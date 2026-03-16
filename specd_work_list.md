@@ -26,8 +26,7 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ## providers v0.1
 
-- Implement `Deft.Provider.Anthropic.stream/3`: POST to `https://api.anthropic.com/v1/messages` with `stream: true` via Req with `into: :self`, read `ANTHROPIC_API_KEY` from env (fail fast if missing), send `{:provider_event, event}` to caller, return stream ref; implement `cancel_stream/1` to close the connection
-- Implement SSE parser layer: pipe raw Req chunks through `ServerSentEvents.decode/1`, buffer partial lines, feed complete events to `parse_event/1` (blocked: Implement Deft.Provider.Anthropic.stream/3...)
+- Implement SSE parser layer: pipe raw Req chunks through `ServerSentEvents.decode/1`, buffer partial lines, feed complete events to `parse_event/1`
 - Implement `Deft.Provider.Anthropic.parse_event/1`: map `content_block_start/delta/stop` and `message_delta/stop` to common event types per spec section 4 event mapping table (blocked: Implement SSE parser layer...)
 - Implement `Deft.Provider.Anthropic.format_messages/1`: convert `Deft.Message` list to Anthropic wire format — system message to top-level `system` param, user/assistant with content arrays, tool_use/tool_result content blocks
 - Implement `Deft.Provider.Anthropic.format_tools/1`: convert tool modules to Anthropic `tools` array with `name`, `description`, `input_schema`
