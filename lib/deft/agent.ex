@@ -50,11 +50,13 @@ defmodule Deft.Agent do
   - `:session_id` — Required. Unique identifier for the session.
   - `:config` — Required. Configuration map for the agent.
   - `:messages` — Optional. Initial conversation messages (default: []).
+  - `:name` — Optional. Name for the gen_statem process.
   """
   def start_link(opts) do
     session_id = Keyword.fetch!(opts, :session_id)
     config = Keyword.fetch!(opts, :config)
     initial_messages = Keyword.get(opts, :messages, [])
+    name = Keyword.get(opts, :name)
 
     initial_data = %{
       session_id: session_id,
@@ -75,7 +77,8 @@ defmodule Deft.Agent do
       tool_execution_times: %{}
     }
 
-    :gen_statem.start_link(__MODULE__, initial_data, [])
+    start_opts = if name, do: [name: name], else: []
+    :gen_statem.start_link(__MODULE__, initial_data, start_opts)
   end
 
   @doc """

@@ -26,8 +26,7 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ## harness v0.1
 
-- Implement `Deft.Session.Worker` supervisor (`rest_for_one`): starts `Deft.Agent`, `Deft.Agent.ToolRunner` (Task.Supervisor), and `Deft.OM.Supervisor` as children; add `start_session/1` to `Deft.Session.Supervisor` that calls `DynamicSupervisor.start_child/2` with the Worker spec
-- Wire `get_tool_runner_supervisor/1` in `Deft.Agent` to resolve the ToolRunner Task.Supervisor from the session worker supervision tree instead of returning `nil` (blocked: Implement Deft.Session.Worker supervisor...)
+- Wire `get_tool_runner_supervisor/1` in `Deft.Agent` to resolve the ToolRunner Task.Supervisor from the session worker supervision tree instead of returning `nil`
 - Fix turn counter off-by-one: increment `turn_count` on the initial `call_provider_stream` (not just in `continue_after_tools`), or change the check from `> max_turns` to `>= max_turns`, so the limit triggers at exactly 25 calls
 - Track `current_context_tokens` and `context_window` in agent state; update `current_context_tokens` from provider `:usage` events; implement compaction fallback when `current_context_tokens > 0.7 * context_window` and OM is disabled
 

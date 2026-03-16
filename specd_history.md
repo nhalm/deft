@@ -2,6 +2,7 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **harness v0.1 (2026-03-16):** Implement `Deft.Session.Worker` supervisor (`rest_for_one`): starts `Deft.Agent`, `Deft.Agent.ToolRunner` (Task.Supervisor), and `Deft.OM.Supervisor` as children; add `start_session/1` to `Deft.Session.Supervisor` that calls `DynamicSupervisor.start_child/2` with the Worker spec
 - **standards v0.1 (2026-03-16):** Update `make test.all` to `mix test --include eval --include integration` so it overrides the `ExUnit.configure(exclude:)` defaults in `test_helper.exs`
 - **standards v0.1 (2026-03-16):** Remove the Mix `test` alias from `mix.exs` — it prepends `--exclude eval --exclude integration` to every `mix test` invocation, breaking `make test.all`, `make ci`, `make test.eval`, `make test.integration`, and the pre-push integration hook
 - **evals v0.1 (2026-03-16):** Implement Actor tool selection evals: picks correct tool per spec section 4.3; 85% pass rate
