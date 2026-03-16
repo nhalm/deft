@@ -26,7 +26,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ## tools v0.1
 
-- Implement `Deft.Tools.Find`: shell out to `fd`, glob patterns, respect .gitignore, cap 1000 results; fall back to `Path.wildcard` if fd not installed
 - Implement `Deft.Tools.Ls`: list directory via `File.ls/1`, return formatted listing with name, type, size
 - Implement `Deft.Agent.ToolRunner`: start `Task.Supervisor`, expose `execute_batch/2` that spawns async_nolink tasks per tool call, collects results via `Task.yield_many/2` with per-task timeouts, catches exceptions
 
