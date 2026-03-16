@@ -26,7 +26,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ## harness v0.1
 
-- Implement abort: on `{:abort}` in any state, cancel stream via `cancel_stream/1` if streaming, terminate in-flight tasks if executing_tools, transition to `:idle`
 - Implement turn limit: counter incremented on `:executing_tools → :calling`, reset on user prompt; at limit, pause-and-ask via event broadcast
 - Implement prompt queueing: queue prompts received in non-idle states, deliver on return to `:idle`
 - Implement `Deft.Agent.Context.build/2`: assemble message list — system prompt + observation injection point (empty initially) + conversation history + project context (DEFT.md/CLAUDE.md/AGENTS.md from working_dir)

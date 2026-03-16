@@ -116,16 +116,8 @@ defmodule Deft.Agent do
       # No tool calls - check prompt queue and transition to idle
       handle_idle_transition(data)
     else
-      # Execute tools concurrently via ToolRunner
-      # Get the ToolRunner supervisor from the session worker
-      # For now, we'll execute inline since ToolRunner setup is not complete
-      # This will be updated when the session worker is implemented
-      tool_timeout = Map.get(data.config, :tool_timeout, 120_000)
-
-      # Start execution asynchronously by sending ourselves a message
-      # This prevents blocking the gen_statem
-      send(self(), {:execute_tools, tool_calls, tool_timeout})
-      :keep_state_and_data
+      # Start tool execution asynchronously
+      start_tool_execution(tool_calls, data)
     end
   end
 
@@ -184,10 +176,40 @@ defmodule Deft.Agent do
     {:keep_state, new_data}
   end
 
-  def handle_event(:cast, :abort, _state, data) do
-    # Placeholder: abort logic will be implemented in future work item
-    # For now, just transition to idle
-    {:next_state, :idle, data}
+  def handle_event(:cast, :abort, state, data) do
+    # Cancel any in-flight operations based on current state
+    case state do
+      :streaming ->
+        # Cancel the stream if we have a stream ref and provider
+        if data.stream_ref && Map.get(data.config, :provider) do
+          provider = Map.get(data.config, :provider)
+          provider.cancel_stream(data.stream_ref)
+        end
+
+      :executing_tools ->
+        # Terminate all in-flight tool execution tasks
+        Enum.each(data.tool_tasks, fn task ->
+          Task.shutdown(task, :brutal_kill)
+        end)
+
+      _ ->
+        # No active operations to cancel in other states
+        :ok
+    end
+
+    # Broadcast abort event
+    broadcast_event(data.session_id, {:abort, state})
+
+    # Clean up state and transition to idle
+    clean_data = %{
+      data
+      | stream_ref: nil,
+        current_message: nil,
+        tool_call_buffers: %{},
+        tool_tasks: []
+    }
+
+    {:next_state, :idle, clean_data}
   end
 
   def handle_event(:info, {:provider_event, event}, :calling, data) do
@@ -277,93 +299,34 @@ defmodule Deft.Agent do
     :keep_state_and_data
   end
 
-  def handle_event(:info, {:execute_tools, tool_calls, timeout}, :executing_tools, data) do
-    # Execute tools via ToolRunner
-    # For now, we'll call execute_batch directly
-    # In the future, this will use the ToolRunner supervisor from the session worker
-    tool_runner = get_tool_runner_supervisor(data)
-    tool_context = build_tool_context(data)
+  def handle_event(:info, {ref, results}, :executing_tools, %{tool_tasks: tasks} = data)
+      when is_reference(ref) do
+    # Task completed - check if this is our tool execution task
+    case Enum.find(tasks, fn task -> task.ref == ref end) do
+      nil ->
+        # Not our task, ignore
+        :keep_state_and_data
 
-    results =
-      if tool_runner do
-        ToolRunner.execute_batch(tool_runner, tool_calls, tool_context, timeout)
-      else
-        # No supervisor available - execute inline with error results
-        Enum.map(tool_calls, fn tool_use ->
-          {tool_use.id,
-           {:error, "Tool execution not available (ToolRunner supervisor not started)"}}
-        end)
-      end
+      _task ->
+        handle_tool_execution_complete(ref, results, data)
+    end
+  end
 
-    # Convert results to ToolResult content blocks
-    tool_result_blocks =
-      Enum.map(results, fn {tool_use_id, result} ->
-        # Find the tool name from the original tool call
-        tool_name =
-          Enum.find_value(tool_calls, fn tool_use ->
-            if tool_use.id == tool_use_id, do: tool_use.name
-          end) || "unknown"
+  def handle_event(:info, {:DOWN, ref, :process, _pid, _reason}, :executing_tools, data) do
+    # Task crashed or was shut down - check if it's our tool execution task
+    case Enum.find(data.tool_tasks, fn task -> task.ref == ref end) do
+      nil ->
+        # Not our task, ignore
+        :keep_state_and_data
 
-        case result do
-          {:ok, content_blocks} ->
-            # Content blocks from tool execution - convert to string
-            content_text =
-              content_blocks
-              |> Enum.map(fn
-                %Deft.Message.Text{text: text} -> text
-                other -> inspect(other)
-              end)
-              |> Enum.join("\n")
+      _task ->
+        # Tool execution task crashed/shutdown - transition to idle
+        broadcast_event(
+          data.session_id,
+          {:error, "Tool execution was interrupted"}
+        )
 
-            %Deft.Message.ToolResult{
-              tool_use_id: tool_use_id,
-              name: tool_name,
-              content: content_text,
-              is_error: false
-            }
-
-          {:error, error_message} ->
-            %Deft.Message.ToolResult{
-              tool_use_id: tool_use_id,
-              name: tool_name,
-              content: error_message,
-              is_error: true
-            }
-        end
-      end)
-
-    # Create a user message with tool results
-    tool_result_message = %Message{
-      id: generate_message_id(),
-      role: :user,
-      content: tool_result_blocks,
-      timestamp: DateTime.utc_now()
-    }
-
-    # Append to messages
-    new_messages = data.messages ++ [tool_result_message]
-    new_data = %{data | messages: new_messages}
-
-    # Transition to :calling to continue the conversation
-    # Assemble context and call provider again
-    context_messages = Context.build(new_messages, config: data.config)
-    provider = Map.get(data.config, :provider)
-    tools = []
-
-    case call_provider_stream(provider, context_messages, tools, data.config) do
-      {:ok, stream_ref} ->
-        updated_data = %{
-          new_data
-          | stream_ref: stream_ref,
-            retry_count: 0,
-            retry_delay: 1000
-        }
-
-        broadcast_event(data.session_id, {:state_change, :calling})
-        {:next_state, :calling, updated_data}
-
-      {:error, reason} ->
-        broadcast_event(data.session_id, {:error, reason})
+        new_data = %{data | tool_tasks: []}
         handle_idle_transition(new_data)
     end
   end
@@ -668,5 +631,126 @@ defmodule Deft.Agent do
       emit: fn _output -> :ok end,
       file_scope: nil
     }
+  end
+
+  defp start_tool_execution(tool_calls, data) do
+    # Execute tools concurrently via ToolRunner
+    # Get the ToolRunner supervisor from the session worker
+    # For now, we'll execute inline since ToolRunner setup is not complete
+    # This will be updated when the session worker is implemented
+    tool_timeout = Map.get(data.config, :tool_timeout, 120_000)
+
+    # Start execution asynchronously in a task so we can abort if needed
+    # This prevents blocking the gen_statem and allows abort to work
+    task =
+      Task.async(fn ->
+        execute_tools_in_task(tool_calls, data, tool_timeout)
+      end)
+
+    # Store the task so we can abort it later
+    new_data = %{data | tool_tasks: [task]}
+    {:keep_state, new_data}
+  end
+
+  defp execute_tools_in_task(tool_calls, data, tool_timeout) do
+    tool_runner = get_tool_runner_supervisor(data)
+    tool_context = build_tool_context(data)
+
+    if tool_runner do
+      ToolRunner.execute_batch(tool_runner, tool_calls, tool_context, tool_timeout)
+    else
+      # No supervisor available - execute inline with error results
+      Enum.map(tool_calls, fn tool_use ->
+        {tool_use.id,
+         {:error, "Tool execution not available (ToolRunner supervisor not started)"}}
+      end)
+    end
+  end
+
+  defp handle_tool_execution_complete(ref, results, data) do
+    # Clean up the task process
+    Process.demonitor(ref, [:flush])
+
+    # Extract tool calls and convert results to ToolResult blocks
+    tool_calls = extract_tool_calls(data.messages)
+    tool_result_blocks = build_tool_result_blocks(results, tool_calls)
+
+    # Create a user message with tool results
+    tool_result_message = %Message{
+      id: generate_message_id(),
+      role: :user,
+      content: tool_result_blocks,
+      timestamp: DateTime.utc_now()
+    }
+
+    # Append to messages and clear task list
+    new_messages = data.messages ++ [tool_result_message]
+    new_data = %{data | messages: new_messages, tool_tasks: []}
+
+    # Continue the conversation by calling the provider again
+    continue_after_tools(new_data)
+  end
+
+  defp build_tool_result_blocks(results, tool_calls) do
+    Enum.map(results, fn {tool_use_id, result} ->
+      # Find the tool name from the original tool call
+      tool_name =
+        Enum.find_value(tool_calls, fn tool_use ->
+          if tool_use.id == tool_use_id, do: tool_use.name
+        end) || "unknown"
+
+      build_tool_result_block(tool_use_id, tool_name, result)
+    end)
+  end
+
+  defp build_tool_result_block(tool_use_id, tool_name, {:ok, content_blocks}) do
+    # Content blocks from tool execution - convert to string
+    content_text =
+      content_blocks
+      |> Enum.map(fn
+        %Deft.Message.Text{text: text} -> text
+        other -> inspect(other)
+      end)
+      |> Enum.join("\n")
+
+    %Deft.Message.ToolResult{
+      tool_use_id: tool_use_id,
+      name: tool_name,
+      content: content_text,
+      is_error: false
+    }
+  end
+
+  defp build_tool_result_block(tool_use_id, tool_name, {:error, error_message}) do
+    %Deft.Message.ToolResult{
+      tool_use_id: tool_use_id,
+      name: tool_name,
+      content: error_message,
+      is_error: true
+    }
+  end
+
+  defp continue_after_tools(data) do
+    # Assemble context and call provider to continue the conversation
+    context_messages = Context.build(data.messages, config: data.config)
+    provider = Map.get(data.config, :provider)
+    tools = []
+
+    case call_provider_stream(provider, context_messages, tools, data.config) do
+      {:ok, stream_ref} ->
+        updated_data = %{
+          data
+          | stream_ref: stream_ref,
+            retry_count: 0,
+            retry_delay: 1000
+        }
+
+        broadcast_event(data.session_id, {:state_change, :calling})
+        {:next_state, :calling, updated_data}
+
+      {:error, reason} ->
+        broadcast_event(data.session_id, {:error, reason})
+        handle_idle_transition(data)
+    end
   end
 end
