@@ -70,7 +70,9 @@ defmodule Deft.Agent do
       total_output_tokens: 0,
       session_cost: 0.0,
       retry_count: 0,
-      retry_delay: 1000
+      retry_delay: 1000,
+      saved_message_ids: MapSet.new(),
+      tool_execution_times: %{}
     }
 
     :gen_statem.start_link(__MODULE__, initial_data, [])
@@ -593,11 +595,14 @@ defmodule Deft.Agent do
   end
 
   defp handle_idle_transition(data) do
+    # Save any unsaved messages before transitioning to idle
+    data_with_saved = save_unsaved_messages(data)
+
     # Check if there are queued prompts
-    case :queue.out(data.prompt_queue) do
+    case :queue.out(data_with_saved.prompt_queue) do
       {{:value, text}, new_queue} ->
         # Process the queued prompt
-        new_data = %{data | prompt_queue: new_queue}
+        new_data = %{data_with_saved | prompt_queue: new_queue}
 
         # Create user message and transition to calling
         user_message = %Message{
@@ -633,8 +638,8 @@ defmodule Deft.Agent do
 
       {:empty, _} ->
         # No queued prompts - transition to idle
-        broadcast_event(data.session_id, {:state_change, :idle})
-        {:next_state, :idle, data}
+        broadcast_event(data_with_saved.session_id, {:state_change, :idle})
+        {:next_state, :idle, data_with_saved}
     end
   end
 
@@ -662,6 +667,14 @@ defmodule Deft.Agent do
     # This will be updated when the session worker is implemented
     tool_timeout = Map.get(data.config, :tool_timeout, 120_000)
 
+    # Record start times for each tool call
+    start_time = System.monotonic_time(:millisecond)
+
+    execution_times =
+      Enum.reduce(tool_calls, data.tool_execution_times, fn tool_use, acc ->
+        Map.put(acc, tool_use.id, start_time)
+      end)
+
     # Start execution asynchronously in a task so we can abort if needed
     # This prevents blocking the gen_statem and allows abort to work
     task =
@@ -669,8 +682,8 @@ defmodule Deft.Agent do
         execute_tools_in_task(tool_calls, data, tool_timeout)
       end)
 
-    # Store the task so we can abort it later
-    new_data = %{data | tool_tasks: [task]}
+    # Store the task and execution times so we can abort it later
+    new_data = %{data | tool_tasks: [task], tool_execution_times: execution_times}
     {:keep_state, new_data}
   end
 
@@ -694,8 +707,28 @@ defmodule Deft.Agent do
     # Clean up the task process
     Process.demonitor(ref, [:flush])
 
-    # Extract tool calls and convert results to ToolResult blocks
+    # Calculate durations and prepare tool results for persistence
+    end_time = System.monotonic_time(:millisecond)
     tool_calls = extract_tool_calls(data.messages)
+
+    tool_results_with_timing =
+      Enum.map(results, fn {tool_use_id, result} ->
+        start_time = Map.get(data.tool_execution_times, tool_use_id, end_time)
+        duration_ms = max(0, end_time - start_time)
+
+        # Find the tool name from the original tool call
+        tool_name =
+          Enum.find_value(tool_calls, fn tool_use ->
+            if tool_use.id == tool_use_id, do: tool_use.name
+          end) || "unknown"
+
+        {tool_use_id, tool_name, result, duration_ms}
+      end)
+
+    # Save tool result entries to session file
+    save_tool_results(tool_results_with_timing, data)
+
+    # Convert results to ToolResult blocks for the conversation
     tool_result_blocks = build_tool_result_blocks(results, tool_calls)
 
     # Create a user message with tool results
@@ -706,9 +739,9 @@ defmodule Deft.Agent do
       timestamp: DateTime.utc_now()
     }
 
-    # Append to messages and clear task list
+    # Append to messages, clear task list and execution times
     new_messages = data.messages ++ [tool_result_message]
-    new_data = %{data | messages: new_messages, tool_tasks: []}
+    new_data = %{data | messages: new_messages, tool_tasks: [], tool_execution_times: %{}}
 
     # Continue the conversation by calling the provider again
     continue_after_tools(new_data)
@@ -792,5 +825,63 @@ defmodule Deft.Agent do
           handle_idle_transition(new_data)
       end
     end
+  end
+
+  # Session persistence helpers
+
+  defp save_unsaved_messages(data) do
+    alias Deft.Session.{Entry, Store}
+
+    # Find messages that haven't been saved yet
+    unsaved_messages =
+      Enum.reject(data.messages, fn msg ->
+        MapSet.member?(data.saved_message_ids, msg.id)
+      end)
+
+    # Save each message to the session file
+    Enum.each(unsaved_messages, fn msg ->
+      entry = Entry.Message.from_message(msg)
+      Store.append(data.session_id, entry)
+    end)
+
+    # Update saved_message_ids set
+    new_saved_ids =
+      Enum.reduce(unsaved_messages, data.saved_message_ids, fn msg, acc ->
+        MapSet.put(acc, msg.id)
+      end)
+
+    %{data | saved_message_ids: new_saved_ids}
+  end
+
+  defp save_tool_results(tool_results, data) do
+    alias Deft.Session.{Entry, Store}
+
+    # Save each tool result as a separate entry with timing information
+    Enum.each(tool_results, fn {tool_use_id, tool_name, result, duration_ms} ->
+      is_error =
+        case result do
+          {:ok, _} -> false
+          {:error, _} -> true
+        end
+
+      result_text =
+        case result do
+          {:ok, content_blocks} ->
+            content_blocks
+            |> Enum.map(fn
+              %Deft.Message.Text{text: text} -> text
+              other -> inspect(other)
+            end)
+            |> Enum.join("\n")
+
+          {:error, error_message} ->
+            error_message
+        end
+
+      entry = Entry.ToolResult.new(tool_use_id, tool_name, result_text, duration_ms, is_error)
+      Store.append(data.session_id, entry)
+    end)
+
+    :ok
   end
 end
