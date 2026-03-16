@@ -1,0 +1,18 @@
+pre-commit:
+  parallel: true
+  commands:
+    format:
+      run: mix format --check-formatted
+      glob: "*.{ex,exs}"
+    lint:
+      run: mix credo --strict
+    compile:
+      run: mix compile --warnings-as-errors
+
+pre-push:
+  commands:
+    test:
+      run: mix test --exclude eval
+    integration:
+      run: mix test --only integration
+      tags: integration
