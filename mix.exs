@@ -55,9 +55,7 @@ defmodule Deft.MixProject do
   end
 
   defp aliases do
-    [
-      test: "test --exclude eval --exclude integration"
-    ]
+    []
   end
 
   defp escript do

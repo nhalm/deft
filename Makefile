@@ -31,7 +31,7 @@ test.integration:
 	mix test --only integration
 
 test.all:
-	mix test
+	mix test --include eval --include integration
 
 check: compile format.check lint test
 

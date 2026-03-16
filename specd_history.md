@@ -2,6 +2,8 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **standards v0.1 (2026-03-16):** Update `make test.all` to `mix test --include eval --include integration` so it overrides the `ExUnit.configure(exclude:)` defaults in `test_helper.exs`
+- **standards v0.1 (2026-03-16):** Remove the Mix `test` alias from `mix.exs` — it prepends `--exclude eval --exclude integration` to every `mix test` invocation, breaking `make test.all`, `make ci`, `make test.eval`, `make test.integration`, and the pre-push integration hook
 - **evals v0.1 (2026-03-16):** Implement Actor tool selection evals: picks correct tool per spec section 4.3; 85% pass rate
 - **sessions v0.1 (2026-03-16):** Configure Burrito in mix.exs for single-binary builds: macOS (arm64, x86_64), Linux (x86_64, aarch64)
 - **sessions v0.1 (2026-03-16):** Implement non-interactive mode: `deft -p "prompt"` creates session, sends prompt to Agent, streams text output to stdout, exits on `:idle`; piped input via stdin
