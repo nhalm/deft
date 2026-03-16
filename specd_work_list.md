@@ -24,10 +24,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ---
 
-## providers v0.1
-
-- Create `Deft.Provider.Registry` GenServer: stores provider configs, resolves provider name + model name to module + config
-
 ## tools v0.1
 
 - Implement `Deft.Tools.Read`: read file with optional offset/limit, return content with line numbers, base64 for images
