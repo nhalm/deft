@@ -9,7 +9,8 @@ defmodule Deft.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       elixirc_paths: elixirc_paths(Mix.env()),
-      aliases: aliases()
+      aliases: aliases(),
+      escript: escript()
     ]
   end
 
@@ -55,6 +56,12 @@ defmodule Deft.MixProject do
   defp aliases do
     [
       test: "test --exclude eval --exclude integration"
+    ]
+  end
+
+  defp escript do
+    [
+      main_module: Deft.CLI
     ]
   end
 end
