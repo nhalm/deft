@@ -26,7 +26,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ## tools v0.1
 
-- Implement `Deft.Tools.Write`: write content to path, create parent dirs, return confirmation with byte count, check file_scope if set
 - Implement `Deft.Tools.Edit`: string-match mode (unique old_string replacement, return unified diff, include nearby text on failure) + line-range mode (start_line/end_line/new_content), check file_scope if set
 - Implement `Deft.Tools.Bash`: spawn via Port, stream stdout/stderr to context.emit, configurable timeout (default 120s), truncate to last 100 lines or 30KB, save full output to temp file
 - Implement `Deft.Tools.Grep`: shell out to `rg`, support regex/glob/case_insensitive/context_lines, respect .gitignore, cap 100 matches; fall back to `:re` + `File.stream` if rg not installed

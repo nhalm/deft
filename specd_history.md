@@ -2,6 +2,7 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **tools v0.1 (2026-03-16):** Implement `Deft.Tools.Write`: write content to path, create parent dirs, return confirmation with byte count, check file_scope if set
 - **tools v0.1 (2026-03-16):** Implement `Deft.Tools.Read`: read file with optional offset/limit, return content with line numbers, base64 for images
 - **providers v0.1 (2026-03-16):** Create `Deft.Provider.Registry` GenServer: stores provider configs, resolves provider name + model name to module + config
 - **providers v0.1 (2026-03-16):** Implement `Deft.Provider.Anthropic.model_config/1`: return context_window, max_output, input/output pricing for claude-sonnet-4, claude-opus-4, claude-haiku-4.5
