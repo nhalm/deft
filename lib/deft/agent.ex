@@ -39,6 +39,7 @@ defmodule Deft.Agent do
   alias Deft.Message.Text
   alias Deft.Agent.Context
   alias Deft.Agent.ToolRunner
+  alias Deft.Session.Worker
 
   # Client API
 
@@ -646,11 +647,10 @@ defmodule Deft.Agent do
     end
   end
 
-  defp get_tool_runner_supervisor(_data) do
-    # For now, return nil since the session worker supervision tree is not implemented yet
-    # This will be updated when the session worker is implemented to properly supervise ToolRunner
-    # The session worker will start a ToolRunner Task.Supervisor and make it available here
-    nil
+  defp get_tool_runner_supervisor(data) do
+    # Look up the ToolRunner Task.Supervisor from the session worker supervision tree
+    via_tuple = Worker.tool_runner_via_tuple(data.session_id)
+    GenServer.whereis(via_tuple)
   end
 
   defp build_tool_context(data) do
