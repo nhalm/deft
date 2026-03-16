@@ -2,6 +2,7 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **providers v0.1 (2026-03-16):** Define `Deft.Provider` behaviour with `stream/3`, `cancel_stream/1`, `parse_event/1`, `format_messages/1`, `format_tools/1`, `model_config/1` callbacks; define common event type structs (`:text_delta`, `:thinking_delta`, `:tool_call_start`, `:tool_call_delta`, `:tool_call_done`, `:usage`, `:done`, `:error`)
 - **harness v0.1 (2026-03-16):** Implement `Deft.Agent` as gen_statem with `handle_event` callback mode, four states (`:idle`, `:calling`, `:streaming`, `:executing_tools`), state data holding conversation messages list, config, session_id
 - **harness v0.1 (2026-03-16):** Create `Deft.Application` supervisor tree: `Deft.Supervisor` (one_for_one) with `Deft.Provider.Registry` (GenServer) and `Deft.Session.Supervisor` (DynamicSupervisor)
 - **harness v0.1 (2026-03-16):** Define `Deft.Message` struct with `id`, `role`, `content`, `timestamp` fields and all ContentBlock types (Text, ToolUse, ToolResult, Thinking, Image) as structs with typespec

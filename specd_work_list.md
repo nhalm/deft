@@ -37,12 +37,12 @@ Then use Deft to build the rest of Deft. The critical path is:
 - Implement `Deft.Agent.SystemPrompt.build/1`: role definition + tool descriptions from registered tools' name/0 + description/0 + parameters/0 + working dir + git branch + date + OS + conflict resolution rules
 ## providers v0.1
 
-- Define `Deft.Provider` behaviour with `stream/3`, `cancel_stream/1`, `parse_event/1`, `format_messages/1`, `format_tools/1`, `model_config/1` callbacks; define common event type structs (`:text_delta`, `:thinking_delta`, `:tool_call_start`, `:tool_call_delta`, `:tool_call_done`, `:usage`, `:done`, `:error`)- Implement `Deft.Provider.Anthropic.stream/3`: POST to `https://api.anthropic.com/v1/messages` with `stream: true` via Req with `into: :self`, read `ANTHROPIC_API_KEY` from env (fail fast if missing), send `{:provider_event, event}` to caller, return stream ref; implement `cancel_stream/1` to close the connection (blocked: Define Deft.Provider behaviour...)
+- Implement `Deft.Provider.Anthropic.stream/3`: POST to `https://api.anthropic.com/v1/messages` with `stream: true` via Req with `into: :self`, read `ANTHROPIC_API_KEY` from env (fail fast if missing), send `{:provider_event, event}` to caller, return stream ref; implement `cancel_stream/1` to close the connection
 - Implement SSE parser layer: pipe raw Req chunks through `ServerSentEvents.decode/1`, buffer partial lines, feed complete events to `parse_event/1` (blocked: Implement Deft.Provider.Anthropic.stream/3...)
 - Implement `Deft.Provider.Anthropic.parse_event/1`: map `content_block_start/delta/stop` and `message_delta/stop` to common event types per spec section 4 event mapping table (blocked: Implement SSE parser layer...)
-- Implement `Deft.Provider.Anthropic.format_messages/1`: convert `Deft.Message` list to Anthropic wire format — system message to top-level `system` param, user/assistant with content arrays, tool_use/tool_result content blocks (blocked: Define Deft.Provider behaviour...)
-- Implement `Deft.Provider.Anthropic.format_tools/1`: convert tool modules to Anthropic `tools` array with `name`, `description`, `input_schema` (blocked: Define Deft.Provider behaviour...)
-- Implement `Deft.Provider.Anthropic.model_config/1`: return context_window, max_output, input/output pricing for claude-sonnet-4, claude-opus-4, claude-haiku-4.5 (blocked: Define Deft.Provider behaviour...)
+- Implement `Deft.Provider.Anthropic.format_messages/1`: convert `Deft.Message` list to Anthropic wire format — system message to top-level `system` param, user/assistant with content arrays, tool_use/tool_result content blocks
+- Implement `Deft.Provider.Anthropic.format_tools/1`: convert tool modules to Anthropic `tools` array with `name`, `description`, `input_schema`
+- Implement `Deft.Provider.Anthropic.model_config/1`: return context_window, max_output, input/output pricing for claude-sonnet-4, claude-opus-4, claude-haiku-4.5
 - Create `Deft.Provider.Registry` GenServer: stores provider configs, resolves provider name + model name to module + config 
 ## tools v0.1
 
