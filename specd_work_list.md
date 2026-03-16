@@ -24,6 +24,31 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ---
 
+## standards v0.1
+
+- Remove the Mix `test` alias from `mix.exs` — it prepends `--exclude eval --exclude integration` to every `mix test` invocation, breaking `make test.all`, `make ci`, `make test.eval`, `make test.integration`, and the pre-push integration hook
+- Update `make test.all` to `mix test --include eval --include integration` so it overrides the `ExUnit.configure(exclude:)` defaults in `test_helper.exs`
+
+## harness v0.1
+
+- Implement `Deft.Session.Worker` supervisor (`rest_for_one`): starts `Deft.Agent`, `Deft.Agent.ToolRunner` (Task.Supervisor), and `Deft.OM.Supervisor` as children; add `start_session/1` to `Deft.Session.Supervisor` that calls `DynamicSupervisor.start_child/2` with the Worker spec
+- Wire `get_tool_runner_supervisor/1` in `Deft.Agent` to resolve the ToolRunner Task.Supervisor from the session worker supervision tree instead of returning `nil` (blocked: Implement Deft.Session.Worker supervisor...)
+- Fix turn counter off-by-one: increment `turn_count` on the initial `call_provider_stream` (not just in `continue_after_tools`), or change the check from `> max_turns` to `>= max_turns`, so the limit triggers at exactly 25 calls
+- Track `current_context_tokens` and `context_window` in agent state; update `current_context_tokens` from provider `:usage` events; implement compaction fallback when `current_context_tokens > 0.7 * context_window` and OM is disabled
+
+## tools v0.1
+
+- Fix bash tool: change `Port.open({:spawn, "sh -c ..."})` to `Port.open({:spawn_executable, "/bin/sh"}, [{:args, ["-c", command]} | opts])` — the `{:spawn, string}` form splits on spaces, breaking `sh -c` argument passing for commands with spaces
+- Fix ToolRunner: call `Task.shutdown(task, :brutal_kill)` on timed-out tasks after `Task.yield_many/2` returns `nil` — currently timed-out tasks continue running indefinitely, leaking processes
+- Fix grep global match cap: replace `--max-count` (per-file limit) with post-processing truncation — collect rg output then take only the first 100 match lines, or use `rg` output piped through a line counter
+- Fix grep `format_output/2`: count actual match lines (lines matching `filename:linenum:content` pattern) instead of all output lines — context lines, separators, and file headers inflate the count
+
+## providers v0.1
+
+- Fix tool call ID mismatch: `ToolCallDelta` and `ToolCallDone` use `"tool_#{idx}"` but `ToolCallStart` uses the real Anthropic ID (`"toolu_..."`); maintain an `index → real_id` mapping in tool_state so deltas and stop events use the correct ID — without this fix, tool call args are never accumulated and tools execute with empty args
+- Fix `parse_message_delta/1`: Anthropic's `message_delta` event only carries `output_tokens` in its usage field, not `input_tokens`; match on `%{"output_tokens" => output}` only; also handle `message_start` event to capture `input_tokens` from the initial usage report
+- Fix `stream/3`: use `spawn(fn -> ... end)` + `Process.monitor(pid)` (or `spawn_monitor/1`) instead of `spawn_link/1` — with `spawn_link`, a stream process crash kills the agent instead of delivering a `:DOWN` message for graceful recovery
+
 ## === BOOTSTRAP CHECKPOINT ===
 <!-- After the above specs are implemented, `deft -p "prompt"` works as a CLI agent. -->
 <!-- Use Deft (or Claude Code) to implement the remaining specs below. -->
