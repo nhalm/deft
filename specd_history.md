@@ -2,6 +2,7 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **harness v0.1 (2026-03-16):** Implement `:streaming` state: accumulate `:text_delta` into assistant message content, accumulate `:tool_call_delta` into tool call args, on `:done` event transition to `:executing_tools`
 - **harness v0.1 (2026-03-16):** Implement `:calling → :streaming` transition: on first `{:provider_event, _}` info message, transition to `:streaming`; on error, retry with exponential backoff up to 3 times, then `:idle` with error
 - **harness v0.1 (2026-03-16):** Implement `:idle → :calling` transition: on `{:prompt, text}` cast, append user message to history, call provider.stream/3 with assembled context
 - **providers v0.1 (2026-03-16):** Define `Deft.Provider` behaviour with `stream/3`, `cancel_stream/1`, `parse_event/1`, `format_messages/1`, `format_tools/1`, `model_config/1` callbacks; define common event type structs (`:text_delta`, `:thinking_delta`, `:tool_call_start`, `:tool_call_delta`, `:tool_call_done`, `:usage`, `:done`, `:error`)

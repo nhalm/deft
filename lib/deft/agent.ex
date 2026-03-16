@@ -23,6 +23,7 @@ defmodule Deft.Agent do
   - `current_message` — Message being accumulated during streaming (optional)
   - `stream_ref` — Reference to the current stream (optional)
   - `tool_tasks` — List of in-flight tool execution tasks (optional)
+  - `tool_call_buffers` — Map of tool_id → JSON string for accumulating tool call args (optional)
   - `prompt_queue` — Queue of prompts received while not idle (optional)
   - `turn_count` — Counter for consecutive LLM calls (optional)
   - `total_input_tokens` — Cumulative input tokens (optional)
@@ -61,6 +62,7 @@ defmodule Deft.Agent do
       current_message: nil,
       stream_ref: nil,
       tool_tasks: [],
+      tool_call_buffers: %{},
       prompt_queue: :queue.new(),
       turn_count: 0,
       total_input_tokens: 0,
@@ -210,8 +212,40 @@ defmodule Deft.Agent do
     end
   end
 
+  def handle_event(:info, {:provider_event, {:text_delta, payload}}, :streaming, data) do
+    handle_text_delta(payload, data)
+  end
+
+  def handle_event(:info, {:provider_event, {:thinking_delta, payload}}, :streaming, data) do
+    handle_thinking_delta(payload, data)
+  end
+
+  def handle_event(:info, {:provider_event, {:tool_call_start, payload}}, :streaming, data) do
+    handle_tool_call_start(payload, data)
+  end
+
+  def handle_event(:info, {:provider_event, {:tool_call_delta, payload}}, :streaming, data) do
+    handle_tool_call_delta(payload, data)
+  end
+
+  def handle_event(:info, {:provider_event, {:tool_call_done, payload}}, :streaming, data) do
+    handle_tool_call_done(payload, data)
+  end
+
+  def handle_event(:info, {:provider_event, {:usage, payload}}, :streaming, data) do
+    handle_usage(payload, data)
+  end
+
+  def handle_event(:info, {:provider_event, {:done, _}}, :streaming, data) do
+    handle_stream_done(data)
+  end
+
+  def handle_event(:info, {:provider_event, {:error, payload}}, :streaming, data) do
+    handle_stream_error(payload, data)
+  end
+
   def handle_event(:info, {:provider_event, _event}, :streaming, _data) do
-    # Placeholder: streaming logic will be implemented in future work item
+    # Unrecognized event - ignore
     :keep_state_and_data
   end
 
@@ -290,5 +324,150 @@ defmodule Deft.Agent do
 
       {:next_state, :idle, new_data}
     end
+  end
+
+  defp handle_text_delta(%{delta: delta}, data) do
+    new_message = append_text_delta(data.current_message, delta)
+    new_data = %{data | current_message: new_message}
+    broadcast_event(data.session_id, {:text_delta, delta})
+    {:keep_state, new_data}
+  end
+
+  defp handle_thinking_delta(%{delta: delta}, data) do
+    new_message = append_thinking_delta(data.current_message, delta)
+    new_data = %{data | current_message: new_message}
+    broadcast_event(data.session_id, {:thinking_delta, delta})
+    {:keep_state, new_data}
+  end
+
+  defp handle_tool_call_start(%{id: id, name: name}, data) do
+    # Create a ToolUse block with empty args (will be updated on tool_call_done)
+    tool_use = %Deft.Message.ToolUse{id: id, name: name, args: %{}}
+    new_content = data.current_message.content ++ [tool_use]
+    new_message = %{data.current_message | content: new_content}
+
+    # Initialize buffer for this tool call's JSON args
+    tool_call_buffers = Map.get(data, :tool_call_buffers, %{})
+    new_buffers = Map.put(tool_call_buffers, id, "")
+
+    new_data = %{data | current_message: new_message, tool_call_buffers: new_buffers}
+    broadcast_event(data.session_id, {:tool_call_start, %{id: id, name: name}})
+    {:keep_state, new_data}
+  end
+
+  defp handle_tool_call_delta(%{id: id, delta: delta}, data) do
+    # Accumulate JSON fragment
+    tool_call_buffers = Map.get(data, :tool_call_buffers, %{})
+    current_buffer = Map.get(tool_call_buffers, id, "")
+    new_buffers = Map.put(tool_call_buffers, id, current_buffer <> delta)
+
+    new_data = %{data | tool_call_buffers: new_buffers}
+    broadcast_event(data.session_id, {:tool_call_delta, %{id: id, delta: delta}})
+    {:keep_state, new_data}
+  end
+
+  defp handle_tool_call_done(%{id: id, args: parsed_args}, data) do
+    # Update the ToolUse block with the parsed args
+    new_message = update_tool_call_args(data.current_message, id, parsed_args)
+
+    # Clear the buffer for this tool call
+    tool_call_buffers = Map.get(data, :tool_call_buffers, %{})
+    new_buffers = Map.delete(tool_call_buffers, id)
+
+    new_data = %{data | current_message: new_message, tool_call_buffers: new_buffers}
+    broadcast_event(data.session_id, {:tool_call_done, %{id: id, args: parsed_args}})
+    {:keep_state, new_data}
+  end
+
+  defp handle_usage(%{input: input_tokens, output: output_tokens}, data) do
+    # Update token tracking
+    new_data = %{
+      data
+      | total_input_tokens: data.total_input_tokens + input_tokens,
+        total_output_tokens: data.total_output_tokens + output_tokens
+    }
+
+    broadcast_event(data.session_id, {:usage, %{input: input_tokens, output: output_tokens}})
+    {:keep_state, new_data}
+  end
+
+  defp handle_stream_done(data) do
+    # Finalize the assistant message and transition to :executing_tools
+    finalized_message = data.current_message
+    new_messages = data.messages ++ [finalized_message]
+
+    new_data = %{
+      data
+      | messages: new_messages,
+        current_message: nil,
+        stream_ref: nil,
+        tool_call_buffers: %{}
+    }
+
+    broadcast_event(data.session_id, {:state_change, :executing_tools})
+    {:next_state, :executing_tools, new_data}
+  end
+
+  defp handle_stream_error(error_payload, data) do
+    # Handle error - transition to idle
+    error_message = Map.get(error_payload, :message, "Unknown streaming error")
+    broadcast_event(data.session_id, {:error, error_message})
+
+    new_data = %{
+      data
+      | current_message: nil,
+        stream_ref: nil,
+        tool_call_buffers: %{}
+    }
+
+    {:next_state, :idle, new_data}
+  end
+
+  defp append_text_delta(message, delta) do
+    case List.last(message.content) do
+      %Text{text: existing_text} ->
+        # Update the last Text block
+        new_text = existing_text <> delta
+        new_content = List.replace_at(message.content, -1, %Text{text: new_text})
+        %{message | content: new_content}
+
+      _ ->
+        # No Text block at the end, create a new one
+        new_content = message.content ++ [%Text{text: delta}]
+        %{message | content: new_content}
+    end
+  end
+
+  defp append_thinking_delta(message, delta) do
+    alias Deft.Message.Thinking
+
+    case List.last(message.content) do
+      %Thinking{text: existing_text} ->
+        # Update the last Thinking block
+        new_text = existing_text <> delta
+        new_content = List.replace_at(message.content, -1, %Thinking{text: new_text})
+        %{message | content: new_content}
+
+      _ ->
+        # No Thinking block at the end, create a new one
+        new_content = message.content ++ [%Thinking{text: delta}]
+        %{message | content: new_content}
+    end
+  end
+
+  defp update_tool_call_args(message, tool_id, parsed_args) do
+    alias Deft.Message.ToolUse
+
+    # Find the ToolUse block with matching ID and update its args
+    new_content =
+      Enum.map(message.content, fn
+        %ToolUse{id: ^tool_id} = tool_use ->
+          %{tool_use | args: parsed_args}
+
+        other ->
+          other
+      end)
+
+    %{message | content: new_content}
   end
 end
