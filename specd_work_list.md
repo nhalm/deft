@@ -26,7 +26,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ## tools v0.1
 
-- Implement `Deft.Tools.Bash`: spawn via Port, stream stdout/stderr to context.emit, configurable timeout (default 120s), truncate to last 100 lines or 30KB, save full output to temp file
 - Implement `Deft.Tools.Grep`: shell out to `rg`, support regex/glob/case_insensitive/context_lines, respect .gitignore, cap 100 matches; fall back to `:re` + `File.stream` if rg not installed
 - Implement `Deft.Tools.Find`: shell out to `fd`, glob patterns, respect .gitignore, cap 1000 results; fall back to `Path.wildcard` if fd not installed
 - Implement `Deft.Tools.Ls`: list directory via `File.ls/1`, return formatted listing with name, type, size

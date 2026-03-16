@@ -2,6 +2,7 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **tools v0.1 (2026-03-16):** Implement `Deft.Tools.Bash`: spawn via Port, stream stdout/stderr to context.emit, configurable timeout (default 120s), truncate to last 100 lines or 30KB, save full output to temp file
 - **tools v0.1 (2026-03-16):** Implement `Deft.Tools.Edit`: string-match mode (unique old_string replacement, return unified diff, include nearby text on failure) + line-range mode (start_line/end_line/new_content), check file_scope if set
 - **tools v0.1 (2026-03-16):** Implement `Deft.Tools.Write`: write content to path, create parent dirs, return confirmation with byte count, check file_scope if set
 - **tools v0.1 (2026-03-16):** Implement `Deft.Tools.Read`: read file with optional offset/limit, return content with line numbers, base64 for images
