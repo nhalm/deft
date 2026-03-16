@@ -26,7 +26,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ## standards v0.1
 
-- Scaffold Elixir Mix project: `mix.exs` with all deps from spec section 3, `Deft.Application` module, directory structure matching spec section 1 (lib/deft/agent/, om/, provider/, tools/, session/, tui/, job/)
 - Create `.formatter.exs` with standard config (line_length: 98, standard inputs glob)
 - Create `.credo.exs` with `strict: true` and the enabled checks from spec section 5
 - Create `lefthook.yml` with pre-commit (format, lint, compile) and pre-push (test, integration) hooks from spec section 8
@@ -35,9 +34,7 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ## harness v0.1
 
-- Define `Deft.Message` struct with `id`, `role`, `content`, `timestamp` fields and all ContentBlock types (Text, ToolUse, ToolResult, Thinking, Image) as structs with typespec (blocked: Scaffold Elixir Mix project...)
-- Create `Deft.Application` supervisor tree: `Deft.Supervisor` (one_for_one) with `Deft.Provider.Registry` (GenServer) and `Deft.Session.Supervisor` (DynamicSupervisor) (blocked: Scaffold Elixir Mix project...)
-- Implement `Deft.Agent` as gen_statem with `handle_event` callback mode, four states (`:idle`, `:calling`, `:streaming`, `:executing_tools`), state data holding conversation messages list, config, session_id (blocked: Define Deft.Message struct...)
+- Define `Deft.Message` struct with `id`, `role`, `content`, `timestamp` fields and all ContentBlock types (Text, ToolUse, ToolResult, Thinking, Image) as structs with typespec - Create `Deft.Application` supervisor tree: `Deft.Supervisor` (one_for_one) with `Deft.Provider.Registry` (GenServer) and `Deft.Session.Supervisor` (DynamicSupervisor) - Implement `Deft.Agent` as gen_statem with `handle_event` callback mode, four states (`:idle`, `:calling`, `:streaming`, `:executing_tools`), state data holding conversation messages list, config, session_id (blocked: Define Deft.Message struct...)
 - Implement `:idle → :calling` transition: on `{:prompt, text}` cast, append user message to history, call provider.stream/3 with assembled context (blocked: Implement Deft.Agent gen_statem...)
 - Implement `:calling → :streaming` transition: on first `{:provider_event, _}` info message, transition to `:streaming`; on error, retry with exponential backoff up to 3 times, then `:idle` with error (blocked: Implement Deft.Agent gen_statem...)
 - Implement `:streaming` state: accumulate `:text_delta` into assistant message content, accumulate `:tool_call_delta` into tool call args, on `:done` event transition to `:executing_tools` (blocked: Implement Deft.Agent gen_statem...)
@@ -57,8 +54,7 @@ Then use Deft to build the rest of Deft. The critical path is:
 - Implement `Deft.Provider.Anthropic.format_messages/1`: convert `Deft.Message` list to Anthropic wire format — system message to top-level `system` param, user/assistant with content arrays, tool_use/tool_result content blocks (blocked: Define Deft.Provider behaviour...)
 - Implement `Deft.Provider.Anthropic.format_tools/1`: convert tool modules to Anthropic `tools` array with `name`, `description`, `input_schema` (blocked: Define Deft.Provider behaviour...)
 - Implement `Deft.Provider.Anthropic.model_config/1`: return context_window, max_output, input/output pricing for claude-sonnet-4, claude-opus-4, claude-haiku-4.5 (blocked: Define Deft.Provider behaviour...)
-- Create `Deft.Provider.Registry` GenServer: stores provider configs, resolves provider name + model name to module + config (blocked: Scaffold Elixir Mix project...)
-
+- Create `Deft.Provider.Registry` GenServer: stores provider configs, resolves provider name + model name to module + config 
 ## tools v0.1
 
 - Define `Deft.Tool` behaviour with `name/0`, `description/0`, `parameters/0`, `execute/2` callbacks; define `Deft.Tool.Context` struct with `working_dir`, `session_id`, `emit`, `file_scope` (blocked: Define Deft.Message struct...)
@@ -73,15 +69,12 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ## sessions v0.1
 
-- Implement `Deft.Session.Store`: `append/2` writes JSON line to `~/.deft/sessions/<session_id>.jsonl`, `load/1` reads and parses all lines, `list/0` returns session metadata sorted most-recent-first (blocked: Scaffold Elixir Mix project...)
-- Define entry type structs: session_start, message, tool_result, model_change, observation, compaction, cost (blocked: Define Deft.Message struct...)
+- Implement `Deft.Session.Store`: `append/2` writes JSON line to `~/.deft/sessions/<session_id>.jsonl`, `load/1` reads and parses all lines, `list/0` returns session metadata sorted most-recent-first - Define entry type structs: session_start, message, tool_result, model_change, observation, compaction, cost (blocked: Define Deft.Message struct...)
 - Implement session save: after each agent turn (transition to `:idle`), append message and tool_result entries to JSONL (blocked: Implement Deft.Session.Store...)
 - Implement session resume: `load/1` reconstructs conversation state from entries, returns data for Agent gen_statem init (blocked: Implement Deft.Session.Store...)
-- Implement `Deft.Config`: read and merge from CLI flags map → `.deft/config.yaml` in working_dir → `~/.deft/config.yaml` → defaults; parse YAML via yaml_elixir; return validated config struct (blocked: Scaffold Elixir Mix project...)
-- Implement `Deft.CLI`: parse args (deft, deft resume, deft resume <id>, deft config, -p, --model, --provider, --no-om, --working-dir, --output, --help, --version), load config, start OTP app (blocked: Implement Deft.Config...)
+- Implement `Deft.Config`: read and merge from CLI flags map → `.deft/config.yaml` in working_dir → `~/.deft/config.yaml` → defaults; parse YAML via yaml_elixir; return validated config struct - Implement `Deft.CLI`: parse args (deft, deft resume, deft resume <id>, deft config, -p, --model, --provider, --no-om, --working-dir, --output, --help, --version), load config, start OTP app (blocked: Implement Deft.Config...)
 - Implement non-interactive mode: `deft -p "prompt"` creates session, sends prompt to Agent, streams text output to stdout, exits on `:idle`; piped input via stdin (blocked: Implement Deft.CLI...)
-- Implement rg/fd startup check: verify in PATH via `System.find_executable/1`, warn to stderr if missing (blocked: Scaffold Elixir Mix project...)
-- Configure Burrito in mix.exs for single-binary builds: macOS (arm64, x86_64), Linux (x86_64, aarch64) (blocked: Implement Deft.CLI...)
+- Implement rg/fd startup check: verify in PATH via `System.find_executable/1`, warn to stderr if missing - Configure Burrito in mix.exs for single-binary builds: macOS (arm64, x86_64), Linux (x86_64, aarch64) (blocked: Implement Deft.CLI...)
 
 ## === BOOTSTRAP CHECKPOINT ===
 <!-- After the above specs are implemented, `deft -p "prompt"` works as a CLI agent. -->
@@ -89,20 +82,14 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ## observational-memory v0.1
 
-- Define `Deft.OM.State` struct with all fields from spec section 2: active_observations, observation_tokens, buffered_chunks, buffered_reflection, last_observed_at, observed_message_ids, pending_message_tokens, generation_count, is_observing, is_reflecting, needs_rebuffer, activation_epoch, snapshot_dirty, calibration_factor, sync_from (blocked: Scaffold Elixir Mix project...)
-- Define `Deft.OM.BufferedChunk` struct: observations, token_count, message_ids, message_tokens, epoch (blocked: Scaffold Elixir Mix project...)
-- Implement `Deft.OM.Tokens.estimate/1`: `div(byte_size(text), calibration_factor)` with configurable factor; implement `calibrate/2` via exponential moving average (alpha=0.1) (blocked: Scaffold Elixir Mix project...)
-- Implement `Deft.OM.Supervisor` (rest_for_one): starts TaskSupervisor first, then State (blocked: Define Deft.OM.State struct...)
+- Define `Deft.OM.State` struct with all fields from spec section 2: active_observations, observation_tokens, buffered_chunks, buffered_reflection, last_observed_at, observed_message_ids, pending_message_tokens, generation_count, is_observing, is_reflecting, needs_rebuffer, activation_epoch, snapshot_dirty, calibration_factor, sync_from - Define `Deft.OM.BufferedChunk` struct: observations, token_count, message_ids, message_tokens, epoch - Implement `Deft.OM.Tokens.estimate/1`: `div(byte_size(text), calibration_factor)` with configurable factor; implement `calibrate/2` via exponential moving average (alpha=0.1) - Implement `Deft.OM.Supervisor` (rest_for_one): starts TaskSupervisor first, then State (blocked: Define Deft.OM.State struct...)
 - Implement `Deft.OM.State` GenServer: holds state struct, exposes `get_context/1` returning `{observations_text, observed_message_ids}`, `messages_added/2` that updates pending tokens and spawns Observer Tasks when thresholds approached; manages coalescing via `is_observing` + `needs_rebuffer` (blocked: Implement Deft.OM.Supervisor...)
-- Implement Observer prompt: `Deft.OM.Observer.Prompt.system/0` with coding-specific extraction rules (user facts 🔴, files read/modified 🟡, errors 🟡, commands 🟡, architecture 🟡, deps 🟡, git state 🟡, TODOs 🟡), anti-hallucination rules, sectioned output format (Current State/User Preferences/Files & Architecture/Decisions/Session History) (blocked: Scaffold Elixir Mix project...)
-- Implement `Deft.OM.Observer.Prompt.format_messages/1`: format messages as `**Role (HH:MM):** content`, tool calls as `[Tool Call: name]`, tool results as `[Tool Result: name]` (blocked: Define Deft.Message struct...)
+- Implement Observer prompt: `Deft.OM.Observer.Prompt.system/0` with coding-specific extraction rules (user facts 🔴, files read/modified 🟡, errors 🟡, commands 🟡, architecture 🟡, deps 🟡, git state 🟡, TODOs 🟡), anti-hallucination rules, sectioned output format (Current State/User Preferences/Files & Architecture/Decisions/Session History) - Implement `Deft.OM.Observer.Prompt.format_messages/1`: format messages as `**Role (HH:MM):** content`, tool calls as `[Tool Call: name]`, tool results as `[Tool Result: name]` (blocked: Define Deft.Message struct...)
 - Implement `Deft.OM.Observer.Prompt.truncate_observations/2`: given observations + 8k budget, take last 5k tokens (tail) + scan remainder for 🔴 lines filling to 3k + `[N observations truncated]` marker (blocked: Implement Deft.OM.Tokens.estimate...)
-- Implement `Deft.OM.Observer.Parse.parse_output/1`: extract `<observations>` and `<current-task>` from XML; fallback to raw bullet-list extraction; validate section headers (blocked: Scaffold Elixir Mix project...)
-- Implement section-aware merge in State: Current State = replace, User Preferences/Decisions/Session History = append, Files & Architecture = append with dedup (same file path updates existing entry), unknown sections = ignore (blocked: Implement Deft.OM.State GenServer...)
+- Implement `Deft.OM.Observer.Parse.parse_output/1`: extract `<observations>` and `<current-task>` from XML; fallback to raw bullet-list extraction; validate section headers - Implement section-aware merge in State: Current State = replace, User Preferences/Decisions/Session History = append, Files & Architecture = append with dedup (same file path updates existing entry), unknown sections = ignore (blocked: Implement Deft.OM.State GenServer...)
 - Implement Observer Task execution: State spawns Task under TaskSupervisor with current messages + truncated observations, handles result in `handle_info({ref, result})`, stores as BufferedChunk with current activation_epoch (blocked: Implement section-aware merge...)
 - Implement observation activation: when pending_message_tokens >= threshold and buffered_chunks non-empty, section-aware merge all chunks into active_observations, move chunk message_ids to observed_message_ids, clear buffered_chunks, increment activation_epoch, set snapshot_dirty (blocked: Implement Observer Task execution...)
-- Implement Reflector prompt: `Deft.OM.Reflector.Prompt.system/1` with target size (50% of threshold), compression levels 0-3, section ordering constraint, per-section budget guidance, CORRECTION marker preservation requirement (blocked: Scaffold Elixir Mix project...)
-- Implement Reflector Task execution: State spawns Task with full active_observations + target size; result replaces active_observations, increments generation_count + activation_epoch; max 2 LLM calls; CORRECTION post-check (append missing markers); if level 3 still exceeds target, accept and move on (blocked: Implement Deft.OM.State GenServer...)
+- Implement Reflector prompt: `Deft.OM.Reflector.Prompt.system/1` with target size (50% of threshold), compression levels 0-3, section ordering constraint, per-section budget guidance, CORRECTION marker preservation requirement - Implement Reflector Task execution: State spawns Task with full active_observations + target size; result replaces active_observations, increments generation_count + activation_epoch; max 2 LLM calls; CORRECTION post-check (append missing markers); if level 3 still exceeds target, accept and move on (blocked: Implement Deft.OM.State GenServer...)
 - Implement Observer/Reflector serialization: if is_reflecting, defer Observer activation until reflection completes; if is_observing, defer reflection until Observer completes; activation_epoch incremented on both (blocked: Implement Reflector Task execution...)
 - Implement sync fallback: on force_observe call, stash `from` in sync_from, spawn Task, return {:noreply}; on Task result, GenServer.reply(sync_from, result) and clear; on Task DOWN, reply with {:error, reason}; 1 retry max; 60s GenServer.call timeout (blocked: Implement Observer/Reflector serialization...)
 - Implement circuit breaker: after 3 consecutive cycle failures, enter degraded mode (stop attempting), emit {:om, :circuit_open}, resume after 5-minute cooldown or /compact command (blocked: Implement sync fallback...)
@@ -115,11 +102,9 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ## tui v0.1
 
-- Build Breeze streaming proof-of-concept: 1000+ lines mixed text, 30 tokens/sec append, scrollable area + fixed input + status bar; verify performance is acceptable; if not, document fallback to Termite + BackBreeze (blocked: Scaffold Elixir Mix project...)
-- Implement `Deft.TUI.Chat` Breeze view: mount/2 subscribes to agent events via Registry, render/1 displays scrollable conversation + input + status bar (blocked: Build Breeze streaming proof-of-concept...)
+- Build Breeze streaming proof-of-concept: 1000+ lines mixed text, 30 tokens/sec append, scrollable area + fixed input + status bar; verify performance is acceptable; if not, document fallback to Termite + BackBreeze - Implement `Deft.TUI.Chat` Breeze view: mount/2 subscribes to agent events via Registry, render/1 displays scrollable conversation + input + status bar (blocked: Build Breeze streaming proof-of-concept...)
 - Implement streaming text display: handle_info for :text_delta events, append to current assistant message in assigns (blocked: Implement Deft.TUI.Chat...)
-- Implement markdown-to-ANSI renderer: parse with Earmark, walk AST to emit ANSI codes for bold/italic/code/lists/fenced code blocks; streaming partial markdown: buffer last incomplete line (blocked: Scaffold Elixir Mix project...)
-- Implement tool execution display: tool name + key arg, spinner while running, ✓/✗ + duration on complete (blocked: Implement Deft.TUI.Chat...)
+- Implement markdown-to-ANSI renderer: parse with Earmark, walk AST to emit ANSI codes for bold/italic/code/lists/fenced code blocks; streaming partial markdown: buffer last incomplete line - Implement tool execution display: tool name + key arg, spinner while running, ✓/✗ + duration on complete (blocked: Implement Deft.TUI.Chat...)
 - Implement status bar: tokens (current/context_window), memory (obs_tokens/40k or "--" before first observation), cost, turn count, agent state; OM activity spinner during observation/reflection; "memorizing..." during sync fallback (blocked: Implement Deft.TUI.Chat...)
 - Implement user input component: Enter submits, Shift+Enter newline (Kitty protocol), \ + Enter fallback, paste detection (chars within 5ms), Up arrow input history (blocked: Implement Deft.TUI.Chat...)
 - Implement slash command dispatch: recognize leading `/`, parse command + args, dispatch to appropriate handler; implement /help, /clear, /quit directly; other commands dispatched to their spec owners (blocked: Implement user input component...)
@@ -128,8 +113,7 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ## evals v0.1
 
-- Create eval test infrastructure: test/eval/ directory structure per spec, fixture loading helpers, pass rate tracking in baselines.json, regression detection (blocked: Scaffold Elixir Mix project...)
-- Create coding conversation fixtures: short bug-fix (5-10 exchanges), long feature session (50+ exchanges), multi-topic pivot, sessions with errors/corrections, heavy tool usage (blocked: Define Deft.Message struct...)
+- Create eval test infrastructure: test/eval/ directory structure per spec, fixture loading helpers, pass rate tracking in baselines.json, regression detection - Create coding conversation fixtures: short bug-fix (5-10 exchanges), long feature session (50+ exchanges), multi-topic pivot, sessions with errors/corrections, heavy tool usage (blocked: Define Deft.Message struct...)
 - Implement Observer extraction evals: 9 test cases from spec section 2.1 (explicit tech choice, preference, file read, file modify, error, command, architecture, dependency, deferred work); 85% pass rate (blocked: Implement Observer Task execution...)
 - Implement Observer section routing evals: verify facts route to correct sections per spec section 2.2; 85% pass rate (blocked: Implement Observer extraction evals...)
 - Implement Observer anti-hallucination evals: 4 test cases from spec section 2.3 (hypothetical, exploring options, reading about, discussing alternatives); 95% pass rate (blocked: Implement Observer extraction evals...)
@@ -147,9 +131,7 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ## orchestration v0.1
 
-- Implement `Deft.Job.SiteLog` GenServer: owns JSONL file + ETS table (`:bag`, keyed by `{type, agent_id}`), writes via handle_call + handle_continue for async file I/O, reads via ETS directly; rebuild ETS from JSONL in init/1 on restart (blocked: Scaffold Elixir Mix project...)
-- Implement `Deft.Job.RateLimiter` GenServer: dual token-bucket (RPM + TPM) per provider, priority queue (Foreman > Runner > Lead), starvation protection (promote after 10s), auto-429 detection + capacity reduction, adaptive concurrency (scale-up when bucket >60% for 30s, scale-down on >2 429s/min), cost tracking from API usage responses, pause at ceiling - $1 buffer (blocked: Scaffold Elixir Mix project...)
-- Implement `Deft.Job.Runner.run/1`: inline agent loop function — build minimal context, call LLM via RateLimiter, parse tool calls, execute tools inline with try/catch, loop until done, write results to SiteLog, return to caller (blocked: Implement Deft.Job.SiteLog..., Implement Deft.Job.RateLimiter...)
+- Implement `Deft.Job.SiteLog` GenServer: owns JSONL file + ETS table (`:bag`, keyed by `{type, agent_id}`), writes via handle_call + handle_continue for async file I/O, reads via ETS directly; rebuild ETS from JSONL in init/1 on restart - Implement `Deft.Job.RateLimiter` GenServer: dual token-bucket (RPM + TPM) per provider, priority queue (Foreman > Runner > Lead), starvation protection (promote after 10s), auto-429 detection + capacity reduction, adaptive concurrency (scale-up when bucket >60% for 30s, scale-down on >2 429s/min), cost tracking from API usage responses, pause at ceiling - $1 buffer - Implement `Deft.Job.Runner.run/1`: inline agent loop function — build minimal context, call LLM via RateLimiter, parse tool calls, execute tools inline with try/catch, loop until done, write results to SiteLog, return to caller (blocked: Implement Deft.Job.SiteLog..., Implement Deft.Job.RateLimiter...)
 - Implement Foreman gen_statem: extends Agent with tuple states `{job_phase, agent_state}` using handle_event mode; phases: :planning, :researching, :decomposing, :executing, :verifying, :complete; single-agent fallback detection during :planning (blocked: Implement Deft.Agent gen_statem..., Implement Deft.Job.Runner.run/1...)
 - Implement research phase: Foreman spawns read-only Runners in parallel (Sonnet model), collects findings from SiteLog, 120s timeout (blocked: Implement Foreman gen_statem...)
 - Implement decomposition phase: Foreman reads findings, produces deliverables + dependency DAG + interface contracts + cost estimate, writes plan to SiteLog, presents to user for approval; --auto-approve support (blocked: Implement research phase...)
@@ -163,8 +145,7 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ## issues v0.1
 
-- Define `Deft.Issue` struct with all schema fields: id, title, context, acceptance_criteria (list of strings), constraints (list of strings), status (:open/:in_progress/:closed), priority (0-4), dependencies (list of IDs), created_at, updated_at, closed_at, source (:user/:agent), job_id; include JSON encode/decode (blocked: Scaffold Elixir Mix project...)
-- Implement `Deft.Issue.Id.generate/1`: derive 4-hex-char ID from random UUID with `deft-` prefix, accept existing IDs list, extend to 5+ chars on collision (blocked: Define Deft.Issue struct...)
+- Define `Deft.Issue` struct with all schema fields: id, title, context, acceptance_criteria (list of strings), constraints (list of strings), status (:open/:in_progress/:closed), priority (0-4), dependencies (list of IDs), created_at, updated_at, closed_at, source (:user/:agent), job_id; include JSON encode/decode - Implement `Deft.Issue.Id.generate/1`: derive 4-hex-char ID from random UUID with `deft-` prefix, accept existing IDs list, extend to 5+ chars on collision (blocked: Define Deft.Issue struct...)
 - Implement `Deft.Issues` GenServer: init reads `.deft/issues.jsonl` into memory (dedup-on-read: last occurrence per ID wins), holds list of Issue structs in state; expose `create/1`, `update/2`, `close/1`, `get/1`, `list/1`, `ready/0` (blocked: Define Deft.Issue struct...)
 - Implement JSONL persistence in `Deft.Issues`: atomic file rewrite (write to `.deft/issues.jsonl.tmp.<random>`, then `File.rename/2`); advisory file lock via `.deft/issues.jsonl.lock` with exclusive create, 30s stale threshold, 100ms retry with jitter, 10s timeout (blocked: Implement Deft.Issues GenServer...)
 - Implement worktree awareness in `Deft.Issues`: detect worktree via `git rev-parse --git-common-dir`, resolve `.deft/issues.jsonl` to main repo path (blocked: Implement Deft.Issues GenServer...)
