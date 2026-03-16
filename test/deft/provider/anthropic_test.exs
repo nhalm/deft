@@ -206,8 +206,239 @@ defmodule Deft.Provider.AnthropicTest do
   end
 
   describe "format_messages/1" do
-    test "returns empty list for now (not yet implemented)" do
-      assert [] = Anthropic.format_messages([])
+    test "returns nil system and empty list for empty messages" do
+      assert {nil, []} = Anthropic.format_messages([])
+    end
+
+    test "extracts system message as string when only text content" do
+      messages = [
+        %Deft.Message{
+          id: "sys1",
+          role: :system,
+          content: [%Deft.Message.Text{text: "You are a helpful assistant."}],
+          timestamp: DateTime.utc_now()
+        }
+      ]
+
+      assert {"You are a helpful assistant.", []} = Anthropic.format_messages(messages)
+    end
+
+    test "combines multiple system messages into single string" do
+      messages = [
+        %Deft.Message{
+          id: "sys1",
+          role: :system,
+          content: [%Deft.Message.Text{text: "First part."}],
+          timestamp: DateTime.utc_now()
+        },
+        %Deft.Message{
+          id: "sys2",
+          role: :system,
+          content: [%Deft.Message.Text{text: "Second part."}],
+          timestamp: DateTime.utc_now()
+        }
+      ]
+
+      assert {"First part.\n\nSecond part.", []} = Anthropic.format_messages(messages)
+    end
+
+    test "converts user message with text content" do
+      messages = [
+        %Deft.Message{
+          id: "msg1",
+          role: :user,
+          content: [%Deft.Message.Text{text: "Hello!"}],
+          timestamp: DateTime.utc_now()
+        }
+      ]
+
+      assert {nil, [%{role: "user", content: [%{type: "text", text: "Hello!"}]}]} =
+               Anthropic.format_messages(messages)
+    end
+
+    test "converts assistant message with text content" do
+      messages = [
+        %Deft.Message{
+          id: "msg1",
+          role: :assistant,
+          content: [%Deft.Message.Text{text: "Hi there!"}],
+          timestamp: DateTime.utc_now()
+        }
+      ]
+
+      assert {nil, [%{role: "assistant", content: [%{type: "text", text: "Hi there!"}]}]} =
+               Anthropic.format_messages(messages)
+    end
+
+    test "converts tool use content block" do
+      messages = [
+        %Deft.Message{
+          id: "msg1",
+          role: :assistant,
+          content: [
+            %Deft.Message.ToolUse{
+              id: "toolu_123",
+              name: "read_file",
+              args: %{"path" => "test.txt"}
+            }
+          ],
+          timestamp: DateTime.utc_now()
+        }
+      ]
+
+      assert {nil,
+              [
+                %{
+                  role: "assistant",
+                  content: [
+                    %{
+                      type: "tool_use",
+                      id: "toolu_123",
+                      name: "read_file",
+                      input: %{"path" => "test.txt"}
+                    }
+                  ]
+                }
+              ]} = Anthropic.format_messages(messages)
+    end
+
+    test "converts tool result content block" do
+      messages = [
+        %Deft.Message{
+          id: "msg1",
+          role: :user,
+          content: [
+            %Deft.Message.ToolResult{
+              tool_use_id: "toolu_123",
+              name: "read_file",
+              content: "file contents",
+              is_error: false
+            }
+          ],
+          timestamp: DateTime.utc_now()
+        }
+      ]
+
+      assert {nil,
+              [
+                %{
+                  role: "user",
+                  content: [
+                    %{
+                      type: "tool_result",
+                      tool_use_id: "toolu_123",
+                      content: "file contents",
+                      is_error: false
+                    }
+                  ]
+                }
+              ]} = Anthropic.format_messages(messages)
+    end
+
+    test "converts thinking content block" do
+      messages = [
+        %Deft.Message{
+          id: "msg1",
+          role: :assistant,
+          content: [%Deft.Message.Thinking{text: "Let me think about this..."}],
+          timestamp: DateTime.utc_now()
+        }
+      ]
+
+      assert {nil,
+              [
+                %{
+                  role: "assistant",
+                  content: [%{type: "thinking", thinking: "Let me think about this..."}]
+                }
+              ]} = Anthropic.format_messages(messages)
+    end
+
+    test "converts image content block" do
+      messages = [
+        %Deft.Message{
+          id: "msg1",
+          role: :user,
+          content: [%Deft.Message.Image{media_type: "image/png", data: "base64data"}],
+          timestamp: DateTime.utc_now()
+        }
+      ]
+
+      assert {nil,
+              [
+                %{
+                  role: "user",
+                  content: [
+                    %{
+                      type: "image",
+                      source: %{type: "base64", media_type: "image/png", data: "base64data"}
+                    }
+                  ]
+                }
+              ]} = Anthropic.format_messages(messages)
+    end
+
+    test "converts message with multiple content blocks" do
+      messages = [
+        %Deft.Message{
+          id: "msg1",
+          role: :assistant,
+          content: [
+            %Deft.Message.Text{text: "I'll read that file."},
+            %Deft.Message.ToolUse{
+              id: "toolu_123",
+              name: "read_file",
+              args: %{"path" => "test.txt"}
+            }
+          ],
+          timestamp: DateTime.utc_now()
+        }
+      ]
+
+      assert {nil,
+              [
+                %{
+                  role: "assistant",
+                  content: [
+                    %{type: "text", text: "I'll read that file."},
+                    %{
+                      type: "tool_use",
+                      id: "toolu_123",
+                      name: "read_file",
+                      input: %{"path" => "test.txt"}
+                    }
+                  ]
+                }
+              ]} = Anthropic.format_messages(messages)
+    end
+
+    test "separates system messages from user/assistant messages" do
+      messages = [
+        %Deft.Message{
+          id: "sys1",
+          role: :system,
+          content: [%Deft.Message.Text{text: "You are helpful."}],
+          timestamp: DateTime.utc_now()
+        },
+        %Deft.Message{
+          id: "msg1",
+          role: :user,
+          content: [%Deft.Message.Text{text: "Hello"}],
+          timestamp: DateTime.utc_now()
+        },
+        %Deft.Message{
+          id: "msg2",
+          role: :assistant,
+          content: [%Deft.Message.Text{text: "Hi!"}],
+          timestamp: DateTime.utc_now()
+        }
+      ]
+
+      assert {"You are helpful.",
+              [
+                %{role: "user", content: [%{type: "text", text: "Hello"}]},
+                %{role: "assistant", content: [%{type: "text", text: "Hi!"}]}
+              ]} = Anthropic.format_messages(messages)
     end
   end
 

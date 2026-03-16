@@ -76,20 +76,22 @@ defmodule Deft.Provider.Anthropic do
   end
 
   # Private streaming loop
-  defp stream_loop(caller, api_key, _messages, _tools, model, max_tokens, temperature) do
+  defp stream_loop(caller, api_key, messages, tools, model, max_tokens, temperature) do
+    # Format messages and tools for Anthropic API
+    {system_param, wire_messages} = format_messages(messages)
+    wire_tools = format_tools(tools)
+
     # Build request body
-    body = %{
-      model: model,
-      max_tokens: max_tokens,
-      temperature: temperature,
-      messages: [
-        %{
-          role: "user",
-          content: "Hello"
-        }
-      ],
-      stream: true
-    }
+    body =
+      %{
+        model: model,
+        max_tokens: max_tokens,
+        temperature: temperature,
+        messages: wire_messages,
+        stream: true
+      }
+      |> maybe_add_system(system_param)
+      |> maybe_add_tools(wire_tools)
 
     headers = [
       {"x-api-key", api_key},
@@ -293,10 +295,85 @@ defmodule Deft.Provider.Anthropic do
   end
 
   @impl Deft.Provider
-  def format_messages(_messages) do
-    # TODO: Implement in next work item
-    []
+  def format_messages(messages) do
+    # Extract system messages and convert to system parameter
+    {system_messages, other_messages} = Enum.split_with(messages, &(&1.role == :system))
+
+    system_param = build_system_param(system_messages)
+
+    # Convert user/assistant messages to wire format
+    wire_messages =
+      other_messages
+      |> Enum.map(&message_to_wire/1)
+
+    {system_param, wire_messages}
   end
+
+  # Build the system parameter from system messages
+  defp build_system_param([]), do: nil
+
+  defp build_system_param(system_messages) do
+    # Combine all system message content blocks
+    all_content = Enum.flat_map(system_messages, & &1.content)
+
+    # If all content is text, join into a single string
+    if Enum.all?(all_content, &match?(%Deft.Message.Text{}, &1)) do
+      all_content
+      |> Enum.map(& &1.text)
+      |> Enum.join("\n\n")
+    else
+      # Mixed content types - convert to wire format
+      Enum.map(all_content, &content_block_to_wire/1)
+    end
+  end
+
+  # Convert a message to wire format
+  defp message_to_wire(message) do
+    %{
+      role: Atom.to_string(message.role),
+      content: Enum.map(message.content, &content_block_to_wire/1)
+    }
+  end
+
+  # Convert content blocks to wire format
+  defp content_block_to_wire(%Deft.Message.Text{text: text}) do
+    %{type: "text", text: text}
+  end
+
+  defp content_block_to_wire(%Deft.Message.ToolUse{id: id, name: name, args: args}) do
+    %{type: "tool_use", id: id, name: name, input: args}
+  end
+
+  defp content_block_to_wire(%Deft.Message.ToolResult{
+         tool_use_id: tool_use_id,
+         content: content,
+         is_error: is_error
+       }) do
+    %{type: "tool_result", tool_use_id: tool_use_id, content: content, is_error: is_error}
+  end
+
+  defp content_block_to_wire(%Deft.Message.Thinking{text: text}) do
+    %{type: "thinking", thinking: text}
+  end
+
+  defp content_block_to_wire(%Deft.Message.Image{media_type: media_type, data: data}) do
+    %{
+      type: "image",
+      source: %{
+        type: "base64",
+        media_type: media_type,
+        data: data
+      }
+    }
+  end
+
+  # Add system parameter to request body if present
+  defp maybe_add_system(body, nil), do: body
+  defp maybe_add_system(body, system), do: Map.put(body, :system, system)
+
+  # Add tools to request body if present
+  defp maybe_add_tools(body, []), do: body
+  defp maybe_add_tools(body, tools), do: Map.put(body, :tools, tools)
 
   @impl Deft.Provider
   def format_tools(_tools) do

@@ -26,7 +26,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ## providers v0.1
 
-- Implement `Deft.Provider.Anthropic.format_messages/1`: convert `Deft.Message` list to Anthropic wire format — system message to top-level `system` param, user/assistant with content arrays, tool_use/tool_result content blocks
 - Implement `Deft.Provider.Anthropic.format_tools/1`: convert tool modules to Anthropic `tools` array with `name`, `description`, `input_schema`
 - Implement `Deft.Provider.Anthropic.model_config/1`: return context_window, max_output, input/output pricing for claude-sonnet-4, claude-opus-4, claude-haiku-4.5
 - Create `Deft.Provider.Registry` GenServer: stores provider configs, resolves provider name + model name to module + config 
