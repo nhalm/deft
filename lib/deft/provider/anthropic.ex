@@ -140,117 +140,67 @@ defmodule Deft.Provider.Anthropic do
   defp process_sse_buffer(caller, buffer, tool_state) do
     case ServerSentEvents.parse(buffer) do
       {events, remaining} ->
-        # Process each event
-        new_tool_state =
-          Enum.reduce(events, tool_state, fn event, acc ->
-            process_sse_event(caller, event, acc)
-          end)
-
+        new_tool_state = Enum.reduce(events, tool_state, &process_single_event(caller, &1, &2))
         {remaining, new_tool_state}
     end
   end
 
-  # Process a single SSE event (event is a map with :event, :data, :id, :retry keys)
-  defp process_sse_event(caller, event, tool_state) do
-    event_type = Map.get(event, :event, "message")
-    data = Map.get(event, :data, "")
-    route_event(event_type, caller, data, tool_state)
-  end
+  # Process a single SSE event
+  defp process_single_event(caller, sse_event, tool_state) do
+    event_type = Map.get(sse_event, :event, "message")
 
-  # Route event to appropriate handler
-  defp route_event("message_start", _caller, _data, tool_state), do: tool_state
-  defp route_event("message_stop", _caller, _data, tool_state), do: tool_state
-  defp route_event("ping", _caller, _data, tool_state), do: tool_state
-
-  defp route_event("content_block_start", caller, data, tool_state),
-    do: handle_content_block_start(caller, data, tool_state)
-
-  defp route_event("content_block_delta", caller, data, tool_state),
-    do: handle_content_block_delta(caller, data, tool_state)
-
-  defp route_event("content_block_stop", caller, data, tool_state),
-    do: handle_content_block_stop(caller, data, tool_state)
-
-  defp route_event("message_delta", caller, data, tool_state),
-    do: handle_message_delta(caller, data, tool_state)
-
-  defp route_event("error", caller, data, tool_state) do
-    handle_error_event(caller, data)
-    tool_state
-  end
-
-  defp route_event(event_type, _caller, _data, tool_state) do
-    Logger.debug("Ignoring unknown SSE event type: #{event_type}")
-    tool_state
-  end
-
-  # Handle content_block_start event
-  defp handle_content_block_start(caller, data, tool_state) do
-    case Jason.decode(data) do
-      {:ok, %{"content_block" => %{"type" => "text"}} = _block} ->
-        # First text chunk will come in delta
-        tool_state
-
-      {:ok, %{"content_block" => %{"type" => "thinking"}} = _block} ->
-        # First thinking chunk will come in delta
-        tool_state
-
-      {:ok, %{"content_block" => %{"type" => "tool_use", "id" => id, "name" => name}} = _block} ->
-        send(caller, {:provider_event, %ToolCallStart{id: id, name: name}})
-        # Initialize tool call buffer
-        Map.put(tool_state, id, "")
-
-      _ ->
-        tool_state
+    if event_type == "content_block_stop" do
+      handle_tool_call_stop(caller, sse_event, tool_state)
+    else
+      handle_parsed_event(caller, parse_event(sse_event), tool_state)
     end
   end
 
-  # Handle content_block_delta event
-  defp handle_content_block_delta(caller, data, tool_state) do
-    case Jason.decode(data) do
-      {:ok, %{"delta" => %{"type" => "text_delta", "text" => text}}} ->
-        send(caller, {:provider_event, %TextDelta{delta: text}})
-        tool_state
+  # Handle events from parse_event/1
+  defp handle_parsed_event(_caller, :skip, tool_state), do: tool_state
 
-      {:ok, %{"delta" => %{"type" => "thinking_delta", "thinking" => text}}} ->
-        send(caller, {:provider_event, %ThinkingDelta{delta: text}})
-        tool_state
-
-      {:ok,
-       %{
-         "delta" => %{"type" => "input_json_delta", "partial_json" => json_fragment},
-         "index" => idx
-       }} ->
-        # Need to track by tool call ID, but Anthropic uses index
-        # We'll use a synthesized ID based on index
-        id = "tool_#{idx}"
-        send(caller, {:provider_event, %ToolCallDelta{id: id, delta: json_fragment}})
-        # Accumulate the JSON
-        current = Map.get(tool_state, id, "")
-        Map.put(tool_state, id, current <> json_fragment)
-
-      _ ->
-        tool_state
-    end
+  defp handle_parsed_event(caller, %ToolCallStart{id: id} = event, tool_state) do
+    send(caller, {:provider_event, event})
+    Map.put(tool_state, id, "")
   end
 
-  # Handle content_block_stop event
-  defp handle_content_block_stop(caller, data, tool_state) do
+  defp handle_parsed_event(caller, %ToolCallDelta{id: id, delta: delta} = event, tool_state) do
+    send(caller, {:provider_event, event})
+    current = Map.get(tool_state, id, "")
+    Map.put(tool_state, id, current <> delta)
+  end
+
+  defp handle_parsed_event(caller, event, tool_state) do
+    send(caller, {:provider_event, event})
+    tool_state
+  end
+
+  # Handle content_block_stop with accumulated tool state
+  defp handle_tool_call_stop(caller, sse_event, tool_state) do
+    data = Map.get(sse_event, :data, "")
+
     case Jason.decode(data) do
       {:ok, %{"index" => idx}} ->
-        # Parse accumulated JSON for this tool call
         id = "tool_#{idx}"
-        json_str = Map.get(tool_state, id, "{}")
 
-        case Jason.decode(json_str) do
-          {:ok, args} ->
-            send(caller, {:provider_event, %ToolCallDone{id: id, args: args}})
-            Map.delete(tool_state, id)
+        # Check if we have accumulated JSON for this tool call
+        case Map.get(tool_state, id) do
+          nil ->
+            # Not a tool call, just a regular content block stop
+            tool_state
 
-          {:error, _} ->
-            # Send empty args if parsing failed
-            send(caller, {:provider_event, %ToolCallDone{id: id, args: %{}}})
-            Map.delete(tool_state, id)
+          json_str ->
+            # Parse accumulated JSON and emit ToolCallDone
+            case Jason.decode(json_str) do
+              {:ok, args} ->
+                send(caller, {:provider_event, %ToolCallDone{id: id, args: args}})
+                Map.delete(tool_state, id)
+
+              {:error, _} ->
+                # Send empty args if parsing failed
+                send(caller, {:provider_event, %ToolCallDone{id: id, args: %{}}})
+                Map.delete(tool_state, id)
+            end
         end
 
       _ ->
@@ -258,36 +208,88 @@ defmodule Deft.Provider.Anthropic do
     end
   end
 
-  # Handle message_delta event (usage info)
-  defp handle_message_delta(caller, data, tool_state) do
+  @impl Deft.Provider
+  def parse_event(sse_event) do
+    event_type = Map.get(sse_event, :event, "message")
+    data = Map.get(sse_event, :data, "")
+
+    case event_type do
+      "content_block_start" -> parse_content_block_start(data)
+      "content_block_delta" -> parse_content_block_delta(data)
+      "message_delta" -> parse_message_delta(data)
+      "message_stop" -> %Done{}
+      "error" -> parse_error(data)
+      # content_block_stop is handled separately in the streaming layer
+      # because it requires accumulated state for tool calls
+      _ -> :skip
+    end
+  end
+
+  # Parse content_block_start events
+  defp parse_content_block_start(data) do
+    case Jason.decode(data) do
+      {:ok, %{"content_block" => %{"type" => "text"}}} ->
+        # Text blocks don't emit on start - first delta will be TextDelta
+        :skip
+
+      {:ok, %{"content_block" => %{"type" => "thinking"}}} ->
+        # Thinking blocks don't emit on start - first delta will be ThinkingDelta
+        :skip
+
+      {:ok, %{"content_block" => %{"type" => "tool_use", "id" => id, "name" => name}}} ->
+        %ToolCallStart{id: id, name: name}
+
+      _ ->
+        :skip
+    end
+  end
+
+  # Parse content_block_delta events
+  defp parse_content_block_delta(data) do
+    case Jason.decode(data) do
+      {:ok, %{"delta" => %{"type" => "text_delta", "text" => text}}} ->
+        %TextDelta{delta: text}
+
+      {:ok, %{"delta" => %{"type" => "thinking_delta", "thinking" => text}}} ->
+        %ThinkingDelta{delta: text}
+
+      {:ok,
+       %{
+         "delta" => %{"type" => "input_json_delta", "partial_json" => json_fragment},
+         "index" => idx
+       }} ->
+        # Anthropic uses index-based tracking for tool calls
+        id = "tool_#{idx}"
+        %ToolCallDelta{id: id, delta: json_fragment}
+
+      _ ->
+        :skip
+    end
+  end
+
+  # Parse message_delta events (usage info)
+  defp parse_message_delta(data) do
     case Jason.decode(data) do
       {:ok, %{"usage" => %{"input_tokens" => input, "output_tokens" => output}}} ->
-        send(caller, {:provider_event, %Usage{input: input, output: output}})
-        tool_state
+        %Usage{input: input, output: output}
 
       _ ->
-        tool_state
+        :skip
     end
   end
 
-  # Handle error event
-  defp handle_error_event(caller, data) do
+  # Parse error events
+  defp parse_error(data) do
     case Jason.decode(data) do
       {:ok, %{"error" => %{"message" => message}}} ->
-        send(caller, {:provider_event, %Error{message: message}})
+        %Error{message: message}
 
       {:ok, %{"message" => message}} ->
-        send(caller, {:provider_event, %Error{message: message}})
+        %Error{message: message}
 
       _ ->
-        send(caller, {:provider_event, %Error{message: "Unknown error"}})
+        %Error{message: "Unknown error"}
     end
-  end
-
-  @impl Deft.Provider
-  def parse_event(_raw_event) do
-    # TODO: Implement in next work item
-    :skip
   end
 
   @impl Deft.Provider

@@ -2,6 +2,7 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **providers v0.1 (2026-03-16):** Implement SSE parser layer: pipe raw Req chunks through `ServerSentEvents.parse/1`, buffer partial lines, feed complete events to `parse_event/1`
 - **providers v0.1 (2026-03-16):** Implement `Deft.Provider.Anthropic.stream/3`: POST to `https://api.anthropic.com/v1/messages` with `stream: true` via Req with `into: :self`, read `ANTHROPIC_API_KEY` from env (fail fast if missing), send `{:provider_event, event}` to caller, return stream ref; implement `cancel_stream/1` to close the connection
 - **harness v0.1 (2026-03-16):** Implement `Deft.Agent.SystemPrompt.build/1`: role definition + tool descriptions from registered tools' name/0 + description/0 + parameters/0 + working dir + git branch + date + OS + conflict resolution rules
 - **harness v0.1 (2026-03-16):** Implement `Deft.Agent.Context.build/2`: assemble message list — system prompt + observation injection point (empty initially) + conversation history + project context (DEFT.md/CLAUDE.md/AGENTS.md from working_dir)
