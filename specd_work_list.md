@@ -26,8 +26,8 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ## sessions v0.1
 
-- Implement `Deft.Session.Store`: `append/2` writes JSON line to `~/.deft/sessions/<session_id>.jsonl`, `load/1` reads and parses all lines, `list/0` returns session metadata sorted most-recent-first - Define entry type structs: session_start, message, tool_result, model_change, observation, compaction, cost- Implement session save: after each agent turn (transition to `:idle`), append message and tool_result entries to JSONL (blocked: Implement Deft.Session.Store...)
-- Implement session resume: `load/1` reconstructs conversation state from entries, returns data for Agent gen_statem init (blocked: Implement Deft.Session.Store...)
+- Implement session save: after each agent turn (transition to `:idle`), append message and tool_result entries to JSONL
+- Implement session resume: `load/1` reconstructs conversation state from entries, returns data for Agent gen_statem init
 - Implement `Deft.Config`: read and merge from CLI flags map → `.deft/config.yaml` in working_dir → `~/.deft/config.yaml` → defaults; parse YAML via yaml_elixir; return validated config struct - Implement `Deft.CLI`: parse args (deft, deft resume, deft resume <id>, deft config, -p, --model, --provider, --no-om, --working-dir, --output, --help, --version), load config, start OTP app (blocked: Implement Deft.Config...)
 - Implement non-interactive mode: `deft -p "prompt"` creates session, sends prompt to Agent, streams text output to stdout, exits on `:idle`; piped input via stdin (blocked: Implement Deft.CLI...)
 - Implement rg/fd startup check: verify in PATH via `System.find_executable/1`, warn to stderr if missing - Configure Burrito in mix.exs for single-binary builds: macOS (arm64, x86_64), Linux (x86_64, aarch64) (blocked: Implement Deft.CLI...)
