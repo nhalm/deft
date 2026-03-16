@@ -24,10 +24,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ---
 
-## tools v0.1
-
-- Implement `Deft.Agent.ToolRunner`: start `Task.Supervisor`, expose `execute_batch/2` that spawns async_nolink tasks per tool call, collects results via `Task.yield_many/2` with per-task timeouts, catches exceptions
-
 ## sessions v0.1
 
 - Implement `Deft.Session.Store`: `append/2` writes JSON line to `~/.deft/sessions/<session_id>.jsonl`, `load/1` reads and parses all lines, `list/0` returns session metadata sorted most-recent-first - Define entry type structs: session_start, message, tool_result, model_change, observation, compaction, cost- Implement session save: after each agent turn (transition to `:idle`), append message and tool_result entries to JSONL (blocked: Implement Deft.Session.Store...)

@@ -38,19 +38,23 @@ defmodule Deft.Agent.ToolRunner do
   - `supervisor` — The ToolRunner supervisor PID
   - `tool_calls` — List of `%ToolUse{}` blocks to execute
   - `context` — The `Deft.Tool.Context` struct for tool execution
+  - `tools` — List of tool modules implementing the `Deft.Tool` behaviour
   - `timeout` — Timeout in milliseconds for each tool (default: 120_000)
 
   ## Returns
 
   List of `{tool_use_id, result}` tuples in the same order as tool_calls.
   """
-  def execute_batch(supervisor, tool_calls, context, timeout \\ 120_000) do
+  def execute_batch(supervisor, tool_calls, context, tools, timeout \\ 120_000) do
+    # Build tool dispatch map: name -> module
+    tool_map = Map.new(tools, fn tool_module -> {tool_module.name(), tool_module} end)
+
     # Spawn async tasks for each tool call
     tasks =
       Enum.map(tool_calls, fn tool_use ->
         task =
           Task.Supervisor.async_nolink(supervisor, fn ->
-            execute_tool(tool_use, context)
+            execute_tool(tool_use, context, tool_map)
           end)
 
         {tool_use.id, task}
@@ -80,10 +84,14 @@ defmodule Deft.Agent.ToolRunner do
   end
 
   # Execute a single tool call
-  defp execute_tool(tool_use, _context) do
-    # For now, since no tools are implemented yet, return an error
-    # Future work items will implement tools and register them
-    {:error, "Tool '#{tool_use.name}' not found"}
+  defp execute_tool(tool_use, context, tool_map) do
+    case Map.get(tool_map, tool_use.name) do
+      nil ->
+        {:error, "Tool '#{tool_use.name}' not found"}
+
+      tool_module ->
+        tool_module.execute(tool_use.args, context)
+    end
   rescue
     exception ->
       {:error, "Tool execution error: #{Exception.message(exception)}"}

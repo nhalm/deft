@@ -647,9 +647,7 @@ defmodule Deft.Agent do
 
   defp build_tool_context(data) do
     # Build a Deft.Tool.Context struct for tool execution
-    # For now, return nil since the Tool.Context struct is not defined yet
-    # This will be implemented in the tools work items
-    %{
+    %Deft.Tool.Context{
       working_dir: Map.get(data.config, :working_dir, File.cwd!()),
       session_id: data.session_id,
       emit: fn _output -> :ok end,
@@ -679,9 +677,10 @@ defmodule Deft.Agent do
   defp execute_tools_in_task(tool_calls, data, tool_timeout) do
     tool_runner = get_tool_runner_supervisor(data)
     tool_context = build_tool_context(data)
+    tools = Map.get(data.config, :tools, [])
 
     if tool_runner do
-      ToolRunner.execute_batch(tool_runner, tool_calls, tool_context, tool_timeout)
+      ToolRunner.execute_batch(tool_runner, tool_calls, tool_context, tools, tool_timeout)
     else
       # No supervisor available - execute inline with error results
       Enum.map(tool_calls, fn tool_use ->

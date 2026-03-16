@@ -2,6 +2,7 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **tools v0.1 (2026-03-16):** Implement `Deft.Agent.ToolRunner`: start `Task.Supervisor`, expose `execute_batch/2` that spawns async_nolink tasks per tool call, collects results via `Task.yield_many/2` with per-task timeouts, catches exceptions
 - **tools v0.1 (2026-03-16):** Implement `Deft.Tools.Ls`: list directory via `File.ls/1`, return formatted listing with name, type, size
 - **tools v0.1 (2026-03-16):** Implement `Deft.Tools.Find`: shell out to `fd`, glob patterns, respect .gitignore, cap 1000 results; fall back to `Path.wildcard` if fd not installed
 - **tools v0.1 (2026-03-16):** Implement `Deft.Tools.Grep`: shell out to `rg`, support regex/glob/case_insensitive/context_lines, respect .gitignore, cap 100 matches; fall back to `:re` + `File.stream` if rg not installed
