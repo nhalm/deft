@@ -2,6 +2,7 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **harness v0.1 (2026-03-16):** Create `Deft.Application` supervisor tree: `Deft.Supervisor` (one_for_one) with `Deft.Provider.Registry` (GenServer) and `Deft.Session.Supervisor` (DynamicSupervisor)
 - **harness v0.1 (2026-03-16):** Define `Deft.Message` struct with `id`, `role`, `content`, `timestamp` fields and all ContentBlock types (Text, ToolUse, ToolResult, Thinking, Image) as structs with typespec
 - **standards v0.1 (2026-03-16):** Run `make setup` to verify deps install, lefthook installs, `make check` passes on empty project
 - **standards v0.1 (2026-03-16):** Create `Makefile` with all targets from spec section 7: setup, deps, compile, format, format.check, lint, dialyzer, test, test.eval, test.integration, test.all, check, ci, clean

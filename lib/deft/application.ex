@@ -10,7 +10,8 @@ defmodule Deft.Application do
   @impl true
   def start(_type, _args) do
     children = [
-      # Additional children will be added as specs are implemented
+      Deft.Provider.Registry,
+      Deft.Session.Supervisor
     ]
 
     opts = [strategy: :one_for_one, name: Deft.Supervisor]
