@@ -376,9 +376,14 @@ defmodule Deft.Provider.Anthropic do
   defp maybe_add_tools(body, tools), do: Map.put(body, :tools, tools)
 
   @impl Deft.Provider
-  def format_tools(_tools) do
-    # TODO: Implement in next work item
-    []
+  def format_tools(tools) do
+    Enum.map(tools, fn tool_module ->
+      %{
+        name: tool_module.name(),
+        description: tool_module.description(),
+        input_schema: tool_module.parameters()
+      }
+    end)
   end
 
   @impl Deft.Provider

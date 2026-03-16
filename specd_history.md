@@ -2,6 +2,7 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **providers v0.1 (2026-03-16):** Implement `Deft.Provider.Anthropic.format_tools/1`: convert tool modules to Anthropic `tools` array with `name`, `description`, `input_schema`
 - **tools v0.1 (2026-03-16):** Define `Deft.Tool` behaviour with `name/0`, `description/0`, `parameters/0`, `execute/2` callbacks; define `Deft.Tool.Context` struct with `working_dir`, `session_id`, `emit`, `file_scope`
 - **providers v0.1 (2026-03-16):** Implement `Deft.Provider.Anthropic.format_messages/1`: convert `Deft.Message` list to Anthropic wire format — system message to top-level `system` param, user/assistant with content arrays, tool_use/tool_result content blocks
 - **providers v0.1 (2026-03-16):** Implement `Deft.Provider.Anthropic.parse_event/1`: map `content_block_start/delta/stop` and `message_delta/stop` to common event types per spec section 4 event mapping table

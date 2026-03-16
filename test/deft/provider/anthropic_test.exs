@@ -443,8 +443,89 @@ defmodule Deft.Provider.AnthropicTest do
   end
 
   describe "format_tools/1" do
-    test "returns empty list for now (not yet implemented)" do
+    defmodule MockTool do
+      @behaviour Deft.Tool
+
+      @impl Deft.Tool
+      def name(), do: "read_file"
+
+      @impl Deft.Tool
+      def description(), do: "Read contents of a file"
+
+      @impl Deft.Tool
+      def parameters() do
+        %{
+          type: "object",
+          properties: %{
+            path: %{type: "string", description: "Path to the file"}
+          },
+          required: ["path"]
+        }
+      end
+
+      @impl Deft.Tool
+      def execute(_args, _context), do: {:ok, []}
+    end
+
+    test "returns empty list for empty tools" do
       assert [] = Anthropic.format_tools([])
+    end
+
+    test "converts tool module to Anthropic format" do
+      result = Anthropic.format_tools([MockTool])
+
+      assert [
+               %{
+                 name: "read_file",
+                 description: "Read contents of a file",
+                 input_schema: %{
+                   type: "object",
+                   properties: %{
+                     path: %{type: "string", description: "Path to the file"}
+                   },
+                   required: ["path"]
+                 }
+               }
+             ] = result
+    end
+
+    test "converts multiple tool modules" do
+      defmodule AnotherMockTool do
+        @behaviour Deft.Tool
+
+        @impl Deft.Tool
+        def name(), do: "write_file"
+
+        @impl Deft.Tool
+        def description(), do: "Write content to a file"
+
+        @impl Deft.Tool
+        def parameters() do
+          %{
+            type: "object",
+            properties: %{
+              path: %{type: "string"},
+              content: %{type: "string"}
+            },
+            required: ["path", "content"]
+          }
+        end
+
+        @impl Deft.Tool
+        def execute(_args, _context), do: {:ok, []}
+      end
+
+      result = Anthropic.format_tools([MockTool, AnotherMockTool])
+
+      assert length(result) == 2
+
+      assert Enum.any?(result, fn tool ->
+               tool.name == "read_file"
+             end)
+
+      assert Enum.any?(result, fn tool ->
+               tool.name == "write_file"
+             end)
     end
   end
 
