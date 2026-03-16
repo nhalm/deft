@@ -26,7 +26,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ## sessions v0.1
 
-- Implement non-interactive mode: `deft -p "prompt"` creates session, sends prompt to Agent, streams text output to stdout, exits on `:idle`; piped input via stdin
 - Implement rg/fd startup check: verify in PATH via `System.find_executable/1`, warn to stderr if missing - Configure Burrito in mix.exs for single-binary builds: macOS (arm64, x86_64), Linux (x86_64, aarch64)
 
 ## === BOOTSTRAP CHECKPOINT ===

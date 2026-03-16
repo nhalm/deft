@@ -6,9 +6,16 @@ defmodule Deft.AgentTest do
   alias Deft.Message.Text
 
   setup_all do
-    # Start the Deft.Registry for event broadcasting
-    # Tests are non-async so they can share the registry
-    {:ok, _} = Registry.start_link(keys: :duplicate, name: Deft.Registry)
+    # The Deft.Registry is started by the application, so we don't need to start it here
+    # Just verify it's running
+    case Process.whereis(Deft.Registry) do
+      nil ->
+        {:ok, _} = Registry.start_link(keys: :duplicate, name: Deft.Registry)
+
+      _pid ->
+        :ok
+    end
+
     :ok
   end
 

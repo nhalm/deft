@@ -10,6 +10,7 @@ defmodule Deft.Application do
   @impl true
   def start(_type, _args) do
     children = [
+      {Registry, keys: :duplicate, name: Deft.Registry},
       Deft.Provider.Registry,
       Deft.Session.Supervisor
     ]

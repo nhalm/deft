@@ -26,6 +26,7 @@ defmodule Deft.CLI do
   """
 
   alias Deft.Config
+  alias Deft.Session.Entry.SessionStart
   alias Deft.Session.Store
 
   @version Mix.Project.config()[:version]
@@ -214,13 +215,32 @@ defmodule Deft.CLI do
     :ok
   end
 
-  defp execute_command({:non_interactive, prompt}, _flags) do
-    # TODO: Implement non-interactive mode
-    # For now, just show that we parsed it correctly
-    IO.puts("Non-interactive mode:")
-    IO.puts("Prompt: #{prompt}")
-    IO.puts("(Non-interactive mode not yet implemented)")
-    :ok
+  defp execute_command({:non_interactive, prompt}, flags) do
+    # Get working directory and load configuration
+    working_dir = flags[:working_dir] || File.cwd!()
+    cli_flags = build_cli_flags(flags)
+    config = Config.load(cli_flags, working_dir)
+
+    # Verify API key and register provider
+    verify_api_key()
+    :ok = Deft.Provider.Registry.register("anthropic", Deft.Provider.Anthropic)
+
+    # Create session and start agent
+    session_id = generate_session_id()
+    create_session(session_id, working_dir, config)
+    agent_pid = start_agent(session_id, working_dir, config)
+
+    # Subscribe to agent events
+    Registry.register(Deft.Registry, {:session, session_id}, [])
+
+    # Open output handle and run
+    output_handle = open_output_handle(flags[:output])
+    Deft.Agent.prompt(agent_pid, prompt)
+    result = non_interactive_loop(output_handle)
+
+    # Clean up
+    close_output_handle(output_handle)
+    result
   end
 
   defp execute_command({:error, message}, _flags) do
@@ -291,6 +311,95 @@ defmodule Deft.CLI do
 
     For more information, see: https://github.com/yourusername/deft
     """)
+  end
+
+  # Generate a unique session ID
+  defp generate_session_id do
+    # Generate a random 8-byte hex string as session ID
+    "sess_" <> (:crypto.strong_rand_bytes(8) |> Base.encode16(case: :lower))
+  end
+
+  # Verify that ANTHROPIC_API_KEY is set
+  defp verify_api_key do
+    unless System.get_env("ANTHROPIC_API_KEY") do
+      IO.puts(:stderr, "Error: ANTHROPIC_API_KEY environment variable not set")
+      exit({:shutdown, 1})
+    end
+  end
+
+  # Create a new session with initial metadata
+  defp create_session(session_id, working_dir, config) do
+    config_map = Map.from_struct(config)
+    session_start = SessionStart.new(session_id, working_dir, config.model, config_map)
+    Store.append(session_id, session_start)
+  end
+
+  # Start the Agent process for a session
+  defp start_agent(session_id, working_dir, config) do
+    agent_config = %{
+      model: config.model,
+      provider: Deft.Provider.Anthropic,
+      working_dir: working_dir,
+      turn_limit: config.turn_limit,
+      tool_timeout: config.tool_timeout,
+      max_turns: config.turn_limit
+    }
+
+    {:ok, agent_pid} = Deft.Agent.start_link(session_id: session_id, config: agent_config)
+    agent_pid
+  end
+
+  # Open output handle for non-interactive mode
+  defp open_output_handle(nil), do: :stdio
+
+  defp open_output_handle(file_path) do
+    case File.open(file_path, [:write, :utf8]) do
+      {:ok, handle} ->
+        handle
+
+      {:error, reason} ->
+        IO.puts(:stderr, "Error: Failed to open output file: #{inspect(reason)}")
+        exit({:shutdown, 1})
+    end
+  end
+
+  # Close output handle if it's a file
+  defp close_output_handle(:stdio), do: :ok
+  defp close_output_handle(handle), do: File.close(handle)
+
+  # Event loop for non-interactive mode
+  defp non_interactive_loop(output_handle) do
+    receive do
+      {:agent_event, {:text_delta, delta}} ->
+        write_output(output_handle, delta)
+        non_interactive_loop(output_handle)
+
+      {:agent_event, {:state_change, :idle}} ->
+        # Agent is idle - we're done
+        :ok
+
+      {:agent_event, {:error, message}} ->
+        IO.puts(:stderr, "Error: #{message}")
+        exit({:shutdown, 1})
+
+      {:agent_event, _other_event} ->
+        # Ignore other events (tool calls, thinking, etc.)
+        non_interactive_loop(output_handle)
+    after
+      # Timeout after 5 minutes of inactivity
+      300_000 ->
+        IO.puts(:stderr, "Error: Timeout waiting for response")
+        exit({:shutdown, 1})
+    end
+  end
+
+  # Write output to stdout or file
+  defp write_output(:stdio, text) do
+    IO.write(text)
+  end
+
+  defp write_output(file_handle, text) do
+    IO.write(file_handle, text)
   end
 
   # Check for required external dependencies

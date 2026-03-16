@@ -2,6 +2,7 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **sessions v0.1 (2026-03-16):** Implement non-interactive mode: `deft -p "prompt"` creates session, sends prompt to Agent, streams text output to stdout, exits on `:idle`; piped input via stdin
 - **sessions v0.1 (2026-03-16):** Implement `Deft.CLI`: parse args (deft, deft resume, deft resume <id>, deft config, -p, --model, --provider, --no-om, --working-dir, --output, --help, --version), load config, start OTP app
 - **sessions v0.1 (2026-03-16):** Implement `Deft.Config`: read and merge from CLI flags map → `.deft/config.yaml` in working_dir → `~/.deft/config.yaml` → defaults; parse YAML via yaml_elixir; return validated config struct
 - **sessions v0.1 (2026-03-16):** Implement session resume: `load/1` reconstructs conversation state from entries, returns data for Agent gen_statem init
