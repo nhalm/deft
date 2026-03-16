@@ -49,6 +49,10 @@ Then use Deft to build the rest of Deft. The critical path is:
 - Fix `parse_message_delta/1`: Anthropic's `message_delta` event only carries `output_tokens` in its usage field, not `input_tokens`; match on `%{"output_tokens" => output}` only; also handle `message_start` event to capture `input_tokens` from the initial usage report
 - Fix `stream/3`: use `spawn(fn -> ... end)` + `Process.monitor(pid)` (or `spawn_monitor/1`) instead of `spawn_link/1` — with `spawn_link`, a stream process crash kills the agent instead of delivering a `:DOWN` message for graceful recovery
 
+## sessions v0.1
+
+- Implement `deft resume <id>` CLI command: load session JSONL from `~/.deft/sessions/<id>.jsonl`, reconstruct conversation state from `message` + `tool_result` entries, display summary of last 10 messages (formatted as "Role (HH:MM): first 100 chars of content"); then accept `-p "prompt"` flag for non-interactive continuation (execute one turn with that prompt, print response, exit)
+
 ## === BOOTSTRAP CHECKPOINT ===
 <!-- After the above specs are implemented, `deft -p "prompt"` works as a CLI agent. -->
 <!-- Use Deft (or Claude Code) to implement the remaining specs below. -->
