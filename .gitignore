@@ -1,0 +1,34 @@
+# Elixir/Mix
+_build/
+deps/
+*.beam
+*.ez
+erl_crash.dump
+
+# Burrito builds
+burrito_out/
+
+# Test/coverage
+cover/
+doc/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Environment / secrets
+.env
+.env.*
+
+# Dialyzer
+priv/plts/
+
+# specd lock files
+*.lock
