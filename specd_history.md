@@ -2,6 +2,7 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **sessions v0.1 (2026-03-16):** Implement session resume: `load/1` reconstructs conversation state from entries, returns data for Agent gen_statem init
 - **sessions v0.1 (2026-03-16):** Implement session save: after each agent turn (transition to `:idle`), append message and tool_result entries to JSONL
 - **sessions v0.1 (2026-03-16):** Implement `Deft.Session.Store`: `append/2` writes JSON line to `~/.deft/sessions/<session_id>.jsonl`, `load/1` reads and parses all lines, `list/0` returns session metadata sorted most-recent-first - Define entry type structs: session_start, message, tool_result, model_change, observation, compaction, cost
 - **tools v0.1 (2026-03-16):** Implement `Deft.Agent.ToolRunner`: start `Task.Supervisor`, expose `execute_batch/2` that spawns async_nolink tasks per tool call, collects results via `Task.yield_many/2` with per-task timeouts, catches exceptions

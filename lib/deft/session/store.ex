@@ -83,6 +83,46 @@ defmodule Deft.Session.Store do
   end
 
   @doc """
+  Resumes a session by reconstructing conversation state from entries.
+
+  Returns a map containing:
+  - `:messages` - List of reconstructed Deft.Message structs
+  - `:config` - Configuration map from session_start
+  - `:working_dir` - Working directory from session_start
+  - `:model` - Model name from session_start (or latest model_change)
+  - `:om_state` - Latest observation state (if any)
+  - `:session_metadata` - Session start metadata
+
+  ## Examples
+
+      iex> Store.resume("abc123")
+      {:ok, %{
+        messages: [%Deft.Message{}, ...],
+        config: %{},
+        working_dir: "/tmp",
+        model: "claude-sonnet-4",
+        om_state: nil,
+        session_metadata: %Entry.SessionStart{}
+      }}
+
+      iex> Store.resume("nonexistent")
+      {:error, :enoent}
+  """
+  @spec resume(String.t()) :: {:ok, map()} | {:error, term()}
+  def resume(session_id) do
+    case load(session_id) do
+      {:ok, entries} ->
+        state = reconstruct_state(entries)
+        {:ok, state}
+
+      {:error, reason} = error ->
+        require Logger
+        Logger.debug("Failed to resume session #{session_id}: #{inspect(reason)}")
+        error
+    end
+  end
+
+  @doc """
   Lists all sessions with metadata, sorted most-recent-first.
 
   Returns a list of session metadata maps with:
@@ -126,6 +166,136 @@ defmodule Deft.Session.Store do
   end
 
   # Private helpers
+
+  defp reconstruct_state(entries) do
+    # Extract session metadata
+    session_start = find_session_start(entries)
+
+    # Reconstruct messages from message entries
+    messages = reconstruct_messages(entries)
+
+    # Find the latest model (from session_start or model_change entries)
+    model = find_latest_model(entries, session_start)
+
+    # Find the latest observation state
+    om_state = find_latest_observation(entries)
+
+    %{
+      messages: messages,
+      config: (session_start && session_start.config) || %{},
+      working_dir: (session_start && session_start.working_dir) || File.cwd!(),
+      model: model,
+      om_state: om_state,
+      session_metadata: session_start
+    }
+  end
+
+  defp reconstruct_messages(entries) do
+    # Convert message entries back to Deft.Message structs
+    entries
+    |> Enum.filter(fn
+      %Entry.Message{} -> true
+      _ -> false
+    end)
+    |> Enum.map(&entry_to_message/1)
+  end
+
+  defp entry_to_message(%Entry.Message{} = entry) do
+    %Deft.Message{
+      id: entry.message_id,
+      role: entry.role,
+      content: deserialize_content(entry.content),
+      timestamp: entry.timestamp
+    }
+  end
+
+  defp deserialize_content(content) when is_list(content) do
+    Enum.map(content, fn
+      %{type: "text", text: text} ->
+        %Deft.Message.Text{text: text}
+
+      %{type: "tool_use", id: id, name: name, args: args} ->
+        %Deft.Message.ToolUse{id: id, name: name, args: args}
+
+      %{
+        type: "tool_result",
+        tool_use_id: tool_use_id,
+        name: name,
+        content: content,
+        is_error: is_error
+      } ->
+        %Deft.Message.ToolResult{
+          tool_use_id: tool_use_id,
+          name: name,
+          content: content,
+          is_error: is_error
+        }
+
+      %{type: "thinking", text: text} ->
+        %Deft.Message.Thinking{text: text}
+
+      %{type: "image", media_type: media_type, data: data} ->
+        %Deft.Message.Image{media_type: media_type, data: data}
+
+      # Handle string keys as well (from JSON parsing)
+      %{"type" => "text", "text" => text} ->
+        %Deft.Message.Text{text: text}
+
+      %{"type" => "tool_use", "id" => id, "name" => name, "args" => args} ->
+        %Deft.Message.ToolUse{id: id, name: name, args: args}
+
+      %{
+        "type" => "tool_result",
+        "tool_use_id" => tool_use_id,
+        "name" => name,
+        "content" => content,
+        "is_error" => is_error
+      } ->
+        %Deft.Message.ToolResult{
+          tool_use_id: tool_use_id,
+          name: name,
+          content: content,
+          is_error: is_error
+        }
+
+      %{"type" => "thinking", "text" => text} ->
+        %Deft.Message.Thinking{text: text}
+
+      %{"type" => "image", "media_type" => media_type, "data" => data} ->
+        %Deft.Message.Image{media_type: media_type, data: data}
+
+      _other ->
+        # Unknown content type - skip
+        nil
+    end)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp find_latest_model(entries, session_start) do
+    # Find the most recent model_change entry, or use session_start model
+    latest_change =
+      entries
+      |> Enum.reverse()
+      |> Enum.find(fn
+        %Entry.ModelChange{} -> true
+        _ -> false
+      end)
+
+    case latest_change do
+      %Entry.ModelChange{to_model: model} -> model
+      nil -> (session_start && session_start.model) || "claude-sonnet-4"
+    end
+  end
+
+  defp find_latest_observation(entries) do
+    # Find the most recent observation entry
+    entries
+    |> Enum.reverse()
+    |> Enum.find(fn
+      %Entry.Observation{} -> true
+      _ -> false
+    end)
+  end
 
   defp session_path(session_id) do
     Path.join(@sessions_dir, "#{session_id}.jsonl")

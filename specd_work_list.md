@@ -26,7 +26,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ## sessions v0.1
 
-- Implement session resume: `load/1` reconstructs conversation state from entries, returns data for Agent gen_statem init
 - Implement `Deft.Config`: read and merge from CLI flags map → `.deft/config.yaml` in working_dir → `~/.deft/config.yaml` → defaults; parse YAML via yaml_elixir; return validated config struct - Implement `Deft.CLI`: parse args (deft, deft resume, deft resume <id>, deft config, -p, --model, --provider, --no-om, --working-dir, --output, --help, --version), load config, start OTP app (blocked: Implement Deft.Config...)
 - Implement non-interactive mode: `deft -p "prompt"` creates session, sends prompt to Agent, streams text output to stdout, exits on `:idle`; piped input via stdin (blocked: Implement Deft.CLI...)
 - Implement rg/fd startup check: verify in PATH via `System.find_executable/1`, warn to stderr if missing - Configure Burrito in mix.exs for single-binary builds: macOS (arm64, x86_64), Linux (x86_64, aarch64) (blocked: Implement Deft.CLI...)
