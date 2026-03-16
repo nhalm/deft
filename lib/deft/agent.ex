@@ -94,6 +94,16 @@ defmodule Deft.Agent do
     :gen_statem.cast(agent, :abort)
   end
 
+  @doc """
+  Responds to a turn limit prompt.
+
+  When the turn limit is reached, the agent pauses and asks if it should continue.
+  Call this function with `true` to continue or `false` to stop.
+  """
+  def continue_turn(agent, should_continue) when is_boolean(should_continue) do
+    :gen_statem.cast(agent, {:continue_turn, should_continue})
+  end
+
   # gen_statem callbacks
 
   @impl :gen_statem
@@ -150,13 +160,14 @@ defmodule Deft.Agent do
     # Call provider.stream/3
     case call_provider_stream(provider, context_messages, tools, data.config) do
       {:ok, stream_ref} ->
-        # Store stream ref and updated messages, reset retry state, transition to :calling
+        # Store stream ref and updated messages, reset retry state and turn count, transition to :calling
         new_data = %{
           data
           | messages: new_messages,
             stream_ref: stream_ref,
             retry_count: 0,
-            retry_delay: 1000
+            retry_delay: 1000,
+            turn_count: 0
         }
 
         {:next_state, :calling, new_data}
@@ -210,6 +221,18 @@ defmodule Deft.Agent do
     }
 
     {:next_state, :idle, clean_data}
+  end
+
+  def handle_event(:cast, {:continue_turn, should_continue}, :executing_tools, data) do
+    if should_continue do
+      # Reset turn counter and continue calling provider
+      new_data = %{data | turn_count: 0}
+      continue_after_tools(new_data)
+    else
+      # User declined to continue - transition to idle
+      broadcast_event(data.session_id, {:turn_limit_declined})
+      handle_idle_transition(data)
+    end
   end
 
   def handle_event(:info, {:provider_event, event}, :calling, data) do
@@ -596,7 +619,8 @@ defmodule Deft.Agent do
               | messages: new_messages,
                 stream_ref: stream_ref,
                 retry_count: 0,
-                retry_delay: 1000
+                retry_delay: 1000,
+                turn_count: 0
             }
 
             broadcast_event(new_data.session_id, {:state_change, :calling})
@@ -731,26 +755,43 @@ defmodule Deft.Agent do
   end
 
   defp continue_after_tools(data) do
-    # Assemble context and call provider to continue the conversation
-    context_messages = Context.build(data.messages, config: data.config)
-    provider = Map.get(data.config, :provider)
-    tools = []
+    # Increment turn counter
+    new_turn_count = data.turn_count + 1
 
-    case call_provider_stream(provider, context_messages, tools, data.config) do
-      {:ok, stream_ref} ->
-        updated_data = %{
-          data
-          | stream_ref: stream_ref,
-            retry_count: 0,
-            retry_delay: 1000
-        }
+    # Check turn limit (default: 25)
+    max_turns = Map.get(data.config, :max_turns, 25)
 
-        broadcast_event(data.session_id, {:state_change, :calling})
-        {:next_state, :calling, updated_data}
+    if new_turn_count > max_turns do
+      # Turn limit reached - pause and ask user to continue
+      broadcast_event(data.session_id, {:turn_limit_reached, new_turn_count, max_turns})
+      # Stay in :executing_tools state and wait for user response via continue_turn/2
+      updated_data = %{data | turn_count: new_turn_count}
+      {:keep_state, updated_data}
+    else
+      # Continue with provider call
+      context_messages = Context.build(data.messages, config: data.config)
+      provider = Map.get(data.config, :provider)
+      tools = []
 
-      {:error, reason} ->
-        broadcast_event(data.session_id, {:error, reason})
-        handle_idle_transition(data)
+      case call_provider_stream(provider, context_messages, tools, data.config) do
+        {:ok, stream_ref} ->
+          updated_data = %{
+            data
+            | stream_ref: stream_ref,
+              retry_count: 0,
+              retry_delay: 1000,
+              turn_count: new_turn_count
+          }
+
+          broadcast_event(data.session_id, {:state_change, :calling})
+          {:next_state, :calling, updated_data}
+
+        {:error, reason} ->
+          broadcast_event(data.session_id, {:error, reason})
+          # Keep turn count even on error
+          new_data = %{data | turn_count: new_turn_count}
+          handle_idle_transition(new_data)
+      end
     end
   end
 end

@@ -26,7 +26,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ## harness v0.1
 
-- Implement turn limit: counter incremented on `:executing_tools → :calling`, reset on user prompt; at limit, pause-and-ask via event broadcast
 - Implement prompt queueing: queue prompts received in non-idle states, deliver on return to `:idle`
 - Implement `Deft.Agent.Context.build/2`: assemble message list — system prompt + observation injection point (empty initially) + conversation history + project context (DEFT.md/CLAUDE.md/AGENTS.md from working_dir)
 - Implement `Deft.Agent.SystemPrompt.build/1`: role definition + tool descriptions from registered tools' name/0 + description/0 + parameters/0 + working dir + git branch + date + OS + conflict resolution rules
