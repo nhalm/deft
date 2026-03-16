@@ -32,6 +32,10 @@ defmodule Deft.Agent do
 
   @behaviour :gen_statem
 
+  alias Deft.Message
+  alias Deft.Message.Text
+  alias Deft.Agent.Context
+
   # Client API
 
   @doc """
@@ -96,9 +100,45 @@ defmodule Deft.Agent do
   end
 
   @impl :gen_statem
-  def handle_event(:cast, {:prompt, _text}, :idle, _data) do
-    # Placeholder: transition to :calling will be implemented in future work item
-    :keep_state_and_data
+  def handle_event(:cast, {:prompt, text}, :idle, data) do
+    # Create user message
+    user_message = %Message{
+      id: generate_message_id(),
+      role: :user,
+      content: [%Text{text: text}],
+      timestamp: DateTime.utc_now()
+    }
+
+    # Append to conversation history
+    new_messages = data.messages ++ [user_message]
+
+    # Assemble context
+    context_messages = Context.build(new_messages, config: data.config)
+
+    # Get provider from config (default to nil for now)
+    provider = Map.get(data.config, :provider)
+
+    # Get tools (empty for now, will be populated by future work items)
+    tools = []
+
+    # Call provider.stream/3
+    case call_provider_stream(provider, context_messages, tools, data.config) do
+      {:ok, stream_ref} ->
+        # Store stream ref and updated messages, transition to :calling
+        new_data = %{
+          data
+          | messages: new_messages,
+            stream_ref: stream_ref
+        }
+
+        {:next_state, :calling, new_data}
+
+      {:error, reason} ->
+        # On error, stay in :idle and emit error event
+        # Error recovery with retries will be implemented in :calling → :streaming transition
+        broadcast_event(data.session_id, {:error, reason})
+        :keep_state_and_data
+    end
   end
 
   def handle_event(:cast, {:prompt, text}, _state, data) do
@@ -132,5 +172,32 @@ defmodule Deft.Agent do
   @impl :gen_statem
   def terminate(_reason, _state, _data) do
     :ok
+  end
+
+  # Private helpers
+
+  defp generate_message_id do
+    # Generate a unique message ID using UUID
+    "msg_" <> (:crypto.strong_rand_bytes(8) |> Base.encode16(case: :lower))
+  end
+
+  defp call_provider_stream(nil, _messages, _tools, _config) do
+    # No provider configured
+    {:error, :no_provider}
+  end
+
+  defp call_provider_stream(provider, messages, tools, config) do
+    # Call provider.stream/3
+    provider.stream(messages, tools, config)
+  end
+
+  defp broadcast_event(session_id, event) do
+    # Broadcast event via Registry for TUI and other consumers
+    # Registry key is {:session, session_id}
+    Registry.dispatch(Deft.Registry, {:session, session_id}, fn entries ->
+      for {pid, _} <- entries do
+        send(pid, {:agent_event, event})
+      end
+    end)
   end
 end
