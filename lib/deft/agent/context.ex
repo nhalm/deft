@@ -12,6 +12,7 @@ defmodule Deft.Agent.Context do
 
   alias Deft.Message
   alias Deft.Message.Text
+  alias Deft.Agent.SystemPrompt
 
   @doc """
   Builds the context for an agent turn.
@@ -42,14 +43,14 @@ defmodule Deft.Agent.Context do
     |> Enum.reject(&is_nil/1)
   end
 
-  # Builds the system prompt message
-  # For now, this is a placeholder. Will be replaced by SystemPrompt.build/1
-  # in the next work item.
-  defp build_system_prompt(_config) do
+  # Builds the system prompt message using SystemPrompt.build/1
+  defp build_system_prompt(config) do
+    prompt_text = SystemPrompt.build(config)
+
     %Message{
       id: "sys_prompt",
       role: :system,
-      content: [%Text{text: "You are Deft, a helpful AI assistant."}],
+      content: [%Text{text: prompt_text}],
       timestamp: DateTime.utc_now()
     }
   end

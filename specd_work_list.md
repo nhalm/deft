@@ -24,9 +24,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ---
 
-## harness v0.1
-
-- Implement `Deft.Agent.SystemPrompt.build/1`: role definition + tool descriptions from registered tools' name/0 + description/0 + parameters/0 + working dir + git branch + date + OS + conflict resolution rules
 ## providers v0.1
 
 - Implement `Deft.Provider.Anthropic.stream/3`: POST to `https://api.anthropic.com/v1/messages` with `stream: true` via Req with `into: :self`, read `ANTHROPIC_API_KEY` from env (fail fast if missing), send `{:provider_event, event}` to caller, return stream ref; implement `cancel_stream/1` to close the connection
