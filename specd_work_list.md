@@ -26,15 +26,14 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ## harness v0.1
 
-- Implement `Deft.Agent` as gen_statem with `handle_event` callback mode, four states (`:idle`, `:calling`, `:streaming`, `:executing_tools`), state data holding conversation messages list, config, session_id
-- Implement `:idle → :calling` transition: on `{:prompt, text}` cast, append user message to history, call provider.stream/3 with assembled context (blocked: Implement Deft.Agent gen_statem...)
-- Implement `:calling → :streaming` transition: on first `{:provider_event, _}` info message, transition to `:streaming`; on error, retry with exponential backoff up to 3 times, then `:idle` with error (blocked: Implement Deft.Agent gen_statem...)
-- Implement `:streaming` state: accumulate `:text_delta` into assistant message content, accumulate `:tool_call_delta` into tool call args, on `:done` event transition to `:executing_tools` (blocked: Implement Deft.Agent gen_statem...)
-- Implement `:executing_tools` state: fan out tool calls via `Task.Supervisor.async_nolink` under `Deft.Agent.ToolRunner`, collect results with `Task.yield_many/2` + timeouts, append tool_result messages, transition to `:calling` if tool results present or `:idle` if no tool calls (blocked: Implement Deft.Agent gen_statem...)
+- Implement `:idle → :calling` transition: on `{:prompt, text}` cast, append user message to history, call provider.stream/3 with assembled context
+- Implement `:calling → :streaming` transition: on first `{:provider_event, _}` info message, transition to `:streaming`; on error, retry with exponential backoff up to 3 times, then `:idle` with error
+- Implement `:streaming` state: accumulate `:text_delta` into assistant message content, accumulate `:tool_call_delta` into tool call args, on `:done` event transition to `:executing_tools`
+- Implement `:executing_tools` state: fan out tool calls via `Task.Supervisor.async_nolink` under `Deft.Agent.ToolRunner`, collect results with `Task.yield_many/2` + timeouts, append tool_result messages, transition to `:calling` if tool results present or `:idle` if no tool calls
 - Implement abort: on `{:abort}` in any state, cancel stream via `cancel_stream/1` if streaming, terminate in-flight tasks if executing_tools, transition to `:idle` (blocked: Implement :executing_tools state...)
 - Implement turn limit: counter incremented on `:executing_tools → :calling`, reset on user prompt; at limit, pause-and-ask via event broadcast (blocked: Implement :executing_tools state...)
-- Implement prompt queueing: queue prompts received in non-idle states, deliver on return to `:idle` (blocked: Implement Deft.Agent gen_statem...)
-- Implement `Deft.Agent.Context.build/2`: assemble message list — system prompt + observation injection point (empty initially) + conversation history + project context (DEFT.md/CLAUDE.md/AGENTS.md from working_dir) (blocked: Implement Deft.Agent gen_statem...)
+- Implement prompt queueing: queue prompts received in non-idle states, deliver on return to `:idle`
+- Implement `Deft.Agent.Context.build/2`: assemble message list — system prompt + observation injection point (empty initially) + conversation history + project context (DEFT.md/CLAUDE.md/AGENTS.md from working_dir)
 - Implement `Deft.Agent.SystemPrompt.build/1`: role definition + tool descriptions from registered tools' name/0 + description/0 + parameters/0 + working dir + git branch + date + OS + conflict resolution rules
 ## providers v0.1
 
