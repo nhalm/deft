@@ -24,10 +24,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ---
 
-## sessions v0.1
-
-- Implement rg/fd startup check: verify in PATH via `System.find_executable/1`, warn to stderr if missing - Configure Burrito in mix.exs for single-binary builds: macOS (arm64, x86_64), Linux (x86_64, aarch64)
-
 ## === BOOTSTRAP CHECKPOINT ===
 <!-- After the above specs are implemented, `deft -p "prompt"` works as a CLI agent. -->
 <!-- Use Deft (or Claude Code) to implement the remaining specs below. -->

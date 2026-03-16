@@ -2,6 +2,7 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **sessions v0.1 (2026-03-16):** Configure Burrito in mix.exs for single-binary builds: macOS (arm64, x86_64), Linux (x86_64, aarch64)
 - **sessions v0.1 (2026-03-16):** Implement non-interactive mode: `deft -p "prompt"` creates session, sends prompt to Agent, streams text output to stdout, exits on `:idle`; piped input via stdin
 - **sessions v0.1 (2026-03-16):** Implement `Deft.CLI`: parse args (deft, deft resume, deft resume <id>, deft config, -p, --model, --provider, --no-om, --working-dir, --output, --help, --version), load config, start OTP app
 - **sessions v0.1 (2026-03-16):** Implement `Deft.Config`: read and merge from CLI flags map → `.deft/config.yaml` in working_dir → `~/.deft/config.yaml` → defaults; parse YAML via yaml_elixir; return validated config struct

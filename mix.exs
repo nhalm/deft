@@ -10,7 +10,8 @@ defmodule Deft.MixProject do
       deps: deps(),
       elixirc_paths: elixirc_paths(Mix.env()),
       aliases: aliases(),
-      escript: escript()
+      escript: escript(),
+      releases: releases()
     ]
   end
 
@@ -62,6 +63,22 @@ defmodule Deft.MixProject do
   defp escript do
     [
       main_module: Deft.CLI
+    ]
+  end
+
+  defp releases do
+    [
+      deft: [
+        steps: [:assemble],
+        burrito: [
+          targets: [
+            macos_arm64: [os: :darwin, cpu: :aarch64],
+            macos_x86_64: [os: :darwin, cpu: :x86_64],
+            linux_x86_64: [os: :linux, cpu: :x86_64],
+            linux_aarch64: [os: :linux, cpu: :aarch64]
+          ]
+        ]
+      ]
     ]
   end
 end
