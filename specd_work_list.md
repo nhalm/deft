@@ -31,14 +31,14 @@ Then use Deft to build the rest of Deft. The critical path is:
 - Create `Deft.Provider.Registry` GenServer: stores provider configs, resolves provider name + model name to module + config 
 ## tools v0.1
 
-- Define `Deft.Tool` behaviour with `name/0`, `description/0`, `parameters/0`, `execute/2` callbacks; define `Deft.Tool.Context` struct with `working_dir`, `session_id`, `emit`, `file_scope`- Implement `Deft.Tools.Read`: read file with optional offset/limit, return content with line numbers, base64 for images (blocked: Define Deft.Tool behaviour...)
-- Implement `Deft.Tools.Write`: write content to path, create parent dirs, return confirmation with byte count, check file_scope if set (blocked: Define Deft.Tool behaviour...)
-- Implement `Deft.Tools.Edit`: string-match mode (unique old_string replacement, return unified diff, include nearby text on failure) + line-range mode (start_line/end_line/new_content), check file_scope if set (blocked: Define Deft.Tool behaviour...)
-- Implement `Deft.Tools.Bash`: spawn via Port, stream stdout/stderr to context.emit, configurable timeout (default 120s), truncate to last 100 lines or 30KB, save full output to temp file (blocked: Define Deft.Tool behaviour...)
-- Implement `Deft.Tools.Grep`: shell out to `rg`, support regex/glob/case_insensitive/context_lines, respect .gitignore, cap 100 matches; fall back to `:re` + `File.stream` if rg not installed (blocked: Define Deft.Tool behaviour...)
-- Implement `Deft.Tools.Find`: shell out to `fd`, glob patterns, respect .gitignore, cap 1000 results; fall back to `Path.wildcard` if fd not installed (blocked: Define Deft.Tool behaviour...)
-- Implement `Deft.Tools.Ls`: list directory via `File.ls/1`, return formatted listing with name, type, size (blocked: Define Deft.Tool behaviour...)
-- Implement `Deft.Agent.ToolRunner`: start `Task.Supervisor`, expose `execute_batch/2` that spawns async_nolink tasks per tool call, collects results via `Task.yield_many/2` with per-task timeouts, catches exceptions (blocked: Define Deft.Tool behaviour...)
+- Implement `Deft.Tools.Read`: read file with optional offset/limit, return content with line numbers, base64 for images
+- Implement `Deft.Tools.Write`: write content to path, create parent dirs, return confirmation with byte count, check file_scope if set
+- Implement `Deft.Tools.Edit`: string-match mode (unique old_string replacement, return unified diff, include nearby text on failure) + line-range mode (start_line/end_line/new_content), check file_scope if set
+- Implement `Deft.Tools.Bash`: spawn via Port, stream stdout/stderr to context.emit, configurable timeout (default 120s), truncate to last 100 lines or 30KB, save full output to temp file
+- Implement `Deft.Tools.Grep`: shell out to `rg`, support regex/glob/case_insensitive/context_lines, respect .gitignore, cap 100 matches; fall back to `:re` + `File.stream` if rg not installed
+- Implement `Deft.Tools.Find`: shell out to `fd`, glob patterns, respect .gitignore, cap 1000 results; fall back to `Path.wildcard` if fd not installed
+- Implement `Deft.Tools.Ls`: list directory via `File.ls/1`, return formatted listing with name, type, size
+- Implement `Deft.Agent.ToolRunner`: start `Task.Supervisor`, expose `execute_batch/2` that spawns async_nolink tasks per tool call, collects results via `Task.yield_many/2` with per-task timeouts, catches exceptions
 
 ## sessions v0.1
 
