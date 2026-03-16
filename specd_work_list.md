@@ -70,7 +70,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 - Implement Reflector CORRECTION survival evals: all markers survive; 100% pass rate (blocked: Implement Reflector compression evals...)
 - Implement Actor observation usage evals: references observation content correctly; 85% pass rate (blocked: Wire OM into Agent...)
 - Implement Actor continuation evals: continues naturally after trimming, no greeting; 90% pass rate (blocked: Wire OM into Agent...)
-- Implement Actor tool selection evals: picks correct tool per spec section 4.3; 85% pass rate
 - Implement Foreman decomposition evals: 1-3 deliverables, valid DAG, specific contracts; 75% pass rate (blocked: Implement Foreman gen_statem...)
 - Implement Lead task planning evals: 4-8 tasks, dependency-ordered, clear done states; 75% pass rate (blocked: Implement Lead gen_statem...)
 - Implement Lead steering evals: identifies errors, provides specific corrections; 75% pass rate (blocked: Implement Lead active steering...)
