@@ -26,7 +26,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ## standards v0.1
 
-- Create `.credo.exs` with `strict: true` and the enabled checks from spec section 5
 - Create `lefthook.yml` with pre-commit (format, lint, compile) and pre-push (test, integration) hooks from spec section 8
 - Create `Makefile` with all targets from spec section 7: setup, deps, compile, format, format.check, lint, dialyzer, test, test.eval, test.integration, test.all, check, ci, clean
 - Run `make setup` to verify deps install, lefthook installs, `make check` passes on empty project
