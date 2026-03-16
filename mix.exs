@@ -29,12 +29,18 @@ defmodule Deft.MixProject do
   defp deps do
     [
       # Runtime
-      {:req, "~> 0.5"},                    # HTTP client
-      {:jason, "~> 1.4"},                  # JSON
-      {:yaml_elixir, "~> 2.11"},           # Config parsing
-      {:server_sent_events, "~> 0.2"},     # SSE parsing
-      {:breeze, "~> 0.2"},                 # TUI framework (pulls in back_breeze, termite)
-      {:burrito, "~> 1.0"},                # Single-binary distribution
+      # HTTP client
+      {:req, "~> 0.5"},
+      # JSON
+      {:jason, "~> 1.4"},
+      # Config parsing
+      {:yaml_elixir, "~> 2.11"},
+      # SSE parsing
+      {:server_sent_events, "~> 0.2"},
+      # TUI framework (pulls in back_breeze, termite)
+      {:breeze, "~> 0.2"},
+      # Single-binary distribution
+      {:burrito, "~> 1.0"},
 
       # Dev/Test only
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
