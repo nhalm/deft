@@ -26,7 +26,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ## harness v0.1
 
-- Implement `Deft.Agent.Context.build/2`: assemble message list — system prompt + observation injection point (empty initially) + conversation history + project context (DEFT.md/CLAUDE.md/AGENTS.md from working_dir)
 - Implement `Deft.Agent.SystemPrompt.build/1`: role definition + tool descriptions from registered tools' name/0 + description/0 + parameters/0 + working dir + git branch + date + OS + conflict resolution rules
 ## providers v0.1
 
