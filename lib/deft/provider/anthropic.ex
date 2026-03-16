@@ -387,8 +387,34 @@ defmodule Deft.Provider.Anthropic do
   end
 
   @impl Deft.Provider
-  def model_config(_model_name) do
-    # TODO: Implement in next work item
-    {:error, :unknown_model}
+  def model_config(model_name) do
+    case model_name do
+      "claude-sonnet-4" ->
+        %{
+          context_window: 200_000,
+          max_output: 16_000,
+          input_price_per_mtok: 3.00,
+          output_price_per_mtok: 15.00
+        }
+
+      "claude-opus-4" ->
+        %{
+          context_window: 200_000,
+          max_output: 32_000,
+          input_price_per_mtok: 15.00,
+          output_price_per_mtok: 75.00
+        }
+
+      "claude-haiku-4.5" ->
+        %{
+          context_window: 200_000,
+          max_output: 8192,
+          input_price_per_mtok: 0.80,
+          output_price_per_mtok: 4.00
+        }
+
+      _ ->
+        {:error, :unknown_model}
+    end
   end
 end

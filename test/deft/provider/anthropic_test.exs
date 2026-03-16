@@ -530,8 +530,35 @@ defmodule Deft.Provider.AnthropicTest do
   end
 
   describe "model_config/1" do
-    test "returns error for now (not yet implemented)" do
-      assert {:error, :unknown_model} = Anthropic.model_config("claude-sonnet-4")
+    test "returns config for claude-sonnet-4" do
+      assert %{
+               context_window: 200_000,
+               max_output: 16_000,
+               input_price_per_mtok: 3.00,
+               output_price_per_mtok: 15.00
+             } = Anthropic.model_config("claude-sonnet-4")
+    end
+
+    test "returns config for claude-opus-4" do
+      assert %{
+               context_window: 200_000,
+               max_output: 32_000,
+               input_price_per_mtok: 15.00,
+               output_price_per_mtok: 75.00
+             } = Anthropic.model_config("claude-opus-4")
+    end
+
+    test "returns config for claude-haiku-4.5" do
+      assert %{
+               context_window: 200_000,
+               max_output: 8192,
+               input_price_per_mtok: 0.80,
+               output_price_per_mtok: 4.00
+             } = Anthropic.model_config("claude-haiku-4.5")
+    end
+
+    test "returns error for unknown model" do
+      assert {:error, :unknown_model} = Anthropic.model_config("unknown-model")
     end
   end
 end
