@@ -2,6 +2,7 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **harness v0.1 (2026-03-16):** Implement `:executing_tools` state: fan out tool calls via `Task.Supervisor.async_nolink` under `Deft.Agent.ToolRunner`, collect results with `Task.yield_many/2` + timeouts, append tool_result messages, transition to `:calling` if tool results present or `:idle` if no tool calls
 - **harness v0.1 (2026-03-16):** Implement `:streaming` state: accumulate `:text_delta` into assistant message content, accumulate `:tool_call_delta` into tool call args, on `:done` event transition to `:executing_tools`
 - **harness v0.1 (2026-03-16):** Implement `:calling → :streaming` transition: on first `{:provider_event, _}` info message, transition to `:streaming`; on error, retry with exponential backoff up to 3 times, then `:idle` with error
 - **harness v0.1 (2026-03-16):** Implement `:idle → :calling` transition: on `{:prompt, text}` cast, append user message to history, call provider.stream/3 with assembled context

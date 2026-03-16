@@ -38,6 +38,7 @@ defmodule Deft.Agent do
   alias Deft.Message
   alias Deft.Message.Text
   alias Deft.Agent.Context
+  alias Deft.Agent.ToolRunner
 
   # Client API
 
@@ -97,7 +98,7 @@ defmodule Deft.Agent do
 
   @impl :gen_statem
   def callback_mode do
-    :handle_event_function
+    [:handle_event_function, :state_enter]
   end
 
   @impl :gen_statem
@@ -106,6 +107,33 @@ defmodule Deft.Agent do
   end
 
   @impl :gen_statem
+  # State entry handlers
+  def handle_event(:enter, _old_state, :executing_tools, data) do
+    # Extract tool calls from the last assistant message
+    tool_calls = extract_tool_calls(data.messages)
+
+    if Enum.empty?(tool_calls) do
+      # No tool calls - check prompt queue and transition to idle
+      handle_idle_transition(data)
+    else
+      # Execute tools concurrently via ToolRunner
+      # Get the ToolRunner supervisor from the session worker
+      # For now, we'll execute inline since ToolRunner setup is not complete
+      # This will be updated when the session worker is implemented
+      tool_timeout = Map.get(data.config, :tool_timeout, 120_000)
+
+      # Start execution asynchronously by sending ourselves a message
+      # This prevents blocking the gen_statem
+      send(self(), {:execute_tools, tool_calls, tool_timeout})
+      :keep_state_and_data
+    end
+  end
+
+  def handle_event(:enter, _old_state, _state, _data) do
+    # Default entry handler - do nothing
+    :keep_state_and_data
+  end
+
   def handle_event(:cast, {:prompt, text}, :idle, data) do
     # Create user message
     user_message = %Message{
@@ -247,6 +275,97 @@ defmodule Deft.Agent do
   def handle_event(:info, {:provider_event, _event}, :streaming, _data) do
     # Unrecognized event - ignore
     :keep_state_and_data
+  end
+
+  def handle_event(:info, {:execute_tools, tool_calls, timeout}, :executing_tools, data) do
+    # Execute tools via ToolRunner
+    # For now, we'll call execute_batch directly
+    # In the future, this will use the ToolRunner supervisor from the session worker
+    tool_runner = get_tool_runner_supervisor(data)
+    tool_context = build_tool_context(data)
+
+    results =
+      if tool_runner do
+        ToolRunner.execute_batch(tool_runner, tool_calls, tool_context, timeout)
+      else
+        # No supervisor available - execute inline with error results
+        Enum.map(tool_calls, fn tool_use ->
+          {tool_use.id,
+           {:error, "Tool execution not available (ToolRunner supervisor not started)"}}
+        end)
+      end
+
+    # Convert results to ToolResult content blocks
+    tool_result_blocks =
+      Enum.map(results, fn {tool_use_id, result} ->
+        # Find the tool name from the original tool call
+        tool_name =
+          Enum.find_value(tool_calls, fn tool_use ->
+            if tool_use.id == tool_use_id, do: tool_use.name
+          end) || "unknown"
+
+        case result do
+          {:ok, content_blocks} ->
+            # Content blocks from tool execution - convert to string
+            content_text =
+              content_blocks
+              |> Enum.map(fn
+                %Deft.Message.Text{text: text} -> text
+                other -> inspect(other)
+              end)
+              |> Enum.join("\n")
+
+            %Deft.Message.ToolResult{
+              tool_use_id: tool_use_id,
+              name: tool_name,
+              content: content_text,
+              is_error: false
+            }
+
+          {:error, error_message} ->
+            %Deft.Message.ToolResult{
+              tool_use_id: tool_use_id,
+              name: tool_name,
+              content: error_message,
+              is_error: true
+            }
+        end
+      end)
+
+    # Create a user message with tool results
+    tool_result_message = %Message{
+      id: generate_message_id(),
+      role: :user,
+      content: tool_result_blocks,
+      timestamp: DateTime.utc_now()
+    }
+
+    # Append to messages
+    new_messages = data.messages ++ [tool_result_message]
+    new_data = %{data | messages: new_messages}
+
+    # Transition to :calling to continue the conversation
+    # Assemble context and call provider again
+    context_messages = Context.build(new_messages, config: data.config)
+    provider = Map.get(data.config, :provider)
+    tools = []
+
+    case call_provider_stream(provider, context_messages, tools, data.config) do
+      {:ok, stream_ref} ->
+        updated_data = %{
+          new_data
+          | stream_ref: stream_ref,
+            retry_count: 0,
+            retry_delay: 1000
+        }
+
+        broadcast_event(data.session_id, {:state_change, :calling})
+        {:next_state, :calling, updated_data}
+
+      {:error, reason} ->
+        broadcast_event(data.session_id, {:error, reason})
+        handle_idle_transition(new_data)
+    end
   end
 
   def handle_event(_event_type, _event_content, _state, _data) do
@@ -469,5 +588,85 @@ defmodule Deft.Agent do
       end)
 
     %{message | content: new_content}
+  end
+
+  defp extract_tool_calls(messages) do
+    # Extract all ToolUse blocks from the last assistant message
+    alias Deft.Message.ToolUse
+
+    case List.last(messages) do
+      %Message{role: :assistant, content: content} ->
+        Enum.filter(content, fn
+          %ToolUse{} -> true
+          _ -> false
+        end)
+
+      _ ->
+        []
+    end
+  end
+
+  defp handle_idle_transition(data) do
+    # Check if there are queued prompts
+    case :queue.out(data.prompt_queue) do
+      {{:value, text}, new_queue} ->
+        # Process the queued prompt
+        new_data = %{data | prompt_queue: new_queue}
+
+        # Create user message and transition to calling
+        user_message = %Message{
+          id: generate_message_id(),
+          role: :user,
+          content: [%Text{text: text}],
+          timestamp: DateTime.utc_now()
+        }
+
+        new_messages = new_data.messages ++ [user_message]
+        context_messages = Context.build(new_messages, config: new_data.config)
+        provider = Map.get(new_data.config, :provider)
+        tools = []
+
+        case call_provider_stream(provider, context_messages, tools, new_data.config) do
+          {:ok, stream_ref} ->
+            updated_data = %{
+              new_data
+              | messages: new_messages,
+                stream_ref: stream_ref,
+                retry_count: 0,
+                retry_delay: 1000
+            }
+
+            broadcast_event(new_data.session_id, {:state_change, :calling})
+            {:next_state, :calling, updated_data}
+
+          {:error, reason} ->
+            broadcast_event(new_data.session_id, {:error, reason})
+            {:next_state, :idle, new_data}
+        end
+
+      {:empty, _} ->
+        # No queued prompts - transition to idle
+        broadcast_event(data.session_id, {:state_change, :idle})
+        {:next_state, :idle, data}
+    end
+  end
+
+  defp get_tool_runner_supervisor(_data) do
+    # For now, return nil since the session worker supervision tree is not implemented yet
+    # This will be updated when the session worker is implemented to properly supervise ToolRunner
+    # The session worker will start a ToolRunner Task.Supervisor and make it available here
+    nil
+  end
+
+  defp build_tool_context(data) do
+    # Build a Deft.Tool.Context struct for tool execution
+    # For now, return nil since the Tool.Context struct is not defined yet
+    # This will be implemented in the tools work items
+    %{
+      working_dir: Map.get(data.config, :working_dir, File.cwd!()),
+      session_id: data.session_id,
+      emit: fn _output -> :ok end,
+      file_scope: nil
+    }
   end
 end

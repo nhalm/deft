@@ -26,9 +26,8 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ## harness v0.1
 
-- Implement `:executing_tools` state: fan out tool calls via `Task.Supervisor.async_nolink` under `Deft.Agent.ToolRunner`, collect results with `Task.yield_many/2` + timeouts, append tool_result messages, transition to `:calling` if tool results present or `:idle` if no tool calls
-- Implement abort: on `{:abort}` in any state, cancel stream via `cancel_stream/1` if streaming, terminate in-flight tasks if executing_tools, transition to `:idle` (blocked: Implement :executing_tools state...)
-- Implement turn limit: counter incremented on `:executing_tools → :calling`, reset on user prompt; at limit, pause-and-ask via event broadcast (blocked: Implement :executing_tools state...)
+- Implement abort: on `{:abort}` in any state, cancel stream via `cancel_stream/1` if streaming, terminate in-flight tasks if executing_tools, transition to `:idle`
+- Implement turn limit: counter incremented on `:executing_tools → :calling`, reset on user prompt; at limit, pause-and-ask via event broadcast
 - Implement prompt queueing: queue prompts received in non-idle states, deliver on return to `:idle`
 - Implement `Deft.Agent.Context.build/2`: assemble message list — system prompt + observation injection point (empty initially) + conversation history + project context (DEFT.md/CLAUDE.md/AGENTS.md from working_dir)
 - Implement `Deft.Agent.SystemPrompt.build/1`: role definition + tool descriptions from registered tools' name/0 + description/0 + parameters/0 + working dir + git branch + date + OS + conflict resolution rules

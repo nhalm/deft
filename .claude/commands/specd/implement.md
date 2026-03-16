@@ -17,12 +17,14 @@ Your task is to implement ONE work item from specd_work_list.md, then validate i
 ## Step 3: Implement
 
 - If code contradicts the spec, fix the code first (see AGENTS.md)
+- Use `specd_decisions.md` to find relevent previous implementation step decisions.
 - Do NOT use TodoWrite — just do the work
 - Do NOT do multiple things — ONE thing per iteration
 
 ## Step 4: Validate
 
 <!-- Customize: add your project's validation steps here -->
+
 - Run the project's test suite to catch errors
 - If there are linting or formatting errors fix them even if they aren't in a file you modified
 
