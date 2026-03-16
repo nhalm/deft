@@ -28,6 +28,8 @@ defmodule Deft.Agent do
   - `total_input_tokens` — Cumulative input tokens (optional)
   - `total_output_tokens` — Cumulative output tokens (optional)
   - `session_cost` — Cumulative estimated cost (optional)
+  - `retry_count` — Number of retries attempted for current request (optional)
+  - `retry_delay` — Current exponential backoff delay in ms (optional)
   """
 
   @behaviour :gen_statem
@@ -63,7 +65,9 @@ defmodule Deft.Agent do
       turn_count: 0,
       total_input_tokens: 0,
       total_output_tokens: 0,
-      session_cost: 0.0
+      session_cost: 0.0,
+      retry_count: 0,
+      retry_delay: 1000
     }
 
     :gen_statem.start_link(__MODULE__, initial_data, [])
@@ -124,11 +128,13 @@ defmodule Deft.Agent do
     # Call provider.stream/3
     case call_provider_stream(provider, context_messages, tools, data.config) do
       {:ok, stream_ref} ->
-        # Store stream ref and updated messages, transition to :calling
+        # Store stream ref and updated messages, reset retry state, transition to :calling
         new_data = %{
           data
           | messages: new_messages,
-            stream_ref: stream_ref
+            stream_ref: stream_ref,
+            retry_count: 0,
+            retry_delay: 1000
         }
 
         {:next_state, :calling, new_data}
@@ -154,9 +160,54 @@ defmodule Deft.Agent do
     {:next_state, :idle, data}
   end
 
-  def handle_event(:info, {:provider_event, _event}, :calling, _data) do
-    # Placeholder: transition to :streaming will be implemented in future work item
-    :keep_state_and_data
+  def handle_event(:info, {:provider_event, event}, :calling, data) do
+    case event do
+      # First content chunk - transition to streaming
+      {event_type, _payload}
+      when event_type in [:text_delta, :thinking_delta, :tool_call_start] ->
+        # Initialize current assistant message
+        current_message = %Message{
+          id: generate_message_id(),
+          role: :assistant,
+          content: [],
+          timestamp: DateTime.utc_now()
+        }
+
+        new_data = %{
+          data
+          | current_message: current_message,
+            retry_count: 0,
+            retry_delay: 1000
+        }
+
+        broadcast_event(data.session_id, {:state_change, :streaming})
+        {:next_state, :streaming, new_data}
+
+      # Error event - retry with exponential backoff
+      {:error, error_payload} ->
+        handle_calling_error(error_payload, data)
+
+      # Other events (usage, etc.) - keep waiting for first content
+      _ ->
+        :keep_state_and_data
+    end
+  end
+
+  def handle_event(:info, {:retry_stream}, :calling, data) do
+    # Retry after exponential backoff delay
+    context_messages = Context.build(data.messages, config: data.config)
+    provider = Map.get(data.config, :provider)
+    tools = []
+
+    case call_provider_stream(provider, context_messages, tools, data.config) do
+      {:ok, stream_ref} ->
+        # Update stream ref, keep retry count
+        new_data = %{data | stream_ref: stream_ref}
+        {:keep_state, new_data}
+
+      {:error, reason} ->
+        handle_calling_error(%{message: inspect(reason)}, data)
+    end
   end
 
   def handle_event(:info, {:provider_event, _event}, :streaming, _data) do
@@ -199,5 +250,45 @@ defmodule Deft.Agent do
         send(pid, {:agent_event, event})
       end
     end)
+  end
+
+  defp handle_calling_error(error_payload, data) do
+    max_retries = 3
+
+    if data.retry_count < max_retries do
+      # Schedule retry with exponential backoff
+      retry_count = data.retry_count + 1
+      delay = data.retry_delay
+
+      # Send delayed message to self for retry
+      Process.send_after(self(), {:retry_stream}, delay)
+
+      new_data = %{
+        data
+        | retry_count: retry_count,
+          retry_delay: delay * 2
+      }
+
+      broadcast_event(data.session_id, {:retry, retry_count, max_retries, delay})
+      {:keep_state, new_data}
+    else
+      # Max retries exceeded - transition to idle with error
+      error_message = Map.get(error_payload, :message, "Unknown error")
+
+      broadcast_event(
+        data.session_id,
+        {:error, "Failed after #{max_retries} retries: #{error_message}"}
+      )
+
+      # Reset retry state and transition to idle
+      new_data = %{
+        data
+        | stream_ref: nil,
+          retry_count: 0,
+          retry_delay: 1000
+      }
+
+      {:next_state, :idle, new_data}
+    end
   end
 end
