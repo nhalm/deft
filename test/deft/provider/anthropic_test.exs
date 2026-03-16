@@ -8,7 +8,6 @@ defmodule Deft.Provider.AnthropicTest do
     ThinkingDelta,
     ToolCallStart,
     ToolCallDelta,
-    ToolCallDone,
     Usage,
     Done,
     Error
@@ -88,8 +87,121 @@ defmodule Deft.Provider.AnthropicTest do
   end
 
   describe "parse_event/1" do
-    test "returns :skip for now (not yet implemented)" do
-      assert :skip = Anthropic.parse_event(%{})
+    test "parses content_block_start with type text" do
+      sse_event = %{
+        event: "content_block_start",
+        data: Jason.encode!(%{"content_block" => %{"type" => "text"}})
+      }
+
+      assert :skip = Anthropic.parse_event(sse_event)
+    end
+
+    test "parses content_block_start with type thinking" do
+      sse_event = %{
+        event: "content_block_start",
+        data: Jason.encode!(%{"content_block" => %{"type" => "thinking"}})
+      }
+
+      assert :skip = Anthropic.parse_event(sse_event)
+    end
+
+    test "parses content_block_start with type tool_use" do
+      sse_event = %{
+        event: "content_block_start",
+        data:
+          Jason.encode!(%{
+            "content_block" => %{"type" => "tool_use", "id" => "toolu_123", "name" => "read_file"}
+          })
+      }
+
+      assert %ToolCallStart{id: "toolu_123", name: "read_file"} =
+               Anthropic.parse_event(sse_event)
+    end
+
+    test "parses content_block_delta with text_delta" do
+      sse_event = %{
+        event: "content_block_delta",
+        data: Jason.encode!(%{"delta" => %{"type" => "text_delta", "text" => "Hello"}})
+      }
+
+      assert %TextDelta{delta: "Hello"} = Anthropic.parse_event(sse_event)
+    end
+
+    test "parses content_block_delta with thinking_delta" do
+      sse_event = %{
+        event: "content_block_delta",
+        data: Jason.encode!(%{"delta" => %{"type" => "thinking_delta", "thinking" => "Hmm..."}})
+      }
+
+      assert %ThinkingDelta{delta: "Hmm..."} = Anthropic.parse_event(sse_event)
+    end
+
+    test "parses content_block_delta with input_json_delta" do
+      sse_event = %{
+        event: "content_block_delta",
+        data:
+          Jason.encode!(%{
+            "delta" => %{"type" => "input_json_delta", "partial_json" => "{\"path\":\""},
+            "index" => 0
+          })
+      }
+
+      assert %ToolCallDelta{id: "tool_0", delta: "{\"path\":\""} =
+               Anthropic.parse_event(sse_event)
+    end
+
+    test "parses message_delta with usage" do
+      sse_event = %{
+        event: "message_delta",
+        data: Jason.encode!(%{"usage" => %{"input_tokens" => 100, "output_tokens" => 50}})
+      }
+
+      assert %Usage{input: 100, output: 50} = Anthropic.parse_event(sse_event)
+    end
+
+    test "parses message_stop" do
+      sse_event = %{
+        event: "message_stop",
+        data: "{}"
+      }
+
+      assert %Done{} = Anthropic.parse_event(sse_event)
+    end
+
+    test "parses error event with error object" do
+      sse_event = %{
+        event: "error",
+        data: Jason.encode!(%{"error" => %{"message" => "Rate limit exceeded"}})
+      }
+
+      assert %Error{message: "Rate limit exceeded"} = Anthropic.parse_event(sse_event)
+    end
+
+    test "parses error event with direct message" do
+      sse_event = %{
+        event: "error",
+        data: Jason.encode!(%{"message" => "Connection failed"})
+      }
+
+      assert %Error{message: "Connection failed"} = Anthropic.parse_event(sse_event)
+    end
+
+    test "returns :skip for unknown event types" do
+      sse_event = %{
+        event: "unknown_event",
+        data: "{}"
+      }
+
+      assert :skip = Anthropic.parse_event(sse_event)
+    end
+
+    test "returns :skip for malformed data" do
+      sse_event = %{
+        event: "content_block_delta",
+        data: "invalid json"
+      }
+
+      assert :skip = Anthropic.parse_event(sse_event)
     end
   end
 
