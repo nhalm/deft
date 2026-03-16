@@ -2,6 +2,7 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **tools v0.1 (2026-03-16):** Implement `Deft.Tools.Grep`: shell out to `rg`, support regex/glob/case_insensitive/context_lines, respect .gitignore, cap 100 matches; fall back to `:re` + `File.stream` if rg not installed
 - **tools v0.1 (2026-03-16):** Implement `Deft.Tools.Bash`: spawn via Port, stream stdout/stderr to context.emit, configurable timeout (default 120s), truncate to last 100 lines or 30KB, save full output to temp file
 - **tools v0.1 (2026-03-16):** Implement `Deft.Tools.Edit`: string-match mode (unique old_string replacement, return unified diff, include nearby text on failure) + line-range mode (start_line/end_line/new_content), check file_scope if set
 - **tools v0.1 (2026-03-16):** Implement `Deft.Tools.Write`: write content to path, create parent dirs, return confirmation with byte count, check file_scope if set
