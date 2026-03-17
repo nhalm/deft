@@ -453,17 +453,9 @@ defmodule Deft.Agent do
   def handle_event(:info, {:DOWN, ref, :process, _pid, reason}, :streaming, data) do
     # Stream process crashed during streaming
     if ref == data.stream_monitor_ref do
-      broadcast_event(data.session_id, {:error, "Stream process crashed: #{inspect(reason)}"})
-
-      new_data = %{
-        data
-        | stream_ref: nil,
-          stream_monitor_ref: nil,
-          current_message: nil,
-          tool_call_buffers: %{}
-      }
-
-      handle_idle_transition(new_data)
+      # Treat process crash as a streaming error and retry
+      error_payload = %{message: "Stream process crashed: #{inspect(reason)}"}
+      handle_stream_error(error_payload, data)
     else
       # Not our stream monitor, ignore
       :keep_state_and_data
@@ -718,16 +710,15 @@ defmodule Deft.Agent do
   end
 
   defp handle_stream_error(error_payload, data) do
+    max_retries = 3
+
     # Demonitor the stream process
     if data.stream_monitor_ref do
       Process.demonitor(data.stream_monitor_ref, [:flush])
     end
 
-    # Handle error - transition to idle
-    error_message = Map.get(error_payload, :message, "Unknown streaming error")
-    broadcast_event(data.session_id, {:error, error_message})
-
-    new_data = %{
+    # Reset partial state from streaming
+    reset_data = %{
       data
       | current_message: nil,
         stream_ref: nil,
@@ -735,7 +726,41 @@ defmodule Deft.Agent do
         tool_call_buffers: %{}
     }
 
-    {:next_state, :idle, new_data}
+    if reset_data.retry_count < max_retries do
+      # Schedule retry with exponential backoff
+      retry_count = reset_data.retry_count + 1
+      delay = reset_data.retry_delay
+
+      # Send delayed message to self for retry
+      Process.send_after(self(), {:retry_stream}, delay)
+
+      new_data = %{
+        reset_data
+        | retry_count: retry_count,
+          retry_delay: delay * 2
+      }
+
+      broadcast_event(data.session_id, {:retry, retry_count, max_retries, delay})
+      # Transition to :calling state so the retry handler can re-call the provider
+      {:next_state, :calling, new_data}
+    else
+      # Max retries exceeded - transition to idle with error
+      error_message = Map.get(error_payload, :message, "Unknown streaming error")
+
+      broadcast_event(
+        data.session_id,
+        {:error, "Failed after #{max_retries} retries: #{error_message}"}
+      )
+
+      # Reset retry state and transition to idle
+      new_data = %{
+        reset_data
+        | retry_count: 0,
+          retry_delay: 1000
+      }
+
+      {:next_state, :idle, new_data}
+    end
   end
 
   defp append_text_delta(message, delta) do
