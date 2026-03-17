@@ -2,6 +2,7 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **filesystem v0.2 (2026-03-17):** Create project directory layout: ~/.deft/projects/<path-encoded-repo>/ with sessions/, cache/, jobs/ subdirectories; path encoding replaces / with -, strip leading -; resolve working directory to real path via Path.expand/1; for git worktrees, use `git rev-parse --show-toplevel` for canonical repo root; monorepos share single project directory
 - **evals v0.2 (2026-03-17):** Create eval result storage infrastructure: per-run JSONL at test/eval/results/<run_id>.jsonl with commit SHA, model, category, pass_rate, iterations, cost, and failure examples; .gitignore results dir; keep last 30 runs on disk; implement `mix eval.export` for archiving
 - **sessions v0.2 (2026-03-17):** Implement interactive session mode (`deft` with no args): replaced stub with IO.gets REPL loop — creates session, starts agent, prompts with `deft> `, streams response via agent events, supports `/quit` and EOF to exit
 - **harness v0.1 (2026-03-16):** Fix retry counter reset on `:calling → :streaming` transition: `retry_count` and `retry_delay` are reset to 0/1000 at agent.ex:284-286 every time the first streaming chunk arrives. If a stream partially succeeds then errors, the retry counter restarts from 0, allowing unlimited retries instead of the spec's "up to 3 times" limit. Move retry_count/retry_delay reset from the `:calling → :streaming` transition to turn completion (`:executing_tools → :idle` or successful stream end)

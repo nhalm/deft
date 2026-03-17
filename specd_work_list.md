@@ -139,7 +139,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement site log programmatic promotion: pattern match on Lead messages — auto-promote contract, decision, correction, critical_finding; promote finding if tagged shared; never promote status or blocker (blocked: Implement Deft.Store site log instance..., Implement Foreman gen_statem...)
 - Implement per-Lead cache isolation: start one Deft.Store instance per Lead with DETS at cache/<session_id>/lead-<lead_id>.dets; Lead cleanup deletes its own cache instance (blocked: Implement Deft.Store GenServer..., Implement Lead gen_statem...)
 - Implement session-end cache cleanup: on session termination, delete all files under cache/<session_id>/ (blocked: Implement per-Lead cache isolation...)
-- Create project directory layout: ~/.deft/projects/<path-encoded-repo>/ with sessions/, cache/, jobs/ subdirectories; path encoding replaces / with -, strip leading -; resolve working directory to real path via Path.expand/1; for git worktrees, use `git rev-parse --show-toplevel` for canonical repo root; monorepos share single project directory
 
 ## skills v0.2
 
