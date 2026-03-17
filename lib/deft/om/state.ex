@@ -140,6 +140,11 @@ defmodule Deft.OM.State do
     if Enum.empty?(unobserved_messages) do
       {:reply, {:ok, :no_messages}, state}
     else
+      # Emit sync fallback event
+      broadcast_event(state.session_id, {:om, :sync_fallback, %{type: :observation}})
+      # Emit observation_started event (LLM call begins immediately)
+      broadcast_event(state.session_id, {:om, :observation_started})
+
       task_supervisor = Supervisor.task_supervisor_name(state.session_id)
 
       # Spawn Observer Task with 1 retry max (sync path)
@@ -217,6 +222,17 @@ defmodule Deft.OM.State do
     # Check if observations are empty (indicates failure)
     is_success = result.observations != ""
 
+    # Emit observation_complete event if successful
+    if is_success do
+      tokens_produced = Tokens.estimate(result.observations, state.calibration_factor)
+
+      broadcast_event(state.session_id, {
+        :om,
+        :observation_complete,
+        %{tokens_observed: result.message_tokens, tokens_produced: tokens_produced}
+      })
+    end
+
     # Record success/failure for circuit breaker
     state =
       if is_success do
@@ -243,6 +259,9 @@ defmodule Deft.OM.State do
       # Normal async buffering path - only store the chunk if successful
       state =
         if is_success do
+          # Emit buffering_complete event for async path
+          broadcast_event(state.session_id, {:om, :buffering_complete, %{type: :observation}})
+
           chunk = %BufferedChunk{
             observations: result.observations,
             token_count: Tokens.estimate(result.observations, state.calibration_factor),
@@ -335,6 +354,13 @@ defmodule Deft.OM.State do
 
     # Demonitor the task
     Process.demonitor(ref, [:flush])
+
+    # Emit reflection_complete event
+    broadcast_event(state.session_id, {
+      :om,
+      :reflection_complete,
+      %{before_tokens: result.before_tokens, after_tokens: result.after_tokens}
+    })
 
     # Record success for circuit breaker
     state = record_cycle_success(state)
@@ -510,6 +536,11 @@ defmodule Deft.OM.State do
         "Spawning Observer Task for session #{state.session_id} at #{state.pending_message_tokens} tokens"
       )
 
+      # Emit buffering_started event for async buffering
+      broadcast_event(state.session_id, {:om, :buffering_started, %{type: :observation}})
+      # Emit observation_started event (LLM call begins immediately)
+      broadcast_event(state.session_id, {:om, :observation_started})
+
       # Get unobserved messages
       unobserved_messages =
         state.messages
@@ -541,6 +572,9 @@ defmodule Deft.OM.State do
     Logger.info(
       "Activating #{length(state.buffered_chunks)} buffered chunks for session #{state.session_id}"
     )
+
+    # Emit activation event
+    broadcast_event(state.session_id, {:om, :activation, %{type: :observation}})
 
     # Section-aware merge all chunks into active_observations
     merged_observations =
@@ -608,6 +642,9 @@ defmodule Deft.OM.State do
       Logger.debug(
         "Spawning Reflector Task for session #{state.session_id} with #{state.observation_tokens} tokens"
       )
+
+      # Emit reflection_started event (level starts at 0)
+      broadcast_event(state.session_id, {:om, :reflection_started, %{level: 0}})
 
       # Target size is 50% of reflection threshold (per spec section 4.3)
       target_size = div(@default_observation_threshold, 2)

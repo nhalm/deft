@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## observational-memory v0.1
 
-- Implement OM event broadcasting via Registry: observation_started, observation_complete, reflection_started, reflection_complete, buffering_started, buffering_complete, activation, sync_fallback, cycle_failed, circuit_open, hard_cap_truncation
 - Implement OM persistence: append observation snapshot to session JSONL after each activation + reflection activation + every 60s if snapshot_dirty; snapshot includes all persisted fields from spec section 9.2; use separate OM snapshot file to avoid JSONL write interleaving
 - Implement OM resume: load latest snapshot, initialize State, recompute pending_message_tokens from messages not in observed_message_ids, trigger observation/reflection if thresholds exceeded (blocked: Implement OM persistence...)
 - Wire OM into Agent: in Context.build/2, call State.get_context/1 for observations + observed IDs, inject observations, trim observed messages; after each turn, call State.messages_added/2
