@@ -47,7 +47,7 @@ ETS handles reads — concurrent, no process bottleneck. DETS handles persistenc
 
 **Dependencies:**
 - [sessions.md](sessions.md) — session lifecycle
-- [orchestration.md](orchestration.md) — Foreman/Lead/Runner process architecture (will be updated to use Store + process messages instead of Site Log)
+- [orchestration.md](orchestration.md) — Foreman/Lead/Runner process architecture, OTP coordination protocol
 
 **Design principles:**
 - **ETS for reads, DETS for durability.** Fast concurrent reads from ETS. DETS is the write-behind persistence layer. The GenServer manages the sync.
@@ -121,7 +121,7 @@ The ETS table is the authority for reads. DETS is the write-behind persistence l
 
 **Startup:**
 1. Open DETS file. If `:dets.open_file/2` returns an error, fall back to creating a new empty DETS file. Log a warning for site log corruption. Cache corruption is silent (ephemeral data).
-2. Create ETS table (`:set`, `:public` for reads). Tables are unnamed — use the tid (table reference integer) for all subsequent access. This eliminates naming collisions across multiple instances.
+2. Create ETS table (`:set`, `:protected`). Tables are unnamed — use the tid (table reference integer) for all subsequent access. This eliminates naming collisions across multiple instances.
 3. Start an async load task with `Task.async` (linked to the GenServer) to load DETS entries into ETS.
 4. GenServer is ready immediately — reads return `:miss` for not-yet-loaded entries.
 
@@ -215,7 +215,7 @@ The site log manager runs inside the Foreman process. It uses pattern matching o
 | `contract` | Always promote — API shapes, interface definitions |
 | `decision` | Always promote — architectural choices with rationale |
 | `critical_finding` | Always promote — the Lead's LLM judges importance and tags critical findings for auto-promotion |
-| `finding` (research) | Promote if tagged as `shared` by the research Runner |
+| `finding` (research) | Promote if tagged as `shared` by the Lead when forwarding to the Foreman (the Lead decides whether a Runner's finding is worth sharing) |
 | `correction` (from user) | Always promote |
 | `status` | Never — ephemeral progress updates |
 | `blocker` | Never — coordination, not knowledge |
@@ -232,6 +232,12 @@ written_at :: String.t()     # ISO 8601 UTC
 ```
 
 Keys are human-readable, chosen by the Foreman or the promotion rules. Overwrites are allowed (same key replaces the previous entry).
+
+#### 5.5 Lead Read Access
+
+Leads obtain the site log's ETS tid via `Deft.Store.tid(server)` — a `GenServer.call` that returns the tid from the GenServer's state. Once a Lead has the tid, it reads directly from ETS (no further GenServer calls needed). The Foreman passes the site log's registered name to each Lead at startup; the Lead resolves it and caches the tid locally.
+
+Since the ETS table is `:protected` (owner-write, other-read), Leads can read but cannot accidentally write. Only the Foreman (the GenServer owner) can write via the `write/4` API.
 
 #### 5.5 Lifecycle
 

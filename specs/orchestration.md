@@ -102,7 +102,7 @@ Key invariants:
 
 **Single-agent fallback:** If the task is simple enough (touches 1-2 files, no natural decomposition, estimated < 3 Runner tasks), the Foreman skips orchestration and executes directly.
 
-**Auto-approve:** The `--auto-approve` flag (or `job.auto_approve: true` config) skips the plan approval gate. Cost-threshold variant: `job.auto_approve_under: 5.00`.
+**Auto-approve:** The `--auto-approve-all` flag skips all plan approval gates. For `deft work --loop`, this is the only way to skip approvals — each plan is approved by default (see [issues.md](issues.md) section 5.3). For non-interactive mode (`deft -p "prompt"`), `--auto-approve-all` is required since no user is present.
 
 **Startup orphan cleanup:** On launch, Deft scans for orphaned `deft/job-*` branches and `deft/lead-*` worktrees from prior crashed jobs. See [git-strategy.md](git-strategy.md) for details.
 
@@ -212,7 +212,7 @@ All Foreman↔Lead communication happens via Erlang process messages.
 | Type | Direction | Purpose |
 |------|-----------|---------|
 | `plan` | Foreman→broadcast | Work plan with deliverables and DAG |
-| `finding` | Runner→Lead→Foreman | Research result |
+| `finding` | Runner→Lead→Foreman | Research result. Lead may tag as `shared` when forwarding to Foreman — shared findings are auto-promoted to site log. |
 | `decision` | Lead→Foreman | Choice made with rationale |
 | `contract` | Lead→Foreman | Interface definition satisfying a dependency |
 | `contract_revision` | Lead→Foreman | Updated contract |
@@ -223,7 +223,8 @@ All Foreman↔Lead communication happens via Erlang process messages.
 | `plan_amendment` | Lead→Foreman | Request for plan change |
 | `complete` | Lead→Foreman | Deliverable finished |
 | `error` | Any→Foreman | Something went wrong |
-| `cost` | RateLimiter→Foreman | Cost checkpoint |
+| `cost` | RateLimiter→Foreman | Cost checkpoint (sent as `{:rate_limiter, :cost, amount}`, not `{:lead_message, ...}`) |
+| `correction` | User→Foreman | User course-correction — auto-promoted to site log |
 | `critical_finding` | Lead→Foreman | Important finding — auto-promoted to site log |
 
 #### 6.3 Deft.Store Site Log Instance
@@ -267,8 +268,8 @@ The TUI shows Lead status (running/waiting/complete), current Runner activity, c
 | `job.runner_model` | `"claude-sonnet-4"` | Model for Runners |
 | `job.research_runner_model` | `"claude-sonnet-4"` | Model for research Runners |
 | `job.max_duration` | `1_800_000` | Maximum job duration (ms, default 30 min) |
-| `job.auto_approve` | `false` | Skip plan approval |
-| `job.auto_approve_under` | `nil` | Auto-approve if estimated cost under this amount ($) |
+
+Plan approval is controlled by the `--auto-approve-all` CLI flag (see [issues.md](issues.md)). No config key — approval is always explicit.
 
 See [rate-limiter.md](rate-limiter.md) for cost ceiling, concurrency, and rate limiter configuration.
 See [git-strategy.md](git-strategy.md) for git-related configuration.

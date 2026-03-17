@@ -2,11 +2,14 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.2 |
+| Version | 0.3 |
 | Status | Implemented |
-| Last Updated | 2026-03-16 |
+| Last Updated | 2026-03-17 |
 
 ## Changelog
+
+### v0.3 (2026-03-17)
+- Session storage path is now project-scoped: `~/.deft/projects/<path-encoded-repo>/sessions/<session_id>.jsonl`. See filesystem.md for the full directory layout.
 
 ### v0.2 (2026-03-16)
 - Updated section 3: removed "Project instructions" from system prompt list. Project files are included in context assembly (section 4.1, item 4) as a separate message for better context management.

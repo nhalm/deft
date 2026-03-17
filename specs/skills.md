@@ -160,7 +160,7 @@ A skill can be invoked in three ways:
 
 1. **Explicit:** The user types `/review` as a slash command.
 2. **Suggested:** The agent suggests a skill in its prose response (e.g., "you might want to run /review"). The user then decides whether to invoke it.
-3. **Auto-invoked:** The agent invokes a skill directly when clearly appropriate based on context. The agent sees skill manifests (name + description) in its system prompt, which is sufficient for it to decide when to use a skill, just as it decides when to use any tool.
+3. **Auto-invoked:** The agent invokes a skill directly when clearly appropriate based on context. The agent emits a `use_skill` tool call with the skill name as the argument. The harness intercepts this tool call, loads the full definition from the Registry, injects it into context, and continues the agent loop. This is the same mechanism as explicit invocation — the only difference is who initiates it (agent vs. user).
 
 When a skill is invoked (by any means):
 1. Look up `review` in the skill registry

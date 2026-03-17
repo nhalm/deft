@@ -45,7 +45,7 @@
 Each provider gets two token buckets:
 
 - **RPM bucket** — requests per minute. Refills at the provider's RPM limit. Each LLM call deducts 1 token.
-- **TPM bucket** — tokens per minute. Refills at the provider's TPM limit. Deducts estimated input tokens on send (`chars / 4` heuristic), reconciles actual usage from the API response.
+- **TPM bucket** — tokens per minute. Refills at the provider's TPM limit. Deducts estimated input tokens on send (`chars / 4` heuristic). On API response, reconciles actual usage: credits back `(estimated - actual)` to the bucket, capped at the bucket maximum (no over-crediting that would allow bursts above the configured TPM).
 
 A call proceeds only when both buckets have sufficient capacity. If either is exhausted, the call is queued.
 
@@ -86,7 +86,7 @@ The RateLimiter sends `{:rate_limiter, :concurrency_change, new_limit}` to the F
 
 Reads `usage` (input_tokens, output_tokens) from API responses. Multiplies by per-model pricing from a configurable pricing table.
 
-**Reporting:** Sends `{:lead_message, :cost, content, metadata}` to the Foreman every $0.50 increment.
+**Reporting:** Sends `{:rate_limiter, :cost, amount}` to the Foreman every $0.50 increment. Uses the `{:rate_limiter, ...}` message format (not `{:lead_message, ...}`) since the RateLimiter is not a Lead.
 
 **Cost ceiling:** Pauses the job at `cost_ceiling - $1.00` buffer to absorb in-flight overruns. In-flight calls complete (slight overshoot accepted); no new calls dispatched until the user approves continued spending.
 
