@@ -214,7 +214,7 @@ defmodule Deft.Tools.Grep do
 
     Enum.any?(parts, fn part ->
       part == ".git" or part == "node_modules" or part == "_build" or
-        part == "deps" or String.starts_with?(part, ".")
+        part == "deps"
     end)
   end
 

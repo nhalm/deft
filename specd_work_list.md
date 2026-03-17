@@ -24,10 +24,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ---
 
-## tools v0.1
-
-- Fix grep/find native fallback `ignored?/1`: replace blanket `String.starts_with?(part, ".")` exclusion with actual `.gitignore` parsing (or at minimum, only exclude `.git` and common build dirs) so files in `.github/`, `.config/` etc. are searchable (grep.ex:212-219, find.ex:127-134)
-
 ## providers v0.1
 
 - Fix `parse_event/1` for `content_block_delta` with `input_json_delta`: use the real Anthropic tool call ID from `content_block_start` instead of synthetic `"tool_#{idx}"` — either thread tool_state through parse_event or remove the broken code path and document that content_block events must go through the stateful streaming layer (anthropic.ex:342-349)
