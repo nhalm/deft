@@ -45,6 +45,7 @@ defmodule Deft.Agent do
   alias Deft.Session.Worker
   alias Deft.Session.Entry
   alias Deft.Session.Entry.Compaction
+  alias Deft.Session.Entry.Cost
   alias Deft.Session.Store
 
   alias Deft.Provider.Event.{
@@ -68,12 +69,14 @@ defmodule Deft.Agent do
   - `:session_id` — Required. Unique identifier for the session.
   - `:config` — Required. Configuration map for the agent.
   - `:messages` — Optional. Initial conversation messages (default: []).
+  - `:session_cost` — Optional. Initial session cost from resumed session (default: 0.0).
   - `:name` — Optional. Name for the gen_statem process.
   """
   def start_link(opts) do
     session_id = Keyword.fetch!(opts, :session_id)
     config = Keyword.fetch!(opts, :config)
     initial_messages = Keyword.get(opts, :messages, [])
+    initial_session_cost = Keyword.get(opts, :session_cost, 0.0)
     name = Keyword.get(opts, :name)
 
     # Get context window from provider model config
@@ -94,7 +97,7 @@ defmodule Deft.Agent do
       total_output_tokens: 0,
       current_context_tokens: 0,
       context_window: context_window,
-      session_cost: 0.0,
+      session_cost: initial_session_cost,
       retry_count: 0,
       retry_delay: 1000,
       saved_message_ids: MapSet.new(),
@@ -505,6 +508,29 @@ defmodule Deft.Agent do
     end
   end
 
+  defp calculate_cost(config, input_tokens, output_tokens) do
+    # Calculate cost from usage tokens using model pricing
+    provider = Map.get(config, :provider)
+    model = Map.get(config, :model, "claude-sonnet-4")
+
+    if provider && function_exported?(provider, :model_config, 1) do
+      case provider.model_config(model) do
+        %{input_price_per_mtok: input_price, output_price_per_mtok: output_price} ->
+          # Price is per million tokens (mtok)
+          input_cost = input_tokens * input_price / 1_000_000
+          output_cost = output_tokens * output_price / 1_000_000
+          input_cost + output_cost
+
+        {:error, _} ->
+          # If model config not available, return 0.0
+          0.0
+      end
+    else
+      # If provider not available, return 0.0
+      0.0
+    end
+  end
+
   defp generate_message_id do
     # Generate a unique message ID using UUID
     "msg_" <> (:crypto.strong_rand_bytes(8) |> Base.encode16(case: :lower))
@@ -626,12 +652,21 @@ defmodule Deft.Agent do
   defp handle_usage(%{input: input_tokens, output: output_tokens}, data) do
     # Update token tracking
     # current_context_tokens represents the actual context sent to the LLM (input tokens)
+    # Calculate cost from usage tokens
+    turn_cost = calculate_cost(data.config, input_tokens, output_tokens)
+    new_session_cost = data.session_cost + turn_cost
+
     new_data = %{
       data
       | total_input_tokens: data.total_input_tokens + input_tokens,
         total_output_tokens: data.total_output_tokens + output_tokens,
-        current_context_tokens: input_tokens
+        current_context_tokens: input_tokens,
+        session_cost: new_session_cost
     }
+
+    # Persist cost entry to session JSONL
+    cost_entry = Cost.new(new_session_cost)
+    Store.append(data.session_id, cost_entry)
 
     broadcast_event(data.session_id, {:usage, %{input: input_tokens, output: output_tokens}})
     {:keep_state, new_data}

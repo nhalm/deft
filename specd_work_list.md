@@ -22,10 +22,6 @@ Then use Deft to build the rest of Deft. The critical path is:
   Then: OM → TUI → evals → orchestration
 -->
 
-## sessions v0.1
-
-- Persist `Entry.Cost` to session JSONL on usage updates: `handle_usage` updates `session_cost` in memory but never writes `Entry.Cost` to JSONL. On resume, cumulative cost is lost (resets to 0). Add periodic or per-turn `Store.append` with `Entry.Cost` (agent.ex lines 522-533)
-
 ---
 
 ## === BOOTSTRAP CHECKPOINT ===

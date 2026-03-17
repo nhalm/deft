@@ -91,6 +91,7 @@ defmodule Deft.Session.Store do
   - `:working_dir` - Working directory from session_start
   - `:model` - Model name from session_start (or latest model_change)
   - `:om_state` - Latest observation state (if any)
+  - `:session_cost` - Cumulative cost from latest cost entry (or 0.0)
   - `:session_metadata` - Session start metadata
 
   ## Examples
@@ -102,6 +103,7 @@ defmodule Deft.Session.Store do
         working_dir: "/tmp",
         model: "claude-sonnet-4",
         om_state: nil,
+        session_cost: 0.05,
         session_metadata: %Entry.SessionStart{}
       }}
 
@@ -180,12 +182,16 @@ defmodule Deft.Session.Store do
     # Find the latest observation state
     om_state = find_latest_observation(entries)
 
+    # Find the latest cost entry
+    session_cost = find_latest_cost(entries)
+
     %{
       messages: messages,
       config: (session_start && session_start.config) || %{},
       working_dir: (session_start && session_start.working_dir) || File.cwd!(),
       model: model,
       om_state: om_state,
+      session_cost: session_cost,
       session_metadata: session_start
     }
   end
@@ -295,6 +301,20 @@ defmodule Deft.Session.Store do
       %Entry.Observation{} -> true
       _ -> false
     end)
+  end
+
+  defp find_latest_cost(entries) do
+    # Find the most recent cost entry and return cumulative_cost, or 0.0 if not found
+    entries
+    |> Enum.reverse()
+    |> Enum.find(fn
+      %Entry.Cost{} -> true
+      _ -> false
+    end)
+    |> case do
+      %Entry.Cost{cumulative_cost: cost} -> cost
+      nil -> 0.0
+    end
   end
 
   defp session_path(session_id) do
