@@ -35,6 +35,7 @@ defmodule Deft.Agent do
   - `retry_count` — Number of retries attempted for current request (optional)
   - `retry_delay` — Current exponential backoff delay in ms (optional)
   - `compaction_task_ref` — Task reference for ongoing compaction summarization (optional)
+  - `compaction_task_pid` — Task PID for ongoing compaction summarization (optional)
   - `pending_compaction_data` — Data to use when compaction completes (optional)
   """
 
@@ -105,6 +106,7 @@ defmodule Deft.Agent do
       saved_message_ids: MapSet.new(),
       tool_execution_times: %{},
       compaction_task_ref: nil,
+      compaction_task_pid: nil,
       pending_compaction_data: nil
     }
 
@@ -246,6 +248,7 @@ defmodule Deft.Agent do
         tool_call_buffers: %{},
         tool_tasks: [],
         compaction_task_ref: nil,
+        compaction_task_pid: nil,
         pending_compaction_data: nil
     }
 
@@ -397,7 +400,13 @@ defmodule Deft.Agent do
         # Compaction task failed - log and continue without compaction
         broadcast_event(data.session_id, {:compaction_failed, inspect(reason)})
 
-        new_data = %{data | compaction_task_ref: nil, pending_compaction_data: nil}
+        new_data = %{
+          data
+          | compaction_task_ref: nil,
+            compaction_task_pid: nil,
+            pending_compaction_data: nil
+        }
+
         {:keep_state, new_data}
 
       true ->
@@ -454,7 +463,13 @@ defmodule Deft.Agent do
         # Compaction task failed - log and continue without compaction
         broadcast_event(data.session_id, {:compaction_failed, inspect(reason)})
 
-        new_data = %{data | compaction_task_ref: nil, pending_compaction_data: nil}
+        new_data = %{
+          data
+          | compaction_task_ref: nil,
+            compaction_task_pid: nil,
+            pending_compaction_data: nil
+        }
+
         {:keep_state, new_data}
 
       true ->
@@ -497,7 +512,13 @@ defmodule Deft.Agent do
         # Compaction task failed - log and continue without compaction
         broadcast_event(data.session_id, {:compaction_failed, inspect(reason)})
 
-        new_data = %{data | compaction_task_ref: nil, pending_compaction_data: nil}
+        new_data = %{
+          data
+          | compaction_task_ref: nil,
+            compaction_task_pid: nil,
+            pending_compaction_data: nil
+        }
+
         {:keep_state, new_data}
 
       true ->
@@ -932,7 +953,7 @@ defmodule Deft.Agent do
 
     if tool_runner do
       Enum.each(data.tool_tasks, fn task_info ->
-        Task.Supervisor.terminate_child(tool_runner, task_info.ref)
+        Task.Supervisor.terminate_child(tool_runner, task_info.pid)
       end)
     end
   end
@@ -943,11 +964,11 @@ defmodule Deft.Agent do
   end
 
   defp cancel_compaction_task(data) do
-    if data.compaction_task_ref do
+    if data.compaction_task_pid do
       tool_runner = get_tool_runner_supervisor(data)
 
       if tool_runner do
-        Task.Supervisor.terminate_child(tool_runner, data.compaction_task_ref)
+        Task.Supervisor.terminate_child(tool_runner, data.compaction_task_pid)
       end
     end
   end
@@ -994,8 +1015,8 @@ defmodule Deft.Agent do
           execute_tools_in_task(tool_calls, data, tool_timeout)
         end)
 
-      # Store the task info (ref only, Task struct has its own pid) and execution times
-      task_info = %{ref: task.ref}
+      # Store the task info (both ref and pid) and execution times
+      task_info = %{ref: task.ref, pid: task.pid}
       new_data = %{data | tool_tasks: [task_info], tool_execution_times: execution_times}
       {:keep_state, new_data}
     else
@@ -1273,7 +1294,7 @@ defmodule Deft.Agent do
           summarize_messages_with_llm(to_remove, provider, config)
         end)
 
-      # Store task ref and compaction context in state
+      # Store task ref, pid, and compaction context in state
       pending_data = %{
         to_remove: to_remove,
         to_keep: to_keep,
@@ -1281,7 +1302,12 @@ defmodule Deft.Agent do
         messages_to_remove_count: length(to_remove)
       }
 
-      %{data | compaction_task_ref: task.ref, pending_compaction_data: pending_data}
+      %{
+        data
+        | compaction_task_ref: task.ref,
+          compaction_task_pid: task.pid,
+          pending_compaction_data: pending_data
+      }
     else
       data
     end
@@ -1324,13 +1350,14 @@ defmodule Deft.Agent do
         data
         | messages: new_messages,
           compaction_task_ref: nil,
+          compaction_task_pid: nil,
           pending_compaction_data: nil
       }
 
       {:keep_state, new_data}
     else
       # No pending compaction data, just clear the task ref
-      {:keep_state, %{data | compaction_task_ref: nil}}
+      {:keep_state, %{data | compaction_task_ref: nil, compaction_task_pid: nil}}
     end
   end
 
