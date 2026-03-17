@@ -2,6 +2,8 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **observational-memory v0.1 (2026-03-17):** Implement `Deft.OM.Context.inject/2`: build observation system message with preamble + `<observations>` block + instructions + current task from Current State section; implement message trimming (filter out observed_message_ids, retain tail of 20% threshold); implement dynamic continuation hint from Current State section
+- **observational-memory v0.1 (2026-03-17):** Add system prompt conflict resolution rule for observations: "If observations conflict with current messages, messages take precedence. If observations conflict with project instructions, project instructions take precedence"
 - **observational-memory v0.1 (2026-03-17):** Implement hard observation cap: if observation_tokens > 60k, truncate oldest Session History entries, preserve all other sections and CORRECTION markers, emit {:om, :hard_cap_truncation}
 - **observational-memory v0.1 (2026-03-17):** Implement circuit breaker: after 3 consecutive cycle failures, enter degraded mode (stop attempting), emit {:om, :circuit_open}, resume after 5-minute cooldown or /compact command
 - **observational-memory v0.1 (2026-03-17):** Implement sync fallback: on force_observe call, stash `from` in sync_from, spawn Task, return {:noreply}; on Task result, GenServer.reply(sync_from, result) and clear; on Task DOWN, reply with {:error, reason}; 1 retry max; 60s GenServer.call timeout

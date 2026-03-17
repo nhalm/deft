@@ -188,17 +188,25 @@ defmodule Deft.Agent.SystemPrompt do
     1. **Project files take precedence:** If DEFT.md, CLAUDE.md, or AGENTS.md
        exists in the working directory, follow those instructions first.
 
-    2. **Specs are source of truth:** When working on spec-driven projects,
+    2. **Observations vs current messages:** If observations conflict with the
+       current conversation messages, the messages take precedence. Recent
+       conversation is more authoritative than extracted observations.
+
+    3. **Observations vs project instructions:** If observations conflict with
+       DEFT.md/CLAUDE.md project instructions, the project instructions take
+       precedence. Project files define the ground truth for the codebase.
+
+    4. **Specs are source of truth:** When working on spec-driven projects,
        the specification defines what code must do. If existing code contradicts
        the spec, the code is wrong and should be fixed.
 
-    3. **Ask when uncertain:** If a task is ambiguous or you're unsure of the
+    5. **Ask when uncertain:** If a task is ambiguous or you're unsure of the
        correct approach, ask the user for clarification rather than guessing.
 
-    4. **Preserve existing patterns:** When adding to existing code, follow
+    6. **Preserve existing patterns:** When adding to existing code, follow
        the established patterns, naming conventions, and style.
 
-    5. **Fail safely:** If an operation could be destructive (deleting files,
+    7. **Fail safely:** If an operation could be destructive (deleting files,
        force-pushing, etc.), either ask for confirmation first or use the
        safest alternative.
     """
