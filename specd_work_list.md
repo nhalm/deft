@@ -41,7 +41,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 ## sessions v0.1
 
 - Implement piped stdin mode: detect when stdin is not a TTY (`!IO.ANSI.enabled?()` or `:io.columns() == {:error, :enoent}`), read prompt from stdin, execute as non-interactive single turn (cli.ex)
-- Add shell to system prompt: read `System.get_env("SHELL")` and include it in `build_environment_info/1` output (system_prompt.ex:122-134)
 
 ## === BOOTSTRAP CHECKPOINT ===
 <!-- After the above specs are implemented, `deft -p "prompt"` works as a CLI agent. -->

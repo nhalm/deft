@@ -123,6 +123,7 @@ defmodule Deft.Agent.SystemPrompt do
     git_info = get_git_info(working_dir)
     date = format_date()
     os_info = get_os_info()
+    shell_info = get_shell_info()
 
     """
     # Environment
@@ -131,6 +132,7 @@ defmodule Deft.Agent.SystemPrompt do
     #{git_info}
     **Date:** #{date}
     **OS:** #{os_info}
+    **Shell:** #{shell_info}
     """
   end
 
@@ -165,6 +167,14 @@ defmodule Deft.Agent.SystemPrompt do
       {:unix, subtype} -> "Unix (#{subtype})"
       {:win32, _} -> "Windows"
       other -> inspect(other)
+    end
+  end
+
+  # Get shell information
+  defp get_shell_info do
+    case System.get_env("SHELL") do
+      nil -> "Unknown"
+      shell_path -> shell_path
     end
   end
 

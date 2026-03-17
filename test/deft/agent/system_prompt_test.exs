@@ -34,6 +34,13 @@ defmodule Deft.Agent.SystemPromptTest do
       assert result =~ "**OS:**"
     end
 
+    test "includes shell information in environment info" do
+      result = SystemPrompt.build(%{})
+
+      # Should include shell information
+      assert result =~ "**Shell:**"
+    end
+
     test "includes git branch when in a git repository" do
       # Use the current directory which is a git repo
       result = SystemPrompt.build(%{working_dir: File.cwd!()})
