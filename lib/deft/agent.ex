@@ -22,6 +22,7 @@ defmodule Deft.Agent do
   - `session_id` — Unique identifier for the session
   - `current_message` — Message being accumulated during streaming (optional)
   - `stream_ref` — Reference to the current stream (optional)
+  - `stream_monitor_ref` — Monitor reference for the stream process (optional)
   - `tool_tasks` — List of in-flight tool execution tasks (optional)
   - `tool_call_buffers` — Map of tool_id → JSON string for accumulating tool call args (optional)
   - `prompt_queue` — Queue of prompts received while not idle (optional)
@@ -81,6 +82,7 @@ defmodule Deft.Agent do
       messages: initial_messages,
       current_message: nil,
       stream_ref: nil,
+      stream_monitor_ref: nil,
       tool_tasks: [],
       tool_call_buffers: %{},
       prompt_queue: :queue.new(),
@@ -188,10 +190,14 @@ defmodule Deft.Agent do
     # Call provider.stream/3
     case call_provider_stream(provider, context_messages, tools, compacted_data.config) do
       {:ok, stream_ref} ->
+        # Monitor the stream process to detect crashes (only if stream_ref is a PID)
+        monitor_ref = if is_pid(stream_ref), do: Process.monitor(stream_ref), else: nil
+
         # Store stream ref and updated messages, reset retry state and turn count, transition to :calling
         new_data = %{
           compacted_data
           | stream_ref: stream_ref,
+            stream_monitor_ref: monitor_ref,
             retry_count: 0,
             retry_delay: 1000,
             turn_count: 0
@@ -217,11 +223,16 @@ defmodule Deft.Agent do
   def handle_event(:cast, :abort, state, data) do
     # Cancel any in-flight operations based on current state
     case state do
-      :streaming ->
+      state when state in [:calling, :streaming] ->
         # Cancel the stream if we have a stream ref and provider
         if data.stream_ref && Map.get(data.config, :provider) do
           provider = Map.get(data.config, :provider)
           provider.cancel_stream(data.stream_ref)
+        end
+
+        # Demonitor the stream process
+        if data.stream_monitor_ref do
+          Process.demonitor(data.stream_monitor_ref, [:flush])
         end
 
       :executing_tools ->
@@ -242,6 +253,7 @@ defmodule Deft.Agent do
     clean_data = %{
       data
       | stream_ref: nil,
+        stream_monitor_ref: nil,
         current_message: nil,
         tool_call_buffers: %{},
         tool_tasks: []
@@ -343,12 +355,33 @@ defmodule Deft.Agent do
 
     case call_provider_stream(provider, context_messages, tools, compacted_data.config) do
       {:ok, stream_ref} ->
+        # Monitor the stream process to detect crashes (only if stream_ref is a PID)
+        monitor_ref = if is_pid(stream_ref), do: Process.monitor(stream_ref), else: nil
+
         # Update stream ref, keep retry count
-        new_data = %{compacted_data | stream_ref: stream_ref}
+        new_data = %{compacted_data | stream_ref: stream_ref, stream_monitor_ref: monitor_ref}
         {:keep_state, new_data}
 
       {:error, reason} ->
         handle_calling_error(%{message: inspect(reason)}, compacted_data)
+    end
+  end
+
+  def handle_event(:info, {:DOWN, ref, :process, _pid, reason}, :calling, data) do
+    # Stream process crashed while waiting for first content
+    if ref == data.stream_monitor_ref do
+      broadcast_event(data.session_id, {:error, "Stream process crashed: #{inspect(reason)}"})
+
+      new_data = %{
+        data
+        | stream_ref: nil,
+          stream_monitor_ref: nil
+      }
+
+      handle_idle_transition(new_data)
+    else
+      # Not our stream monitor, ignore
+      :keep_state_and_data
     end
   end
 
@@ -387,6 +420,26 @@ defmodule Deft.Agent do
   def handle_event(:info, {:provider_event, _event}, :streaming, _data) do
     # Unrecognized event - ignore
     :keep_state_and_data
+  end
+
+  def handle_event(:info, {:DOWN, ref, :process, _pid, reason}, :streaming, data) do
+    # Stream process crashed during streaming
+    if ref == data.stream_monitor_ref do
+      broadcast_event(data.session_id, {:error, "Stream process crashed: #{inspect(reason)}"})
+
+      new_data = %{
+        data
+        | stream_ref: nil,
+          stream_monitor_ref: nil,
+          current_message: nil,
+          tool_call_buffers: %{}
+      }
+
+      handle_idle_transition(new_data)
+    else
+      # Not our stream monitor, ignore
+      :keep_state_and_data
+    end
   end
 
   def handle_event(:info, {ref, results}, :executing_tools, %{tool_tasks: tasks} = data)
@@ -582,6 +635,11 @@ defmodule Deft.Agent do
   end
 
   defp handle_stream_done(data) do
+    # Demonitor the stream process
+    if data.stream_monitor_ref do
+      Process.demonitor(data.stream_monitor_ref, [:flush])
+    end
+
     # Finalize the assistant message and transition to :executing_tools
     finalized_message = data.current_message
     new_messages = data.messages ++ [finalized_message]
@@ -591,6 +649,7 @@ defmodule Deft.Agent do
       | messages: new_messages,
         current_message: nil,
         stream_ref: nil,
+        stream_monitor_ref: nil,
         tool_call_buffers: %{}
     }
 
@@ -599,6 +658,11 @@ defmodule Deft.Agent do
   end
 
   defp handle_stream_error(error_payload, data) do
+    # Demonitor the stream process
+    if data.stream_monitor_ref do
+      Process.demonitor(data.stream_monitor_ref, [:flush])
+    end
+
     # Handle error - transition to idle
     error_message = Map.get(error_payload, :message, "Unknown streaming error")
     broadcast_event(data.session_id, {:error, error_message})
@@ -607,6 +671,7 @@ defmodule Deft.Agent do
       data
       | current_message: nil,
         stream_ref: nil,
+        stream_monitor_ref: nil,
         tool_call_buffers: %{}
     }
 
@@ -707,9 +772,13 @@ defmodule Deft.Agent do
 
         case call_provider_stream(provider, context_messages, tools, compacted_data.config) do
           {:ok, stream_ref} ->
+            # Monitor the stream process to detect crashes (only if stream_ref is a PID)
+            monitor_ref = if is_pid(stream_ref), do: Process.monitor(stream_ref), else: nil
+
             updated_data = %{
               compacted_data
               | stream_ref: stream_ref,
+                stream_monitor_ref: monitor_ref,
                 retry_count: 0,
                 retry_delay: 1000,
                 turn_count: 0
@@ -898,9 +967,13 @@ defmodule Deft.Agent do
 
       case call_provider_stream(provider, context_messages, tools, compacted_data.config) do
         {:ok, stream_ref} ->
+          # Monitor the stream process to detect crashes (only if stream_ref is a PID)
+          monitor_ref = if is_pid(stream_ref), do: Process.monitor(stream_ref), else: nil
+
           updated_data = %{
             compacted_data
             | stream_ref: stream_ref,
+              stream_monitor_ref: monitor_ref,
               retry_count: 0,
               retry_delay: 1000,
               turn_count: new_turn_count

@@ -2,6 +2,7 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **providers v0.1 (2026-03-16):** Add `Process.monitor/1` on stream PID in agent after `stream/3` returns: the agent stores `stream_ref` (a PID) but never monitors it. If the stream process crashes, the agent hangs in `:calling` forever with no `:DOWN` handler. Add monitor in the `:idle → :calling` transition and handle `:DOWN` in `:calling`/`:streaming` states (agent.ex lines 179-189; providers spec section 1)
 - **harness v0.1 (2026-03-16):** Fix agent event pattern matching in `:calling` and `:streaming` states: handlers match on tuples (`{:text_delta, payload}`) but provider sends structs (`%TextDelta{delta: text}`). All provider events fall through to catch-all handlers silently. The agent never transitions from `:calling` to `:streaming`. Fix: match on struct patterns instead of tuples in `handle_event` clauses (agent.ex lines 257, 307-336)
 - **sessions v0.1 (2026-03-16):** Implement piped stdin mode: detect when stdin is not a TTY (`!IO.ANSI.enabled?()` or `:io.columns() == {:error, :enoent}`), read prompt from stdin, execute as non-interactive single turn (cli.ex)
 - **providers v0.1 (2026-03-16):** Fix `parse_event/1` for `content_block_delta` with `input_json_delta`: use the real Anthropic tool call ID from `content_block_start` instead of synthetic `"tool_#{idx}"` — either thread tool_state through parse_event or remove the broken code path and document that content_block events must go through the stateful streaming layer (anthropic.ex:342-349)
