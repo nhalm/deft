@@ -63,6 +63,7 @@ defmodule Deft.TUI.Chat do
         memory_tokens: nil,
         memory_threshold: 40_000,
         om_active: false,
+        om_sync_fallback: false,
         # Scroll state
         scroll_offset: 0
       )
@@ -83,7 +84,8 @@ defmodule Deft.TUI.Chat do
     assigns =
       assign(assigns,
         model_name: assigns.config[:model] || "claude-sonnet-4",
-        agent_state_display: format_agent_state(assigns.agent_state, assigns.om_active)
+        agent_state_display:
+          format_agent_state(assigns.agent_state, assigns.om_active, assigns.om_sync_fallback)
       )
 
     ~H"""
@@ -171,10 +173,59 @@ defmodule Deft.TUI.Chat do
     handle_abort(term)
   end
 
+  # OM (Observational Memory) events
+  def handle_info({:om, :observation_started}, term) do
+    {:noreply, assign(term, om_active: true, om_sync_fallback: false)}
+  end
+
+  def handle_info({:om, :observation_complete, metadata}, term) do
+    # Extract tokens_produced from metadata and update memory_tokens
+    memory_tokens =
+      case metadata do
+        %{tokens_produced: tokens} -> tokens
+        _ -> term.assigns.memory_tokens
+      end
+
+    {:noreply, assign(term, om_active: false, memory_tokens: memory_tokens)}
+  end
+
+  def handle_info({:om, :reflection_started, _metadata}, term) do
+    {:noreply, assign(term, om_active: true, om_sync_fallback: false)}
+  end
+
+  def handle_info({:om, :reflection_complete, metadata}, term) do
+    # Extract after_tokens from metadata and update memory_tokens
+    memory_tokens =
+      case metadata do
+        %{after_tokens: tokens} -> tokens
+        _ -> term.assigns.memory_tokens
+      end
+
+    {:noreply, assign(term, om_active: false, memory_tokens: memory_tokens)}
+  end
+
+  def handle_info({:om, :buffering_started, _metadata}, term) do
+    {:noreply, assign(term, om_active: true, om_sync_fallback: false)}
+  end
+
+  def handle_info({:om, :buffering_complete, _metadata}, term) do
+    {:noreply, assign(term, om_active: false)}
+  end
+
+  def handle_info({:om, :sync_fallback, _metadata}, term) do
+    {:noreply, assign(term, om_active: true, om_sync_fallback: true)}
+  end
+
+  def handle_info({:om, :activation, _metadata}, term) do
+    # Activation is instant, no spinner needed
+    {:noreply, term}
+  end
+
   # Ignore events that don't need display updates
   def handle_info({:agent_event, {:thinking_delta, _delta}}, term), do: {:noreply, term}
   def handle_info({:agent_event, {:tool_call_delta, _}}, term), do: {:noreply, term}
   def handle_info({:agent_event, _event}, term), do: {:noreply, term}
+  def handle_info({:om, _event}, term), do: {:noreply, term}
 
   def handle_info(_msg, term) do
     {:noreply, term}
@@ -664,15 +715,24 @@ defmodule Deft.TUI.Chat do
     "$#{Float.round(cost, 2)}"
   end
 
-  defp format_agent_state(:idle, false), do: "○ idle"
-  defp format_agent_state(:idle, true), do: "○ idle"
-  defp format_agent_state(:calling, false), do: "◉ calling"
-  defp format_agent_state(:calling, true), do: "◉ calling"
-  defp format_agent_state(:streaming, false), do: "◉ streaming"
-  defp format_agent_state(:streaming, true), do: "◉ streaming"
-  defp format_agent_state(:executing_tools, false), do: "◉ tools"
-  defp format_agent_state(:executing_tools, true), do: "◉ tools"
-  defp format_agent_state(state, _om_active), do: "◉ #{state}"
+  # When in sync fallback, always show "memorizing..." regardless of agent state
+  defp format_agent_state(_agent_state, _om_active, true) do
+    "◉ memorizing..."
+  end
+
+  # When OM is active (but not sync fallback), show spinner with agent state
+  defp format_agent_state(:idle, true, false), do: "◌ idle (observing)"
+  defp format_agent_state(:calling, true, false), do: "◉ calling (observing)"
+  defp format_agent_state(:streaming, true, false), do: "◉ streaming (observing)"
+  defp format_agent_state(:executing_tools, true, false), do: "◉ tools (observing)"
+  defp format_agent_state(state, true, false), do: "◉ #{state} (observing)"
+
+  # Normal states when OM is not active
+  defp format_agent_state(:idle, false, false), do: "○ idle"
+  defp format_agent_state(:calling, false, false), do: "◉ calling"
+  defp format_agent_state(:streaming, false, false), do: "◉ streaming"
+  defp format_agent_state(:executing_tools, false, false), do: "◉ tools"
+  defp format_agent_state(state, false, false), do: "◉ #{state}"
 
   defp format_k(num) when num < 1000, do: "#{num}"
   defp format_k(num), do: "#{Float.round(num / 1000, 1)}k"
