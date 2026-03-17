@@ -19,7 +19,7 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## observational-memory v0.1
 
-- Implement Reflector prompt: `Deft.OM.Reflector.Prompt.system/1` with target size (50% of threshold), compression levels 0-3, section ordering constraint, per-section budget guidance, CORRECTION marker preservation requirement - Implement Reflector Task execution: State spawns Task with full active_observations + target size; result replaces active_observations, increments generation_count + activation_epoch; max 2 LLM calls; CORRECTION post-check (append missing markers); if level 3 still exceeds target, accept and move on
+- Implement Reflector Task execution: State spawns Task with full active_observations + target size; result replaces active_observations, increments generation_count + activation_epoch; max 2 LLM calls; CORRECTION post-check (append missing markers); if level 3 still exceeds target, accept and move on
 - Implement Observer/Reflector serialization: if is_reflecting, defer Observer activation until reflection completes; if is_observing, defer reflection until Observer completes; activation_epoch incremented on both (blocked: Implement Reflector Task execution...)
 - Implement sync fallback: on force_observe call, stash `from` in sync_from, spawn Task, return {:noreply}; on Task result, GenServer.reply(sync_from, result) and clear; on Task DOWN, reply with {:error, reason}; 1 retry max; 60s GenServer.call timeout (blocked: Implement Observer/Reflector serialization...)
 - Implement circuit breaker: after 3 consecutive cycle failures, enter degraded mode (stop attempting), emit {:om, :circuit_open}, resume after 5-minute cooldown or /compact command (blocked: Implement sync fallback...)

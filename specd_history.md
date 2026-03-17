@@ -2,6 +2,7 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **observational-memory v0.1 (2026-03-17):** Implement Reflector prompt: `Deft.OM.Reflector.Prompt.system/1` with target size (50% of threshold), compression levels 0-3, section ordering constraint, per-section budget guidance, CORRECTION marker preservation requirement
 - **observational-memory v0.1 (2026-03-17):** Implement observation activation: when pending_message_tokens >= threshold and buffered_chunks non-empty, section-aware merge all chunks into active_observations, move chunk message_ids to observed_message_ids, clear buffered_chunks, increment activation_epoch, set snapshot_dirty
 - **observational-memory v0.1 (2026-03-17):** Implement Observer Task execution: State spawns Task under TaskSupervisor with current messages + truncated observations, handles result in `handle_info({ref, result})`, stores as BufferedChunk with current activation_epoch
 
