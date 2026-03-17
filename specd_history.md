@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **evals v0.2 (2026-03-17):** Implement skill invocation fidelity evals: agent auto-invokes via use_skill tool correctly; skill definition is loaded and followed; 20 iterations, 80% pass rate
 - **evals v0.2 (2026-03-17):** Implement skill suggestion evals: agent suggests appropriate skill when context matches skill description; 20 iterations, 80% pass rate
 - **tui v0.1 (2026-03-17):** Implement job status display in Chat view: per-Lead progress, blocked status, cost, elapsed time; /status and /inspect commands
 - **tui v0.1 (2026-03-17):** Implement `Deft.TUI.SessionPicker` Breeze view: list sessions, arrow keys to navigate, Enter to resume

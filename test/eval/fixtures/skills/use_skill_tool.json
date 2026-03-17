@@ -1,0 +1,18 @@
+{
+  "id": "skills-invocation-fidelity-002",
+  "spec_version": "0.2",
+  "description": "Agent correctly uses use_skill tool when appropriate",
+  "tags": ["skills", "invocation_fidelity", "use_skill"],
+  "should_invoke_use_skill": true,
+  "available_skills": [
+    {"name": "review", "description": "Perform a comprehensive code review of staged changes"}
+  ],
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {"type": "text", "text": "I need to review my code changes. Can you help?"}
+      ]
+    }
+  ]
+}

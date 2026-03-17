@@ -1,3 +1,4 @@
+{"date_time":"2026-03-17T23:47:00Z","spec":"evals","version":"v0.2","source":"implement","decision_by":"claude","summary":"Implemented skill invocation fidelity evals with three test cases","reasoning":"Created test file with LLM-as-judge to verify agents follow multi-step skill instructions and correctly use use_skill tool. Pass rate set to 85% per spec (work item said 80% but spec is authoritative). Used ToolCallStart/ToolCallDone events to collect tool calls.","files":{"specs":["specs/evals/README.md","specs/evals/skills.md"],"source_code":["test/eval/skills/invocation_fidelity_test.exs"],"other":["test/eval/fixtures/skills/multi_step_skill.json","test/eval/fixtures/skills/use_skill_tool.json","test/eval/fixtures/skills/ordered_steps_skill.json"]}}
 {
   "date_time": "2026-03-17T23:00:00Z",
   "spec": "evals",
