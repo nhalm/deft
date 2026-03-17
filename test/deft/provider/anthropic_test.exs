@@ -7,7 +7,6 @@ defmodule Deft.Provider.AnthropicTest do
     TextDelta,
     ThinkingDelta,
     ToolCallStart,
-    ToolCallDelta,
     Usage,
     Done,
     Error
@@ -136,7 +135,11 @@ defmodule Deft.Provider.AnthropicTest do
       assert %ThinkingDelta{delta: "Hmm..."} = Anthropic.parse_event(sse_event)
     end
 
-    test "parses content_block_delta with input_json_delta" do
+    test "skips content_block_delta with input_json_delta" do
+      # Tool call deltas must go through the stateful streaming layer
+      # (handle_content_block_delta) to get the real tool call ID from
+      # content_block_start. parse_event/1 is stateless and cannot provide
+      # the correct ID, so it returns :skip for these events.
       sse_event = %{
         event: "content_block_delta",
         data:
@@ -146,8 +149,7 @@ defmodule Deft.Provider.AnthropicTest do
           })
       }
 
-      assert %ToolCallDelta{id: "tool_0", delta: "{\"path\":\""} =
-               Anthropic.parse_event(sse_event)
+      assert :skip = Anthropic.parse_event(sse_event)
     end
 
     test "parses message_start with input tokens" do

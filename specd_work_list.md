@@ -24,10 +24,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ---
 
-## providers v0.1
-
-- Fix `parse_event/1` for `content_block_delta` with `input_json_delta`: use the real Anthropic tool call ID from `content_block_start` instead of synthetic `"tool_#{idx}"` — either thread tool_state through parse_event or remove the broken code path and document that content_block events must go through the stateful streaming layer (anthropic.ex:342-349)
-
 ## sessions v0.1
 
 - Implement piped stdin mode: detect when stdin is not a TTY (`!IO.ANSI.enabled?()` or `:io.columns() == {:error, :enoent}`), read prompt from stdin, execute as non-interactive single turn (cli.ex)

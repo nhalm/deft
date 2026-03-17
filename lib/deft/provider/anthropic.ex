@@ -234,12 +234,6 @@ defmodule Deft.Provider.Anthropic do
     Map.put(tool_state, id, "")
   end
 
-  defp handle_parsed_event(caller, %ToolCallDelta{id: id, delta: delta} = event, tool_state) do
-    send(caller, {:provider_event, event})
-    current = Map.get(tool_state, id, "")
-    Map.put(tool_state, id, current <> delta)
-  end
-
   defp handle_parsed_event(caller, event, tool_state) do
     send(caller, {:provider_event, event})
     tool_state
@@ -339,14 +333,12 @@ defmodule Deft.Provider.Anthropic do
       {:ok, %{"delta" => %{"type" => "thinking_delta", "thinking" => text}}} ->
         %ThinkingDelta{delta: text}
 
-      {:ok,
-       %{
-         "delta" => %{"type" => "input_json_delta", "partial_json" => json_fragment},
-         "index" => idx
-       }} ->
-        # Anthropic uses index-based tracking for tool calls
-        id = "tool_#{idx}"
-        %ToolCallDelta{id: id, delta: json_fragment}
+      {:ok, %{"delta" => %{"type" => "input_json_delta"}}} ->
+        # Tool call deltas are handled by the stateful streaming layer
+        # (handle_content_block_delta) which has access to the real tool call ID
+        # from content_block_start. parse_event/1 is stateless and cannot
+        # provide the correct ID, so these events must be skipped here.
+        :skip
 
       _ ->
         :skip
