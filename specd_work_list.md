@@ -128,7 +128,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## issues v0.2
 
-- Implement `Deft.Issue.Id.generate/1`: derive 4-hex-char ID from random UUID with `deft-` prefix, accept existing IDs list, extend to 5+ chars on collision
 - Implement `Deft.Issues` GenServer: init reads .deft/issues.jsonl into memory with dedup-on-read (last occurrence per ID wins); lines that fail JSON parsing are skipped with warnings (file not corrupt unless all lines malformed); holds list of Issue structs in state; expose create/1, update/2, close/1, get/1, list/1, ready/0
 - Implement cycle detection on load: after loading from JSONL in init/1, detect cycles in dependency graph; affected issues have dependencies cleared with warnings logged (blocked: Implement Deft.Issues GenServer...)
 - Implement JSONL persistence with advisory lock: lock file at .deft/issues.jsonl.lock with exclusive create; lock file contains PID and timestamp as JSON line; stale threshold 30s; retry 100ms with jitter, 10s timeout; writes go to .deft/issues.jsonl.tmp.<random> then File.rename/2 (blocked: Implement Deft.Issues GenServer...)
