@@ -18,7 +18,8 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         --full-audit)  AUDIT_MODE="full"; shift ;;
         --skip-audit)  AUDIT_MODE="skip"; shift ;;
-        *) echo "Unknown flag: $1"; echo "Usage: ./loop.sh [--full-audit | --skip-audit]"; exit 1 ;;
+        --max-cycles)  MAX_CYCLES="$2"; shift 2 ;;
+        *) echo "Unknown flag: $1"; echo "Usage: ./loop.sh [--full-audit | --skip-audit] [--max-cycles N]"; exit 1 ;;
     esac
 done
 
