@@ -215,8 +215,8 @@ defmodule Deft.Agent do
 
       :executing_tools ->
         # Terminate all in-flight tool execution tasks
-        Enum.each(data.tool_tasks, fn task ->
-          Task.shutdown(task, :brutal_kill)
+        Enum.each(data.tool_tasks, fn task_info ->
+          Process.exit(task_info.pid, :kill)
         end)
 
       _ ->
@@ -713,15 +713,17 @@ defmodule Deft.Agent do
         Map.put(acc, tool_use.id, start_time)
       end)
 
-    # Start execution asynchronously in a task so we can abort if needed
+    # Start execution asynchronously with spawn_monitor so we can abort if needed
     # This prevents blocking the gen_statem and allows abort to work
-    task =
-      Task.async(fn ->
+    # spawn_monitor provides isolation - a crash in execute_tools_in_task won't propagate to the agent
+    {pid, ref} =
+      spawn_monitor(fn ->
         execute_tools_in_task(tool_calls, data, tool_timeout)
       end)
 
-    # Store the task and execution times so we can abort it later
-    new_data = %{data | tool_tasks: [task], tool_execution_times: execution_times}
+    # Store the task info (pid and ref) and execution times so we can abort it later
+    task_info = %{pid: pid, ref: ref}
+    new_data = %{data | tool_tasks: [task_info], tool_execution_times: execution_times}
     {:keep_state, new_data}
   end
 

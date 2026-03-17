@@ -2,6 +2,7 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **harness v0.1 (2026-03-16):** Fix outer `Task.async` wrapping tool batch in `start_tool_execution/2` (agent.ex:719): replace with `Task.Supervisor.async_nolink` or `spawn_monitor` so a crash in `execute_tools_in_task` does not propagate to the agent process
 - **sessions v0.1 (2026-03-16):** Add shell to system prompt: read `System.get_env("SHELL")` and include it in `build_environment_info/1` output (system_prompt.ex:122-134)
 - **sessions v0.1 (2026-03-16):** Implement `deft resume <id>` CLI command: load session JSONL from `~/.deft/sessions/<id>.jsonl`, reconstruct conversation state from `message` + `tool_result` entries, display summary of last 10 messages (formatted as "Role (HH:MM): first 100 chars of content"); then accept `-p "prompt"` flag for non-interactive continuation (execute one turn with that prompt, print response, exit)
 - **providers v0.1 (2026-03-16):** Fix `stream/3`: use `spawn(fn -> ... end)` + `Process.monitor(pid)` (or `spawn_monitor/1`) instead of `spawn_link/1` — with `spawn_link`, a stream process crash kills the agent instead of delivering a `:DOWN` message for graceful recovery

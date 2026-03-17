@@ -26,7 +26,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ## harness v0.1
 
-- Fix outer `Task.async` wrapping tool batch in `start_tool_execution/2` (agent.ex:719): replace with `Task.Supervisor.async_nolink` or `spawn_monitor` so a crash in `execute_tools_in_task` does not propagate to the agent process
 - Implement LLM-based compaction summarization: when `current_context_tokens > 0.7 * context_window`, call the LLM to summarize oldest messages before replacing them, instead of using the current static placeholder string (agent.ex:960-965)
 
 ## tools v0.1
