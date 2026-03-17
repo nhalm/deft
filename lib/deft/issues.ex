@@ -136,6 +136,17 @@ defmodule Deft.Issues do
   end
 
   @doc """
+  Returns blocked issues (open, with at least one non-closed dependency).
+
+  ## Returns
+
+  List of blocked issues.
+  """
+  def blocked do
+    GenServer.call(__MODULE__, :blocked)
+  end
+
+  @doc """
   Adds a dependency to an issue.
 
   ## Parameters
@@ -310,6 +321,15 @@ defmodule Deft.Issues do
       |> Enum.sort_by(&{&1.priority, &1.created_at})
 
     {:reply, ready_issues, state}
+  end
+
+  @impl true
+  def handle_call(:blocked, _from, state) do
+    blocked_issues =
+      state.issues
+      |> Enum.filter(&is_blocked?(&1, state.issues))
+
+    {:reply, blocked_issues, state}
   end
 
   @impl true
@@ -568,6 +588,17 @@ defmodule Deft.Issues do
         case Enum.find(all_issues, &(&1.id == dep_id)) do
           nil -> false
           dep -> dep.status == :closed
+        end
+      end)
+  end
+
+  # Checks if an issue is blocked (open with at least one non-closed dependency)
+  defp is_blocked?(issue, all_issues) do
+    issue.status == :open &&
+      Enum.any?(issue.dependencies, fn dep_id ->
+        case Enum.find(all_issues, &(&1.id == dep_id)) do
+          nil -> false
+          dep -> dep.status in [:open, :in_progress]
         end
       end)
   end

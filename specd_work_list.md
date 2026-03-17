@@ -102,7 +102,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## issues v0.2
 
-- Implement ready/blocked queries: ready/0 returns open issues where all dependencies are closed, sorted by priority (0 first) then created_at (oldest first); blocked/0 returns open issues with at least one non-closed dependency
 - Add .deft/issues.jsonl merge=union to .gitattributes on first `deft issue create` if not already present
 - Implement interactive issue creation session: `deft issue create <title>` starts lightweight Agent session (no OM) with elicitation system prompt; asks clarifying questions about context, acceptance criteria, constraints, dependencies; agent uses issue_draft tool call for structured output (JSON with title, context, acceptance_criteria, constraints, priority); CLI parses tool call result and presents for confirmation; saves to JSONL on confirm
 - Implement --quick flag for issue creation: skip interactive session, create issue with title only (empty context, acceptance_criteria, constraints) (blocked: Implement interactive issue creation session...)
@@ -111,10 +110,10 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement `deft issue list` CLI command: default shows open + in_progress; --status filter, --priority filter; tabular output with id, priority, status, title
 - Implement `deft issue update <id>` CLI command: --title, --priority, --status, --blocked-by flags; call Issues.update/2
 - Implement `deft issue close <id>` CLI command: set status to :closed, set closed_at, print any newly unblocked issues
-- Implement `deft issue ready` CLI command: call ready/0, display sorted list (blocked: Implement ready/blocked queries...)
+- Implement `deft issue ready` CLI command: call ready/0, display sorted list
 - Implement `deft issue dep add <id> --blocked-by <blocker_id>` and `dep remove` CLI commands (blocked: Implement dependency tracking...)
-- Implement `deft work`: call ready/0, pick first, set status :in_progress, start Foreman job with issue structured JSON as prompt (context → research, acceptance_criteria → verification targets, constraints → Lead steering), on success set :closed + job_id, on failure set back to :open (blocked: Implement ready/blocked queries..., Implement Foreman gen_statem...)
+- Implement `deft work`: call ready/0, pick first, set status :in_progress, start Foreman job with issue structured JSON as prompt (context → research, acceptance_criteria → verification targets, constraints → Lead steering), on success set :closed + job_id, on failure set back to :open (blocked: Implement Foreman gen_statem...)
 - Implement `deft work <id>`: same as `deft work` but for a specific issue ID, verify issue exists and is open (blocked: Implement deft work...)
 - Implement `deft work --loop`: approve every plan by default (each issue gets plan approval checkpoint); --auto-approve-all flag skips all plan approvals for fully autonomous mode; stop when no ready issues remain, cumulative cost exceeds work.cost_ceiling, or user aborts; re-evaluate unblocked issues between jobs (blocked: Implement deft work...)
 - Implement SIGINT handling: catch Ctrl+C, send graceful shutdown to Foreman, wait for current issue status rollback to :open (5-second timeout), then exit; if timeout expires, issue left at :in_progress (detected as stale on next startup) (blocked: Implement deft work --loop...)
-- Implement unblock notification: when an issue is closed, check if any blocked issues became ready, log to user output (blocked: Implement ready/blocked queries...)
+- Implement unblock notification: when an issue is closed, check if any blocked issues became ready, log to user output
