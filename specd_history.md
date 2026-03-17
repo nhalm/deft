@@ -2,6 +2,7 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **sessions v0.2 (2026-03-16):** Implement interactive session picking in `deft resume` (no ID): currently lists sessions and exits (cli.ex:162-192). Spec section 5.1 requires "List recent sessions and pick one to resume." Add numbered prompt via `IO.gets/1` to select a session, then delegate to `execute_command({:resume_session, id}, flags)`
 - **sessions v0.2 (2026-03-16):** Wire `bash_timeout` config through to bash tool execution: config field is loaded and displayed by `deft config` but never passed to the agent or bash tool. Add `bash_timeout` to `agent_config` map in `start_agent` (cli.ex:429-436), propagate through `Tool.Context` struct (tool.ex:60-61), and use it in `tools/bash.ex` execute/2 as the default timeout instead of `@default_timeout_ms`
 - **harness v0.1 (2026-03-16):** Implement retry logic for streaming-phase errors: `handle_stream_error/2` transitions directly to `:idle` without retrying. Spec requires "On provider error, retry with exponential backoff up to 3 times." Add retry logic matching `handle_calling_error/2` behavior — reset partial state (current_message, tool_call_buffers), re-call `call_provider_stream`, retry up to 3 times with exponential backoff before giving up
 - **harness v0.1 (2026-03-16):** Add `%Done{}` handler in `:calling` state that transitions to `:idle` cleanly (no error broadcast) for the edge case where LLM stream completes without content

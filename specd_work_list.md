@@ -24,10 +24,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ---
 
-## sessions v0.2
-
-- Implement interactive session picking in `deft resume` (no ID): currently lists sessions and exits (cli.ex:162-192). Spec section 5.1 requires "List recent sessions and pick one to resume." Add numbered prompt via `IO.gets/1` to select a session, then delegate to `execute_command({:resume_session, id}, flags)`
-
 ## === BOOTSTRAP CHECKPOINT ===
 <!-- After the above specs are implemented, `deft -p "prompt"` works as a CLI agent. -->
 <!-- Use Deft (or Claude Code) to implement the remaining specs below. -->

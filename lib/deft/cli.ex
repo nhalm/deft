@@ -159,7 +159,7 @@ defmodule Deft.CLI do
     :ok
   end
 
-  defp execute_command(:resume_list, _flags) do
+  defp execute_command(:resume_list, flags) do
     case Store.list() do
       {:ok, sessions} when sessions == [] ->
         IO.puts("No sessions found.")
@@ -170,8 +170,11 @@ defmodule Deft.CLI do
         IO.puts("================")
         IO.puts("")
 
-        sessions
-        |> Enum.take(10)
+        session_list =
+          sessions
+          |> Enum.take(10)
+
+        session_list
         |> Enum.with_index(1)
         |> Enum.each(fn {session, idx} ->
           formatted_time = Calendar.strftime(session.last_message_at, "%Y-%m-%d %H:%M")
@@ -182,8 +185,27 @@ defmodule Deft.CLI do
           IO.puts("")
         end)
 
-        IO.puts("Use 'deft resume <session-id>' to resume a specific session.")
-        :ok
+        IO.puts("Enter session number to resume (or 'q' to quit): ")
+
+        case IO.gets("") |> String.trim() do
+          "q" ->
+            :ok
+
+          input ->
+            case Integer.parse(input) do
+              {idx, ""} when idx >= 1 and idx <= length(session_list) ->
+                selected_session = Enum.at(session_list, idx - 1)
+                execute_command({:resume_session, selected_session.session_id}, flags)
+
+              _ ->
+                IO.puts(
+                  :stderr,
+                  "Invalid selection. Please enter a number between 1 and #{length(session_list)}."
+                )
+
+                exit({:shutdown, 1})
+            end
+        end
 
       {:error, reason} ->
         IO.puts(:stderr, "Error listing sessions: #{inspect(reason)}")
