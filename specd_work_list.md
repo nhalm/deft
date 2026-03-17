@@ -22,10 +22,6 @@ Then use Deft to build the rest of Deft. The critical path is:
   Then: OM → TUI → evals → orchestration
 -->
 
-## harness v0.1
-
-- Fix compaction blocking gen_statem: `collect_stream_text_loop/4` (agent.ex:1266) does a synchronous `receive` loop inside the gen_statem process for up to 30 seconds. During this time no messages are processed — abort, prompts, and DOWN signals are all delayed. Run compaction summarization in a spawned Task and handle the result asynchronously via `handle_info`
-
 ## sessions v0.2
 
 - Fix Burrito release config missing `&Burrito.wrap/1` step: `steps: [:assemble]` in mix.exs:70 only runs standard Mix release assembly. Burrito requires `steps: [:assemble, &Burrito.wrap/1]` to produce a self-contained single binary (per deps/burrito/README.md). Without it, `mix release` produces a standard release directory, not a portable binary

@@ -34,6 +34,8 @@ defmodule Deft.Agent do
   - `session_cost` — Cumulative estimated cost (optional)
   - `retry_count` — Number of retries attempted for current request (optional)
   - `retry_delay` — Current exponential backoff delay in ms (optional)
+  - `compaction_task_ref` — Task reference for ongoing compaction summarization (optional)
+  - `pending_compaction_data` — Data to use when compaction completes (optional)
   """
 
   @behaviour :gen_statem
@@ -101,7 +103,9 @@ defmodule Deft.Agent do
       retry_count: 0,
       retry_delay: 1000,
       saved_message_ids: MapSet.new(),
-      tool_execution_times: %{}
+      tool_execution_times: %{},
+      compaction_task_ref: nil,
+      pending_compaction_data: nil
     }
 
     start_opts = if name, do: [name: name], else: []
@@ -228,33 +232,7 @@ defmodule Deft.Agent do
 
   def handle_event(:cast, :abort, state, data) do
     # Cancel any in-flight operations based on current state
-    case state do
-      state when state in [:calling, :streaming] ->
-        # Cancel the stream if we have a stream ref and provider
-        if data.stream_ref && Map.get(data.config, :provider) do
-          provider = Map.get(data.config, :provider)
-          provider.cancel_stream(data.stream_ref)
-        end
-
-        # Demonitor the stream process
-        if data.stream_monitor_ref do
-          Process.demonitor(data.stream_monitor_ref, [:flush])
-        end
-
-      :executing_tools ->
-        # Terminate all in-flight tool execution tasks
-        tool_runner = get_tool_runner_supervisor(data)
-
-        if tool_runner do
-          Enum.each(data.tool_tasks, fn task_info ->
-            Task.Supervisor.terminate_child(tool_runner, task_info.ref)
-          end)
-        end
-
-      _ ->
-        # No active operations to cancel in other states
-        :ok
-    end
+    cancel_operations_for_abort(state, data)
 
     # Broadcast abort event
     broadcast_event(data.session_id, {:abort, state})
@@ -266,7 +244,9 @@ defmodule Deft.Agent do
         stream_monitor_ref: nil,
         current_message: nil,
         tool_call_buffers: %{},
-        tool_tasks: []
+        tool_tasks: [],
+        compaction_task_ref: nil,
+        pending_compaction_data: nil
     }
 
     {:next_state, :idle, clean_data}
@@ -400,20 +380,29 @@ defmodule Deft.Agent do
   end
 
   def handle_event(:info, {:DOWN, ref, :process, _pid, reason}, :calling, data) do
-    # Stream process crashed while waiting for first content
-    if ref == data.stream_monitor_ref do
-      broadcast_event(data.session_id, {:error, "Stream process crashed: #{inspect(reason)}"})
+    cond do
+      ref == data.stream_monitor_ref ->
+        # Stream process crashed while waiting for first content
+        broadcast_event(data.session_id, {:error, "Stream process crashed: #{inspect(reason)}"})
 
-      new_data = %{
-        data
-        | stream_ref: nil,
-          stream_monitor_ref: nil
-      }
+        new_data = %{
+          data
+          | stream_ref: nil,
+            stream_monitor_ref: nil
+        }
 
-      handle_idle_transition(new_data)
-    else
-      # Not our stream monitor, ignore
-      :keep_state_and_data
+        handle_idle_transition(new_data)
+
+      ref == data.compaction_task_ref ->
+        # Compaction task failed - log and continue without compaction
+        broadcast_event(data.session_id, {:compaction_failed, inspect(reason)})
+
+        new_data = %{data | compaction_task_ref: nil, pending_compaction_data: nil}
+        {:keep_state, new_data}
+
+      true ->
+        # Not our monitor, ignore
+        :keep_state_and_data
     end
   end
 
@@ -455,38 +444,46 @@ defmodule Deft.Agent do
   end
 
   def handle_event(:info, {:DOWN, ref, :process, _pid, reason}, :streaming, data) do
-    # Stream process crashed during streaming
-    if ref == data.stream_monitor_ref do
-      # Treat process crash as a streaming error and retry
-      error_payload = %{message: "Stream process crashed: #{inspect(reason)}"}
-      handle_stream_error(error_payload, data)
-    else
-      # Not our stream monitor, ignore
-      :keep_state_and_data
+    cond do
+      ref == data.stream_monitor_ref ->
+        # Stream process crashed during streaming - treat as error and retry
+        error_payload = %{message: "Stream process crashed: #{inspect(reason)}"}
+        handle_stream_error(error_payload, data)
+
+      ref == data.compaction_task_ref ->
+        # Compaction task failed - log and continue without compaction
+        broadcast_event(data.session_id, {:compaction_failed, inspect(reason)})
+
+        new_data = %{data | compaction_task_ref: nil, pending_compaction_data: nil}
+        {:keep_state, new_data}
+
+      true ->
+        # Not our monitor, ignore
+        :keep_state_and_data
     end
   end
 
   def handle_event(:info, {ref, results}, :executing_tools, %{tool_tasks: tasks} = data)
       when is_reference(ref) do
-    # Task completed - check if this is our tool execution task
-    case Enum.find(tasks, fn task -> task.ref == ref end) do
-      nil ->
+    cond do
+      # Check if it's a tool execution task
+      Enum.find(tasks, fn task -> task.ref == ref end) != nil ->
+        handle_tool_execution_complete(ref, results, data)
+
+      # Check if it's the compaction task
+      ref == data.compaction_task_ref ->
+        handle_compaction_complete(results, data)
+
+      true ->
         # Not our task, ignore
         :keep_state_and_data
-
-      _task ->
-        handle_tool_execution_complete(ref, results, data)
     end
   end
 
-  def handle_event(:info, {:DOWN, ref, :process, _pid, _reason}, :executing_tools, data) do
-    # Task crashed or was shut down - check if it's our tool execution task
-    case Enum.find(data.tool_tasks, fn task -> task.ref == ref end) do
-      nil ->
-        # Not our task, ignore
-        :keep_state_and_data
-
-      _task ->
+  def handle_event(:info, {:DOWN, ref, :process, _pid, reason}, :executing_tools, data) do
+    cond do
+      # Check if it's a tool execution task
+      Enum.find(data.tool_tasks, fn task -> task.ref == ref end) != nil ->
         # Tool execution task crashed/shutdown - transition to idle
         broadcast_event(
           data.session_id,
@@ -495,6 +492,27 @@ defmodule Deft.Agent do
 
         new_data = %{data | tool_tasks: []}
         handle_idle_transition(new_data)
+
+      ref == data.compaction_task_ref ->
+        # Compaction task failed - log and continue without compaction
+        broadcast_event(data.session_id, {:compaction_failed, inspect(reason)})
+
+        new_data = %{data | compaction_task_ref: nil, pending_compaction_data: nil}
+        {:keep_state, new_data}
+
+      true ->
+        # Not our task, ignore
+        :keep_state_and_data
+    end
+  end
+
+  # Handle compaction task completion in any other state (idle, calling, streaming)
+  def handle_event(:info, {ref, result}, _state, data) when is_reference(ref) do
+    if ref == data.compaction_task_ref do
+      handle_compaction_complete(result, data)
+    else
+      # Not our task, ignore
+      :keep_state_and_data
     end
   end
 
@@ -888,6 +906,52 @@ defmodule Deft.Agent do
     end
   end
 
+  defp cancel_operations_for_abort(state, data) do
+    # Cancel state-specific operations
+    cancel_state_operations(state, data)
+    # Cancel compaction task if in progress (applies to all states)
+    cancel_compaction_task(data)
+  end
+
+  defp cancel_state_operations(state, data) when state in [:calling, :streaming] do
+    # Cancel the stream if we have a stream ref and provider
+    if data.stream_ref && Map.get(data.config, :provider) do
+      provider = Map.get(data.config, :provider)
+      provider.cancel_stream(data.stream_ref)
+    end
+
+    # Demonitor the stream process
+    if data.stream_monitor_ref do
+      Process.demonitor(data.stream_monitor_ref, [:flush])
+    end
+  end
+
+  defp cancel_state_operations(:executing_tools, data) do
+    # Terminate all in-flight tool execution tasks
+    tool_runner = get_tool_runner_supervisor(data)
+
+    if tool_runner do
+      Enum.each(data.tool_tasks, fn task_info ->
+        Task.Supervisor.terminate_child(tool_runner, task_info.ref)
+      end)
+    end
+  end
+
+  defp cancel_state_operations(_state, _data) do
+    # No active operations to cancel in other states
+    :ok
+  end
+
+  defp cancel_compaction_task(data) do
+    if data.compaction_task_ref do
+      tool_runner = get_tool_runner_supervisor(data)
+
+      if tool_runner do
+        Task.Supervisor.terminate_child(tool_runner, data.compaction_task_ref)
+      end
+    end
+  end
+
   defp get_tool_runner_supervisor(data) do
     # Look up the ToolRunner Task.Supervisor from the session worker supervision tree
     via_tuple = Worker.tool_runner_via_tuple(data.session_id)
@@ -1159,65 +1223,114 @@ defmodule Deft.Agent do
     om_enabled = Map.get(data.config, :om_enabled, false)
     threshold = trunc(data.context_window * 0.7)
 
-    if !om_enabled && data.current_context_tokens > threshold do
-      # Compact messages - remove oldest non-system messages until we're at ~50% of window
-      target_tokens = trunc(data.context_window * 0.5)
-      tokens_to_remove = data.current_context_tokens - target_tokens
-
-      # Estimate tokens per message (rough heuristic)
-      # We'll remove messages until we estimate we've removed enough tokens
-      avg_tokens_per_message =
-        if length(data.messages) > 0 do
-          div(data.current_context_tokens, max(1, length(data.messages)))
-        else
-          1000
-        end
-
-      messages_to_remove = max(1, div(tokens_to_remove, max(1, avg_tokens_per_message)))
-
-      # Separate system messages from conversation messages
-      {system_messages, conversation_messages} =
-        Enum.split_with(data.messages, fn msg -> msg.role == :system end)
-
-      # Take the oldest N conversation messages to remove
-      {to_remove, to_keep} = Enum.split(conversation_messages, messages_to_remove)
-
-      if length(to_remove) > 0 do
-        # Try to generate LLM summary, fallback to static text on error
-        provider = Map.get(data.config, :provider)
-
-        summary_text =
-          case summarize_messages_with_llm(to_remove, provider, data.config) do
-            {:ok, summary} ->
-              "[Context compaction: #{length(to_remove)} messages summarized]\n\n#{summary}"
-
-            {:error, _reason} ->
-              "[Context compaction: #{length(to_remove)} messages removed to free up context space. " <>
-                "Conversation continues from this point.]"
-          end
-
-        summary_message = %Message{
-          id: generate_message_id(),
-          role: :system,
-          content: [%Text{text: summary_text}],
-          timestamp: DateTime.utc_now()
-        }
-
-        # Rebuild messages list with summary
-        new_messages = system_messages ++ [summary_message] ++ to_keep
-
-        broadcast_event(data.session_id, {:compaction, %{removed: length(to_remove)}})
-
-        # Persist compaction entry to session JSONL
-        compaction_entry = Compaction.new(summary_text, length(to_remove))
-        Store.append(data.session_id, compaction_entry)
-
-        %{data | messages: new_messages}
+    # Skip if compaction is already in progress
+    if data.compaction_task_ref != nil do
+      data
+    else
+      if !om_enabled && data.current_context_tokens > threshold do
+        # Spawn compaction task instead of blocking
+        start_compaction_task(data)
       else
         data
       end
+    end
+  end
+
+  defp start_compaction_task(data) do
+    # Compact messages - remove oldest non-system messages until we're at ~50% of window
+    target_tokens = trunc(data.context_window * 0.5)
+    tokens_to_remove = data.current_context_tokens - target_tokens
+
+    # Estimate tokens per message (rough heuristic)
+    # We'll remove messages until we estimate we've removed enough tokens
+    avg_tokens_per_message =
+      if length(data.messages) > 0 do
+        div(data.current_context_tokens, max(1, length(data.messages)))
+      else
+        1000
+      end
+
+    messages_to_remove = max(1, div(tokens_to_remove, max(1, avg_tokens_per_message)))
+
+    # Separate system messages from conversation messages
+    {system_messages, conversation_messages} =
+      Enum.split_with(data.messages, fn msg -> msg.role == :system end)
+
+    # Take the oldest N conversation messages to remove
+    {to_remove, to_keep} = Enum.split(conversation_messages, messages_to_remove)
+
+    if length(to_remove) > 0 do
+      # Spawn task to generate LLM summary asynchronously
+      provider = Map.get(data.config, :provider)
+      session_id = data.session_id
+      config = data.config
+
+      # Spawn task using the ToolRunner supervisor
+      tool_runner = Worker.tool_runner_via_tuple(session_id)
+
+      task =
+        Task.Supervisor.async_nolink(tool_runner, fn ->
+          summarize_messages_with_llm(to_remove, provider, config)
+        end)
+
+      # Store task ref and compaction context in state
+      pending_data = %{
+        to_remove: to_remove,
+        to_keep: to_keep,
+        system_messages: system_messages,
+        messages_to_remove_count: length(to_remove)
+      }
+
+      %{data | compaction_task_ref: task.ref, pending_compaction_data: pending_data}
     else
       data
+    end
+  end
+
+  defp handle_compaction_complete(result, data) do
+    pending = data.pending_compaction_data
+
+    if pending do
+      summary_text =
+        case result do
+          {:ok, summary} ->
+            "[Context compaction: #{pending.messages_to_remove_count} messages summarized]\n\n#{summary}"
+
+          {:error, _reason} ->
+            "[Context compaction: #{pending.messages_to_remove_count} messages removed to free up context space. " <>
+              "Conversation continues from this point.]"
+        end
+
+      summary_message = %Message{
+        id: generate_message_id(),
+        role: :system,
+        content: [%Text{text: summary_text}],
+        timestamp: DateTime.utc_now()
+      }
+
+      # Rebuild messages list with summary
+      new_messages = pending.system_messages ++ [summary_message] ++ pending.to_keep
+
+      broadcast_event(
+        data.session_id,
+        {:compaction, %{removed: pending.messages_to_remove_count}}
+      )
+
+      # Persist compaction entry to session JSONL
+      compaction_entry = Compaction.new(summary_text, pending.messages_to_remove_count)
+      Store.append(data.session_id, compaction_entry)
+
+      new_data = %{
+        data
+        | messages: new_messages,
+          compaction_task_ref: nil,
+          pending_compaction_data: nil
+      }
+
+      {:keep_state, new_data}
+    else
+      # No pending compaction data, just clear the task ref
+      {:keep_state, %{data | compaction_task_ref: nil}}
     end
   end
 
