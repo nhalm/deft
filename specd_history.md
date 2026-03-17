@@ -2,6 +2,7 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **skills v0.2 (2026-03-17):** Implement slash command dispatch clarification: TUI intercepts leading / in user input, parses command name + args, looks up in Registry, loads definition if skill, injects as system instruction (skill) or user message (command); report "Unknown command" if not found
 - **issues v0.2 (2026-03-17):** Implement closed issue compaction: on startup, remove issues with status :closed and closed_at older than issues.compaction_days (default 90); atomic JSONL rewrite; log "Compacted N closed issues older than 90 days"
 - **skills v0.2 (2026-03-17):** Add skills/commands listing to system prompt: assemble "Available skills:" and "Available commands:" sections from Registry.list/0 with names + descriptions; include in system prompt build
 - **skills v0.2 (2026-03-17):** Implement `use_skill` tool for agent auto-invocation: agent emits use_skill tool call with skill name; harness intercepts, loads full definition from Registry, injects into context, continues agent loop; same mechanism as explicit slash command invocation

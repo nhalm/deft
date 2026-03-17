@@ -28,6 +28,7 @@ defmodule Deft.CLI do
   alias Deft.Config
   alias Deft.Session.Entry.SessionStart
   alias Deft.Session.Store
+  alias Deft.SlashCommand
 
   @version Mix.Project.config()[:version]
 
@@ -546,10 +547,51 @@ defmodule Deft.CLI do
             interactive_loop(agent_pid)
 
           true ->
-            Deft.Agent.prompt(agent_pid, prompt)
-            interactive_response_loop()
-            IO.puts("")
-            interactive_loop(agent_pid)
+            case handle_user_input(prompt) do
+              {:ok, text_to_send} ->
+                Deft.Agent.prompt(agent_pid, text_to_send)
+                interactive_response_loop()
+                IO.puts("")
+                interactive_loop(agent_pid)
+
+              {:error, error_msg} ->
+                IO.puts(:stderr, error_msg)
+                interactive_loop(agent_pid)
+            end
+        end
+    end
+  end
+
+  # Handle user input - dispatch slash commands or pass through regular text
+  defp handle_user_input(input) do
+    case SlashCommand.parse(input) do
+      {:not_slash, text} ->
+        {:ok, text}
+
+      {:command, name, args} ->
+        case SlashCommand.dispatch(name) do
+          {:ok, :command, definition} ->
+            # Commands: inject markdown content as user message
+            # If args provided, append them to the definition
+            text = if args == "", do: definition, else: "#{definition}\n\n#{args}"
+            {:ok, text}
+
+          {:ok, :skill, definition} ->
+            # Skills: inject definition as instruction
+            # TODO: When TUI is implemented, skills should be injected as system-level
+            # instructions rather than user messages. For now, CLI treats them like commands.
+            # If args provided, append them to the definition
+            text =
+              if args == "", do: definition, else: "#{definition}\n\nAdditional context: #{args}"
+
+            {:ok, text}
+
+          {:error, :not_found, cmd_name} ->
+            {:error, "Unknown command: /#{cmd_name}"}
+
+          {:error, :no_definition, cmd_name} ->
+            {:error,
+             "Skill '/#{cmd_name}' exists but has no definition (manifest-only, missing --- separator)"}
         end
     end
   end

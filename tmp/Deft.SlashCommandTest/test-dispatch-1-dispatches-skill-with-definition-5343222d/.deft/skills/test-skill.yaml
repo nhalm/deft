@@ -1,0 +1,8 @@
+name: test-skill
+description: A test skill with definition
+version: "1.0"
+
+---
+
+You are performing a test task.
+Follow these instructions carefully.
