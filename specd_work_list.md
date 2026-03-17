@@ -24,6 +24,25 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ---
 
+## harness v0.1
+
+- Fix outer `Task.async` wrapping tool batch in `start_tool_execution/2` (agent.ex:719): replace with `Task.Supervisor.async_nolink` or `spawn_monitor` so a crash in `execute_tools_in_task` does not propagate to the agent process
+- Implement LLM-based compaction summarization: when `current_context_tokens > 0.7 * context_window`, call the LLM to summarize oldest messages before replacing them, instead of using the current static placeholder string (agent.ex:960-965)
+
+## tools v0.1
+
+- Fix bash tool `format_result/4`: show temp file path whenever output was truncated (by line count OR byte size), not only when file size exceeds 30KB (bash.ex:198-209)
+- Fix grep/find native fallback `ignored?/1`: replace blanket `String.starts_with?(part, ".")` exclusion with actual `.gitignore` parsing (or at minimum, only exclude `.git` and common build dirs) so files in `.github/`, `.config/` etc. are searchable (grep.ex:212-219, find.ex:127-134)
+
+## providers v0.1
+
+- Fix `parse_event/1` for `content_block_delta` with `input_json_delta`: use the real Anthropic tool call ID from `content_block_start` instead of synthetic `"tool_#{idx}"` — either thread tool_state through parse_event or remove the broken code path and document that content_block events must go through the stateful streaming layer (anthropic.ex:342-349)
+
+## sessions v0.1
+
+- Implement piped stdin mode: detect when stdin is not a TTY (`!IO.ANSI.enabled?()` or `:io.columns() == {:error, :enoent}`), read prompt from stdin, execute as non-interactive single turn (cli.ex)
+- Add shell to system prompt: read `System.get_env("SHELL")` and include it in `build_environment_info/1` output (system_prompt.ex:122-134)
+
 ## === BOOTSTRAP CHECKPOINT ===
 <!-- After the above specs are implemented, `deft -p "prompt"` works as a CLI agent. -->
 <!-- Use Deft (or Claude Code) to implement the remaining specs below. -->
