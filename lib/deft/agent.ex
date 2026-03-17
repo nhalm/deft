@@ -1115,6 +1115,21 @@ defmodule Deft.Agent do
         {tool_use_id, tool_name, result, duration_ms}
       end)
 
+    # Broadcast tool execution completion events for UI display
+    Enum.each(tool_results_with_timing, fn {tool_use_id, tool_name, result, duration_ms} ->
+      is_error = match?({:error, _}, result)
+
+      broadcast_event(data.session_id, {
+        :tool_execution_complete,
+        %{
+          id: tool_use_id,
+          name: tool_name,
+          success: !is_error,
+          duration: duration_ms
+        }
+      })
+    end)
+
     # Save tool result entries to session file
     save_tool_results(tool_results_with_timing, data)
 

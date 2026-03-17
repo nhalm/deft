@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **tui v0.1 (2026-03-17):** Implement tool execution display: tool name + key arg, spinner while running, ✓/✗ + duration on complete
 - **tui v0.1 (2026-03-17):** Implement streaming text display: handle_info for :text_delta events, append to current assistant message in assigns
 - **tui v0.1 (2026-03-17):** Implement `Deft.TUI.Chat` Breeze view: mount/2 subscribes to agent events via Registry, render/1 displays scrollable conversation + input + status bar
 - **filesystem v0.2 (2026-03-17):** Implement system prompt integration for cache spilling: when cache entries are active, include instruction about cache:// references and cache_read tool usage; remove instruction when no cache entries active

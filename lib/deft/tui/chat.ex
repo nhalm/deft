@@ -143,6 +143,10 @@ defmodule Deft.TUI.Chat do
     handle_tool_done(id, args, term)
   end
 
+  def handle_info({:agent_event, {:tool_execution_complete, %{id: id} = event}}, term) do
+    handle_tool_execution_complete(id, event, term)
+  end
+
   def handle_info({:agent_event, {:state_change, new_state}}, term) do
     handle_state_change(new_state, term)
   end
@@ -297,20 +301,32 @@ defmodule Deft.TUI.Chat do
   end
 
   defp handle_tool_done(id, args, term) do
-    # Update tool status to done, calculate duration
+    # Update tool with parsed args (execution not complete yet)
     case Map.get(term.assigns.active_tools, id) do
       nil ->
         {:noreply, term}
 
       tool_info ->
-        duration = System.monotonic_time(:millisecond) - tool_info.start_time
         key_arg = extract_key_arg(tool_info.name, args)
+        updated_tool = Map.put(tool_info, :key_arg, key_arg)
+        new_active_tools = Map.put(term.assigns.active_tools, id, updated_tool)
+        {:noreply, assign(term, active_tools: new_active_tools)}
+    end
+  end
+
+  defp handle_tool_execution_complete(id, %{success: success, duration: duration}, term) do
+    # Update tool status to done or error with duration
+    case Map.get(term.assigns.active_tools, id) do
+      nil ->
+        {:noreply, term}
+
+      tool_info ->
+        status = if success, do: :done, else: :error
 
         updated_tool =
           tool_info
-          |> Map.put(:status, :done)
+          |> Map.put(:status, status)
           |> Map.put(:duration, duration)
-          |> Map.put(:key_arg, key_arg)
 
         new_active_tools = Map.put(term.assigns.active_tools, id, updated_tool)
         {:noreply, assign(term, active_tools: new_active_tools)}
@@ -596,6 +612,29 @@ defmodule Deft.TUI.Chat do
     ~H"""
     <box>
       <box>[Tool: <%= @name %>] ✓ (<%= Float.round(@duration, 1) %>s)</box>
+    </box>
+    """
+  end
+
+  defp render_tool(%{name: name, status: :error, duration: duration, key_arg: key_arg})
+       when not is_nil(key_arg) do
+    duration_sec = duration / 1000
+    assigns = %{name: name, key_arg: key_arg, duration: duration_sec}
+
+    ~H"""
+    <box>
+      <box>[Tool: <%= @name %>] <%= @key_arg %> ✗ (<%= Float.round(@duration, 1) %>s)</box>
+    </box>
+    """
+  end
+
+  defp render_tool(%{name: name, status: :error, duration: duration}) do
+    duration_sec = duration / 1000
+    assigns = %{name: name, duration: duration_sec}
+
+    ~H"""
+    <box>
+      <box>[Tool: <%= @name %>] ✗ (<%= Float.round(@duration, 1) %>s)</box>
     </box>
     """
   end
