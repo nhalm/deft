@@ -24,10 +24,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ---
 
-## sessions v0.2
-
-- Fix `reconstruct_messages/1` to include `Entry.ToolResult` entries: currently filters only `Entry.Message` and drops everything else (store.ex:199-207). Resumed sessions with tool calls have assistant messages with `ToolUse` blocks but no corresponding user messages with `ToolResult` blocks, violating Anthropic's turn-structure contract and crashing the resumed session
-
 ## === BOOTSTRAP CHECKPOINT ===
 <!-- After the above specs are implemented, `deft -p "prompt"` works as a CLI agent. -->
 <!-- Use Deft (or Claude Code) to implement the remaining specs below. -->

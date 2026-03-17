@@ -197,10 +197,11 @@ defmodule Deft.Session.Store do
   end
 
   defp reconstruct_messages(entries) do
-    # Convert message entries back to Deft.Message structs
+    # Convert both message and tool_result entries back to Deft.Message structs
     entries
     |> Enum.filter(fn
       %Entry.Message{} -> true
+      %Entry.ToolResult{} -> true
       _ -> false
     end)
     |> Enum.map(&entry_to_message/1)
@@ -211,6 +212,22 @@ defmodule Deft.Session.Store do
       id: entry.message_id,
       role: entry.role,
       content: deserialize_content(entry.content),
+      timestamp: entry.timestamp
+    }
+  end
+
+  defp entry_to_message(%Entry.ToolResult{} = entry) do
+    %Deft.Message{
+      id: "tool_result_#{entry.tool_call_id}",
+      role: :user,
+      content: [
+        %Deft.Message.ToolResult{
+          tool_use_id: entry.tool_call_id,
+          name: entry.name,
+          content: entry.result,
+          is_error: entry.is_error
+        }
+      ],
       timestamp: entry.timestamp
     }
   end
