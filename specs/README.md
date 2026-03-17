@@ -60,29 +60,29 @@ Decision reasoning is logged in [specd_decisions.jsonl](../specd_decisions.jsonl
 | Spec | Version | Status | Description |
 |------|---------|--------|-------------|
 | [standards](standards.md) | v0.1 | Implemented | Elixir coding standards, Makefile, git hooks, testing strategy |
-| [evals](evals/README.md) | v0.2 | Draft | AI eval infrastructure, methodology, and component eval definitions |
+| [evals](evals/README.md) | v0.2 | Ready | AI eval infrastructure, methodology, and component eval definitions |
 | [harness](harness.md) | v0.1 | Implemented | Agent loop (gen_statem), message format, process architecture, context assembly |
 | [tools](tools.md) | v0.1 | Implemented | Tool behaviour, 7 built-in tools, tool execution model |
 | [providers](providers.md) | v0.2 | Implemented | LLM provider behaviour, SSE streaming, Anthropic implementation |
 | [sessions](sessions.md) | v0.3 | Implemented | Session persistence (JSONL), resume, configuration, CLI, project-scoped storage |
-| [tui](tui.md) | v0.1 | Draft | Breeze TUI, chat view, markdown rendering, input handling, slash commands |
+| [tui](tui.md) | v0.1 | Ready | Breeze TUI, chat view, markdown rendering, input handling, slash commands |
 
 ## Core
 
 | Spec | Version | Status | Description |
 |------|---------|--------|-------------|
-| [observational-memory](observational-memory.md) | v0.1 | Draft | Observer/Reflector with sectioned observations, two-level compression |
-| [orchestration](orchestration.md) | v0.3 | Draft | Foreman/Lead/Runner hierarchy, OTP coordination protocol, Deft.Store site log |
-| [rate-limiter](rate-limiter.md) | v0.1 | Draft | Dual token-bucket rate limiting, priority queue, adaptive concurrency, cost tracking |
-| [git-strategy](git-strategy.md) | v0.1 | Draft | Git worktree strategy, merge protocol, conflict resolution, orphan cleanup |
+| [observational-memory](observational-memory.md) | v0.1 | Ready | Observer/Reflector with sectioned observations, two-level compression |
+| [orchestration](orchestration.md) | v0.3 | Ready | Foreman/Lead/Runner hierarchy, OTP coordination protocol, Deft.Store site log |
+| [rate-limiter](rate-limiter.md) | v0.1 | Ready | Dual token-bucket rate limiting, priority queue, adaptive concurrency, cost tracking |
+| [git-strategy](git-strategy.md) | v0.1 | Ready | Git worktree strategy, merge protocol, conflict resolution, orphan cleanup |
 
 ## Infrastructure
 
 | Spec | Version | Status | Description |
 |------|---------|--------|-------------|
-| [filesystem](filesystem.md) | v0.2 | Draft | Deft.Store GenServer — ETS+DETS for cache and site log, cache_read tool, per-tool spilling thresholds |
-| [skills](skills.md) | v0.2 | Draft | Skills (agent-selected YAML) and commands (markdown prompts), three-level cascade |
-| [issues](issues.md) | v0.2 | Draft | Persistent issue tracker — JSONL+git, interactive creation, approve-every-plan `deft work` loop |
+| [filesystem](filesystem.md) | v0.2 | Ready | Deft.Store GenServer — ETS+DETS for cache and site log, cache_read tool, per-tool spilling thresholds |
+| [skills](skills.md) | v0.2 | Ready | Skills (agent-selected YAML) and commands (markdown prompts), three-level cascade |
+| [issues](issues.md) | v0.2 | Ready | Persistent issue tracker — JSONL+git, interactive creation, approve-every-plan `deft work` loop |
 
 ## Future
 
