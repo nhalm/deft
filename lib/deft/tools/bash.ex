@@ -62,8 +62,11 @@ defmodule Deft.Tools.Bash do
 
       case result do
         {:ok, output, exit_code} ->
-          truncated_output = truncate_output(output)
-          result_text = format_result(command, truncated_output, exit_code, temp_path)
+          {truncated_output, was_truncated} = truncate_output(output)
+
+          result_text =
+            format_result(command, truncated_output, exit_code, temp_path, was_truncated)
+
           {:ok, [%Text{text: result_text}]}
 
         {:error, :timeout} ->
@@ -141,12 +144,12 @@ defmodule Deft.Tools.Bash do
 
   defp truncate_output(output) do
     # First, truncate by byte size if needed
-    output_by_bytes =
+    {output_by_bytes, truncated_by_bytes?} =
       if byte_size(output) > @max_output_bytes do
         # Take last 30KB
-        binary_part(output, byte_size(output) - @max_output_bytes, @max_output_bytes)
+        {binary_part(output, byte_size(output) - @max_output_bytes, @max_output_bytes), true}
       else
-        output
+        {output, false}
       end
 
     # Then, truncate by line count if needed
@@ -163,24 +166,31 @@ defmodule Deft.Tools.Bash do
 
     actual_line_count = length(lines)
 
-    if actual_line_count > @max_output_lines do
-      # Take last 100 lines
-      truncated =
-        lines
-        |> Enum.take(-@max_output_lines)
-        |> Enum.join("\n")
+    {truncated_output, truncated_by_lines?} =
+      if actual_line_count > @max_output_lines do
+        # Take last 100 lines
+        truncated =
+          lines
+          |> Enum.take(-@max_output_lines)
+          |> Enum.join("\n")
 
-      if has_trailing_newline do
-        truncated <> "\n"
+        final_output =
+          if has_trailing_newline do
+            truncated <> "\n"
+          else
+            truncated
+          end
+
+        {final_output, true}
       else
-        truncated
+        {output_by_bytes, false}
       end
-    else
-      output_by_bytes
-    end
+
+    was_truncated = truncated_by_bytes? or truncated_by_lines?
+    {truncated_output, was_truncated}
   end
 
-  defp format_result(_command, output, exit_code, temp_path) do
+  defp format_result(_command, output, exit_code, temp_path, was_truncated) do
     output_section =
       if String.trim(output) == "" do
         "(no output)"
@@ -196,14 +206,8 @@ defmodule Deft.Tools.Bash do
       end
 
     temp_file_section =
-      if File.exists?(temp_path) do
-        {:ok, %{size: size}} = File.stat(temp_path)
-
-        if size > @max_output_bytes do
-          "\n\nFull output saved to: #{temp_path}"
-        else
-          ""
-        end
+      if File.exists?(temp_path) and was_truncated do
+        "\n\nFull output saved to: #{temp_path}"
       else
         ""
       end

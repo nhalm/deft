@@ -26,7 +26,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ## tools v0.1
 
-- Fix bash tool `format_result/4`: show temp file path whenever output was truncated (by line count OR byte size), not only when file size exceeds 30KB (bash.ex:198-209)
 - Fix grep/find native fallback `ignored?/1`: replace blanket `String.starts_with?(part, ".")` exclusion with actual `.gitignore` parsing (or at minimum, only exclude `.git` and common build dirs) so files in `.github/`, `.config/` etc. are searchable (grep.ex:212-219, find.ex:127-134)
 
 ## providers v0.1
