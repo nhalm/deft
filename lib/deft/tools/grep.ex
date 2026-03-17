@@ -277,7 +277,8 @@ defmodule Deft.Tools.Grep do
   # Format ripgrep output
   defp format_output(output, pattern) do
     lines = String.split(output, "\n", trim: true)
-    match_count = length(lines)
+    # Count only actual match lines (filename:linenum:content), not context lines or separators
+    match_count = Enum.count(lines, fn line -> Regex.match?(~r/^.+:\d+:/, line) end)
 
     if match_count >= @max_matches do
       "Found #{match_count}+ matches for pattern: #{pattern}\n\n#{output}\n\n(Results capped at #{@max_matches} matches)"

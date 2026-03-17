@@ -24,10 +24,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ---
 
-## tools v0.1
-
-- Fix grep `format_output/2`: count actual match lines (lines matching `filename:linenum:content` pattern) instead of all output lines — context lines, separators, and file headers inflate the count
-
 ## providers v0.1
 
 - Fix tool call ID mismatch: `ToolCallDelta` and `ToolCallDone` use `"tool_#{idx}"` but `ToolCallStart` uses the real Anthropic ID (`"toolu_..."`); maintain an `index → real_id` mapping in tool_state so deltas and stop events use the correct ID — without this fix, tool call args are never accumulated and tools execute with empty args
