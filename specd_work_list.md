@@ -19,7 +19,7 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## tui v0.1
 
-- Build Breeze streaming proof-of-concept: 1000+ lines mixed text, 30 tokens/sec append, scrollable area + fixed input + status bar; verify performance is acceptable; if not, document fallback to Termite + BackBreeze - Implement `Deft.TUI.Chat` Breeze view: mount/2 subscribes to agent events via Registry, render/1 displays scrollable conversation + input + status bar (blocked: Build Breeze streaming proof-of-concept...)
+- Implement `Deft.TUI.Chat` Breeze view: mount/2 subscribes to agent events via Registry, render/1 displays scrollable conversation + input + status bar
 - Implement streaming text display: handle_info for :text_delta events, append to current assistant message in assigns (blocked: Implement Deft.TUI.Chat...)
 - Implement tool execution display: tool name + key arg, spinner while running, ✓/✗ + duration on complete (blocked: Implement Deft.TUI.Chat...)
 - Implement status bar: tokens (current/context_window), memory (obs_tokens/40k or "--" before first observation), cost, turn count, agent state; OM activity spinner during observation/reflection; "memorizing..." during sync fallback (blocked: Implement Deft.TUI.Chat...)
