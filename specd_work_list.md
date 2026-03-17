@@ -15,16 +15,7 @@ HOW IT WORKS:
 7. LOOP_COMPLETE when this file has no unblocked items remaining
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
-
-BOOTSTRAP STRATEGY: Build enough to get a working `deft -p "prompt"` CLI agent.
-Then use Deft to build the rest of Deft. The critical path is:
-  standards → harness + providers + tools → sessions (non-interactive) → BOOTSTRAP DONE
-  Then: OM → TUI → evals → orchestration
 -->
-
-## === BOOTSTRAP CHECKPOINT ===
-<!-- After the above specs are implemented, `deft -p "prompt"` works as a CLI agent. -->
-<!-- Use Deft (or Claude Code) to implement the remaining specs below. -->
 
 ## observational-memory v0.1
 
@@ -100,7 +91,7 @@ Then use Deft to build the rest of Deft. The critical path is:
 - Implement research phase: Foreman spawns research Runners via Task.Supervisor.async_nolink in parallel (Sonnet model, read-only tools), collects findings from Task return values, configurable timeout (default 120s) via Process.send_after (blocked: Implement Foreman gen_statem...)
 - Implement decomposition phase: Foreman reads research findings, produces deliverables + dependency DAG + interface contracts + cost estimate, writes plan to Deft.Store site log instance, presents to user for approval; --auto-approve-all flag skips approval gate (blocked: Implement research phase..., Implement Deft.Store site log instance...)
 - Implement Lead gen_statem: extends Agent with tuple states `{chunk_phase, agent_state}`, receives deliverable assignment, decomposes into task list, spawns Runners via Task.Supervisor.async_nolink, Lead must explicitly Process.monitor(task.pid) for async_nolink Runners, actively steers (reads output, evaluates, corrects), handles `{:foreman_steering, content}` in handle_info; restart: :temporary in child spec (blocked: Implement Deft.Job.Runner.run/1...)
-- Implement Runner inline loop: build minimal context → call LLM through RateLimiter → parse tool calls → execute tools inline with try/catch → loop until done → return results to Lead via Task return value; no gen_statem, no OM; Runner timeout via Process.send_after in Lead (blocked: Implement Deft.Job.RateLimiter dual token-bucket..., Scaffold Elixir Mix project...)
+- Implement Runner inline loop: build minimal context → call LLM through RateLimiter → parse tool calls → execute tools inline with try/catch → loop until done → return results to Lead via Task return value; no gen_statem, no OM; Runner timeout via Process.send_after in Lead (blocked: Implement Deft.Job.RateLimiter dual token-bucket...)
 - Implement Lead→Foreman messaging: Lead sends messages via `send(foreman_pid, {:lead_message, type, content, metadata})` for types: :status, :decision, :artifact, :contract, :contract_revision, :plan_amendment, :complete, :blocker, :error, :critical_finding (blocked: Implement Lead gen_statem...)
 - Implement Foreman→Lead steering: Foreman sends `send(lead_pid, {:foreman_steering, content})` for course correction; detect conflicting :decision messages from parallel Leads, pause affected Leads, resolve or escalate to user (blocked: Implement Foreman gen_statem..., Implement Lead gen_statem...)
 - Implement partial dependency unblocking: Foreman watches for {:lead_message, :contract, content, metadata} messages matching dependency `needs`, creates worktree for unblocked Lead, starts Lead with contract details (blocked: Implement decomposition phase..., Implement Lead gen_statem..., Implement per-Lead worktree creation...)
@@ -122,7 +113,7 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ## git-strategy v0.1
 
-- Implement job branch creation: verify working tree is clean (warn + ask to stash if uncommitted changes), create `deft/job-<job_id>` branch from current HEAD (blocked: Scaffold Elixir Mix project..., Implement Foreman gen_statem...)
+- Implement job branch creation: verify working tree is clean (warn + ask to stash if uncommitted changes), create `deft/job-<job_id>` branch from current HEAD (blocked: Implement Foreman gen_statem...)
 - Implement per-Lead worktree creation: `git worktree add <repo>/.deft-worktrees/lead-<lead_id> -b deft/lead-<lead_id>` branched from job branch plus already-merged Lead work; Runners operate in Lead's worktree directory; Leads commit work per-task or per-milestone (blocked: Implement job branch creation...)
 - Implement merge in dependency order: when Lead sends {:lead_message, :complete, ...}, Foreman merges Lead branch into deft/job-<job_id>; on conflict, spawn merge-resolution Runner; independent Leads merged in completion order (blocked: Implement per-Lead worktree creation..., Implement Lead gen_statem...)
 - Implement post-merge test command: run configurable test command (not hardcoded `mix test`) on merged job branch after each Lead merge to catch semantic conflicts early; on failure, spawn fix-up Runner or flag for user intervention (blocked: Implement merge in dependency order...)
@@ -144,19 +135,20 @@ Then use Deft to build the rest of Deft. The critical path is:
 - Implement per-tool threshold config: cache.token_threshold (default 10000), cache.token_threshold.read (20000), cache.token_threshold.grep (8000), cache.token_threshold.ls (4000), cache.token_threshold.find (4000); provisional values pending threshold calibration evals (blocked: Implement Deft.Store GenServer...)
 - Implement `cache_read` tool: parameters key (required), lines (optional line range), filter (optional grep pattern); returns full cached result or filtered subset; error cases :miss (not found) and :expired (session ended); only include in agent tool list when session has active cache entries (blocked: Implement Deft.Store GenServer...)
 - Implement system prompt integration for cache spilling: when cache entries are active, include instruction about cache:// references and cache_read tool usage; remove instruction when no cache entries active (blocked: Implement cache_read tool...)
-- Implement tool result spilling protocol: in Deft.Agent.ToolRunner, after tool execution check if result byte_size/4 exceeds tool's cache.token_threshold; if so, call tool's summarize/2 callback, write full result to cache, replace context entry with summary + cache://<key> reference (blocked: Implement Deft.Store GenServer..., Implement Deft.Agent.ToolRunner...)
+- Implement tool result spilling protocol: in Deft.Agent.ToolRunner, after tool execution check if result byte_size/4 exceeds tool's cache.token_threshold; if so, call tool's summarize/2 callback, write full result to cache, replace context entry with summary + cache://<key> reference (blocked: Implement Deft.Store GenServer...)
 - Add summarize/2 callback to Deft.Tool behaviour: receives full result + cache key, returns summary string with cache://<key> reference; implement for grep (match count + top N), read (line count + first N lines), find/ls (file count + top-level structure) (blocked: Implement tool result spilling protocol...)
 - Implement site log programmatic promotion: pattern match on Lead messages — auto-promote contract, decision, correction, critical_finding; promote finding if tagged shared; never promote status or blocker (blocked: Implement Deft.Store site log instance..., Implement Foreman gen_statem...)
 - Implement per-Lead cache isolation: start one Deft.Store instance per Lead with DETS at cache/<session_id>/lead-<lead_id>.dets; Lead cleanup deletes its own cache instance (blocked: Implement Deft.Store GenServer..., Implement Lead gen_statem...)
 - Implement session-end cache cleanup: on session termination, delete all files under cache/<session_id>/ (blocked: Implement per-Lead cache isolation...)
 - Create project directory layout: ~/.deft/projects/<path-encoded-repo>/ with sessions/, cache/, jobs/ subdirectories; path encoding replaces / with -, strip leading -; resolve working directory to real path via Path.expand/1; for git worktrees, use `git rev-parse --show-toplevel` for canonical repo root; monorepos share single project directory
+
 ## skills v0.2
 
 - Implement `Deft.Skills.Registry` as Agent: on init, scan built-in (priv/skills/*.yaml, priv/commands/*.md), global (~/.deft/skills/*.yaml, ~/.deft/commands/*.md), project (.deft/skills/*.yaml, .deft/commands/*.md); parse YAML manifests using String.split(content, "\n---\n", parts: 2) on first part only; do NOT use YamlElixir.read_all_from_string; files missing --- separator are manifest-only (cannot be invoked); apply cascade (project > global > built-in); single namespace — skill wins at same cascade level; hold map of name → Entry struct- Define `Deft.Skills.Entry` struct: name, type (:skill | :command), level (:builtin | :global | :project), description, path, loaded (boolean)- Implement error handling in Registry discovery: skip skill YAML files that fail to parse with warning; skip skills with missing required fields (name, description) with warning; missing directories treated as empty (not an error) (blocked: Implement Deft.Skills.Registry...)
 - Implement `Deft.Skills.Registry.list/0`: return all entries sorted by name; implement `lookup/1`: return entry by name or :not_found (blocked: Implement Deft.Skills.Registry...)
 - Implement `Deft.Skills.Registry.load_definition/1`: use Agent.get_and_update/2 to atomically read and cache the definition (avoid read/cache race); for skills, read YAML file, parse content after --- separator, cache in registry (set loaded: true), return definition string; for commands, read markdown file contents (blocked: Implement Deft.Skills.Registry...)
 - Implement `use_skill` tool for agent auto-invocation: agent emits use_skill tool call with skill name; harness intercepts, loads full definition from Registry, injects into context, continues agent loop; same mechanism as explicit slash command invocation (blocked: Implement Deft.Skills.Registry...)
-- Add skills/commands listing to system prompt: assemble "Available skills:" and "Available commands:" sections from Registry.list/0 with names + descriptions; include in system prompt build (blocked: Implement Deft.Skills.Registry..., Implement Deft.Agent.SystemPrompt.build...)
+- Add skills/commands listing to system prompt: assemble "Available skills:" and "Available commands:" sections from Registry.list/0 with names + descriptions; include in system prompt build (blocked: Implement Deft.Skills.Registry...)
 - Implement slash command dispatch clarification: TUI intercepts leading / in user input, parses command name + args, looks up in Registry, loads definition if skill, injects as system instruction (skill) or user message (command); report "Unknown command" if not found (blocked: Implement Deft.Skills.Registry...)
 - Implement naming validation: reject files not matching ^[a-z][a-z0-9-]*$, log warning during discovery (blocked: Implement Deft.Skills.Registry...)
 - Implement project-level re-scan on session start: on each new session, re-run discovery for .deft/skills/ and .deft/commands/ to pick up changes; built-in and global skills persist across sessions (blocked: Implement Deft.Skills.Registry...)
