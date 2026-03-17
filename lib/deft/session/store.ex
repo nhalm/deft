@@ -197,11 +197,12 @@ defmodule Deft.Session.Store do
   end
 
   defp reconstruct_messages(entries) do
-    # Convert both message and tool_result entries back to Deft.Message structs
+    # Convert message entries to Deft.Message structs
+    # Skip Entry.ToolResult — it's metadata-only (stores duration_ms)
+    # Tool results are already in the user message saved by save_unsaved_messages
     entries
     |> Enum.filter(fn
       %Entry.Message{} -> true
-      %Entry.ToolResult{} -> true
       _ -> false
     end)
     |> Enum.map(&entry_to_message/1)
