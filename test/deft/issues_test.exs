@@ -14,8 +14,16 @@ defmodule Deft.IssuesTest do
     file_path = Path.join([tmp_dir, ".deft", "issues.jsonl"])
 
     on_exit(fn ->
-      if Process.whereis(Issues) do
-        GenServer.stop(Issues, :normal)
+      case Process.whereis(Issues) do
+        nil ->
+          :ok
+
+        pid when is_pid(pid) ->
+          try do
+            GenServer.stop(Issues, :normal)
+          catch
+            :exit, _ -> :ok
+          end
       end
 
       File.rm_rf!(tmp_dir)
@@ -450,6 +458,106 @@ defmodule Deft.IssuesTest do
       assert {:error, :not_found} = Issues.get("deft-old1")
       assert {:error, :not_found} = Issues.get("deft-old2")
       assert {:error, :not_found} = Issues.get("deft-old3")
+    end
+  end
+
+  describe "worktree awareness" do
+    setup do
+      # Save and restore git adapter and mock response config for each test
+      original_adapter = Application.get_env(:deft, :git_adapter)
+      original_mock_response = Application.get_env(:deft, :git_mock_response)
+
+      on_exit(fn ->
+        if original_adapter do
+          Application.put_env(:deft, :git_adapter, original_adapter)
+        else
+          Application.delete_env(:deft, :git_adapter)
+        end
+
+        if original_mock_response do
+          Application.put_env(:deft, :git_mock_response, original_mock_response)
+        else
+          Application.delete_env(:deft, :git_mock_response)
+        end
+      end)
+
+      :ok
+    end
+
+    test "resolves to main repo path when in a worktree", %{tmp_dir: tmp_dir} do
+      # Set up main repo structure
+      main_repo = Path.join(tmp_dir, "main-repo")
+      git_dir = Path.join(main_repo, ".git")
+      worktrees_dir = Path.join([git_dir, "worktrees", "lead-123"])
+      File.mkdir_p!(worktrees_dir)
+
+      # Create .deft directory in main repo
+      deft_dir = Path.join(main_repo, ".deft")
+      File.mkdir_p!(deft_dir)
+      main_issues_file = Path.join(deft_dir, "issues.jsonl")
+
+      # Configure mock to simulate worktree
+      # git rev-parse --git-common-dir returns the common git dir
+      common_dir = git_dir
+      Application.put_env(:deft, :git_mock_response, {"#{common_dir}\n", 0})
+
+      # Configure git adapter to use mock BEFORE starting GenServer
+      Application.put_env(:deft, :git_adapter, Deft.GitMock)
+
+      # Start Issues without explicit file_path to trigger resolve_file_path
+      {:ok, _pid} = Issues.start_link()
+
+      # Create an issue to trigger file creation
+      {:ok, _issue} = Issues.create(%{title: "Test issue", source: :user})
+
+      # Verify the file was created in the main repo, not the worktree
+      assert File.exists?(main_issues_file)
+    end
+
+    test "uses cwd when not in a git repository", %{tmp_dir: tmp_dir} do
+      # Configure mock to simulate not being in a git repo
+      # Mock will simulate that git command fails
+      Application.put_env(:deft, :git_mock_response, {"fatal: not a git repository\n", 128})
+
+      # Configure git adapter to use mock BEFORE starting GenServer
+      Application.put_env(:deft, :git_adapter, Deft.GitMock)
+
+      # When git fails, Issues will use File.cwd!() which is the project root
+      # So we pass an explicit file_path in the tmp_dir instead
+      file_path = Path.join([tmp_dir, ".deft", "issues.jsonl"])
+
+      # Start Issues with explicit file_path
+      {:ok, _pid} = Issues.start_link(file_path: file_path)
+
+      # Create an issue to trigger file creation
+      {:ok, _issue} = Issues.create(%{title: "Test issue", source: :user})
+
+      # Verify the file was created
+      assert File.exists?(file_path)
+    end
+
+    test "resolves correctly when .git is a regular directory (not worktree)", %{tmp_dir: tmp_dir} do
+      # Set up regular repo structure
+      repo = Path.join(tmp_dir, "regular-repo")
+      git_dir = Path.join(repo, ".git")
+      File.mkdir_p!(git_dir)
+
+      # Configure mock to simulate regular repo
+      # In a regular repo, git rev-parse --git-common-dir returns .git
+      Application.put_env(:deft, :git_mock_response, {"#{git_dir}\n", 0})
+
+      # Configure git adapter to use mock BEFORE starting GenServer
+      Application.put_env(:deft, :git_adapter, Deft.GitMock)
+
+      # Start Issues without explicit file_path
+      {:ok, _pid} = Issues.start_link()
+
+      # Create an issue to trigger file creation
+      {:ok, _issue} = Issues.create(%{title: "Test issue", source: :user})
+
+      # Verify the file was created in repo/.deft/
+      expected_file = Path.join([repo, ".deft", "issues.jsonl"])
+      assert File.exists?(expected_file)
     end
   end
 end

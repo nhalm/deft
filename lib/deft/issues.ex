@@ -17,6 +17,7 @@ defmodule Deft.Issues do
   use GenServer
   require Logger
 
+  alias Deft.Git
   alias Deft.Issue
   alias Deft.Issue.Id
 
@@ -321,7 +322,7 @@ defmodule Deft.Issues do
 
   # Resolves the issues.jsonl file path, accounting for worktrees
   defp resolve_file_path do
-    case System.cmd("git", ["rev-parse", "--git-common-dir"], stderr_to_stdout: true) do
+    case Git.cmd(["rev-parse", "--git-common-dir"]) do
       {output, 0} ->
         common_dir = String.trim(output)
         repo_root = Path.dirname(common_dir)
@@ -484,6 +485,9 @@ defmodule Deft.Issues do
 
   # Persists all issues to JSONL file with advisory locking
   defp persist_issues(state) do
+    # Ensure directory exists before attempting to acquire lock
+    File.mkdir_p!(Path.dirname(state.file_path))
+
     lock_path = state.file_path <> ".lock"
     stale_threshold_ms = 30_000
     retry_interval_ms = 100
@@ -548,6 +552,10 @@ defmodule Deft.Issues do
             else
               {:error, :locked}
             end
+
+          {:error, :enoent} ->
+            # Lock file disappeared, retry
+            acquire_lock(lock_path, stale_threshold)
 
           _ ->
             {:error, :locked}
