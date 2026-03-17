@@ -50,7 +50,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## evals v0.2
 
-- Implement regression detection: proportion z-test comparing current run against historical distribution (p < 0.05 one-tailed); separate infrastructure failures (same error in 8/10 = deterministic bug) from model quality regressions (varied errors)
 - Implement eval diffing command: `mix eval.compare <run_a> <run_b>` showing changed categories, soft floor violations, and side-by-side failure examples
 - Spike Tribunal version verification: check hex.pm for current Tribunal version, verify it provides assert_contains, assert_regex, assert_json, assert_max_tokens, assert_faithful, refute_hallucination, refute_pii, and evaluation mode; document gaps and fallback plan if assertions are missing
 - Set up judge calibration infrastructure: create test/eval/support/judge_calibration/ directory; implement calibration workflow (50 gold-labeled examples per judge prompt, measure precision > 85% and recall > 80%, store calibration sets, re-run on judge model/prompt change)

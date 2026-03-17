@@ -2,6 +2,7 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **evals v0.2 (2026-03-17):** Implement regression detection: proportion z-test comparing current run against historical distribution (p < 0.05 one-tailed); separate infrastructure failures (same error in 8/10 = deterministic bug) from model quality regressions (varied errors)
 - **evals v0.2 (2026-03-17):** Implement baselines with history in test/eval/baselines.json: store baseline, soft_floor (baseline minus 10pp), and history array per category; implement baseline update logic (baselines only go up)
 - **filesystem v0.2 (2026-03-17):** Create project directory layout: ~/.deft/projects/<path-encoded-repo>/ with sessions/, cache/, jobs/ subdirectories; path encoding replaces / with -, strip leading -; resolve working directory to real path via Path.expand/1; for git worktrees, use `git rev-parse --show-toplevel` for canonical repo root; monorepos share single project directory
 - **evals v0.2 (2026-03-17):** Create eval result storage infrastructure: per-run JSONL at test/eval/results/<run_id>.jsonl with commit SHA, model, category, pass_rate, iterations, cost, and failure examples; .gitignore results dir; keep last 30 runs on disk; implement `mix eval.export` for archiving
