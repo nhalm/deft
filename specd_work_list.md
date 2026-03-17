@@ -26,7 +26,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ## tools v0.1
 
-- Fix grep global match cap: replace `--max-count` (per-file limit) with post-processing truncation — collect rg output then take only the first 100 match lines, or use `rg` output piped through a line counter
 - Fix grep `format_output/2`: count actual match lines (lines matching `filename:linenum:content` pattern) instead of all output lines — context lines, separators, and file headers inflate the count
 
 ## providers v0.1

@@ -98,8 +98,9 @@ defmodule Deft.Tools.Grep do
 
     case System.cmd("rg", args ++ [search_path], stderr_to_stdout: true) do
       {output, 0} ->
-        # Found matches
-        {:ok, [%Text{text: format_output(output, pattern)}]}
+        # Found matches - truncate to global limit
+        truncated_output = truncate_to_match_limit(output, @max_matches)
+        {:ok, [%Text{text: format_output(truncated_output, pattern)}]}
 
       {_output, 1} ->
         # No matches found
@@ -120,9 +121,7 @@ defmodule Deft.Tools.Grep do
     args = [
       "--color",
       "never",
-      "--line-number",
-      "--max-count",
-      "#{@max_matches}"
+      "--line-number"
     ]
 
     args = if case_insensitive, do: args ++ ["--ignore-case"], else: args
@@ -136,6 +135,31 @@ defmodule Deft.Tools.Grep do
       end
 
     args ++ [pattern]
+  end
+
+  # Truncate ripgrep output to first N match lines
+  # Match lines have format: filename:linenum:content
+  # Context lines have format: filename-linenum-content
+  # Separators are: --
+  defp truncate_to_match_limit(output, max_matches) do
+    lines = String.split(output, "\n", trim: true)
+
+    {truncated, _} =
+      Enum.reduce_while(lines, {[], 0}, fn line, {acc, match_count} ->
+        # Match lines have the pattern: filepath:linenum:content
+        # Context lines have: filepath-linenum-content
+        is_match = Regex.match?(~r/^.+:\d+:/, line)
+
+        new_count = if is_match, do: match_count + 1, else: match_count
+
+        if new_count > max_matches do
+          {:halt, {acc, match_count}}
+        else
+          {:cont, {acc ++ [line], new_count}}
+        end
+      end)
+
+    Enum.join(truncated, "\n")
   end
 
   # Execute using native Elixir
