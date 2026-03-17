@@ -49,8 +49,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## evals v0.2
 
-- Create holdout fixture set: reserve 20-30% of all fixtures in test/eval/fixtures/holdout/; tag with @tag :holdout; exclude from `make test.eval`; run only via `make test.eval.holdout`; validate holdout pass rate is within 10pp of development set
-- Implement fixture validation tooling: verify each fixture's spec_version field matches the current spec version; flag stale fixtures when specs change
 - Create coding conversation fixtures: short bug-fix (5-10 exchanges), long feature session (50+ exchanges), multi-topic pivot, sessions with errors/corrections, heavy tool usage
 - Implement Observer extraction evals: 9 test cases from spec section 2.1 (explicit tech choice, preference, file read, file modify, error, command, architecture, dependency, deferred work); 20 iterations, 85% pass rate (blocked: Implement Observer Task execution...)
 - Implement Observer section routing evals: verify facts route to correct sections per spec section 2.2; 20 iterations, 85% pass rate (blocked: Implement Observer extraction evals...)

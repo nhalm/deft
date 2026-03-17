@@ -2,6 +2,8 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **evals v0.2 (2026-03-17):** Implement fixture validation tooling: verify each fixture's spec_version field matches the current spec version; flag stale fixtures when specs change
+- **evals v0.2 (2026-03-17):** Create holdout fixture set: reserve 20-30% of all fixtures in test/eval/fixtures/holdout/; tag with @tag :holdout; exclude from `make test.eval`; run only via `make test.eval.holdout`; validate holdout pass rate is within 10pp of development set
 - **observational-memory v0.1 (2026-03-17):** Implement `Deft.OM.Supervisor` (rest_for_one): starts TaskSupervisor first, then State
 - **observational-memory v0.1 (2026-03-17):** Define `Deft.OM.State` struct with all fields from spec section 2: active_observations, observation_tokens, buffered_chunks, buffered_reflection, last_observed_at, observed_message_ids, pending_message_tokens, generation_count, is_observing, is_reflecting, needs_rebuffer, activation_epoch, snapshot_dirty, calibration_factor, sync_from - Define `Deft.OM.BufferedChunk` struct: observations, token_count, message_ids, message_tokens, epoch - Implement `Deft.OM.Tokens.estimate/1`: `div(byte_size(text), calibration_factor)` with configurable factor; implement `calibrate/2` via exponential moving average (alpha=0.1)
 - **rate-limiter v0.1 (2026-03-17):** Implement starvation protection: promote any call waiting longer than 10 seconds to highest priority; use injectable time source for testing
