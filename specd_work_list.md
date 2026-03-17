@@ -19,14 +19,13 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## tui v0.1
 
-- Implement `Deft.TUI.Chat` Breeze view: mount/2 subscribes to agent events via Registry, render/1 displays scrollable conversation + input + status bar
-- Implement streaming text display: handle_info for :text_delta events, append to current assistant message in assigns (blocked: Implement Deft.TUI.Chat...)
-- Implement tool execution display: tool name + key arg, spinner while running, ✓/✗ + duration on complete (blocked: Implement Deft.TUI.Chat...)
-- Implement status bar: tokens (current/context_window), memory (obs_tokens/40k or "--" before first observation), cost, turn count, agent state; OM activity spinner during observation/reflection; "memorizing..." during sync fallback (blocked: Implement Deft.TUI.Chat...)
-- Implement user input component: Enter submits, Shift+Enter newline (Kitty protocol), \ + Enter fallback, paste detection (chars within 5ms), Up arrow input history (blocked: Implement Deft.TUI.Chat...)
+- Implement streaming text display: handle_info for :text_delta events, append to current assistant message in assigns
+- Implement tool execution display: tool name + key arg, spinner while running, ✓/✗ + duration on complete
+- Implement status bar: tokens (current/context_window), memory (obs_tokens/40k or "--" before first observation), cost, turn count, agent state; OM activity spinner during observation/reflection; "memorizing..." during sync fallback
+- Implement user input component: Enter submits, Shift+Enter newline (Kitty protocol), \ + Enter fallback, paste detection (chars within 5ms), Up arrow input history
 - Implement slash command dispatch: recognize leading `/`, parse command + args, dispatch to appropriate handler; implement /help, /clear, /quit directly; other commands dispatched to their spec owners (blocked: Implement user input component...)
-- Implement `Deft.TUI.SessionPicker` Breeze view: list sessions, arrow keys to navigate, Enter to resume (blocked: Implement Deft.TUI.Chat...)
-- Implement job status display in Chat view: per-Lead progress, blocked status, cost, elapsed time; /status and /inspect commands (blocked: Implement Deft.TUI.Chat...)
+- Implement `Deft.TUI.SessionPicker` Breeze view: list sessions, arrow keys to navigate, Enter to resume
+- Implement job status display in Chat view: per-Lead progress, blocked status, cost, elapsed time; /status and /inspect commands
 
 ## evals v0.2
 
