@@ -2,6 +2,7 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **observational-memory v0.1 (2026-03-17):** Implement hard observation cap: if observation_tokens > 60k, truncate oldest Session History entries, preserve all other sections and CORRECTION markers, emit {:om, :hard_cap_truncation}
 - **observational-memory v0.1 (2026-03-17):** Implement circuit breaker: after 3 consecutive cycle failures, enter degraded mode (stop attempting), emit {:om, :circuit_open}, resume after 5-minute cooldown or /compact command
 - **observational-memory v0.1 (2026-03-17):** Implement sync fallback: on force_observe call, stash `from` in sync_from, spawn Task, return {:noreply}; on Task result, GenServer.reply(sync_from, result) and clear; on Task DOWN, reply with {:error, reason}; 1 retry max; 60s GenServer.call timeout
 - **filesystem v0.2 (2026-03-17):** Implement per-tool threshold config: cache.token_threshold (default 10000), cache.token_threshold.read (20000), cache.token_threshold.grep (8000), cache.token_threshold.ls (4000), cache.token_threshold.find (4000); provisional values pending threshold calibration evals

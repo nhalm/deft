@@ -352,6 +352,9 @@ defmodule Deft.OM.State do
         snapshot_dirty: true
     }
 
+    # Check if hard cap truncation is needed (spec section 4.6)
+    state = maybe_apply_hard_cap(state)
+
     # After Reflector completes, check if there are buffered chunks to activate
     # (now that is_reflecting is false)
     state =
@@ -379,6 +382,9 @@ defmodule Deft.OM.State do
       | is_reflecting: false,
         reflector_ref: nil
     }
+
+    # Check if hard cap truncation is needed after failure (spec section 4.6)
+    state = maybe_apply_hard_cap(state)
 
     {:noreply, state}
   end
@@ -714,5 +720,176 @@ defmodule Deft.OM.State do
         circuit_opened_at: nil,
         consecutive_failures: 0
     }
+  end
+
+  ## Hard Observation Cap (Spec Section 4.6)
+
+  # Hard cap threshold: 1.5x reflection threshold = 60,000 tokens
+  @hard_cap_threshold 60_000
+
+  defp maybe_apply_hard_cap(state) do
+    if state.observation_tokens > @hard_cap_threshold do
+      apply_hard_cap(state)
+    else
+      state
+    end
+  end
+
+  defp apply_hard_cap(state) do
+    Logger.warning(
+      "OM hard cap exceeded for session #{state.session_id}: #{state.observation_tokens} > #{@hard_cap_threshold} tokens, truncating Session History"
+    )
+
+    before_tokens = state.observation_tokens
+
+    # Parse observations into sections
+    sections = Parse.parse_sections(state.active_observations)
+
+    # Extract CORRECTION markers from entire observations (must preserve all)
+    correction_markers = extract_all_correction_markers(state.active_observations)
+
+    # Get Session History section
+    session_history = Map.get(sections, "Session History", "")
+
+    # Calculate tokens for all other sections (everything except Session History)
+    other_sections_tokens =
+      sections
+      |> Map.delete("Session History")
+      |> Enum.map(fn {name, content} ->
+        Tokens.estimate("## #{name}\n#{content}", state.calibration_factor)
+      end)
+      |> Enum.sum()
+
+    # Add overhead for section separators (2 newlines between sections)
+    num_sections = map_size(sections)
+    separator_tokens = Tokens.estimate("\n\n", state.calibration_factor) * (num_sections - 1)
+
+    # Calculate target Session History size
+    # Use 95% of remaining space to account for token estimation inaccuracies
+    available_tokens = @hard_cap_threshold - other_sections_tokens - separator_tokens
+    target_history_tokens = max(0, trunc(available_tokens * 0.95))
+
+    # Truncate Session History from the head (oldest entries) until under target
+    truncated_history =
+      truncate_session_history_to_target(
+        session_history,
+        target_history_tokens,
+        correction_markers,
+        state.calibration_factor
+      )
+
+    # Replace Session History section with truncated version
+    updated_sections = Map.put(sections, "Session History", truncated_history)
+
+    # Reconstruct observations in canonical order
+    new_observations = reconstruct_observations(updated_sections)
+
+    # Calculate new token count
+    after_tokens = Tokens.estimate(new_observations, state.calibration_factor)
+
+    # Emit hard cap truncation event
+    broadcast_event(state.session_id, {
+      :om,
+      :hard_cap_truncation,
+      %{before: before_tokens, after: after_tokens}
+    })
+
+    Logger.info(
+      "OM hard cap truncation complete for session #{state.session_id}: #{before_tokens} -> #{after_tokens} tokens"
+    )
+
+    # Update state with truncated observations
+    %{
+      state
+      | active_observations: new_observations,
+        observation_tokens: after_tokens,
+        snapshot_dirty: true
+    }
+  end
+
+  # Extract all CORRECTION markers from observations
+  defp extract_all_correction_markers(observations) do
+    observations
+    |> String.split("\n")
+    |> Enum.filter(&String.contains?(&1, "CORRECTION:"))
+    |> Enum.map(&String.trim/1)
+  end
+
+  # Truncate Session History from the head until it fits within target token count
+  # Preserve CORRECTION markers by moving them to the end
+  defp truncate_session_history_to_target(
+         session_history,
+         target_tokens,
+         correction_markers,
+         calibration_factor
+       ) do
+    lines = String.split(session_history, "\n", trim: true)
+
+    # Separate CORRECTION markers from regular lines
+    {correction_lines, regular_lines} =
+      Enum.split_with(lines, fn line ->
+        Enum.any?(correction_markers, fn marker ->
+          String.contains?(line, marker)
+        end)
+      end)
+
+    # Calculate tokens for CORRECTION markers (these must be kept)
+    correction_tokens =
+      correction_lines
+      |> Enum.map(&Tokens.estimate(&1, calibration_factor))
+      |> Enum.sum()
+
+    # Calculate available tokens for regular lines
+    available_for_regular = max(0, target_tokens - correction_tokens)
+
+    # Keep as many recent lines as possible within the available tokens
+    # Process from end (most recent) to beginning (oldest)
+    {kept_lines, _accumulated_tokens} =
+      regular_lines
+      |> Enum.reverse()
+      |> Enum.reduce({[], 0}, fn line, {kept, tokens_so_far} ->
+        line_tokens = Tokens.estimate(line, calibration_factor)
+
+        if tokens_so_far + line_tokens <= available_for_regular do
+          # Can keep this line
+          {[line | kept], tokens_so_far + line_tokens}
+        else
+          # Exceeded budget, stop accumulating
+          {kept, tokens_so_far}
+        end
+      end)
+
+    # Reconstruct Session History: kept lines + CORRECTION markers at end
+    all_lines = kept_lines ++ correction_lines
+
+    Enum.join(all_lines, "\n")
+  end
+
+  # Reconstruct observations from sections in canonical order
+  defp reconstruct_observations(sections) do
+    # Section order from Parse module
+    section_order = [
+      "Current State",
+      "User Preferences",
+      "Files & Architecture",
+      "Decisions",
+      "Session History"
+    ]
+
+    section_order
+    |> Enum.map(fn section_name ->
+      case Map.get(sections, section_name) do
+        nil ->
+          nil
+
+        "" ->
+          nil
+
+        content ->
+          "## #{section_name}\n#{content}"
+      end
+    end)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join("\n\n")
   end
 end

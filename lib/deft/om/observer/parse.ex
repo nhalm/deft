@@ -121,6 +121,53 @@ defmodule Deft.OM.Observer.Parse do
     Enum.join(merged_sections, "\n\n")
   end
 
+  @doc """
+  Parse observations into a map of section_name => content.
+
+  Returns a map where keys are section names (without "##") and values are
+  the section content (without the header line).
+
+  ## Examples
+
+      iex> obs = "## Current State\\n- Task 1\\n\\n## User Preferences\\n- Pref 1\\n"
+      iex> sections = Deft.OM.Observer.Parse.parse_sections(obs)
+      iex> Map.get(sections, "Current State")
+      "- Task 1"
+  """
+  @spec parse_sections(String.t()) :: %{String.t() => String.t()}
+  def parse_sections(observations) do
+    lines = String.split(observations, "\n")
+
+    {sections, current_section, current_lines} =
+      Enum.reduce(lines, {%{}, nil, []}, fn line, {sections, current_section, current_lines} ->
+        case Regex.run(~r/^## (.+)$/, line, capture: :all_but_first) do
+          [section_name] ->
+            # New section header - save previous section if exists
+            sections =
+              if current_section do
+                content = current_lines |> Enum.reverse() |> Enum.join("\n") |> String.trim()
+                Map.put(sections, current_section, content)
+              else
+                sections
+              end
+
+            {sections, String.trim(section_name), []}
+
+          nil ->
+            # Content line - accumulate
+            {sections, current_section, [line | current_lines]}
+        end
+      end)
+
+    # Save the last section
+    if current_section do
+      content = current_lines |> Enum.reverse() |> Enum.join("\n") |> String.trim()
+      Map.put(sections, current_section, content)
+    else
+      sections
+    end
+  end
+
   ## Private Functions
 
   # Extract content from XML tags
@@ -170,40 +217,6 @@ defmodule Deft.OM.Observer.Parse do
     else
       # No recognizable structure
       {:error, "Could not parse output: no XML tags and no section headers found"}
-    end
-  end
-
-  # Parse observations into a map of section_name => content
-  defp parse_sections(observations) do
-    lines = String.split(observations, "\n")
-
-    {sections, current_section, current_lines} =
-      Enum.reduce(lines, {%{}, nil, []}, fn line, {sections, current_section, current_lines} ->
-        case Regex.run(~r/^## (.+)$/, line, capture: :all_but_first) do
-          [section_name] ->
-            # New section header - save previous section if exists
-            sections =
-              if current_section do
-                content = current_lines |> Enum.reverse() |> Enum.join("\n") |> String.trim()
-                Map.put(sections, current_section, content)
-              else
-                sections
-              end
-
-            {sections, String.trim(section_name), []}
-
-          nil ->
-            # Content line - accumulate
-            {sections, current_section, [line | current_lines]}
-        end
-      end)
-
-    # Save the last section
-    if current_section do
-      content = current_lines |> Enum.reverse() |> Enum.join("\n") |> String.trim()
-      Map.put(sections, current_section, content)
-    else
-      sections
     end
   end
 

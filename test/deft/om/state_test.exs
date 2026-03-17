@@ -288,6 +288,175 @@ defmodule Deft.OM.StateTest do
     end
   end
 
+  describe "hard observation cap" do
+    test "truncates Session History when observation_tokens > 60k", %{session_id: session_id} do
+      # Build observations that exceed 60k tokens
+      # Each line is roughly 50 characters = ~12 tokens at 4:1 ratio
+      # Need ~5000 lines to reach 60k tokens
+      session_history_lines =
+        Enum.map(1..5500, fn i ->
+          "- (10:#{rem(i, 60)}) 🟡 Event #{i}: User did something important here"
+        end)
+        |> Enum.join("\n")
+
+      large_observations = """
+      ## Current State
+      - (10:00) Active task: Testing hard cap
+
+      ## User Preferences
+      - (10:00) 🔴 User prefers terse output
+
+      ## Session History
+      #{session_history_lines}
+      """
+
+      # Set state with observations > 60k tokens
+      :sys.replace_state(via_tuple(session_id), fn state ->
+        %{
+          state
+          | active_observations: large_observations,
+            observation_tokens: 65_000,
+            is_reflecting: false
+        }
+      end)
+
+      # Manually trigger hard cap check by calling the private function via reflection simulation
+      # In actual code, this would be triggered after reflection completes/fails
+      # For testing, we'll use sys:replace_state to simulate calling maybe_apply_hard_cap
+      state_before = :sys.get_state(via_tuple(session_id))
+      assert state_before.observation_tokens == 65_000
+
+      # Simulate reflection failure which would trigger hard cap
+      # We'll send a DOWN message to trigger the reflector failure handler
+      ref = make_ref()
+
+      :sys.replace_state(via_tuple(session_id), fn state ->
+        %{state | reflector_ref: ref, is_reflecting: true}
+      end)
+
+      # Send DOWN message to trigger reflector failure path
+      pid = GenServer.whereis(via_tuple(session_id))
+      send(pid, {:DOWN, ref, :process, self(), :test_failure})
+
+      # Give it a moment to process
+      Process.sleep(100)
+
+      # Check that hard cap was applied
+      state_after = :sys.get_state(via_tuple(session_id))
+
+      # Observations should be truncated
+      assert state_after.observation_tokens < 60_000
+      assert state_after.observation_tokens < state_before.observation_tokens
+
+      # Current State and User Preferences should be preserved
+      assert String.contains?(state_after.active_observations, "Testing hard cap")
+      assert String.contains?(state_after.active_observations, "User prefers terse output")
+
+      # Session History should be truncated (oldest entries removed)
+      assert String.contains?(state_after.active_observations, "## Session History")
+
+      # Should have fewer lines in Session History
+      history_lines_after =
+        state_after.active_observations
+        |> String.split("\n")
+        |> Enum.count(&String.contains?(&1, "Event"))
+
+      assert history_lines_after < 5500
+    end
+
+    test "preserves CORRECTION markers during hard cap truncation", %{session_id: session_id} do
+      # Build observations with CORRECTION markers in Session History
+      correction_lines = """
+      - (10:01) 🟡 Event 1: Something happened
+      - (10:02) 🔴 CORRECTION: Event 1 is incorrect — it actually happened differently
+      """
+
+      additional_lines =
+        Enum.map(3..5500, fn i ->
+          "- (10:#{rem(i, 60)}) 🟡 Event #{i}: More events"
+        end)
+        |> Enum.join("\n")
+
+      session_history_with_corrections = correction_lines <> additional_lines
+
+      large_observations = """
+      ## Current State
+      - (10:00) Active task: Testing correction preservation
+
+      ## Session History
+      #{session_history_with_corrections}
+      """
+
+      :sys.replace_state(via_tuple(session_id), fn state ->
+        %{
+          state
+          | active_observations: large_observations,
+            observation_tokens: 65_000,
+            is_reflecting: false
+        }
+      end)
+
+      # Trigger hard cap via reflection failure
+      ref = make_ref()
+
+      :sys.replace_state(via_tuple(session_id), fn state ->
+        %{state | reflector_ref: ref, is_reflecting: true}
+      end)
+
+      pid = GenServer.whereis(via_tuple(session_id))
+      send(pid, {:DOWN, ref, :process, self(), :test_failure})
+      Process.sleep(100)
+
+      state_after = :sys.get_state(via_tuple(session_id))
+
+      # CORRECTION marker must be preserved even if its original context was truncated
+      assert String.contains?(
+               state_after.active_observations,
+               "CORRECTION: Event 1 is incorrect"
+             )
+    end
+
+    test "does not truncate when observation_tokens <= 60k", %{session_id: session_id} do
+      # Set observations below threshold
+      small_observations = """
+      ## Current State
+      - (10:00) Active task: Below threshold
+
+      ## Session History
+      - (10:01) 🟡 Event 1
+      - (10:02) 🟡 Event 2
+      """
+
+      :sys.replace_state(via_tuple(session_id), fn state ->
+        %{
+          state
+          | active_observations: small_observations,
+            observation_tokens: 50_000,
+            is_reflecting: false
+        }
+      end)
+
+      state_before = :sys.get_state(via_tuple(session_id))
+
+      # Trigger reflection failure
+      ref = make_ref()
+
+      :sys.replace_state(via_tuple(session_id), fn state ->
+        %{state | reflector_ref: ref, is_reflecting: true}
+      end)
+
+      pid = GenServer.whereis(via_tuple(session_id))
+      send(pid, {:DOWN, ref, :process, self(), :test_failure})
+      Process.sleep(100)
+
+      state_after = :sys.get_state(via_tuple(session_id))
+
+      # Should NOT have truncated (observations unchanged)
+      assert state_after.observation_tokens == state_before.observation_tokens
+      assert state_after.active_observations == state_before.active_observations
+    end
+  end
+
   defp via_tuple(session_id) do
     {:via, Registry, {Deft.ProcessRegistry, {:om_state, session_id}}}
   end

@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## observational-memory v0.1
 
-- Implement hard observation cap: if observation_tokens > 60k, truncate oldest Session History entries, preserve all other sections and CORRECTION markers, emit {:om, :hard_cap_truncation}
 - Implement `Deft.OM.Context.inject/2`: build observation system message with preamble + `<observations>` block + instructions + current task from Current State section; implement message trimming (filter out observed_message_ids, retain tail of 20% threshold); implement dynamic continuation hint from Current State section
 - Add system prompt conflict resolution rule for observations: "If observations conflict with current messages, messages take precedence. If observations conflict with project instructions, project instructions take precedence"
 - Implement OM event broadcasting via Registry: observation_started, observation_complete, reflection_started, reflection_complete, buffering_started, buffering_complete, activation, sync_fallback, cycle_failed, circuit_open, hard_cap_truncation
