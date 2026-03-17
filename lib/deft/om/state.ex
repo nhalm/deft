@@ -17,11 +17,12 @@ defmodule Deft.OM.State do
   require Logger
 
   alias Deft.{Config, Message}
-  alias Deft.OM.{BufferedChunk, Observer, Supervisor, Tokens}
+  alias Deft.OM.{BufferedChunk, Observer, Reflector, Supervisor, Tokens}
   alias Deft.OM.Observer.Parse
 
   # Default thresholds from spec section 8
   @default_message_threshold 30_000
+  @default_observation_threshold 40_000
   @default_buffer_interval 0.2
 
   @type t :: %__MODULE__{
@@ -44,6 +45,7 @@ defmodule Deft.OM.State do
           calibration_factor: float(),
           sync_from: GenServer.from() | nil,
           observer_ref: reference() | nil,
+          reflector_ref: reference() | nil,
           last_buffer_threshold: integer()
         }
 
@@ -52,6 +54,7 @@ defmodule Deft.OM.State do
     :session_id,
     :config,
     :observer_ref,
+    :reflector_ref,
     messages: [],
     active_observations: "",
     observation_tokens: 0,
@@ -216,6 +219,47 @@ defmodule Deft.OM.State do
   end
 
   @impl true
+  def handle_info({ref, result}, %{reflector_ref: ref} = state) when ref != nil do
+    # Reflector Task completed successfully
+    Logger.info(
+      "Reflector Task completed for session #{state.session_id}: #{result.before_tokens} -> #{result.after_tokens} tokens (level #{result.compression_level}, #{result.llm_calls} calls)"
+    )
+
+    # Demonitor the task
+    Process.demonitor(ref, [:flush])
+
+    # Replace active_observations with compressed result
+    # Increment generation_count and activation_epoch
+    state = %{
+      state
+      | active_observations: result.compressed_observations,
+        observation_tokens: result.after_tokens,
+        generation_count: state.generation_count + 1,
+        activation_epoch: state.activation_epoch + 1,
+        is_reflecting: false,
+        reflector_ref: nil,
+        snapshot_dirty: true
+    }
+
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info({:DOWN, ref, :process, _pid, reason}, %{reflector_ref: ref} = state)
+      when ref != nil do
+    # Reflector Task crashed or failed
+    Logger.warning("Reflector Task failed for session #{state.session_id}: #{inspect(reason)}")
+
+    state = %{
+      state
+      | is_reflecting: false,
+        reflector_ref: nil
+    }
+
+    {:noreply, state}
+  end
+
+  @impl true
   def handle_info({ref, _result}, state) when is_reference(ref) do
     # Ignore stale task results
     Process.demonitor(ref, [:flush])
@@ -323,7 +367,7 @@ defmodule Deft.OM.State do
     # Subtract observed tokens from pending
     new_pending = max(0, state.pending_message_tokens - observed_tokens)
 
-    %{
+    state = %{
       state
       | active_observations: merged_observations,
         observation_tokens: new_observation_tokens,
@@ -333,6 +377,49 @@ defmodule Deft.OM.State do
         activation_epoch: state.activation_epoch + 1,
         snapshot_dirty: true,
         last_observed_at: DateTime.utc_now()
+    }
+
+    # Check if we should trigger reflection
+    check_and_spawn_reflector(state)
+  end
+
+  defp check_and_spawn_reflector(state) do
+    # Check if observation_tokens exceeds reflection threshold
+    # Only spawn if not already reflecting and not currently observing (serialization)
+    if state.observation_tokens >= @default_observation_threshold and
+         not state.is_reflecting and
+         not state.is_observing do
+      spawn_reflector_task(state)
+    else
+      state
+    end
+  end
+
+  defp spawn_reflector_task(state) do
+    Logger.debug(
+      "Spawning Reflector Task for session #{state.session_id} with #{state.observation_tokens} tokens"
+    )
+
+    # Target size is 50% of reflection threshold (per spec section 4.3)
+    target_size = div(@default_observation_threshold, 2)
+
+    task_supervisor = Supervisor.task_supervisor_name(state.session_id)
+
+    # Spawn Reflector Task
+    task =
+      Task.Supervisor.async_nolink(task_supervisor, fn ->
+        Reflector.run(
+          state.config,
+          state.active_observations,
+          target_size,
+          state.calibration_factor
+        )
+      end)
+
+    %{
+      state
+      | is_reflecting: true,
+        reflector_ref: task.ref
     }
   end
 end

@@ -19,8 +19,7 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## observational-memory v0.1
 
-- Implement Reflector Task execution: State spawns Task with full active_observations + target size; result replaces active_observations, increments generation_count + activation_epoch; max 2 LLM calls; CORRECTION post-check (append missing markers); if level 3 still exceeds target, accept and move on
-- Implement Observer/Reflector serialization: if is_reflecting, defer Observer activation until reflection completes; if is_observing, defer reflection until Observer completes; activation_epoch incremented on both (blocked: Implement Reflector Task execution...)
+- Implement Observer/Reflector serialization: if is_reflecting, defer Observer activation until reflection completes; if is_observing, defer reflection until Observer completes; activation_epoch incremented on both
 - Implement sync fallback: on force_observe call, stash `from` in sync_from, spawn Task, return {:noreply}; on Task result, GenServer.reply(sync_from, result) and clear; on Task DOWN, reply with {:error, reason}; 1 retry max; 60s GenServer.call timeout (blocked: Implement Observer/Reflector serialization...)
 - Implement circuit breaker: after 3 consecutive cycle failures, enter degraded mode (stop attempting), emit {:om, :circuit_open}, resume after 5-minute cooldown or /compact command (blocked: Implement sync fallback...)
 - Implement hard observation cap: if observation_tokens > 60k, truncate oldest Session History entries, preserve all other sections and CORRECTION markers, emit {:om, :hard_cap_truncation}
@@ -49,7 +48,7 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement Observer section routing evals: verify facts route to correct sections per spec section 2.2; 20 iterations, 85% pass rate (blocked: Implement Observer extraction evals...)
 - Implement Observer anti-hallucination evals: 4 test cases from spec section 2.3 (hypothetical, exploring options, reading about, discussing alternatives); 20 iterations, 95% pass rate (blocked: Implement Observer extraction evals...)
 - Implement Observer dedup evals: verify no re-extraction of existing observations; 20 iterations, 80% pass rate (blocked: Implement Observer extraction evals...)
-- Implement Reflector compression evals: output within 50% of threshold; 20 iterations, 80% pass rate (blocked: Implement Reflector Task execution...)
+- Implement Reflector compression evals: output within 50% of threshold; 20 iterations, 80% pass rate
 - Implement Reflector preservation evals: all 🔴 items survive; 20 iterations, 95% pass rate (blocked: Implement Reflector compression evals...)
 - Implement Reflector section structure evals: 5 sections in canonical order; hard assertion (not statistical), 100% pass rate (blocked: Implement Reflector compression evals...)
 - Implement Reflector CORRECTION survival evals: all markers survive; hard assertion (not statistical), 100% pass rate (blocked: Implement Reflector compression evals...)
