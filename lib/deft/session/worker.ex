@@ -21,6 +21,7 @@ defmodule Deft.Session.Worker do
   - `:session_id` — Required. Unique identifier for the session.
   - `:config` — Required. Configuration map for the agent.
   - `:messages` — Optional. Initial conversation messages (default: []).
+  - `:om_snapshot` — Optional. OM snapshot to restore from (for session resume).
   """
   def start_link(opts) do
     session_id = Keyword.fetch!(opts, :session_id)
@@ -32,6 +33,7 @@ defmodule Deft.Session.Worker do
     session_id = Keyword.fetch!(opts, :session_id)
     config = Keyword.fetch!(opts, :config)
     messages = Keyword.get(opts, :messages, [])
+    om_snapshot = Keyword.get(opts, :om_snapshot)
 
     children = [
       # 1. Agent — the core agent loop
@@ -47,7 +49,8 @@ defmodule Deft.Session.Worker do
       {Deft.Agent.ToolRunner, [name: tool_runner_via_tuple(session_id)]},
 
       # 3. OM.Supervisor — Observational memory processes
-      {Deft.OM.Supervisor, [session_id: session_id, config: config]}
+      {Deft.OM.Supervisor,
+       [session_id: session_id, config: config, messages: messages, snapshot: om_snapshot]}
     ]
 
     Supervisor.init(children, strategy: :rest_for_one)

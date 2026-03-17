@@ -31,17 +31,24 @@ defmodule Deft.Session.Supervisor do
   - `:session_id` — Required. Unique identifier for the session.
   - `:config` — Required. Configuration map for the agent.
   - `:messages` — Optional. Initial conversation messages (default: []).
+  - `:om_snapshot` — Optional. OM snapshot to restore from (for session resume).
   """
   def start_session(opts) do
     session_id = Keyword.fetch!(opts, :session_id)
     config = Keyword.fetch!(opts, :config)
     messages = Keyword.get(opts, :messages, [])
+    om_snapshot = Keyword.get(opts, :om_snapshot)
+
+    worker_opts = [
+      session_id: session_id,
+      config: config,
+      messages: messages,
+      om_snapshot: om_snapshot
+    ]
 
     child_spec = %{
       id: {:session, session_id},
-      start:
-        {Deft.Session.Worker, :start_link,
-         [[session_id: session_id, config: config, messages: messages]]},
+      start: {Deft.Session.Worker, :start_link, [worker_opts]},
       restart: :temporary
     }
 

@@ -85,11 +85,25 @@ defmodule Deft.OM.State do
 
   @doc """
   Starts the OM State GenServer for the given session.
+
+  ## Options
+
+  - `:session_id` — Required. Session identifier.
+  - `:config` — Required. Configuration struct.
+  - `:messages` — Optional. Messages for computing pending tokens on resume.
+  - `:snapshot` — Optional. Observation entry to restore from.
   """
   def start_link(opts) do
     session_id = Keyword.fetch!(opts, :session_id)
     config = Keyword.fetch!(opts, :config)
-    GenServer.start_link(__MODULE__, {session_id, config}, name: via_tuple(session_id))
+    messages = Keyword.get(opts, :messages, [])
+    snapshot = Keyword.get(opts, :snapshot)
+
+    GenServer.start_link(
+      __MODULE__,
+      {session_id, config, messages, snapshot},
+      name: via_tuple(session_id)
+    )
   end
 
   @doc """
@@ -113,16 +127,110 @@ defmodule Deft.OM.State do
     GenServer.cast(via_tuple(session_id), {:messages_added, messages})
   end
 
+  @doc """
+  Loads the latest OM snapshot from disk for the given session.
+
+  Returns `{:ok, observation_entry}` if a snapshot exists, or `{:ok, nil}` if no snapshot found.
+  Returns `{:error, reason}` if the file exists but cannot be read or parsed.
+
+  Per spec section 9.3, this is called during session resume to restore OM state.
+  """
+  @spec load_latest_snapshot(String.t()) :: {:ok, ObservationEntry.t() | nil} | {:error, term()}
+  def load_latest_snapshot(session_id) do
+    path = om_snapshot_path(session_id)
+
+    case File.read(path) do
+      {:ok, content} ->
+        # Parse all lines and take the last one (most recent)
+        entries =
+          content
+          |> String.split("\n", trim: true)
+          |> Enum.map(&parse_snapshot_line/1)
+          |> Enum.reject(&is_nil/1)
+
+        latest = List.last(entries)
+        {:ok, latest}
+
+      {:error, :enoent} ->
+        # File doesn't exist yet (new session) - this is not an error
+        {:ok, nil}
+
+      {:error, reason} = error ->
+        Logger.warning("Failed to load OM snapshot for session #{session_id}: #{inspect(reason)}")
+
+        error
+    end
+  end
+
   ## Server Callbacks
 
   @impl true
-  def init({session_id, config}) do
+  def init({session_id, config, messages, snapshot}) do
     Logger.debug("Starting OM State for session #{session_id}")
 
     # Schedule periodic snapshot timer (every 60 seconds)
     schedule_snapshot_timer()
 
-    {:ok, %__MODULE__{session_id: session_id, config: config}}
+    # Create initial state
+    initial_state = %__MODULE__{session_id: session_id, config: config}
+
+    # If we have a snapshot, restore from it
+    state =
+      case snapshot do
+        nil ->
+          initial_state
+
+        %ObservationEntry{} = snap ->
+          restore_from_snapshot(initial_state, snap, messages)
+      end
+
+    {:ok, state}
+  end
+
+  # Restore state from a snapshot (spec section 9.3)
+  defp restore_from_snapshot(state, snapshot, messages) do
+    Logger.info(
+      "Restoring OM state for session #{state.session_id} from snapshot: #{snapshot.observation_tokens} tokens, #{length(snapshot.observed_message_ids)} messages observed"
+    )
+
+    # Restore all persisted fields from snapshot (spec section 9.2)
+    restored_state = %{
+      state
+      | active_observations: snapshot.active_observations,
+        observation_tokens: snapshot.observation_tokens,
+        observed_message_ids: snapshot.observed_message_ids,
+        generation_count: snapshot.generation_count,
+        last_observed_at: snapshot.last_observed_at,
+        activation_epoch: snapshot.activation_epoch,
+        calibration_factor: snapshot.calibration_factor,
+        messages: messages
+    }
+
+    # Recompute pending_message_tokens from messages not in observed_message_ids
+    # Per spec section 9.3: use message IDs as authoritative boundary
+    unobserved_messages =
+      messages
+      |> Enum.reject(fn msg -> msg.id in snapshot.observed_message_ids end)
+
+    pending_tokens =
+      unobserved_messages
+      |> Enum.map(fn msg ->
+        content_text = extract_message_text(msg)
+        Tokens.estimate(content_text, snapshot.calibration_factor)
+      end)
+      |> Enum.sum()
+
+    restored_state = %{restored_state | pending_message_tokens: pending_tokens}
+
+    Logger.debug(
+      "OM state restored: #{restored_state.observation_tokens} observation tokens, #{pending_tokens} pending tokens from #{length(unobserved_messages)} unobserved messages"
+    )
+
+    # Check if thresholds are already exceeded and trigger observation/reflection if needed
+    # Per spec section 9.3: "If thresholds are already exceeded, trigger observation/reflection immediately"
+    restored_state
+    |> check_and_spawn_observer()
+    |> check_and_spawn_reflector()
   end
 
   @impl true
@@ -1060,4 +1168,50 @@ defmodule Deft.OM.State do
       {:error, reason} -> {:error, reason}
     end
   end
+
+  # Parse a single line from the OM snapshot file
+  defp parse_snapshot_line(line) do
+    case Jason.decode(line, keys: :atoms) do
+      {:ok, data} ->
+        # Deserialize into ObservationEntry struct
+        %ObservationEntry{
+          type: :observation,
+          active_observations: data.active_observations,
+          observation_tokens: data.observation_tokens,
+          observed_message_ids: data.observed_message_ids,
+          pending_message_tokens: data[:pending_message_tokens] || 0,
+          generation_count: data.generation_count,
+          last_observed_at: parse_datetime_or_nil(data[:last_observed_at]),
+          activation_epoch: data[:activation_epoch] || 0,
+          calibration_factor: data[:calibration_factor] || 4.0,
+          timestamp: parse_datetime(data.timestamp)
+        }
+
+      {:error, reason} ->
+        Logger.warning("Failed to parse OM snapshot line: #{inspect(reason)}")
+        nil
+    end
+  end
+
+  # Parse DateTime from string or pass through DateTime struct
+  defp parse_datetime(dt) when is_binary(dt) do
+    case DateTime.from_iso8601(dt) do
+      {:ok, datetime, _offset} -> datetime
+      {:error, _} -> DateTime.utc_now()
+    end
+  end
+
+  defp parse_datetime(%DateTime{} = dt), do: dt
+
+  # Parse DateTime or return nil for missing values
+  defp parse_datetime_or_nil(nil), do: nil
+
+  defp parse_datetime_or_nil(dt) when is_binary(dt) do
+    case DateTime.from_iso8601(dt) do
+      {:ok, datetime, _offset} -> datetime
+      {:error, _} -> nil
+    end
+  end
+
+  defp parse_datetime_or_nil(%DateTime{} = dt), do: dt
 end

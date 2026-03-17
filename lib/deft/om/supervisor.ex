@@ -15,6 +15,13 @@ defmodule Deft.OM.Supervisor do
 
   @doc """
   Starts the OM supervisor.
+
+  ## Options
+
+  - `:session_id` — Required. Session identifier.
+  - `:config` — Required. Configuration struct.
+  - `:messages` — Optional. Messages for computing pending tokens on resume.
+  - `:snapshot` — Optional. Observation entry to restore from.
   """
   def start_link(opts) do
     Supervisor.start_link(__MODULE__, opts, name: name_for_session(opts))
@@ -24,12 +31,15 @@ defmodule Deft.OM.Supervisor do
   def init(opts) do
     session_id = Keyword.fetch!(opts, :session_id)
     config = Keyword.fetch!(opts, :config)
+    messages = Keyword.get(opts, :messages, [])
+    snapshot = Keyword.get(opts, :snapshot)
 
     children = [
       # TaskSupervisor starts FIRST (with rest_for_one, if this crashes, State also restarts)
       {Task.Supervisor, name: task_supervisor_name(session_id)},
       # State starts SECOND (if this crashes, TaskSupervisor is unaffected)
-      {Deft.OM.State, session_id: session_id, config: config}
+      {Deft.OM.State,
+       session_id: session_id, config: config, messages: messages, snapshot: snapshot}
     ]
 
     Supervisor.init(children, strategy: :rest_for_one)

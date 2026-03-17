@@ -16,6 +16,7 @@ defmodule Deft.Session.Store do
   - `list/0` - List all sessions with metadata
   """
 
+  alias Deft.OM.State, as: OMState
   alias Deft.Session.Entry
 
   @sessions_dir Path.expand("~/.deft/sessions")
@@ -90,7 +91,7 @@ defmodule Deft.Session.Store do
   - `:config` - Configuration map from session_start
   - `:working_dir` - Working directory from session_start
   - `:model` - Model name from session_start (or latest model_change)
-  - `:om_state` - Latest observation state (if any)
+  - `:om_snapshot` - Latest observation snapshot from separate _om.jsonl file (if any)
   - `:session_cost` - Cumulative cost from latest cost entry (or 0.0)
   - `:session_metadata` - Session start metadata
 
@@ -102,7 +103,7 @@ defmodule Deft.Session.Store do
         config: %{},
         working_dir: "/tmp",
         model: "claude-sonnet-4",
-        om_state: nil,
+        om_snapshot: nil,
         session_cost: 0.05,
         session_metadata: %Entry.SessionStart{}
       }}
@@ -115,6 +116,17 @@ defmodule Deft.Session.Store do
     case load(session_id) do
       {:ok, entries} ->
         state = reconstruct_state(entries)
+
+        # Load OM snapshot from separate _om.jsonl file (spec section 9.3)
+        om_snapshot =
+          case OMState.load_latest_snapshot(session_id) do
+            {:ok, snapshot} -> snapshot
+            {:error, _reason} -> nil
+          end
+
+        # Replace om_state with om_snapshot from the separate file
+        state = Map.put(state, :om_snapshot, om_snapshot)
+
         {:ok, state}
 
       {:error, reason} = error ->
