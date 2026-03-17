@@ -42,7 +42,9 @@ Sessions handle persistence, configuration, and the CLI entry point for Deft. A 
 
 Sessions are stored as JSONL files. Each line is a JSON object representing one event in the session timeline.
 
-Storage location: `~/.deft/sessions/<session_id>.jsonl`
+Storage location: `~/.deft/projects/<path-encoded-repo>/sessions/<session_id>.jsonl`
+
+Sessions are scoped per-project. The project is identified by the git repository root (resolved to a real path, no symlinks). The path is encoded by replacing `/` with `-` (e.g., `/Users/nick/myapp` → `-Users-nick-myapp`). See [filesystem.md](filesystem.md) for the full `~/.deft/projects/` layout.
 
 #### 1.2 Entry Types
 

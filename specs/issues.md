@@ -2,14 +2,27 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.1 |
+| Version | 0.2 |
 | Status | Draft |
-| Last Updated | 2026-03-16 |
+| Last Updated | 2026-03-17 |
 
 ## Changelog
 
+### v0.2 (2026-03-17)
+- **Approval model:** Changed from single-approval to approve-every-plan as default for `deft work --loop`. Added `--auto-approve-all` flag for fully autonomous mode.
+- **JSONL error handling:** Lines that fail JSON parsing during init are skipped with warnings; file is not corrupt unless all lines are malformed.
+- **Cycle detection on load:** `init/1` now detects cycles after loading from JSONL; affected issues have dependencies cleared with warnings.
+- **Structured extraction protocol:** Issue creation uses an `issue_draft` tool call for structured output instead of parsing free-text LLM output.
+- **Agent-created issue priority:** Agents may assign higher priority for discovered bugs affecting current functionality (default remains 3).
+- **Git behavior outside repos:** `.deft/` created in cwd when not inside a git repository; worktree detection skipped.
+- **SIGINT handling:** Graceful shutdown on Ctrl+C with 5-second timeout for rolling back in-progress issues.
+- **Lock file content:** Lock file now contains PID and timestamp as a JSON line for debugging stale locks.
+- **DateTime format:** All timestamps use `DateTime.utc_now() |> DateTime.to_iso8601()` — no timezone offsets, no fractional seconds inconsistencies.
+- **Blocking annotation fix:** Interactive creation session depends on the agent loop (harness) and CLI entry point (sessions), not `Deft.CLI` specifically.
+- **Configuration:** Removed `work.auto_approve` config; approval mode controlled solely by `--auto-approve-all` CLI flag.
+
 ### v0.1 (2026-03-16)
-- Initial spec — persistent issue tracker with interactive creation session, structured JSON storage, dependency DAG, `deft work` loop with single-approval, 90-day closed issue compaction. Inspired by Seeds/Beads concepts on JSONL+git storage.
+- Initial spec — persistent issue tracker with interactive creation session, structured JSON storage, dependency DAG, `deft work` loop, 90-day closed issue compaction. Inspired by Seeds/Beads concepts on JSONL+git storage.
 
 ## Overview
 
@@ -73,6 +86,7 @@ Within a single Deft process, the `Deft.Issues` GenServer serializes all writes.
 
 - Lock file: `.deft/issues.jsonl.lock`
 - Atomic creation via `File.open!(path, [:write, :exclusive])`
+- The lock file contains the PID of the locking process and the timestamp, written as a single JSON line. This aids debugging of stale locks.
 - Stale threshold: 30 seconds (delete and retry if lock file is older)
 - Retry: 100ms with jitter, 10 second timeout
 - Writes go to a temp file (`.deft/issues.jsonl.tmp.<random>`) then `File.rename/2` (POSIX-atomic)
@@ -81,7 +95,11 @@ Within a single Deft process, the `Deft.Issues` GenServer serializes all writes.
 
 When running from a git worktree (as Leads do), resolve to the main repo's `.deft/issues.jsonl`. Detect via `git rev-parse --git-common-dir`. Issue writes from worktrees should be rare — typically only the Foreman (in the main worktree) modifies issues.
 
+If `deft issue` commands are run outside a git repository, the `.deft/` directory is created in the current working directory. Worktree detection is skipped.
+
 ### 2. Issue Schema
+
+All timestamps use `DateTime.utc_now() |> DateTime.to_iso8601()` format. No timezone offsets, no fractional seconds inconsistencies.
 
 ```
 id                  :: String.t()           # Hash-based short ID, e.g. "deft-a1b2"
@@ -115,6 +133,8 @@ Each issue is serialized as a single JSON line:
 
 Mutations rewrite the file atomically (read all → modify → write temp → rename). Creates can append under lock for performance, but the file is small enough that full rewrite is fine.
 
+Lines that fail JSON parsing during init are skipped and logged as warnings. The file is not considered corrupt unless all lines are malformed.
+
 ### 3. Dependency Tracking
 
 Dependencies are directional: issue A lists issue B in its `dependencies` field, meaning "A is blocked by B."
@@ -128,6 +148,8 @@ An issue is **blocked** when:
 - At least one issue in its `dependencies` list has status `:open` or `:in_progress`
 
 Circular dependency detection: on create or update, walk the dependency graph. If adding a dependency would create a cycle, reject with an error.
+
+Cycle detection also runs during `init/1` after loading from JSONL. If a cycle is detected (e.g., from a bad branch merge), the affected issues are logged as warnings and their dependencies are cleared to break the cycle.
 
 ### 4. Process Architecture
 
@@ -148,7 +170,7 @@ Deft.Issues (GenServer — owns .deft/issues.jsonl)
 deft issue create <title> [--priority <0-4>] [--blocked-by <id>,...]
 ```
 
-`deft issue create` starts a short interactive AI session to help the user write the issue. The flow:
+`deft issue create` starts a short interactive AI session to help the user write the issue. This depends on the agent loop (harness) and the CLI entry point (sessions). The flow:
 
 1. User provides the title (required) and optional flags
 2. Deft starts a lightweight session (same Agent loop, no OM) with a system prompt focused on issue elicitation
@@ -158,7 +180,8 @@ deft issue create <title> [--priority <0-4>] [--blocked-by <id>,...]
    - Any constraints on how it should be done?
    - Does this depend on other issues? (shows open issues if relevant)
 4. User answers conversationally — Deft extracts structure from the conversation
-5. Deft presents the structured issue for confirmation:
+5. The elicitation agent uses a structured output tool call (an `issue_draft` tool) to produce the final structured issue. The tool returns a JSON object with `title`, `context`, `acceptance_criteria`, `constraints`, and `priority`. The CLI parses this tool call result and presents it for confirmation. This avoids parsing free-text LLM output.
+6. Deft presents the structured issue for confirmation:
    ```
    Issue: Add JWT auth to the API
    Priority: high
@@ -179,7 +202,7 @@ deft issue create <title> [--priority <0-4>] [--blocked-by <id>,...]
 
    [Save / Edit / Cancel]
    ```
-6. User confirms → issue is saved to `.deft/issues.jsonl`
+7. User confirms → issue is saved to `.deft/issues.jsonl`
 
 **Quick mode:** `deft issue create "fix the typo in README" --quick` skips the interactive session and creates the issue with just a title (empty context, criteria, constraints). For trivial issues where a conversation would be overkill.
 
@@ -207,6 +230,7 @@ Default `list` shows open and in_progress issues. `--status closed` to see close
 deft work                           # Pick highest-priority ready issue, run as job
 deft work <id>                      # Run a specific issue as a job
 deft work --loop                    # Keep picking and running until queue empty or cost ceiling
+deft work --loop --auto-approve-all # Fully autonomous: skip all plan approvals
 ```
 
 `deft work` without arguments:
@@ -219,9 +243,12 @@ deft work --loop                    # Keep picking and running until queue empty
 
 `deft work --loop`:
 1. Same as above, but after closing an issue, check for more ready issues
-2. **Single approval:** The user approves the Foreman's plan for the first issue. All subsequent issues in the loop auto-approve. This gives the user a chance to verify Deft's approach without requiring babysitting.
-3. Stop when: no ready issues remain, cumulative cost exceeds `work.cost_ceiling` (separate from per-job ceiling), or user aborts (Ctrl+C)
-4. Between jobs: unblock any issues whose dependencies were just closed
+2. **Approve every plan (default):** Each issue in the loop gets a plan approval checkpoint. The user reviews and approves the Foreman's plan before execution begins. This ensures oversight on every issue.
+3. **`--auto-approve-all`:** Skips all plan approvals, running fully autonomously. This is the opt-in dangerous mode — use when you trust the queue and want hands-off execution.
+4. Stop when: no ready issues remain, cumulative cost exceeds `work.cost_ceiling` (separate from per-job ceiling), or user aborts (Ctrl+C)
+5. Between jobs: unblock any issues whose dependencies were just closed
+
+On SIGINT (Ctrl+C), the CLI catches the signal, sends a graceful shutdown to the Foreman, waits for the current issue's status to be rolled back to `:open` (with a 5-second timeout), then exits. If the timeout expires, the issue is left at `:in_progress` and will be detected as stale on next startup.
 
 ### 6. Foreman Integration
 
@@ -258,7 +285,7 @@ The Foreman uses the structured fields directly:
 During any session (interactive or job), the agent can create issues for work it identifies but considers out of scope:
 
 - The agent has access to an `issue_create` tool (or calls `Deft.Issues.create/1` internally)
-- Agent-created issues have `source: :agent` and default priority 3 (low)
+- Agent-created issues have `source: :agent` and default to priority 3 (low), but the agent may assign higher priority for discovered bugs that affect current functionality (e.g., a bug found during implementation that breaks existing tests). The agent should explain its priority choice in the issue context.
 - The agent should create issues for: discovered bugs, needed refactors, TODO items found in code, follow-up work from the current task
 - The agent should NOT create issues for: the current task itself, trivial observations
 
@@ -288,7 +315,7 @@ Compacted issues are not archived — `git log .deft/issues.jsonl` preserves the
 | `work.cost_ceiling` | `50.00` | Maximum cumulative spend for `deft work --loop` ($) |
 | `issues.compaction_days` | `90` | Days after close before compacting an issue |
 
-Work mode inherits all `job.*` configuration from the orchestration spec. `deft work --loop` uses single-approval: user approves the first job's plan, subsequent jobs auto-approve.
+Work mode inherits all `job.*` configuration from the orchestration spec. Plan approval is the default for `deft work --loop`; pass `--auto-approve-all` to skip all plan approvals and run fully autonomously.
 
 ## Notes
 
@@ -297,13 +324,13 @@ Work mode inherits all `job.*` configuration from the orchestration spec. `deft 
 - **JSONL over SQLite.** Consistent with Site Log and session storage. The issue list is small (tens to hundreds of issues, not thousands). Full file rewrite on mutation is acceptable at this scale and keeps the implementation trivial.
 - **Interactive creation session, structured JSON output.** Humans are bad at writing structured data. AIs are bad at parsing unstructured data. The creation session lets the human speak naturally while the AI extracts structure. The Foreman reads clean JSON — no markdown conventions or heuristic parsing. The `--quick` flag provides an escape hatch for trivial issues.
 - **Structured fields over freeform description.** `context`, `acceptance_criteria`, and `constraints` give the Foreman specific, actionable input. Acceptance criteria become verification targets. Constraints become Lead steering instructions. This is better than a freeform description the Foreman has to interpret.
-- **Single approval for loop mode.** First job gets user approval — validates that Deft's approach makes sense. Subsequent jobs auto-approve. This balances oversight with autonomy. The user can always Ctrl+C if something goes wrong.
+- **Approve every plan by default.** Each issue in `deft work --loop` gets a plan approval checkpoint, ensuring the user reviews every plan before execution. The `--auto-approve-all` flag opts into fully autonomous mode for users who trust the queue. This favors safety over convenience.
 - **90-day compaction.** Closed issues are removed from the JSONL after 90 days. Git history preserves the full record. This keeps the file small and focused on active work. Configurable via `issues.compaction_days`.
 - **No labels/tags in v0.1.** Priority + dependencies cover the core need (what to work on next). Labels add filtering complexity that isn't justified until the issue count grows. Easy to add later without schema migration (just add a `labels` field).
 - **No assignees.** Deft is single-user. If we add multi-agent assignment later, it maps cleanly to `assignee` on the schema.
 - **`merge=union` over custom merge driver.** Git's built-in line-union strategy handles the common case (different issues modified on different branches). Dedup-on-read handles the rare case (same issue modified on both branches — last line wins). No custom tooling needed.
 - **Inspired by Seeds, not a port.** Seeds validates the JSONL+git approach. We take the concepts (ready queue, hash IDs, merge=union, atomic writes) but implement natively in Elixir/OTP with GenServer instead of file locks for the common case.
-- **Agent-created issues are low priority by default.** The agent shouldn't flood the queue with work the user didn't ask for. Low priority means they're visible but won't be auto-picked by `deft work` before user-created issues.
+- **Agent-created issues are low priority by default.** The agent shouldn't flood the queue with work the user didn't ask for. Low priority means they're visible but won't be auto-picked by `deft work` before user-created issues. However, agents may escalate priority for bugs that affect current functionality.
 
 ## References
 

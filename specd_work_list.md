@@ -93,6 +93,36 @@ Then use Deft to build the rest of Deft. The critical path is:
 - Implement cost ceiling: RateLimiter tracks cumulative cost, emits cost entries to SiteLog every $0.50, Foreman pauses at ceiling - $1 buffer, asks user to approve additional spend (blocked: Implement Deft.Job.RateLimiter...)
 - Implement contract versioning: `contract_revision` SiteLog entry type, Foreman re-steers downstream Leads on revision (blocked: Implement partial dependency unblocking...)
 
+## filesystem v0.1
+
+- Implement `Deft.Store` GenServer: `init/1` opens DETS file + creates ETS table (`:set`, `:public`, `:named_table`), spawns async task to load DETS → ETS; `terminate/2` flushes buffered writes + closes DETS; register via `{:via, Registry, {Deft.Store, name}}` (blocked: Scaffold Elixir Mix project...)
+- Implement `Deft.Store.write/4`: validate caller PID against access control list, insert into ETS immediately, queue entry for DETS flush; return `:ok` or `{:error, :unauthorized}` (blocked: Implement Deft.Store GenServer...)
+- Implement `Deft.Store.read/2`: direct ETS lookup (no GenServer call), return `{:ok, entry}` or `:miss` (blocked: Implement Deft.Store GenServer...)
+- Implement lazy DETS flush for cache instances: hold write buffer in GenServer state, flush to DETS every 5 seconds or when buffer reaches 50 entries (whichever first); use `handle_info` for periodic timer via `Process.send_after` (blocked: Implement Deft.Store.write...)
+- Implement sync DETS write for diary instances: write to DETS immediately on every `write` call (no buffering); diary write volume is low (blocked: Implement Deft.Store.write...)
+- Implement async ETS rebuild on startup: spawn Task in `init` to iterate DETS entries and insert into ETS; GenServer serves reads immediately (`:miss` for not-yet-loaded entries) (blocked: Implement Deft.Store GenServer...)
+- Implement `Deft.Store.cleanup/1`: flush pending writes, delete ETS table, close DETS file, delete DETS file from disk (blocked: Implement Deft.Store GenServer...)
+- Implement `Deft.Store.keys/1` and `Deft.Store.delete/2`: keys via ETS `:ets.select` for key listing; delete removes from ETS + queues DETS delete (blocked: Implement Deft.Store GenServer...)
+- Implement access control: GenServer holds `writers` and `readers` PID/atom lists in state; `write` checks caller against writers; read is open (ETS is public) or restricted per config (blocked: Implement Deft.Store GenServer...)
+- Create `~/.deft/projects/<path-encoded-repo>/` directory layout: implement path encoding (replace `/` with `-`), create `sessions/`, `cache/`, `jobs/` subdirectories on first use (blocked: Scaffold Elixir Mix project...)
+- Implement per-Lead cache isolation: start one `Deft.Store` instance per Lead with DETS at `cache/<session_id>/lead-<lead_id>.dets`; Lead cleanup deletes its own cache instance (blocked: Implement Deft.Store GenServer..., Implement Lead gen_statem...)
+- Implement diary instance lifecycle: start one `Deft.Store` with DETS at `jobs/<job_id>/diary.dets` when orchestrated job begins; Foreman PID is sole writer, all Lead PIDs are readers (blocked: Implement Deft.Store GenServer..., Implement Foreman gen_statem...)
+- Implement programmatic diary promotion in Foreman: pattern match on Lead messages — auto-promote `contract` and `decision` messages, promote `finding` if tagged `shared`, promote user `correction`; never promote `status` or `blocker` (blocked: Implement diary instance lifecycle...)
+- Implement tool result spilling protocol: in `Deft.Agent.ToolRunner`, after tool execution check if result byte_size/4 exceeds `cache.token_threshold` (default 4000); if so, call tool's `summarize/2` callback, write full result to cache, replace context entry with summary + `cache://<key>` reference (blocked: Implement Deft.Store GenServer..., Implement Deft.Agent.ToolRunner...)
+- Add `summarize/2` callback to `Deft.Tool` behaviour: receives full result + cache key, returns summary string with `cache://<key>` reference; implement for grep (match count + top N), read (line count + first N lines), find/ls (file count + top-level structure) (blocked: Implement tool result spilling protocol...)
+- Implement session-end cache cleanup: on session termination, delete all files under `cache/<session_id>/` (blocked: Implement per-Lead cache isolation...)
+
+## skills v0.1
+
+- Implement `Deft.Skills.Registry` as Agent: on init, scan built-in (`priv/skills/*.yaml`, `priv/commands/*.md`), global (`~/.deft/skills/*.yaml`, `~/.deft/commands/*.md`), project (`.deft/skills/*.yaml`, `.deft/commands/*.md`); parse YAML manifests (above `---`); extract command names from filenames; apply cascade (project > global > built-in); hold map of name → Entry struct (blocked: Scaffold Elixir Mix project...)
+- Define `Deft.Skills.Entry` struct: name, type (:skill | :command), level (:builtin | :global | :project), description, path, loaded (boolean) (blocked: Scaffold Elixir Mix project...)
+- Implement `Deft.Skills.Registry.list/0`: return all entries sorted by name; implement `lookup/1`: return entry by name or `:not_found` (blocked: Implement Deft.Skills.Registry...)
+- Implement `Deft.Skills.Registry.load_definition/1`: for skills, read YAML file, parse content after `---` separator, cache in registry (set loaded: true), return definition string; for commands, read markdown file contents (blocked: Implement Deft.Skills.Registry...)
+- Implement slash command dispatch in agent loop: on user message starting with `/`, parse command name + args, look up in Registry, load definition if skill, inject as system instruction (skill) or user message (command); report "Unknown command" if not found (blocked: Implement Deft.Skills.Registry..., Implement Deft.Agent gen_statem...)
+- Add skills/commands listing to system prompt: assemble "Available skills:" and "Available commands:" sections from Registry.list/0 with names + descriptions; include in system prompt build (blocked: Implement Deft.Skills.Registry..., Implement Deft.Agent.SystemPrompt.build...)
+- Implement naming validation: reject files not matching `^[a-z][a-z0-9-]*$`, log warning during discovery (blocked: Implement Deft.Skills.Registry...)
+- Implement skill precedence over commands: when both a skill and command share the same name, dispatch to the skill (blocked: Implement slash command dispatch...)
+
 ## issues v0.1
 
 - Define `Deft.Issue` struct with all schema fields: id, title, context, acceptance_criteria (list of strings), constraints (list of strings), status (:open/:in_progress/:closed), priority (0-4), dependencies (list of IDs), created_at, updated_at, closed_at, source (:user/:agent), job_id; include JSON encode/decode - Implement `Deft.Issue.Id.generate/1`: derive 4-hex-char ID from random UUID with `deft-` prefix, accept existing IDs list, extend to 5+ chars on collision (blocked: Define Deft.Issue struct...)

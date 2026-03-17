@@ -2,11 +2,19 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.1 |
+| Version | 0.2 |
 | Status | Draft |
 | Last Updated | 2026-03-16 |
 
 ## Changelog
+
+### v0.2 (2026-03-16)
+- Auto-selection: the agent can now suggest and auto-invoke skills when contextually appropriate. Removed "explicitly rejected" language.
+- YAML parsing: specified `String.split` strategy on first `\n---\n`; prohibited `YamlElixir.read_all_from_string`; defined behavior for files missing the `---` separator.
+- Error handling: skill YAML parse failures and missing required fields are skipped with a warning; missing directories treated as empty.
+- Registry: `load_definition/1` must use `Agent.get_and_update/2` to avoid read/cache race conditions.
+- Registry scope: clarified application-global registry vs. project-local `.deft/skills/`; project skills re-scanned each session.
+- Namespace: simplified skill/command same-name rules — single namespace, skill wins at same cascade level, normal cascade across levels.
 
 ### v0.1 (2026-03-16)
 - Initial spec — skills (structured, progressively-loaded capabilities) and commands (simple prompt injection), three-level cascade (built-in → global → project), manifest-based registry, slash command invocation.
@@ -21,21 +29,20 @@ Skills and commands are Deft's extensibility system. They let users and the proj
 
 Both exist at three levels with cascade: built-in (bundled with Deft), global (`~/.deft/`), and project (`.deft/`). Project overrides global overrides built-in when names collide.
 
-Skills and commands are invoked explicitly via slash command (`/review`, `/commit`). There is no auto-triggering based on context.
+Skills and commands can be invoked in three ways: the user explicitly types a slash command (`/review`, `/commit`); the agent suggests a skill in prose ("you might want to run /review"); or the agent auto-invokes a skill when clearly appropriate based on context. The agent sees skill manifests (name + description) in its system prompt, which is sufficient for it to decide when to use a skill, just as it decides when to use any tool.
 
 **Scope:**
 - Skill manifest format and full definition format
 - Command format
 - Directory layout and cascade rules
 - Registry: discovery, loading, lookup
-- Invocation: slash command dispatch, context injection
+- Invocation: slash command dispatch, agent suggestion, agent auto-invocation, context injection
 - Progressive loading (manifest at boot, full definition on invoke)
 
 **Out of scope:**
 - Defining specific built-in skills (each skill is its own concern)
 - Tool permissions per skill (future)
 - Skill marketplace / sharing (future)
-- Auto-triggering based on context (explicitly rejected — skills are invoked, not activated)
 
 **Dependencies:**
 - [sessions.md](sessions.md) — CLI interface, system prompt assembly
@@ -118,6 +125,10 @@ You have access to: Read, Grep, Bash
 
 The YAML front matter (above the `---` separator) is the manifest. Everything after the separator is the full definition — treated as a markdown prompt.
 
+**Parsing strategy:** Split the file content on the first occurrence of `\n---\n` using `String.split(content, "\n---\n", parts: 2)`. Parse only the first part with YamlElixir. Treat the remainder as raw text (the full definition). Do NOT use `YamlElixir.read_all_from_string` — it interprets `---` as a YAML document separator.
+
+**Files missing the `---` separator:** Treated as manifest-only (no definition). The skill appears in listings but cannot be invoked.
+
 #### 2.2 Manifest Fields
 
 | Field | Required | Description |
@@ -145,7 +156,13 @@ The YAML front matter (above the `---` separator) is the manifest. Everything af
 
 #### 2.4 Invocation
 
-When the user types `/review`:
+A skill can be invoked in three ways:
+
+1. **Explicit:** The user types `/review` as a slash command.
+2. **Suggested:** The agent suggests a skill in its prose response (e.g., "you might want to run /review"). The user then decides whether to invoke it.
+3. **Auto-invoked:** The agent invokes a skill directly when clearly appropriate based on context. The agent sees skill manifests (name + description) in its system prompt, which is sufficient for it to decide when to use a skill, just as it decides when to use any tool.
+
+When a skill is invoked (by any means):
 1. Look up `review` in the skill registry
 2. Load the full definition (everything after the `---` separator)
 3. Inject the definition into the conversation as a system-level instruction
@@ -161,7 +178,7 @@ Three levels, in order of increasing priority:
 
 When names collide, the higher-priority level wins. A project skill named `review` overrides a global skill named `review`, which overrides a built-in skill named `review`.
 
-A skill and a command may share the same name. Skills and commands occupy separate namespaces — if both `review.yaml` (skill) and `review.md` (command) exist, they are distinct entries. The slash command dispatches to the skill first (skills take precedence over commands with the same name).
+Skills and commands share a single namespace. If both `review.yaml` (skill) and `review.md` (command) exist at the same cascade level, the skill takes precedence and the command is ignored. Across levels, the normal cascade applies (project > global > built-in).
 
 ### 4. Registry
 
@@ -174,6 +191,10 @@ On startup, the registry scans all three levels for skills and commands:
 3. Scan `.deft/skills/*.yaml` — parse manifest, store as project
 4. Repeat for commands: scan `*/commands/*.md` at each level, extract name from filename
 5. Apply cascade: for each name, keep only the highest-priority entry
+
+If a skill YAML file fails to parse, the file is skipped with a warning. Deft continues startup. A skill with a missing required field (`name` or `description`) is also skipped with a warning.
+
+Missing directories are treated as empty (no skills/commands at that level). Not an error.
 
 The registry is a map of name → entry, where each entry contains:
 
@@ -190,7 +211,7 @@ The registry is a map of name → entry, where each entry contains:
 
 #### 4.2 System Prompt Integration
 
-The agent's system prompt includes a listing of available skills and commands so the model knows what's available. Only names and descriptions — not full definitions.
+The agent's system prompt includes a listing of available skills and commands so the model knows what's available. Only names and descriptions — not full definitions. This listing gives the agent enough information to suggest or auto-invoke skills when contextually appropriate.
 
 ```
 Available skills:
@@ -206,7 +227,7 @@ This listing is assembled from the registry at session start.
 
 #### 4.3 Lookup and Loading
 
-When the user invokes a slash command:
+When a skill or command is invoked (whether by user slash command or agent auto-invocation):
 
 1. Look up the name in the registry
 2. If not found, report "Unknown command: /foo"
@@ -219,6 +240,8 @@ When the user invokes a slash command:
    - Inject the definition into the context
    - Mark `loaded: true` in the registry (avoid re-reading the file on repeated invocations within the same session)
 
+The `load_definition/1` operation must use `Agent.get_and_update/2` to atomically read and cache the definition. Using separate `get` + `update` creates a race where concurrent callers could both read the file.
+
 ### 5. Process Architecture
 
 ```
@@ -229,6 +252,8 @@ Deft.Skills.Registry (Agent — holds the skill/command registry map)
 - Runs discovery (section 4.1) during init
 - Provides `list/0`, `lookup/1`, `load_definition/1`
 - Lightweight — an `Agent` is sufficient since reads far outnumber writes and the data is small
+
+The Registry is application-global but `.deft/skills/` is project-local. On session start, the Registry re-runs discovery for the project level. Built-in and global skills persist across sessions; project skills are re-scanned each session.
 
 ### 6. Naming Rules
 
@@ -247,12 +272,12 @@ No configuration in v0.1. Discovery paths are fixed (built-in, `~/.deft/`, `.def
 
 ### Design decisions
 
-- **Skills are not auto-triggered.** Context-based activation adds complexity (when does the agent decide to activate a skill?) and unpredictability (the user doesn't know what the agent will do). Explicit invocation via slash command is simple and predictable. The agent can suggest a skill in its response ("you might want to run /review"), but it cannot invoke one on its own.
+- **Agent can suggest and auto-invoke skills.** The agent sees skill manifests (name + description) in its system prompt, which is sufficient for it to decide when a skill is appropriate — just as it decides when to use any tool. The agent can suggest a skill in prose ("you might want to run /review") or auto-invoke when clearly appropriate based on context. Users can always invoke explicitly via `/name`.
 - **Progressive loading.** Loading every skill's full definition at startup would waste context window space. Manifests are tiny (name + description + version). Full definitions can be substantial (multi-step instructions, tool configurations). Loading on demand means the context only pays for skills the user actually invokes.
 - **Commands are just files.** No YAML, no frontmatter, no parsing. A markdown file is a prompt. This makes commands trivially easy to create — write a markdown file, drop it in the directory, done. The filename is the command name.
-- **YAML with document separator for skills.** The `---` separator is standard YAML. It cleanly divides machine-readable metadata (manifest) from human-readable instructions (definition). No need for a separate file per skill.
-- **Agent over GenServer for the registry.** The registry is a simple key-value store with rare writes (only on startup and when loading definitions). An `Agent` is the right tool — simpler than a GenServer, no need for `handle_call`/`handle_cast`.
-- **Skills take precedence over commands.** If both exist with the same name, the skill wins. Skills are richer and more intentional — if someone created both, the skill is the one they want invoked.
+- **YAML with document separator for skills.** The `---` separator cleanly divides machine-readable metadata (manifest) from human-readable instructions (definition). The file is split on the first `\n---\n` and only the first part is parsed as YAML — the remainder is raw text. No need for a separate file per skill.
+- **Agent over GenServer for the registry.** The registry is a simple key-value store with rare writes (only on startup and when loading definitions). An `Agent` is the right tool — simpler than a GenServer, no need for `handle_call`/`handle_cast`. `load_definition/1` uses `Agent.get_and_update/2` for atomic read-and-cache to avoid race conditions.
+- **Skills take precedence over commands.** Skills and commands share a single namespace. If both exist with the same name at the same cascade level, the skill wins. Skills are richer and more intentional — if someone created both, the skill is the one they want invoked.
 - **Three levels match the configuration cascade.** Built-in → global → project mirrors how most tools handle config (defaults → user → project). Users can override built-in behavior without forking, and projects can specialize without affecting global settings.
 - **No tool permissions in v0.1.** Skills may want to restrict or expand available tools (e.g., a review skill shouldn't need write access). This is a real need but adds complexity. Deferring until the tool system is more mature.
 
