@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **tui v0.1 (2026-03-17):** Implement user input component: Enter submits, Shift+Enter newline (Kitty protocol), \ + Enter fallback, paste detection (chars within 5ms), Up arrow input history
 - **tui v0.1 (2026-03-17):** Implement status bar: tokens (current/context_window), memory (obs_tokens/40k or "--" before first observation), cost, turn count, agent state; OM activity spinner during observation/reflection; "memorizing..." during sync fallback
 - **tui v0.1 (2026-03-17):** Implement tool execution display: tool name + key arg, spinner while running, ✓/✗ + duration on complete
 - **tui v0.1 (2026-03-17):** Implement streaming text display: handle_info for :text_delta events, append to current assistant message in assigns

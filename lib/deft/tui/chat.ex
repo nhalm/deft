@@ -51,6 +51,8 @@ defmodule Deft.TUI.Chat do
         input: "",
         input_history: [],
         input_history_index: nil,
+        # Paste detection for multi-line input
+        last_char_timestamp: nil,
         # Tool execution state
         active_tools: %{},
         # Token/cost tracking
@@ -235,46 +237,67 @@ defmodule Deft.TUI.Chat do
   Handles keyboard input events.
 
   - Enter: submit prompt
+  - Shift+Enter: insert newline (Kitty protocol)
+  - Backslash + Enter: insert newline (fallback)
   - Ctrl+C / Ctrl+D: quit
   - Ctrl+L: clear screen
   - Up/Down: input history navigation
   """
+  # Shift+Enter: insert newline (Kitty protocol support)
+  def handle_event(_event, %{"key" => key}, term)
+      when key in ["shift-enter", "S-enter", "Shift-Enter"] do
+    # Insert newline without submitting
+    new_input = term.assigns.input <> "\n"
+    {:noreply, assign(term, input: new_input, last_char_timestamp: current_timestamp())}
+  end
+
+  # Regular Enter: check for backslash escape or submit
   def handle_event(_event, %{"key" => "enter"}, term) do
-    input = String.trim(term.assigns.input)
-
-    if input != "" do
-      # Handle slash commands or send prompt
-      case handle_user_input(input, term) do
-        {:submit, text} ->
-          # Add to history
-          history = [input | term.assigns.input_history]
-
-          # Send prompt to agent
-          Deft.Agent.prompt(term.assigns.agent_pid, text)
-
-          # Clear input
-          new_term =
-            term
-            |> assign(input: "")
-            |> assign(input_history: history)
-            |> assign(input_history_index: nil)
-
-          {:noreply, new_term}
-
-        {:command_handled, new_term} ->
-          # Command was handled, clear input
-          history = [input | term.assigns.input_history]
-
-          new_term =
-            new_term
-            |> assign(input: "")
-            |> assign(input_history: history)
-            |> assign(input_history_index: nil)
-
-          {:noreply, new_term}
-      end
+    # Check if input ends with backslash (escape for newline)
+    if String.ends_with?(term.assigns.input, "\\") do
+      # Remove the trailing backslash and add newline
+      new_input = String.slice(term.assigns.input, 0..-2//1) <> "\n"
+      {:noreply, assign(term, input: new_input, last_char_timestamp: current_timestamp())}
     else
-      {:noreply, term}
+      # Submit the input
+      input = String.trim(term.assigns.input)
+
+      if input != "" do
+        # Handle slash commands or send prompt
+        case handle_user_input(input, term) do
+          {:submit, text} ->
+            # Add to history
+            history = [input | term.assigns.input_history]
+
+            # Send prompt to agent
+            Deft.Agent.prompt(term.assigns.agent_pid, text)
+
+            # Clear input
+            new_term =
+              term
+              |> assign(input: "")
+              |> assign(input_history: history)
+              |> assign(input_history_index: nil)
+              |> assign(last_char_timestamp: nil)
+
+            {:noreply, new_term}
+
+          {:command_handled, new_term} ->
+            # Command was handled, clear input
+            history = [input | term.assigns.input_history]
+
+            new_term =
+              new_term
+              |> assign(input: "")
+              |> assign(input_history: history)
+              |> assign(input_history_index: nil)
+              |> assign(last_char_timestamp: nil)
+
+            {:noreply, new_term}
+        end
+      else
+        {:noreply, term}
+      end
     end
   end
 
@@ -311,14 +334,8 @@ defmodule Deft.TUI.Chat do
   end
 
   def handle_event(_event, %{"key" => key}, term) do
-    # Regular character input - append to input buffer
-    # Filter out control characters
-    if String.printable?(key) and String.length(key) == 1 do
-      new_input = term.assigns.input <> key
-      {:noreply, assign(term, input: new_input)}
-    else
-      {:noreply, term}
-    end
+    # Regular character input - append to input buffer with paste detection
+    handle_character_input(key, term)
   end
 
   def handle_event(_event, _params, term) do
@@ -326,6 +343,28 @@ defmodule Deft.TUI.Chat do
   end
 
   # Private functions
+
+  defp handle_character_input(key, term) do
+    # Paste detection: if characters arrive within 5ms, preserve newlines
+    current_ts = current_timestamp()
+    is_paste = is_paste_event?(term.assigns.last_char_timestamp, current_ts)
+
+    # Accept printable characters, and preserve newlines if part of a paste
+    if should_append_character?(key, is_paste) do
+      new_input = term.assigns.input <> key
+      {:noreply, assign(term, input: new_input, last_char_timestamp: current_ts)}
+    else
+      {:noreply, term}
+    end
+  end
+
+  defp is_paste_event?(nil, _current_ts), do: false
+  defp is_paste_event?(last_ts, current_ts), do: current_ts - last_ts < 5
+
+  defp should_append_character?(key, is_paste) do
+    # Accept if printable, or if it's a paste with newlines
+    String.printable?(key) or (is_paste and String.contains?(key, "\n"))
+  end
 
   defp handle_text_delta(delta, term) do
     new_text = term.assigns.current_text <> delta
@@ -785,9 +824,15 @@ defmodule Deft.TUI.Chat do
 
     Keyboard Shortcuts:
     Enter         - Submit prompt
+    Shift+Enter   - Insert newline (multi-line input)
+    \\ + Enter     - Insert newline (fallback)
     Ctrl+C/Ctrl+D - Exit
     Ctrl+L        - Clear screen
     Up/Down       - Navigate input history
     """
+  end
+
+  defp current_timestamp do
+    System.monotonic_time(:millisecond)
   end
 end
