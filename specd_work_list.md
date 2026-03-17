@@ -24,7 +24,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ## harness v0.1
 
-- Fix abort handler crash in `:executing_tools` state: `task_info` stored at agent.ex:930 only has `ref` key (`%{ref: task.ref}`), but abort handler at agent.ex:246-248 accesses `task_info.pid` which raises `KeyError`. Store `%{ref: task.ref, pid: task.pid}` in `start_tool_execution/2`, or use `Task.Supervisor.terminate_child/2` with the ref instead
 - Fix compaction blocking gen_statem: `collect_stream_text_loop/4` (agent.ex:1266) does a synchronous `receive` loop inside the gen_statem process for up to 30 seconds. During this time no messages are processed — abort, prompts, and DOWN signals are all delayed. Run compaction summarization in a spawned Task and handle the result asynchronously via `handle_info`
 
 ## sessions v0.2

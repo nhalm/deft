@@ -243,9 +243,13 @@ defmodule Deft.Agent do
 
       :executing_tools ->
         # Terminate all in-flight tool execution tasks
-        Enum.each(data.tool_tasks, fn task_info ->
-          Process.exit(task_info.pid, :kill)
-        end)
+        tool_runner = get_tool_runner_supervisor(data)
+
+        if tool_runner do
+          Enum.each(data.tool_tasks, fn task_info ->
+            Task.Supervisor.terminate_child(tool_runner, task_info.ref)
+          end)
+        end
 
       _ ->
         # No active operations to cancel in other states
