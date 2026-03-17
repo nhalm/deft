@@ -2,11 +2,14 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.1 |
+| Version | 0.2 |
 | Status | Ready |
 | Last Updated | 2026-03-16 |
 
 ## Changelog
+
+### v0.2 (2026-03-16)
+- Updated section 3: removed "Project instructions" from system prompt list. Project files are included in context assembly (section 4.1, item 4) as a separate message for better context management.
 
 ### v0.1 (2026-03-16)
 - Initial spec — extracted from harness spec. Session persistence, resume, configuration, CLI interface, distribution.
@@ -99,10 +102,9 @@ The system prompt is assembled dynamically and includes:
 2. **Tool descriptions** — generated from registered tools' `name/0`, `description/0`, and `parameters/0` callbacks
 3. **Working directory context** — current path, git branch if applicable
 4. **Date and environment** — current date, OS, shell
-5. **Project instructions** — contents of `DEFT.md` / `CLAUDE.md` / `AGENTS.md` if present in the working directory
-6. **Conflict resolution** — "If observations conflict with current messages, messages take precedence. If observations conflict with project instructions, project instructions take precedence."
+5. **Conflict resolution** — "If observations conflict with current messages, messages take precedence. If observations conflict with project instructions, project instructions take precedence."
 
-The system prompt does NOT include observation text — that is injected separately by the OM system.
+The system prompt does NOT include observation text — that is injected separately by the OM system. Project instructions are included in the context assembly as a separate message (see section 4.1, item 4).
 
 ### 4. Context Management
 

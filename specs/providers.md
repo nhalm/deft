@@ -2,11 +2,14 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.1 |
+| Version | 0.2 |
 | Status | Ready |
 | Last Updated | 2026-03-16 |
 
 ## Changelog
+
+### v0.2 (2026-03-16)
+- Updated SSE event mapping table: clarify that `content_block_start` events don't carry text content. First meaningful text arrives in `content_block_delta`, not from `content_block_start`.
 
 ### v0.1 (2026-03-16)
 - Initial spec — extracted from harness spec. Provider behaviour, event types, SSE streaming, Anthropic implementation.
@@ -86,12 +89,12 @@ The first provider targets the Anthropic Messages API (`https://api.anthropic.co
 **SSE event mapping:**
 | Anthropic event | Deft event |
 |----------------|------------|
-| `content_block_start` (type: text) | `:text_delta` (first chunk) |
+| `content_block_start` (type: text) | (no event) — empty, first content arrives in `content_block_delta` |
 | `content_block_delta` (type: text_delta) | `:text_delta` |
 | `content_block_start` (type: tool_use) | `:tool_call_start` |
 | `content_block_delta` (type: input_json_delta) | `:tool_call_delta` |
 | `content_block_stop` (for tool_use) | `:tool_call_done` |
-| `content_block_start` (type: thinking) | `:thinking_delta` (first chunk) |
+| `content_block_start` (type: thinking) | (no event) — empty, first content arrives in `content_block_delta` |
 | `content_block_delta` (type: thinking_delta) | `:thinking_delta` |
 | `message_delta` | `:usage` (from `usage` field) |
 | `message_stop` | `:done` |
