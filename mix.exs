@@ -41,6 +41,8 @@ defmodule Deft.MixProject do
       {:server_sent_events, "~> 0.2"},
       # TUI framework (pulls in back_breeze, termite)
       {:breeze, "~> 0.2"},
+      # Markdown parser for TUI rendering
+      {:earmark_parser, "~> 1.4"},
       # Single-binary distribution
       {:burrito, "~> 1.0"},
 

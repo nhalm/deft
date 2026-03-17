@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **tui v0.1 (2026-03-17):** Implement markdown-to-ANSI renderer: parse with Earmark, walk AST to emit ANSI codes for bold/italic/code/lists/fenced code blocks; streaming partial markdown: buffer last incomplete line
 - **evals v0.2 (2026-03-17):** Implement Actor continuation evals: continues naturally after trimming, no greeting; 20 iterations, 90% pass rate
 - **evals v0.2 (2026-03-17):** Implement Actor observation usage evals: references observation content correctly; 20 iterations, 85% pass rate
 - **evals v0.2 (2026-03-17):** Implement Reflector CORRECTION survival evals: all markers survive; hard assertion (not statistical), 100% pass rate
