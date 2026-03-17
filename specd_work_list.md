@@ -24,10 +24,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ---
 
-## harness v0.1
-
-- Add `%Done{}` handler in `:calling` state that transitions to `:idle` cleanly (no error broadcast) for the edge case where LLM stream completes without content
-
 ## === BOOTSTRAP CHECKPOINT ===
 <!-- After the above specs are implemented, `deft -p "prompt"` works as a CLI agent. -->
 <!-- Use Deft (or Claude Code) to implement the remaining specs below. -->

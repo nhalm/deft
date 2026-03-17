@@ -348,6 +348,24 @@ defmodule Deft.Agent do
       %Usage{} = usage_event ->
         handle_usage(usage_event, data)
 
+      # Done event - stream completed without content (edge case)
+      %Done{} ->
+        # Demonitor the stream process
+        if data.stream_monitor_ref do
+          Process.demonitor(data.stream_monitor_ref, [:flush])
+        end
+
+        # Clean up stream references and transition to idle
+        new_data = %{
+          data
+          | stream_ref: nil,
+            stream_monitor_ref: nil,
+            retry_count: 0,
+            retry_delay: 1000
+        }
+
+        handle_idle_transition(new_data)
+
       # Other events - keep waiting for first content
       _ ->
         :keep_state_and_data
