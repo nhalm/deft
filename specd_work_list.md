@@ -49,7 +49,7 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement spilling summary quality evals: tool-specific summaries (grep match count + top N, read line count + first N lines, ls/find file count + top-level structure) preserve key information; 20 iterations, 85% pass rate (blocked: Implement tool result spilling protocol...)
 - Implement spilling cache retrieval evals: agent correctly uses cache_read tool when details not in summary; filter and lines parameters work; 20 iterations, 85% pass rate (blocked: Implement cache_read tool...)
 - Implement spilling threshold calibration grid search: test each tool's threshold across a range of values, measure summary quality vs context savings tradeoff; use to validate per-tool threshold defaults (blocked: Implement spilling summary quality evals...)
-- Implement skill suggestion evals: agent suggests appropriate skill when context matches skill description; 20 iterations, 80% pass rate (blocked: Implement system prompt listing..., Implement use_skill tool...)
+- Implement skill suggestion evals: agent suggests appropriate skill when context matches skill description; 20 iterations, 80% pass rate
 - Implement skill invocation fidelity evals: agent auto-invokes via use_skill tool correctly; skill definition is loaded and followed; 20 iterations, 80% pass rate (blocked: Implement skill suggestion evals...)
 - Implement issue elicitation quality evals: interactive session produces structured issue with meaningful context, concrete acceptance_criteria, and actionable constraints; issue_draft tool call produces valid JSON; 20 iterations, 80% pass rate (blocked: Implement interactive issue creation session...)
 - Implement issue→plan diagnostic eval: verify that structured issue fields (context, acceptance_criteria, constraints) flow correctly into Foreman research/planning/verification phases; 20 iterations, 75% pass rate (blocked: Implement Foreman gen_statem..., Implement interactive issue creation session...)
@@ -103,7 +103,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## skills v0.2
 
-- Add skills/commands listing to system prompt: assemble "Available skills:" and "Available commands:" sections from Registry.list/0 with names + descriptions; include in system prompt build
 - Implement slash command dispatch clarification: TUI intercepts leading / in user input, parses command name + args, looks up in Registry, loads definition if skill, injects as system instruction (skill) or user message (command); report "Unknown command" if not found
 
 ## issues v0.2

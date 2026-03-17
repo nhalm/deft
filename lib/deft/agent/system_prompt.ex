@@ -32,6 +32,7 @@ defmodule Deft.Agent.SystemPrompt do
     [
       build_role_definition(),
       build_tool_descriptions(tools),
+      build_skills_commands_listing(),
       build_environment_info(working_dir),
       build_conflict_resolution_rules()
     ]
@@ -117,6 +118,52 @@ defmodule Deft.Agent.SystemPrompt do
   end
 
   defp format_parameters(_), do: "No parameters"
+
+  # Skills and commands listing section
+  defp build_skills_commands_listing do
+    entries = Deft.Skills.Registry.list()
+
+    skills =
+      entries
+      |> Enum.filter(&(&1.type == :skill))
+      |> Enum.map(fn entry -> "- /#{entry.name} — #{entry.description}" end)
+
+    commands =
+      entries
+      |> Enum.filter(&(&1.type == :command))
+      |> Enum.map(fn entry -> "- /#{entry.name}" end)
+
+    skills_section =
+      if Enum.empty?(skills) do
+        nil
+      else
+        """
+        Available skills:
+        #{Enum.join(skills, "\n")}
+        """
+      end
+
+    commands_section =
+      if Enum.empty?(commands) do
+        nil
+      else
+        """
+        Available commands:
+        #{Enum.join(commands, "\n")}
+        """
+      end
+
+    [skills_section, commands_section]
+    |> Enum.reject(&is_nil/1)
+    |> case do
+      [] -> nil
+      sections -> Enum.join(sections, "\n")
+    end
+  rescue
+    _exception ->
+      # If Skills Registry isn't available yet, skip this section
+      nil
+  end
 
   # Environment information section
   defp build_environment_info(working_dir) do
