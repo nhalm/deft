@@ -1,0 +1,9 @@
+## User Preferences
+
+- (10:05) User prefers argon2 for password hashing
+- (10:10) User likes comprehensive error messages in API responses
+
+## Decisions
+
+- (10:02) Decided to use PostgreSQL as the database
+- (10:08) Using Phoenix framework for the web application

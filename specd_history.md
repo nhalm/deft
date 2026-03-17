@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **evals v0.2 (2026-03-17):** Implement Actor observation usage evals: references observation content correctly; 20 iterations, 85% pass rate
 - **evals v0.2 (2026-03-17):** Implement Reflector CORRECTION survival evals: all markers survive; hard assertion (not statistical), 100% pass rate
 - **evals v0.2 (2026-03-17):** Implement Reflector section structure evals: 5 sections in canonical order; hard assertion (not statistical), 100% pass rate
 - **evals v0.2 (2026-03-17):** Implement Reflector preservation evals: all 🔴 items survive; 20 iterations, 95% pass rate
