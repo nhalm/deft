@@ -26,7 +26,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ## harness v0.1
 
-- Fix turn counter off-by-one: increment `turn_count` on the initial `call_provider_stream` (not just in `continue_after_tools`), or change the check from `> max_turns` to `>= max_turns`, so the limit triggers at exactly 25 calls
 - Track `current_context_tokens` and `context_window` in agent state; update `current_context_tokens` from provider `:usage` events; implement compaction fallback when `current_context_tokens > 0.7 * context_window` and OM is disabled
 
 ## tools v0.1
