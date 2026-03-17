@@ -191,6 +191,10 @@ defmodule Deft.OM.State do
         state
       end
 
+    # After Observer completes, check if reflection should be triggered
+    # (now that is_observing is false)
+    state = check_and_spawn_reflector(state)
+
     {:noreply, state}
   end
 
@@ -241,6 +245,16 @@ defmodule Deft.OM.State do
         snapshot_dirty: true
     }
 
+    # After Reflector completes, check if there are buffered chunks to activate
+    # (now that is_reflecting is false)
+    state =
+      if not Enum.empty?(state.buffered_chunks) and
+           state.pending_message_tokens >= @default_message_threshold do
+        activate_buffered_chunks(state)
+      else
+        state
+      end
+
     {:noreply, state}
   end
 
@@ -283,15 +297,24 @@ defmodule Deft.OM.State do
     current_threshold = div(state.pending_message_tokens, buffer_size) * buffer_size
 
     # First, check if we should activate buffered chunks
-    state =
-      if state.pending_message_tokens >= @default_message_threshold and
-           not Enum.empty?(state.buffered_chunks) do
-        activate_buffered_chunks(state)
-      else
-        state
-      end
+    # Serialization: do not activate if is_reflecting is true
+    state = maybe_activate_buffered_chunks(state)
 
     # Then check if we should spawn observer for buffering
+    maybe_spawn_observer_for_buffering(state, buffer_size, current_threshold)
+  end
+
+  defp maybe_activate_buffered_chunks(state) do
+    if state.pending_message_tokens >= @default_message_threshold and
+         not Enum.empty?(state.buffered_chunks) and
+         not state.is_reflecting do
+      activate_buffered_chunks(state)
+    else
+      state
+    end
+  end
+
+  defp maybe_spawn_observer_for_buffering(state, buffer_size, current_threshold) do
     cond do
       # Already observing - set rebuffer flag if we crossed another threshold
       state.is_observing and current_threshold > state.last_buffer_threshold ->

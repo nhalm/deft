@@ -2,6 +2,7 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **observational-memory v0.1 (2026-03-17):** Implement Observer/Reflector serialization: if is_reflecting, defer Observer activation until reflection completes; if is_observing, defer reflection until Observer completes; activation_epoch incremented on both
 - **issues v0.2 (2026-03-17):** Implement `Deft.Issue.Id.generate/1`: derive 4-hex-char ID from random UUID with `deft-` prefix, accept existing IDs list, extend to 5+ chars on collision
 - **issues v0.2 (2026-03-17):** Define `Deft.Issue` struct with all schema fields: id, title, context, acceptance_criteria (list of strings), constraints (list of strings), status (:open/:in_progress/:closed), priority (0-4), dependencies (list of IDs), created_at, updated_at, closed_at, source (:user/:agent), job_id; include JSON encode/decode; all timestamps use DateTime.utc_now() |> DateTime.to_iso8601()
 - **observational-memory v0.1 (2026-03-17):** Implement Reflector Task execution: State spawns Task with full active_observations + target size; result replaces active_observations, increments generation_count + activation_epoch; max 2 LLM calls; CORRECTION post-check (append missing markers); if level 3 still exceeds target, accept and move on
