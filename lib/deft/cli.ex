@@ -97,7 +97,9 @@ defmodule Deft.CLI do
           help: :boolean,
           version: :boolean,
           status: :string,
-          priority: :integer
+          priority: :integer,
+          title: :string,
+          blocked_by: :string
         ],
         aliases: [
           h: :help,
@@ -151,6 +153,10 @@ defmodule Deft.CLI do
       match?(["issue", "show", _], positional) ->
         [_cmd, _subcmd, issue_id] = positional
         {:issue_show, issue_id}
+
+      match?(["issue", "update", _], positional) ->
+        [_cmd, _subcmd, issue_id] = positional
+        {:issue_update, issue_id}
 
       positional == ["issue", "list"] ->
         :issue_list
@@ -238,6 +244,45 @@ defmodule Deft.CLI do
     # Display in tabular format
     display_issue_list(issues)
     :ok
+  end
+
+  defp execute_command({:issue_update, issue_id}, flags) do
+    # Ensure Issues GenServer is started
+    ensure_issues_started()
+
+    # Build attrs map from flags
+    attrs = build_issue_update_attrs(flags)
+
+    # Validate that at least one update flag was provided
+    if map_size(attrs) == 0 do
+      IO.puts(
+        :stderr,
+        "Error: No update flags provided. Use --title, --priority, --status, or --blocked-by"
+      )
+
+      exit({:shutdown, 1})
+    end
+
+    # Update the issue
+    case Issues.update(issue_id, attrs) do
+      {:ok, issue} ->
+        IO.puts("Issue #{issue_id} updated successfully.")
+        IO.puts("")
+        display_issue(issue)
+        :ok
+
+      {:error, :not_found} ->
+        IO.puts(:stderr, "Error: Issue not found: #{issue_id}")
+        exit({:shutdown, 1})
+
+      {:error, :cycle_detected} ->
+        IO.puts(:stderr, "Error: Adding these dependencies would create a cycle")
+        exit({:shutdown, 1})
+
+      {:error, reason} ->
+        IO.puts(:stderr, "Error: Failed to update issue: #{inspect(reason)}")
+        exit({:shutdown, 1})
+    end
   end
 
   defp execute_command(:resume_list, flags) do
@@ -775,6 +820,74 @@ defmodule Deft.CLI do
     ArgumentError ->
       IO.puts(:stderr, "Error: Invalid status value. Must be one of: open, in_progress, closed")
       exit({:shutdown, 1})
+  end
+
+  # Build attrs map for Issues.update/2 from CLI flags
+  defp build_issue_update_attrs(flags) do
+    %{}
+    |> maybe_add_title(flags[:title])
+    |> maybe_add_priority(flags[:priority])
+    |> maybe_add_status(flags[:status])
+    |> maybe_add_dependencies(flags[:blocked_by])
+  end
+
+  # Add title to attrs if provided
+  defp maybe_add_title(attrs, nil), do: attrs
+  defp maybe_add_title(attrs, title), do: Map.put(attrs, :title, title)
+
+  # Add priority to attrs if provided
+  defp maybe_add_priority(attrs, nil), do: attrs
+
+  defp maybe_add_priority(attrs, priority) when priority in 0..4 do
+    Map.put(attrs, :priority, priority)
+  end
+
+  defp maybe_add_priority(_attrs, priority) do
+    IO.puts(:stderr, "Error: Priority must be 0-4, got: #{priority}")
+    exit({:shutdown, 1})
+  end
+
+  # Add status to attrs if provided
+  defp maybe_add_status(attrs, nil), do: attrs
+
+  defp maybe_add_status(attrs, status_str) do
+    case parse_status(status_str) do
+      {:ok, status_atom} -> Map.put(attrs, :status, status_atom)
+      {:error, msg} -> exit_with_error(msg)
+    end
+  end
+
+  # Parse status string to atom
+  defp parse_status(status_str) do
+    status_atom = String.to_existing_atom(status_str)
+
+    if status_atom in [:open, :in_progress, :closed] do
+      {:ok, status_atom}
+    else
+      {:error, "Error: Invalid status value. Must be one of: open, in_progress, closed"}
+    end
+  rescue
+    ArgumentError ->
+      {:error, "Error: Invalid status value. Must be one of: open, in_progress, closed"}
+  end
+
+  # Add dependencies to attrs if provided
+  defp maybe_add_dependencies(attrs, nil), do: attrs
+
+  defp maybe_add_dependencies(attrs, blocked_by_str) do
+    deps =
+      blocked_by_str
+      |> String.split(",")
+      |> Enum.map(&String.trim/1)
+      |> Enum.reject(&(&1 == ""))
+
+    Map.put(attrs, :dependencies, deps)
+  end
+
+  # Helper to exit with an error message
+  defp exit_with_error(message) do
+    IO.puts(:stderr, message)
+    exit({:shutdown, 1})
   end
 
   # Display a list of issues in tabular format
