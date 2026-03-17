@@ -173,6 +173,7 @@ The Lead sends messages to the Foreman via `send(foreman_pid, {:lead_message, ty
 - `:blocker` — stuck, needs Foreman help
 - `:error` — something went wrong
 - `:critical_finding` — auto-promoted to site log by Foreman
+- `:finding` — forwarded Runner findings (Lead may tag as `shared` for site log promotion)
 
 ### 5. Runner
 
@@ -239,11 +240,11 @@ The Foreman maintains a `Deft.Store` instance (ETS+DETS) for curated job knowled
 
 The user interacts with the Foreman through the normal TUI chat interface.
 
-#### 9.1 Status Display
+#### 7.1 Status Display
 
 The TUI shows Lead status (running/waiting/complete), current Runner activity, cost, elapsed time, and job phase.
 
-#### 9.2 User Commands During Execution
+#### 7.2 User Commands During Execution
 
 | Action | How |
 |--------|-----|
@@ -303,7 +304,7 @@ On job completion, failure, or abort:
 - **Research on Sonnet, not Haiku.** Research quality determines plan quality. Marginal cost is negligible.
 - **OTP messages over shared files for coordination.** BEAM mailbox semantics provide FIFO ordering and no race conditions.
 
-### Open questions (resolve before Ready)
+### Open questions
 
 - **Merge conflict resolution quality.** Can an LLM reliably resolve git merge conflicts? Fallback: flag for user.
 - **Lead-to-Lead communication.** Is there a need for direct messaging, or is the Foreman always the right intermediary?
