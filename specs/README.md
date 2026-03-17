@@ -64,7 +64,7 @@ Decision reasoning is logged in [specd_decisions.jsonl](../specd_decisions.jsonl
 | [harness](harness.md) | v0.1 | Ready | Agent loop (gen_statem), message format, process architecture, context assembly |
 | [tools](tools.md) | v0.1 | Implemented | Tool behaviour, 7 built-in tools, tool execution model |
 | [providers](providers.md) | v0.2 | Implemented | LLM provider behaviour, SSE streaming, Anthropic implementation |
-| [sessions](sessions.md) | v0.1 | Ready | Session persistence (JSONL), resume, configuration, CLI, distribution |
+| [sessions](sessions.md) | v0.2 | Ready | Session persistence (JSONL), resume, configuration, CLI, distribution |
 | [tui](tui.md) | v0.1 | Draft | Breeze TUI, chat view, markdown rendering, input handling, slash commands |
 
 ## Core
