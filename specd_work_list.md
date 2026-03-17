@@ -22,12 +22,6 @@ Then use Deft to build the rest of Deft. The critical path is:
   Then: OM → TUI → evals → orchestration
 -->
 
-## sessions v0.2
-
-- Implement interactive session mode (`deft` with no args): replace "Interactive mode not yet implemented" stub with minimal REPL-style session using IO.gets loop, independent of TUI
-
----
-
 ## === BOOTSTRAP CHECKPOINT ===
 <!-- After the above specs are implemented, `deft -p "prompt"` works as a CLI agent. -->
 <!-- Use Deft (or Claude Code) to implement the remaining specs below. -->

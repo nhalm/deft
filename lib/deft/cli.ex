@@ -245,11 +245,24 @@ defmodule Deft.CLI do
     end
   end
 
-  defp execute_command(:new_session, _flags) do
-    # TODO: Implement interactive mode
-    IO.puts("Starting new session...")
-    IO.puts("(Interactive mode not yet implemented)")
-    :ok
+  defp execute_command(:new_session, flags) do
+    working_dir = flags[:working_dir] || File.cwd!()
+    cli_flags = build_cli_flags(flags)
+    config = Config.load(cli_flags, working_dir)
+
+    verify_api_key()
+    :ok = Deft.Provider.Registry.register("anthropic", Deft.Provider.Anthropic)
+
+    session_id = generate_session_id()
+    create_session(session_id, working_dir, config)
+    agent_pid = start_agent(session_id, working_dir, config)
+
+    Registry.register(Deft.Registry, {:session, session_id}, [])
+
+    IO.puts("Deft session #{session_id} started.")
+    IO.puts("Type /quit to exit.\n")
+
+    interactive_loop(agent_pid)
   end
 
   defp execute_command({:non_interactive, prompt}, flags) do
@@ -510,6 +523,55 @@ defmodule Deft.CLI do
       300_000 ->
         IO.puts(:stderr, "Error: Timeout waiting for response")
         exit({:shutdown, 1})
+    end
+  end
+
+  # REPL loop for interactive mode
+  defp interactive_loop(agent_pid) do
+    case IO.gets("deft> ") do
+      :eof ->
+        :ok
+
+      {:error, _reason} ->
+        :ok
+
+      input ->
+        prompt = String.trim(input)
+
+        cond do
+          prompt == "/quit" ->
+            :ok
+
+          prompt == "" ->
+            interactive_loop(agent_pid)
+
+          true ->
+            Deft.Agent.prompt(agent_pid, prompt)
+            interactive_response_loop()
+            IO.puts("")
+            interactive_loop(agent_pid)
+        end
+    end
+  end
+
+  # Wait for agent response in interactive mode
+  defp interactive_response_loop do
+    receive do
+      {:agent_event, {:text_delta, delta}} ->
+        IO.write(delta)
+        interactive_response_loop()
+
+      {:agent_event, {:state_change, :idle}} ->
+        IO.puts("")
+
+      {:agent_event, {:error, message}} ->
+        IO.puts(:stderr, "\nError: #{message}")
+
+      {:agent_event, _other_event} ->
+        interactive_response_loop()
+    after
+      300_000 ->
+        IO.puts(:stderr, "\nError: Timeout waiting for response")
     end
   end
 
