@@ -39,10 +39,11 @@ defmodule Deft.Tools.BashTest do
 
   describe "behaviour implementation" do
     test "implements Deft.Tool behaviour" do
-      assert function_exported?(Bash, :name, 0)
-      assert function_exported?(Bash, :description, 0)
-      assert function_exported?(Bash, :parameters, 0)
-      assert function_exported?(Bash, :execute, 2)
+      Code.ensure_loaded!(Deft.Tools.Bash)
+      assert function_exported?(Deft.Tools.Bash, :name, 0)
+      assert function_exported?(Deft.Tools.Bash, :description, 0)
+      assert function_exported?(Deft.Tools.Bash, :parameters, 0)
+      assert function_exported?(Deft.Tools.Bash, :execute, 2)
     end
 
     test "name/0 returns 'bash'" do
