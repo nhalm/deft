@@ -522,18 +522,29 @@ defmodule Deft.IssuesTest do
       # Configure git adapter to use mock BEFORE starting GenServer
       Application.put_env(:deft, :git_adapter, Deft.GitMock)
 
-      # When git fails, Issues will use File.cwd!() which is the project root
-      # So we pass an explicit file_path in the tmp_dir instead
-      file_path = Path.join([tmp_dir, ".deft", "issues.jsonl"])
+      # Change to tmp_dir so File.cwd!() returns it
+      # Note: File.cd affects the entire VM, so this test cannot run async
+      original_cwd = File.cwd!()
 
-      # Start Issues with explicit file_path
-      {:ok, _pid} = Issues.start_link(file_path: file_path)
+      try do
+        File.cd!(tmp_dir)
 
-      # Create an issue to trigger file creation
-      {:ok, _issue} = Issues.create(%{title: "Test issue", source: :user})
+        # Start Issues without explicit file_path to trigger automatic resolution
+        {:ok, _pid} = Issues.start_link()
 
-      # Verify the file was created
-      assert File.exists?(file_path)
+        # Create an issue to trigger file creation
+        {:ok, _issue} = Issues.create(%{title: "Test issue", source: :user})
+
+        # Verify the file was created in tmp_dir/.deft/
+        expected_file = Path.join([tmp_dir, ".deft", "issues.jsonl"])
+        assert File.exists?(expected_file)
+
+        # Verify .deft directory was created
+        assert File.dir?(Path.join(tmp_dir, ".deft"))
+      after
+        # Restore original working directory
+        File.cd!(original_cwd)
+      end
     end
 
     test "resolves correctly when .git is a regular directory (not worktree)", %{tmp_dir: tmp_dir} do

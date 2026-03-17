@@ -102,7 +102,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## issues v0.2
 
-- Implement git behavior outside repos: when not inside a git repository, create .deft/ in cwd; skip worktree detection
 - Implement dependency tracking: add_dependency/2 and remove_dependency/2 on Issues GenServer; circular dependency detection — walk graph on add, reject with error if cycle found
 - Implement ready/blocked queries: ready/0 returns open issues where all dependencies are closed, sorted by priority (0 first) then created_at (oldest first); blocked/0 returns open issues with at least one non-closed dependency (blocked: Implement dependency tracking...)
 - Add .deft/issues.jsonl merge=union to .gitattributes on first `deft issue create` if not already present
