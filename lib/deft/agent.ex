@@ -856,8 +856,6 @@ defmodule Deft.Agent do
   defp start_tool_execution(tool_calls, data) do
     # Execute tools concurrently via ToolRunner
     # Get the ToolRunner supervisor from the session worker
-    # For now, we'll execute inline since ToolRunner setup is not complete
-    # This will be updated when the session worker is implemented
     tool_timeout = Map.get(data.config, :tool_timeout, 120_000)
 
     # Record start times for each tool call
@@ -868,18 +866,36 @@ defmodule Deft.Agent do
         Map.put(acc, tool_use.id, start_time)
       end)
 
-    # Start execution asynchronously with spawn_monitor so we can abort if needed
-    # This prevents blocking the gen_statem and allows abort to work
-    # spawn_monitor provides isolation - a crash in execute_tools_in_task won't propagate to the agent
-    {pid, ref} =
-      spawn_monitor(fn ->
-        execute_tools_in_task(tool_calls, data, tool_timeout)
-      end)
+    # Get the ToolRunner Task.Supervisor
+    tool_runner = get_tool_runner_supervisor(data)
 
-    # Store the task info (pid and ref) and execution times so we can abort it later
-    task_info = %{pid: pid, ref: ref}
-    new_data = %{data | tool_tasks: [task_info], tool_execution_times: execution_times}
-    {:keep_state, new_data}
+    if tool_runner do
+      # Start execution asynchronously with Task.Supervisor.async_nolink
+      # This prevents blocking the gen_statem and allows abort to work
+      # async_nolink provides isolation - a crash in execute_tools_in_task won't propagate to the agent
+      task =
+        Task.Supervisor.async_nolink(tool_runner, fn ->
+          execute_tools_in_task(tool_calls, data, tool_timeout)
+        end)
+
+      # Store the task info (ref only, Task struct has its own pid) and execution times
+      task_info = %{ref: task.ref}
+      new_data = %{data | tool_tasks: [task_info], tool_execution_times: execution_times}
+      {:keep_state, new_data}
+    else
+      # No ToolRunner supervisor available - execute inline and return error results
+      results =
+        Enum.map(tool_calls, fn tool_use ->
+          {tool_use.id,
+           {:error, "Tool execution not available (ToolRunner supervisor not started)"}}
+        end)
+
+      # Process the error results immediately
+      handle_tool_execution_complete(nil, results, %{
+        data
+        | tool_execution_times: execution_times
+      })
+    end
   end
 
   defp execute_tools_in_task(tool_calls, data, tool_timeout) do
@@ -899,8 +915,8 @@ defmodule Deft.Agent do
   end
 
   defp handle_tool_execution_complete(ref, results, data) do
-    # Clean up the task process
-    Process.demonitor(ref, [:flush])
+    # Clean up the task process (only if ref is present, not needed for Task.Supervisor.async_nolink)
+    if ref, do: Process.demonitor(ref, [:flush])
 
     # Calculate durations and prepare tool results for persistence
     end_time = System.monotonic_time(:millisecond)

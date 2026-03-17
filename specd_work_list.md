@@ -26,7 +26,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ## harness v0.1
 
-- Fix `start_tool_execution/2`: `spawn_monitor` computes tool results but never sends them back to the agent — the spawned process exits normally, the agent receives `{:DOWN, ref, :process, pid, :normal}` instead of `{ref, results}`, broadcasts "Tool execution was interrupted", and transitions to `:idle`. Replace `spawn_monitor` with `Task.Supervisor.async_nolink` under `Deft.Agent.ToolRunner`, or have the spawned process explicitly `send(caller, {ref, results})` (agent.ex:874-877)
 - Fix Usage events dropped in `:calling` state: `message_start` SSE event emits `%Usage{input: N, output: 0}` which arrives before first content (while agent is in `:calling`). The catch-all at agent.ex:347-349 discards it with `:keep_state_and_data`. Input tokens are never counted, `total_input_tokens` stays 0, and session cost is underreported. Add a `%Usage{}` handler in `:calling` state that calls `handle_usage/2`
 
 ## providers v0.2
