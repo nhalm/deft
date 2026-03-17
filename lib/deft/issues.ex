@@ -135,6 +135,50 @@ defmodule Deft.Issues do
     GenServer.call(__MODULE__, :ready)
   end
 
+  @doc """
+  Adds a dependency to an issue.
+
+  ## Parameters
+
+  - `issue_id` - ID of the issue to modify
+  - `blocker_id` - ID of the issue that blocks this one
+
+  ## Returns
+
+  `{:ok, issue}` on success, `{:error, reason}` on failure.
+  Errors include `:not_found`, `:cycle_detected`, and `:blocker_not_found`.
+
+  ## Examples
+
+      iex> Deft.Issues.add_dependency("deft-a1b2", "deft-c3d4")
+      {:ok, %Deft.Issue{dependencies: ["deft-c3d4"], ...}}
+  """
+  def add_dependency(issue_id, blocker_id) when is_binary(issue_id) and is_binary(blocker_id) do
+    GenServer.call(__MODULE__, {:add_dependency, issue_id, blocker_id})
+  end
+
+  @doc """
+  Removes a dependency from an issue.
+
+  ## Parameters
+
+  - `issue_id` - ID of the issue to modify
+  - `blocker_id` - ID of the blocker to remove
+
+  ## Returns
+
+  `{:ok, issue}` on success, `{:error, reason}` on failure.
+
+  ## Examples
+
+      iex> Deft.Issues.remove_dependency("deft-a1b2", "deft-c3d4")
+      {:ok, %Deft.Issue{dependencies: [], ...}}
+  """
+  def remove_dependency(issue_id, blocker_id)
+      when is_binary(issue_id) and is_binary(blocker_id) do
+    GenServer.call(__MODULE__, {:remove_dependency, issue_id, blocker_id})
+  end
+
   ## Server Callbacks
 
   @impl true
@@ -266,6 +310,56 @@ defmodule Deft.Issues do
       |> Enum.sort_by(&{&1.priority, &1.created_at})
 
     {:reply, ready_issues, state}
+  end
+
+  @impl true
+  def handle_call({:add_dependency, issue_id, blocker_id}, _from, state) do
+    with {:ok, _} <- validate_issue_exists(state.issues, issue_id),
+         {:ok, _} <- validate_issue_exists(state.issues, blocker_id),
+         index when not is_nil(index) <- find_issue_index(state.issues, issue_id) do
+      issue = Enum.at(state.issues, index)
+      updated_deps = Enum.uniq([blocker_id | issue.dependencies])
+      updated_issue = %{issue | dependencies: updated_deps, updated_at: Issue.timestamp()}
+
+      # Check for cycles with the updated dependency list
+      case check_cycle(updated_issue, List.delete_at(state.issues, index)) do
+        {:ok, _} ->
+          new_issues = List.replace_at(state.issues, index, updated_issue)
+          new_state = %{state | issues: new_issues}
+
+          case persist_issues(new_state) do
+            :ok -> {:reply, {:ok, updated_issue}, new_state}
+            {:error, reason} -> {:reply, {:error, reason}, state}
+          end
+
+        {:error, :cycle_detected} ->
+          {:reply, {:error, :cycle_detected}, state}
+      end
+    else
+      {:error, :not_found} -> {:reply, {:error, :not_found}, state}
+      nil -> {:reply, {:error, :not_found}, state}
+    end
+  end
+
+  @impl true
+  def handle_call({:remove_dependency, issue_id, blocker_id}, _from, state) do
+    case find_issue_index(state.issues, issue_id) do
+      nil ->
+        {:reply, {:error, :not_found}, state}
+
+      index ->
+        issue = Enum.at(state.issues, index)
+        updated_deps = Enum.reject(issue.dependencies, &(&1 == blocker_id))
+        updated_issue = %{issue | dependencies: updated_deps, updated_at: Issue.timestamp()}
+
+        new_issues = List.replace_at(state.issues, index, updated_issue)
+        new_state = %{state | issues: new_issues}
+
+        case persist_issues(new_state) do
+          :ok -> {:reply, {:ok, updated_issue}, new_state}
+          {:error, reason} -> {:reply, {:error, reason}, state}
+        end
+    end
   end
 
   ## Private Functions
@@ -476,6 +570,14 @@ defmodule Deft.Issues do
           dep -> dep.status == :closed
         end
       end)
+  end
+
+  # Validates that an issue exists
+  defp validate_issue_exists(issues, id) do
+    case Enum.find(issues, &(&1.id == id)) do
+      nil -> {:error, :not_found}
+      issue -> {:ok, issue}
+    end
   end
 
   # Finds the index of an issue by ID

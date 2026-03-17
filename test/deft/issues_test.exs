@@ -571,4 +571,185 @@ defmodule Deft.IssuesTest do
       assert File.exists?(expected_file)
     end
   end
+
+  describe "add_dependency/2" do
+    test "adds a dependency to an issue", %{file_path: file_path} do
+      {:ok, _pid} = Issues.start_link(file_path: file_path)
+
+      # Create two issues
+      {:ok, issue1} = Issues.create(%{title: "Issue 1", source: :user})
+      {:ok, issue2} = Issues.create(%{title: "Issue 2", source: :user})
+
+      # Add issue2 as a dependency of issue1
+      {:ok, updated_issue} = Issues.add_dependency(issue1.id, issue2.id)
+
+      assert updated_issue.dependencies == [issue2.id]
+      assert updated_issue.id == issue1.id
+
+      # Verify the dependency was persisted
+      {:ok, loaded_issue} = Issues.get(issue1.id)
+      assert loaded_issue.dependencies == [issue2.id]
+    end
+
+    test "prevents duplicate dependencies", %{file_path: file_path} do
+      {:ok, _pid} = Issues.start_link(file_path: file_path)
+
+      # Create two issues
+      {:ok, issue1} = Issues.create(%{title: "Issue 1", source: :user})
+      {:ok, issue2} = Issues.create(%{title: "Issue 2", source: :user})
+
+      # Add issue2 as a dependency twice
+      {:ok, _} = Issues.add_dependency(issue1.id, issue2.id)
+      {:ok, updated_issue} = Issues.add_dependency(issue1.id, issue2.id)
+
+      # Should only have one occurrence
+      assert updated_issue.dependencies == [issue2.id]
+    end
+
+    test "detects simple two-issue cycle", %{file_path: file_path} do
+      {:ok, _pid} = Issues.start_link(file_path: file_path)
+
+      # Create two issues
+      {:ok, issue1} = Issues.create(%{title: "Issue 1", source: :user})
+      {:ok, issue2} = Issues.create(%{title: "Issue 2", source: :user})
+
+      # Add issue2 as a dependency of issue1
+      {:ok, _} = Issues.add_dependency(issue1.id, issue2.id)
+
+      # Try to add issue1 as a dependency of issue2 (would create a cycle)
+      assert {:error, :cycle_detected} = Issues.add_dependency(issue2.id, issue1.id)
+
+      # Verify issue2 still has no dependencies
+      {:ok, loaded_issue2} = Issues.get(issue2.id)
+      assert loaded_issue2.dependencies == []
+    end
+
+    test "detects three-issue cycle", %{file_path: file_path} do
+      {:ok, _pid} = Issues.start_link(file_path: file_path)
+
+      # Create three issues
+      {:ok, issue1} = Issues.create(%{title: "Issue 1", source: :user})
+      {:ok, issue2} = Issues.create(%{title: "Issue 2", source: :user})
+      {:ok, issue3} = Issues.create(%{title: "Issue 3", source: :user})
+
+      # Create chain: issue1 -> issue2 -> issue3
+      {:ok, _} = Issues.add_dependency(issue1.id, issue2.id)
+      {:ok, _} = Issues.add_dependency(issue2.id, issue3.id)
+
+      # Try to complete the cycle: issue3 -> issue1
+      assert {:error, :cycle_detected} = Issues.add_dependency(issue3.id, issue1.id)
+
+      # Verify issue3 still has no dependencies
+      {:ok, loaded_issue3} = Issues.get(issue3.id)
+      assert loaded_issue3.dependencies == []
+    end
+
+    test "detects self-referential cycle", %{file_path: file_path} do
+      {:ok, _pid} = Issues.start_link(file_path: file_path)
+
+      # Create an issue
+      {:ok, issue} = Issues.create(%{title: "Issue", source: :user})
+
+      # Try to make it depend on itself
+      assert {:error, :cycle_detected} = Issues.add_dependency(issue.id, issue.id)
+
+      # Verify issue has no dependencies
+      {:ok, loaded_issue} = Issues.get(issue.id)
+      assert loaded_issue.dependencies == []
+    end
+
+    test "returns error when issue not found", %{file_path: file_path} do
+      {:ok, _pid} = Issues.start_link(file_path: file_path)
+
+      {:ok, issue} = Issues.create(%{title: "Issue", source: :user})
+
+      # Try to add dependency with non-existent issue ID
+      assert {:error, :not_found} = Issues.add_dependency("deft-nonexistent", issue.id)
+    end
+
+    test "returns error when blocker not found", %{file_path: file_path} do
+      {:ok, _pid} = Issues.start_link(file_path: file_path)
+
+      {:ok, issue} = Issues.create(%{title: "Issue", source: :user})
+
+      # Try to add non-existent blocker
+      assert {:error, :not_found} = Issues.add_dependency(issue.id, "deft-nonexistent")
+    end
+
+    test "allows adding multiple dependencies", %{file_path: file_path} do
+      {:ok, _pid} = Issues.start_link(file_path: file_path)
+
+      # Create issues
+      {:ok, issue1} = Issues.create(%{title: "Issue 1", source: :user})
+      {:ok, issue2} = Issues.create(%{title: "Issue 2", source: :user})
+      {:ok, issue3} = Issues.create(%{title: "Issue 3", source: :user})
+
+      # Add multiple dependencies
+      {:ok, _} = Issues.add_dependency(issue1.id, issue2.id)
+      {:ok, updated_issue} = Issues.add_dependency(issue1.id, issue3.id)
+
+      # Should have both dependencies
+      assert length(updated_issue.dependencies) == 2
+      assert issue2.id in updated_issue.dependencies
+      assert issue3.id in updated_issue.dependencies
+    end
+  end
+
+  describe "remove_dependency/2" do
+    test "removes a dependency from an issue", %{file_path: file_path} do
+      {:ok, _pid} = Issues.start_link(file_path: file_path)
+
+      # Create two issues with a dependency
+      {:ok, issue1} = Issues.create(%{title: "Issue 1", source: :user})
+      {:ok, issue2} = Issues.create(%{title: "Issue 2", source: :user})
+      {:ok, _} = Issues.add_dependency(issue1.id, issue2.id)
+
+      # Remove the dependency
+      {:ok, updated_issue} = Issues.remove_dependency(issue1.id, issue2.id)
+
+      assert updated_issue.dependencies == []
+      assert updated_issue.id == issue1.id
+
+      # Verify the removal was persisted
+      {:ok, loaded_issue} = Issues.get(issue1.id)
+      assert loaded_issue.dependencies == []
+    end
+
+    test "handles removing non-existent dependency gracefully", %{file_path: file_path} do
+      {:ok, _pid} = Issues.start_link(file_path: file_path)
+
+      {:ok, issue} = Issues.create(%{title: "Issue", source: :user})
+
+      # Try to remove a dependency that doesn't exist
+      {:ok, updated_issue} = Issues.remove_dependency(issue.id, "deft-nonexistent")
+
+      assert updated_issue.dependencies == []
+    end
+
+    test "removes only the specified dependency", %{file_path: file_path} do
+      {:ok, _pid} = Issues.start_link(file_path: file_path)
+
+      # Create issues with multiple dependencies
+      {:ok, issue1} = Issues.create(%{title: "Issue 1", source: :user})
+      {:ok, issue2} = Issues.create(%{title: "Issue 2", source: :user})
+      {:ok, issue3} = Issues.create(%{title: "Issue 3", source: :user})
+      {:ok, _} = Issues.add_dependency(issue1.id, issue2.id)
+      {:ok, _} = Issues.add_dependency(issue1.id, issue3.id)
+
+      # Remove one dependency
+      {:ok, updated_issue} = Issues.remove_dependency(issue1.id, issue2.id)
+
+      # Should only have issue3 as a dependency
+      assert updated_issue.dependencies == [issue3.id]
+    end
+
+    test "returns error when issue not found", %{file_path: file_path} do
+      {:ok, _pid} = Issues.start_link(file_path: file_path)
+
+      {:ok, issue} = Issues.create(%{title: "Issue", source: :user})
+
+      # Try to remove dependency from non-existent issue
+      assert {:error, :not_found} = Issues.remove_dependency("deft-nonexistent", issue.id)
+    end
+  end
 end

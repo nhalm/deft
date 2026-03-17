@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **issues v0.2 (2026-03-17):** Implement dependency tracking: add_dependency/2 and remove_dependency/2 on Issues GenServer; circular dependency detection — walk graph on add, reject with error if cycle found
 - **issues v0.2 (2026-03-17):** Implement git behavior outside repos: when not inside a git repository, create .deft/ in cwd; skip worktree detection
 - **issues v0.2 (2026-03-17):** Implement worktree awareness: detect worktree via `git rev-parse --git-common-dir`, resolve .deft/issues.jsonl to main repo path; use Deft.Git behaviour for testability
 - **evals v0.2 (2026-03-17):** Implement Reflector compression evals: output within 50% of threshold; 20 iterations, 90% pass rate
