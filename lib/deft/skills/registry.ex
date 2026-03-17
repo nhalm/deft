@@ -107,6 +107,34 @@ defmodule Deft.Skills.Registry do
     end)
   end
 
+  @doc """
+  Re-scans project-level skills and commands.
+
+  Removes all existing project-level entries from the registry and
+  replaces them with freshly discovered ones from the project directory.
+  Built-in and global skills persist unchanged.
+
+  Called at session start to pick up changes to `.deft/skills/` and
+  `.deft/commands/` without affecting application-global skills.
+  """
+  @spec rescan_project(String.t()) :: :ok
+  def rescan_project(project_dir) do
+    Agent.update(__MODULE__, fn registry ->
+      # Remove existing project-level entries
+      non_project =
+        registry
+        |> Enum.reject(fn {_name, entry} -> entry.level == :project end)
+        |> Map.new()
+
+      # Discover fresh project entries from .deft/ subdirectory
+      project_deft_dir = Path.join(project_dir, ".deft")
+      project_entries = discover_level(project_deft_dir, :project)
+
+      # Merge project over non-project (preserving cascade)
+      Map.merge(non_project, project_entries)
+    end)
+  end
+
   ## Discovery
 
   defp discover_all(project_dir) do
@@ -118,11 +146,12 @@ defmodule Deft.Skills.Registry do
       end
 
     global_dir = Path.expand("~/.deft")
+    project_deft_dir = Path.join(project_dir, ".deft")
 
     # Scan each level (nil directories are handled gracefully by discover_level)
     builtin_entries = if builtin_dir, do: discover_level(builtin_dir, :builtin), else: %{}
     global_entries = discover_level(global_dir, :global)
-    project_entries = discover_level(project_dir, :project)
+    project_entries = discover_level(project_deft_dir, :project)
 
     # Apply cascade: project > global > builtin
     # Later entries override earlier ones
