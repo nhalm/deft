@@ -154,6 +154,10 @@ defmodule Deft.CLI do
         [_cmd, _subcmd, issue_id] = positional
         {:issue_show, issue_id}
 
+      match?(["issue", "close", _], positional) ->
+        [_cmd, _subcmd, issue_id] = positional
+        {:issue_close, issue_id}
+
       match?(["issue", "update", _], positional) ->
         [_cmd, _subcmd, issue_id] = positional
         {:issue_update, issue_id}
@@ -215,6 +219,43 @@ defmodule Deft.CLI do
 
       {:error, :not_found} ->
         IO.puts(:stderr, "Error: Issue not found: #{issue_id}")
+        exit({:shutdown, 1})
+    end
+  end
+
+  defp execute_command({:issue_close, issue_id}, _flags) do
+    # Ensure Issues GenServer is started
+    ensure_issues_started()
+
+    # Get all issues to find which ones were blocked by this issue
+    all_issues = Issues.list(status: [:open, :in_progress])
+    previously_blocked = find_issues_blocked_by(all_issues, issue_id)
+
+    # Close the issue
+    case Issues.close(issue_id) do
+      {:ok, _issue} ->
+        IO.puts("Issue #{issue_id} closed successfully.")
+
+        # Check if any previously blocked issues are now unblocked
+        newly_unblocked = find_newly_unblocked(previously_blocked)
+
+        unless Enum.empty?(newly_unblocked) do
+          IO.puts("")
+          IO.puts("Newly unblocked issues:")
+
+          Enum.each(newly_unblocked, fn issue ->
+            IO.puts("  - #{issue.id}: #{issue.title}")
+          end)
+        end
+
+        :ok
+
+      {:error, :not_found} ->
+        IO.puts(:stderr, "Error: Issue not found: #{issue_id}")
+        exit({:shutdown, 1})
+
+      {:error, reason} ->
+        IO.puts(:stderr, "Error: Failed to close issue: #{inspect(reason)}")
         exit({:shutdown, 1})
     end
   end
@@ -1049,5 +1090,23 @@ defmodule Deft.CLI do
       _ ->
         timestamp
     end
+  end
+
+  # Find issues that have the given issue ID in their dependencies
+  defp find_issues_blocked_by(issues, blocker_id) do
+    Enum.filter(issues, fn issue ->
+      blocker_id in issue.dependencies
+    end)
+  end
+
+  # Find which issues from the list are now unblocked (ready)
+  defp find_newly_unblocked(issues) do
+    # Re-query to get current ready status
+    ready_issues = Issues.ready()
+    ready_ids = MapSet.new(ready_issues, & &1.id)
+
+    Enum.filter(issues, fn issue ->
+      MapSet.member?(ready_ids, issue.id)
+    end)
   end
 end

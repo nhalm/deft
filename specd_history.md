@@ -1,6 +1,8 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **issues v0.2 (2026-03-17):** Implement unblock notification: when an issue is closed, check if any blocked issues became ready, log to user output
+- **issues v0.2 (2026-03-17):** Implement `deft issue close <id>` CLI command: set status to :closed, set closed_at, print any newly unblocked issues
 - **issues v0.2 (2026-03-17):** Implement `deft issue update <id>` CLI command: --title, --priority, --status, --blocked-by flags; call Issues.update/2
 - **issues v0.2 (2026-03-17):** Implement `deft issue ready` CLI command: call ready/0, display sorted list
 - **issues v0.2 (2026-03-17):** Implement `deft issue list` CLI command: default shows open + in_progress; --status filter, --priority filter; tabular output with id, priority, status, title
