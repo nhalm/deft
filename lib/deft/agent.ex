@@ -958,10 +958,18 @@ defmodule Deft.Agent do
       {to_remove, to_keep} = Enum.split(conversation_messages, messages_to_remove)
 
       if length(to_remove) > 0 do
-        # Create a summary message
+        # Try to generate LLM summary, fallback to static text on error
+        provider = Map.get(data.config, :provider)
+
         summary_text =
-          "[Context compaction: #{length(to_remove)} messages removed to free up context space. " <>
-            "Conversation continues from this point.]"
+          case summarize_messages_with_llm(to_remove, provider, data.config) do
+            {:ok, summary} ->
+              "[Context compaction: #{length(to_remove)} messages summarized]\n\n#{summary}"
+
+            {:error, _reason} ->
+              "[Context compaction: #{length(to_remove)} messages removed to free up context space. " <>
+                "Conversation continues from this point.]"
+          end
 
         summary_message = %Message{
           id: generate_message_id(),
@@ -981,6 +989,82 @@ defmodule Deft.Agent do
       end
     else
       data
+    end
+  end
+
+  defp summarize_messages_with_llm(_messages, nil, _config) do
+    {:error, :no_provider}
+  end
+
+  defp summarize_messages_with_llm(messages, provider, config) do
+    # Build summarization prompt
+    messages_text =
+      messages
+      |> Enum.map(fn msg ->
+        role = msg.role |> Atom.to_string() |> String.capitalize()
+        content = extract_text_content(msg)
+        "#{role}: #{content}"
+      end)
+      |> Enum.join("\n\n")
+
+    summary_prompt =
+      "Summarize the following conversation messages concisely, preserving key context and decisions:\n\n#{messages_text}"
+
+    summary_message = %Message{
+      id: generate_message_id(),
+      role: :user,
+      content: [%Text{text: summary_prompt}],
+      timestamp: DateTime.utc_now()
+    }
+
+    # Make streaming call and collect the response
+    case provider.stream([summary_message], [], config) do
+      {:ok, stream_ref} ->
+        collect_stream_text(stream_ref, 30_000)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp extract_text_content(message) do
+    message.content
+    |> Enum.filter(fn block -> match?(%Text{}, block) end)
+    |> Enum.map(fn %Text{text: text} -> text end)
+    |> Enum.join(" ")
+  end
+
+  defp collect_stream_text(stream_ref, timeout) do
+    collect_stream_text_loop(stream_ref, "", :os.system_time(:millisecond), timeout)
+  end
+
+  defp collect_stream_text_loop(stream_ref, acc, start_time, timeout) do
+    alias Deft.Provider.Event.{TextDelta, Done, Error}
+
+    elapsed = :os.system_time(:millisecond) - start_time
+    remaining_timeout = max(0, timeout - elapsed)
+
+    receive do
+      {:provider_event, %TextDelta{delta: delta}} ->
+        collect_stream_text_loop(stream_ref, acc <> delta, start_time, timeout)
+
+      {:provider_event, %Done{}} ->
+        {:ok, acc}
+
+      {:provider_event, %Error{message: msg}} ->
+        {:error, msg}
+
+      {:provider_event, _other} ->
+        # Ignore other events (tool calls, thinking, usage, etc.)
+        collect_stream_text_loop(stream_ref, acc, start_time, timeout)
+    after
+      remaining_timeout ->
+        # Cancel stream on timeout by terminating the stream process
+        if is_pid(stream_ref) and Process.alive?(stream_ref) do
+          Process.exit(stream_ref, :timeout)
+        end
+
+        {:error, :timeout}
     end
   end
 end

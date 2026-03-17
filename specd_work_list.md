@@ -24,10 +24,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ---
 
-## harness v0.1
-
-- Implement LLM-based compaction summarization: when `current_context_tokens > 0.7 * context_window`, call the LLM to summarize oldest messages before replacing them, instead of using the current static placeholder string (agent.ex:960-965)
-
 ## tools v0.1
 
 - Fix bash tool `format_result/4`: show temp file path whenever output was truncated (by line count OR byte size), not only when file size exceeds 30KB (bash.ex:198-209)
