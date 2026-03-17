@@ -103,7 +103,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## skills v0.2
 
-- Implement `use_skill` tool for agent auto-invocation: agent emits use_skill tool call with skill name; harness intercepts, loads full definition from Registry, injects into context, continues agent loop; same mechanism as explicit slash command invocation
 - Add skills/commands listing to system prompt: assemble "Available skills:" and "Available commands:" sections from Registry.list/0 with names + descriptions; include in system prompt build
 - Implement slash command dispatch clarification: TUI intercepts leading / in user input, parses command name + args, looks up in Registry, loads definition if skill, injects as system instruction (skill) or user message (command); report "Unknown command" if not found
 

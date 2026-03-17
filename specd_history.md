@@ -2,6 +2,7 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **skills v0.2 (2026-03-17):** Implement `use_skill` tool for agent auto-invocation: agent emits use_skill tool call with skill name; harness intercepts, loads full definition from Registry, injects into context, continues agent loop; same mechanism as explicit slash command invocation
 - **issues v0.2 (2026-03-17):** Implement JSONL persistence with advisory lock: lock file at .deft/issues.jsonl.lock with exclusive create; lock file contains PID and timestamp as JSON line; stale threshold 30s; retry 100ms with jitter, 10s timeout; writes go to .deft/issues.jsonl.tmp.<random> then File.rename/2
 - **issues v0.2 (2026-03-17):** Implement cycle detection on load: after loading from JSONL in init/1, detect cycles in dependency graph; affected issues have dependencies cleared with warnings logged
 - **issues v0.2 (2026-03-17):** Implement `Deft.Issues` GenServer: init reads .deft/issues.jsonl into memory with dedup-on-read (last occurrence per ID wins); lines that fail JSON parsing are skipped with warnings (file not corrupt unless all lines malformed); holds list of Issue structs in state; expose create/1, update/2, close/1, get/1, list/1, ready/0
