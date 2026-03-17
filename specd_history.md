@@ -2,6 +2,7 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **providers v0.1 (2026-03-16):** Fix `stream/3`: use `spawn(fn -> ... end)` + `Process.monitor(pid)` (or `spawn_monitor/1`) instead of `spawn_link/1` — with `spawn_link`, a stream process crash kills the agent instead of delivering a `:DOWN` message for graceful recovery
 - **providers v0.1 (2026-03-16):** Fix `parse_message_delta/1`: Anthropic's `message_delta` event only carries `output_tokens` in its usage field, not `input_tokens`; match on `%{"output_tokens" => output}` only; also handle `message_start` event to capture `input_tokens` from the initial usage report
 - **providers v0.1 (2026-03-16):** Fix tool call ID mismatch: `ToolCallDelta` and `ToolCallDone` use `"tool_#{idx}"` but `ToolCallStart` uses the real Anthropic ID (`"toolu_..."`); maintain an `index → real_id` mapping in tool_state so deltas and stop events use the correct ID — without this fix, tool call args are never accumulated and tools execute with empty args
 - **tools v0.1 (2026-03-16):** Fix grep `format_output/2`: count actual match lines (lines matching `filename:linenum:content` pattern) instead of all output lines — context lines, separators, and file headers inflate the count

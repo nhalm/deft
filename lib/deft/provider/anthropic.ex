@@ -54,8 +54,9 @@ defmodule Deft.Provider.Anthropic do
       temperature = Map.get(config, :temperature, 1.0)
 
       # Spawn a process to handle the streaming request
+      # Use spawn instead of spawn_link so stream crashes don't kill the agent
       pid =
-        spawn_link(fn ->
+        spawn(fn ->
           stream_loop(caller, api_key, messages, tools, model, max_tokens, temperature)
         end)
 

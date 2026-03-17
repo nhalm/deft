@@ -24,10 +24,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ---
 
-## providers v0.1
-
-- Fix `stream/3`: use `spawn(fn -> ... end)` + `Process.monitor(pid)` (or `spawn_monitor/1`) instead of `spawn_link/1` — with `spawn_link`, a stream process crash kills the agent instead of delivering a `:DOWN` message for graceful recovery
-
 ## sessions v0.1
 
 - Implement `deft resume <id>` CLI command: load session JSONL from `~/.deft/sessions/<id>.jsonl`, reconstruct conversation state from `message` + `tool_result` entries, display summary of last 10 messages (formatted as "Role (HH:MM): first 100 chars of content"); then accept `-p "prompt"` flag for non-interactive continuation (execute one turn with that prompt, print response, exit)
