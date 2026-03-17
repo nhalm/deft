@@ -1,0 +1,14 @@
+## User Preferences
+
+- (09:30) User likes to see clear commit messages
+- (09:35) User prefers small, focused functions
+
+## Decisions
+
+- (09:25) Using PostgreSQL for user sessions
+- (09:32) Implementing rate limiting with token bucket algorithm
+
+## Current State
+
+- (09:40) Implementing rate limiting middleware for API endpoints
+- (09:38) Created the RateLimiter module with basic token bucket logic
