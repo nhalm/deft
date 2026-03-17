@@ -18,6 +18,7 @@ defmodule Deft.OM.State do
 
   alias Deft.{Config, Message}
   alias Deft.OM.{BufferedChunk, Observer, Supervisor, Tokens}
+  alias Deft.OM.Observer.Parse
 
   # Default thresholds from spec section 8
   @default_message_threshold 30_000
@@ -230,13 +231,23 @@ defmodule Deft.OM.State do
   ## Private Functions
 
   defp via_tuple(session_id) do
-    {:via, Registry, {Deft.Registry, {:om_state, session_id}}}
+    {:via, Registry, {Deft.ProcessRegistry, {:om_state, session_id}}}
   end
 
   defp check_and_spawn_observer(state) do
     buffer_size = trunc(@default_message_threshold * @default_buffer_interval)
     current_threshold = div(state.pending_message_tokens, buffer_size) * buffer_size
 
+    # First, check if we should activate buffered chunks
+    state =
+      if state.pending_message_tokens >= @default_message_threshold and
+           not Enum.empty?(state.buffered_chunks) do
+        activate_buffered_chunks(state)
+      else
+        state
+      end
+
+    # Then check if we should spawn observer for buffering
     cond do
       # Already observing - set rebuffer flag if we crossed another threshold
       state.is_observing and current_threshold > state.last_buffer_threshold ->
@@ -281,6 +292,47 @@ defmodule Deft.OM.State do
       | is_observing: true,
         observer_ref: task.ref,
         last_buffer_threshold: threshold
+    }
+  end
+
+  defp activate_buffered_chunks(state) do
+    Logger.info(
+      "Activating #{length(state.buffered_chunks)} buffered chunks for session #{state.session_id}"
+    )
+
+    # Section-aware merge all chunks into active_observations
+    merged_observations =
+      Enum.reduce(state.buffered_chunks, state.active_observations, fn chunk, acc ->
+        Parse.merge_observations(acc, chunk.observations)
+      end)
+
+    # Collect all message_ids from all chunks
+    all_message_ids =
+      Enum.flat_map(state.buffered_chunks, fn chunk -> chunk.message_ids end)
+
+    # Add chunk message_ids to observed_message_ids
+    new_observed_message_ids = state.observed_message_ids ++ all_message_ids
+
+    # Calculate tokens for merged observations
+    new_observation_tokens = Tokens.estimate(merged_observations, state.calibration_factor)
+
+    # Calculate how many tokens were observed (to subtract from pending)
+    observed_tokens =
+      Enum.reduce(state.buffered_chunks, 0, fn chunk, acc -> acc + chunk.message_tokens end)
+
+    # Subtract observed tokens from pending
+    new_pending = max(0, state.pending_message_tokens - observed_tokens)
+
+    %{
+      state
+      | active_observations: merged_observations,
+        observation_tokens: new_observation_tokens,
+        buffered_chunks: [],
+        observed_message_ids: new_observed_message_ids,
+        pending_message_tokens: new_pending,
+        activation_epoch: state.activation_epoch + 1,
+        snapshot_dirty: true,
+        last_observed_at: DateTime.utc_now()
     }
   end
 end

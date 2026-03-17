@@ -2,6 +2,7 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **observational-memory v0.1 (2026-03-17):** Implement observation activation: when pending_message_tokens >= threshold and buffered_chunks non-empty, section-aware merge all chunks into active_observations, move chunk message_ids to observed_message_ids, clear buffered_chunks, increment activation_epoch, set snapshot_dirty
 - **observational-memory v0.1 (2026-03-17):** Implement Observer Task execution: State spawns Task under TaskSupervisor with current messages + truncated observations, handles result in `handle_info({ref, result})`, stores as BufferedChunk with current activation_epoch
 
 - **observational-memory v0.1 (2026-03-17):** Implement `Deft.OM.Observer.Parse.parse_output/1`: extract `<observations>` and `<current-task>` from XML; fallback to raw bullet-list extraction; validate section headers - Implement section-aware merge in State: Current State = replace, User Preferences/Decisions/Session History = append, Files & Architecture = append with dedup (same file path updates existing entry), unknown sections = ignore

@@ -39,11 +39,11 @@ defmodule Deft.OM.Supervisor do
   Returns the name for the TaskSupervisor for the given session.
   """
   def task_supervisor_name(session_id) do
-    {:via, Registry, {Deft.Registry, {:om_task_supervisor, session_id}}}
+    {:via, Registry, {Deft.ProcessRegistry, {:om_task_supervisor, session_id}}}
   end
 
   defp name_for_session(opts) do
     session_id = Keyword.fetch!(opts, :session_id)
-    {:via, Registry, {Deft.Registry, {:om_supervisor, session_id}}}
+    {:via, Registry, {Deft.ProcessRegistry, {:om_supervisor, session_id}}}
   end
 end
