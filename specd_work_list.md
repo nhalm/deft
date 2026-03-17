@@ -50,9 +50,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## evals v0.2
 
-- Implement eval diffing command: `mix eval.compare <run_a> <run_b>` showing changed categories, soft floor violations, and side-by-side failure examples
-- Spike Tribunal version verification: check hex.pm for current Tribunal version, verify it provides assert_contains, assert_regex, assert_json, assert_max_tokens, assert_faithful, refute_hallucination, refute_pii, and evaluation mode; document gaps and fallback plan if assertions are missing
-- Set up judge calibration infrastructure: create test/eval/support/judge_calibration/ directory; implement calibration workflow (50 gold-labeled examples per judge prompt, measure precision > 85% and recall > 80%, store calibration sets, re-run on judge model/prompt change)
 - Create holdout fixture set: reserve 20-30% of all fixtures in test/eval/fixtures/holdout/; tag with @tag :holdout; exclude from `make test.eval`; run only via `make test.eval.holdout`; validate holdout pass rate is within 10pp of development set
 - Implement fixture validation tooling: verify each fixture's spec_version field matches the current spec version; flag stale fixtures when specs change
 - Create coding conversation fixtures: short bug-fix (5-10 exchanges), long feature session (50+ exchanges), multi-topic pivot, sessions with errors/corrections, heavy tool usage
@@ -101,8 +98,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## rate-limiter v0.1
 
-- Implement `Deft.Job.RateLimiter` dual token-bucket GenServer: RPM bucket (refills at provider RPM limit, deducts 1 per call) + TPM bucket (refills at provider TPM limit, deducts estimated input tokens on send via chars/4 heuristic); on API response, reconcile actual usage with credit-back capped at bucket maximum (no over-crediting); call proceeds only when both buckets have capacity- Implement priority queue: Foreman > Runner > Lead ordering using :gb_trees or sorted list keyed by {priority, enqueue_time}; FIFO within same priority level; callers submit LLM calls and receive results via call/reply protocol (blocked: Implement Deft.Job.RateLimiter dual token-bucket...)
-- Implement starvation protection: promote any call waiting longer than 10 seconds to highest priority; use injectable time source for testing (blocked: Implement priority queue...)
 - Implement 429 handling: parse Retry-After header, reduce bucket capacity by 20% for affected provider, apply exponential backoff (1s, 2s, 4s, 8s... capped at 60s), restore capacity gradually after 60s without 429s (10% per minute up to configured limit) (blocked: Implement Deft.Job.RateLimiter dual token-bucket...)
 - Implement adaptive concurrency: starting at job.initial_concurrency (default 2) Lead slots; scale-up signal (bucket >60% for 30s + zero queued calls → +1 slot up to job.max_leads); scale-down signal (>2 429s/min → -1 slot, minimum 1); send {:rate_limiter, :concurrency_change, new_limit} to Foreman (blocked: Implement 429 handling...)
 - Implement cost tracking: read usage (input_tokens, output_tokens) from API responses, multiply by per-model pricing table; send {:rate_limiter, :cost, amount} to Foreman every $0.50 increment (not {:lead_message, ...}) (blocked: Implement Deft.Job.RateLimiter dual token-bucket...)
