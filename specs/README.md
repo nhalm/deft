@@ -61,7 +61,7 @@ Decision reasoning is logged in [specd_decisions.jsonl](../specd_decisions.jsonl
 |------|---------|--------|-------------|
 | [standards](standards.md) | v0.1 | Implemented | Elixir coding standards, Makefile, git hooks, testing strategy |
 | [evals](evals.md) | v0.1 | Draft | AI eval test definitions, expected outcomes, quality gates |
-| [harness](harness.md) | v0.1 | Ready | Agent loop (gen_statem), message format, process architecture, context assembly |
+| [harness](harness.md) | v0.1 | Implemented | Agent loop (gen_statem), message format, process architecture, context assembly |
 | [tools](tools.md) | v0.1 | Implemented | Tool behaviour, 7 built-in tools, tool execution model |
 | [providers](providers.md) | v0.2 | Implemented | LLM provider behaviour, SSE streaming, Anthropic implementation |
 | [sessions](sessions.md) | v0.2 | Implemented | Session persistence (JSONL), resume, configuration, CLI, distribution |
@@ -78,6 +78,8 @@ Decision reasoning is logged in [specd_decisions.jsonl](../specd_decisions.jsonl
 
 | Spec | Version | Status | Description |
 |------|---------|--------|-------------|
+| [filesystem](filesystem.md) | v0.1 | Draft | Deft.Store GenServer — ETS+DETS for tool result caching and diary, project-scoped layout |
+| [skills](skills.md) | v0.1 | Draft | Skills (progressive-loaded YAML) and commands (markdown prompts), three-level cascade |
 | [issues](issues.md) | v0.1 | Draft | Persistent issue tracker — JSONL+git work queue, interactive creation, `deft work` loop |
 
 ## Future
