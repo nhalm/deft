@@ -93,8 +93,8 @@ defmodule Deft.Tools.Bash do
     # Use sh -c to execute the command, respecting the working directory
     port =
       Port.open(
-        {:spawn, "sh -c #{shell_escape(command)}"},
-        [:binary, :stderr_to_stdout, :exit_status, cd: working_dir]
+        {:spawn_executable, "/bin/sh"},
+        [:binary, :stderr_to_stdout, :exit_status, cd: working_dir, args: ["-c", command]]
       )
 
     # Open temp file for writing
@@ -137,12 +137,6 @@ defmodule Deft.Tools.Bash do
   defp calculate_remaining_timeout(start_time, timeout) do
     elapsed = :os.system_time(:millisecond) - start_time
     max(0, timeout - elapsed)
-  end
-
-  defp shell_escape(command) do
-    # Escape single quotes by replacing ' with '\''
-    escaped = String.replace(command, "'", "'\\''")
-    "'#{escaped}'"
   end
 
   defp truncate_output(output) do

@@ -26,7 +26,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ## tools v0.1
 
-- Fix bash tool: change `Port.open({:spawn, "sh -c ..."})` to `Port.open({:spawn_executable, "/bin/sh"}, [{:args, ["-c", command]} | opts])` — the `{:spawn, string}` form splits on spaces, breaking `sh -c` argument passing for commands with spaces
 - Fix ToolRunner: call `Task.shutdown(task, :brutal_kill)` on timed-out tasks after `Task.yield_many/2` returns `nil` — currently timed-out tasks continue running indefinitely, leaking processes
 - Fix grep global match cap: replace `--max-count` (per-file limit) with post-processing truncation — collect rg output then take only the first 100 match lines, or use `rg` output piped through a line counter
 - Fix grep `format_output/2`: count actual match lines (lines matching `filename:linenum:content` pattern) instead of all output lines — context lines, separators, and file headers inflate the count
