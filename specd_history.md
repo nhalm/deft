@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **tui v0.1 (2026-03-17):** Implement job status display in Chat view: per-Lead progress, blocked status, cost, elapsed time; /status and /inspect commands
 - **tui v0.1 (2026-03-17):** Implement `Deft.TUI.SessionPicker` Breeze view: list sessions, arrow keys to navigate, Enter to resume
 - **tui v0.1 (2026-03-17):** Implement slash command dispatch: recognize leading `/`, parse command + args, dispatch to appropriate handler; implement /help, /clear, /quit directly; other commands dispatched to their spec owners
 - **tui v0.1 (2026-03-17):** Implement user input component: Enter submits, Shift+Enter newline (Kitty protocol), \ + Enter fallback, paste detection (chars within 5ms), Up arrow input history

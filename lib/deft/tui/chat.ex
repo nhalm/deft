@@ -68,7 +68,16 @@ defmodule Deft.TUI.Chat do
         om_active: false,
         om_sync_fallback: false,
         # Scroll state
-        scroll_offset: 0
+        scroll_offset: 0,
+        # Job state (orchestration mode)
+        job_active: false,
+        job_phase: nil,
+        job_start_time: nil,
+        job_cost: 0.0,
+        job_cost_ceiling: nil,
+        job_leads: %{},
+        job_lead_count: 0,
+        job_completed_count: 0
       )
 
     {:ok, term}
@@ -116,11 +125,15 @@ defmodule Deft.TUI.Chat do
 
       <box style="border">
         <box>
-          <%= format_tokens(@current_tokens, @context_window) %> │
-          <%= format_memory(@memory_tokens, @memory_threshold) %> │
-          <%= format_cost(@session_cost) %> │
-          turn <%= @turn_count %>/<%= @max_turns %> │
-          <%= @agent_state_display %>
+          <%= if @job_active do %>
+            <%= format_job_status(assigns) %>
+          <% else %>
+            <%= format_tokens(@current_tokens, @context_window) %> │
+            <%= format_memory(@memory_tokens, @memory_threshold) %> │
+            <%= format_cost(@session_cost) %> │
+            turn <%= @turn_count %>/<%= @max_turns %> │
+            <%= @agent_state_display %>
+          <% end %>
         </box>
       </box>
     </box>
@@ -224,11 +237,41 @@ defmodule Deft.TUI.Chat do
     {:noreply, term}
   end
 
+  # Job events (orchestration mode)
+  def handle_info({:job_event, {:job_started, metadata}}, term) do
+    handle_job_started(metadata, term)
+  end
+
+  def handle_info({:job_event, {:job_phase_change, phase}}, term) do
+    {:noreply, assign(term, job_phase: phase)}
+  end
+
+  def handle_info({:job_event, {:lead_started, lead_info}}, term) do
+    handle_lead_started(lead_info, term)
+  end
+
+  def handle_info({:job_event, {:lead_completed, lead_id}}, term) do
+    handle_lead_completed(lead_id, term)
+  end
+
+  def handle_info({:job_event, {:lead_status_change, lead_id, status}}, term) do
+    handle_lead_status_change(lead_id, status, term)
+  end
+
+  def handle_info({:job_event, {:job_cost_update, cost}}, term) do
+    {:noreply, assign(term, job_cost: cost)}
+  end
+
+  def handle_info({:job_event, {:job_completed, _metadata}}, term) do
+    handle_job_completed(term)
+  end
+
   # Ignore events that don't need display updates
   def handle_info({:agent_event, {:thinking_delta, _delta}}, term), do: {:noreply, term}
   def handle_info({:agent_event, {:tool_call_delta, _}}, term), do: {:noreply, term}
   def handle_info({:agent_event, _event}, term), do: {:noreply, term}
   def handle_info({:om, _event}, term), do: {:noreply, term}
+  def handle_info({:job_event, _event}, term), do: {:noreply, term}
 
   def handle_info(_msg, term) do
     {:noreply, term}
@@ -616,6 +659,28 @@ defmodule Deft.TUI.Chat do
         new_term = assign(term, messages: term.assigns.messages ++ [help_msg])
         {:command_handled, new_term}
 
+      # Handle /status command for job status display
+      input == "/status" ->
+        status_msg = %{
+          role: :system,
+          content: build_status_text(term),
+          timestamp: DateTime.utc_now()
+        }
+
+        new_term = assign(term, messages: term.assigns.messages ++ [status_msg])
+        {:command_handled, new_term}
+
+      # Handle /inspect command for Lead site log entries
+      String.starts_with?(input, "/inspect") ->
+        inspect_msg = %{
+          role: :system,
+          content: build_inspect_text(input, term),
+          timestamp: DateTime.utc_now()
+        }
+
+        new_term = assign(term, messages: term.assigns.messages ++ [inspect_msg])
+        {:command_handled, new_term}
+
       # Other slash commands are dispatched via SlashCommand module
       String.starts_with?(input, "/") ->
         handle_slash_command(input, term)
@@ -877,5 +942,299 @@ defmodule Deft.TUI.Chat do
 
   defp current_timestamp do
     System.monotonic_time(:millisecond)
+  end
+
+  # Job event handlers
+
+  defp handle_job_started(metadata, term) do
+    cost_ceiling = Map.get(metadata, :cost_ceiling, 10.0)
+    lead_count = Map.get(metadata, :lead_count, 0)
+
+    new_term =
+      term
+      |> assign(job_active: true)
+      |> assign(job_phase: :planning)
+      |> assign(job_start_time: System.monotonic_time(:millisecond))
+      |> assign(job_cost: 0.0)
+      |> assign(job_cost_ceiling: cost_ceiling)
+      |> assign(job_lead_count: lead_count)
+      |> assign(job_completed_count: 0)
+      |> assign(job_leads: %{})
+
+    {:noreply, new_term}
+  end
+
+  defp handle_lead_started(lead_info, term) do
+    lead_id = Map.fetch!(lead_info, :lead_id)
+    deliverable = Map.get(lead_info, :deliverable, "")
+
+    lead_status = %{
+      id: lead_id,
+      deliverable: deliverable,
+      status: :running,
+      started_at: System.monotonic_time(:millisecond)
+    }
+
+    new_leads = Map.put(term.assigns.job_leads, lead_id, lead_status)
+    {:noreply, assign(term, job_leads: new_leads)}
+  end
+
+  defp handle_lead_completed(lead_id, term) do
+    case Map.get(term.assigns.job_leads, lead_id) do
+      nil ->
+        {:noreply, term}
+
+      lead_status ->
+        updated_status = Map.put(lead_status, :status, :complete)
+        new_leads = Map.put(term.assigns.job_leads, lead_id, updated_status)
+        new_completed = term.assigns.job_completed_count + 1
+
+        {:noreply, assign(term, job_leads: new_leads, job_completed_count: new_completed)}
+    end
+  end
+
+  defp handle_lead_status_change(lead_id, status, term) do
+    case Map.get(term.assigns.job_leads, lead_id) do
+      nil ->
+        {:noreply, term}
+
+      lead_status ->
+        updated_status = Map.put(lead_status, :status, status)
+        new_leads = Map.put(term.assigns.job_leads, lead_id, updated_status)
+        {:noreply, assign(term, job_leads: new_leads)}
+    end
+  end
+
+  defp handle_job_completed(term) do
+    new_term =
+      term
+      |> assign(job_active: false)
+      |> assign(job_phase: nil)
+      |> assign(job_leads: %{})
+
+    {:noreply, new_term}
+  end
+
+  # Job status formatting
+
+  defp format_job_status(assigns) do
+    leads_text = "#{assigns.job_lead_count} leads"
+    complete_text = "#{assigns.job_completed_count}/#{assigns.job_lead_count} complete"
+
+    cost_text =
+      if assigns.job_cost_ceiling do
+        "$#{Float.round(assigns.job_cost, 2)}/$#{Float.round(assigns.job_cost_ceiling, 2)}"
+      else
+        "$#{Float.round(assigns.job_cost, 2)}"
+      end
+
+    elapsed_text =
+      if assigns.job_start_time do
+        elapsed_ms = System.monotonic_time(:millisecond) - assigns.job_start_time
+        format_elapsed_time(elapsed_ms)
+      else
+        "0m"
+      end
+
+    phase_display = format_job_phase(assigns.job_phase)
+
+    "#{leads_text} │ #{complete_text} │ #{cost_text} │ #{elapsed_text} elapsed │ #{phase_display}"
+  end
+
+  defp format_elapsed_time(ms) when ms < 60_000 do
+    seconds = div(ms, 1000)
+    "#{seconds}s"
+  end
+
+  defp format_elapsed_time(ms) when ms < 3_600_000 do
+    minutes = div(ms, 60_000)
+    "#{minutes}m"
+  end
+
+  defp format_elapsed_time(ms) do
+    hours = div(ms, 3_600_000)
+    minutes = rem(div(ms, 60_000), 60)
+    "#{hours}h#{minutes}m"
+  end
+
+  defp format_job_phase(:planning), do: "◉ planning"
+  defp format_job_phase(:researching), do: "◉ researching"
+  defp format_job_phase(:decomposing), do: "◉ decomposing"
+  defp format_job_phase(:executing), do: "◉ executing"
+  defp format_job_phase(:verifying), do: "◉ verifying"
+  defp format_job_phase(:complete), do: "✓ complete"
+  defp format_job_phase(nil), do: "◉ starting"
+  defp format_job_phase(phase), do: "◉ #{phase}"
+
+  defp build_status_text(term) do
+    if not term.assigns.job_active do
+      "No active job"
+    else
+      phase_text = format_job_phase_verbose(term.assigns.job_phase)
+
+      cost_text =
+        if term.assigns.job_cost_ceiling do
+          "$#{Float.round(term.assigns.job_cost, 2)} / $#{Float.round(term.assigns.job_cost_ceiling, 2)}"
+        else
+          "$#{Float.round(term.assigns.job_cost, 2)}"
+        end
+
+      elapsed_text =
+        if term.assigns.job_start_time do
+          elapsed_ms = System.monotonic_time(:millisecond) - term.assigns.job_start_time
+          format_elapsed_time_verbose(elapsed_ms)
+        else
+          "0 seconds"
+        end
+
+      leads_text = build_leads_text(term.assigns.job_leads)
+
+      """
+      Job Status
+      ==========
+
+      Phase: #{phase_text}
+      Leads: #{term.assigns.job_completed_count}/#{term.assigns.job_lead_count} complete
+      Cost: #{cost_text}
+      Elapsed: #{elapsed_text}
+
+      #{leads_text}
+      """
+    end
+  end
+
+  defp format_job_phase_verbose(:planning), do: "Planning"
+  defp format_job_phase_verbose(:researching), do: "Researching"
+  defp format_job_phase_verbose(:decomposing), do: "Decomposing"
+  defp format_job_phase_verbose(:executing), do: "Executing"
+  defp format_job_phase_verbose(:verifying), do: "Verifying"
+  defp format_job_phase_verbose(:complete), do: "Complete"
+  defp format_job_phase_verbose(nil), do: "Starting"
+  defp format_job_phase_verbose(phase), do: to_string(phase)
+
+  defp format_elapsed_time_verbose(ms) when ms < 1000, do: "#{ms}ms"
+
+  defp format_elapsed_time_verbose(ms) when ms < 60_000 do
+    seconds = div(ms, 1000)
+    "#{seconds} seconds"
+  end
+
+  defp format_elapsed_time_verbose(ms) when ms < 3_600_000 do
+    minutes = div(ms, 60_000)
+    seconds = rem(div(ms, 1000), 60)
+
+    if seconds > 0 do
+      "#{minutes} minutes, #{seconds} seconds"
+    else
+      "#{minutes} minutes"
+    end
+  end
+
+  defp format_elapsed_time_verbose(ms) do
+    hours = div(ms, 3_600_000)
+    minutes = rem(div(ms, 60_000), 60)
+    "#{hours} hours, #{minutes} minutes"
+  end
+
+  defp build_leads_text(leads) when map_size(leads) == 0 do
+    "No leads started yet"
+  end
+
+  defp build_leads_text(leads) do
+    leads_list =
+      leads
+      |> Map.values()
+      |> Enum.sort_by(& &1.started_at)
+      |> Enum.map(&format_lead_status/1)
+      |> Enum.join("\n")
+
+    "Leads:\n#{leads_list}"
+  end
+
+  defp format_lead_status(lead) do
+    status_icon =
+      case lead.status do
+        :running -> "◉"
+        :waiting -> "○"
+        :blocked -> "⊗"
+        :complete -> "✓"
+        _ -> "○"
+      end
+
+    deliverable_text = String.slice(lead.deliverable, 0..50)
+    "  #{status_icon} #{lead.id}: #{deliverable_text}"
+  end
+
+  defp build_inspect_text(input, term) do
+    # Parse /inspect command: /inspect <lead_id> [--last N] [--type TYPE]
+    parts = String.split(input, ~r/\s+/, trim: true)
+
+    case parts do
+      ["/inspect"] ->
+        "Usage: /inspect <lead_id> [--last N] [--type TYPE]"
+
+      ["/inspect", lead_id | opts] ->
+        if not term.assigns.job_active do
+          "No active job"
+        else
+          case Map.get(term.assigns.job_leads, lead_id) do
+            nil ->
+              "Lead not found: #{lead_id}\n\nAvailable leads:\n#{list_available_leads(term.assigns.job_leads)}"
+
+            _lead ->
+              # Parse options
+              {last_n, type_filter} = parse_inspect_options(opts)
+
+              # TODO: Once orchestration is implemented, this will read from the site log
+              # For now, show a placeholder message
+              """
+              Site Log for Lead: #{lead_id}
+              ==============================
+
+              Options:
+              - Last N entries: #{last_n || "all"}
+              - Type filter: #{type_filter || "all"}
+
+              (Site log entries will appear here once orchestration is implemented)
+              """
+          end
+        end
+
+      _ ->
+        "Usage: /inspect <lead_id> [--last N] [--type TYPE]"
+    end
+  end
+
+  defp parse_inspect_options(opts) do
+    parse_inspect_options(opts, nil, nil)
+  end
+
+  defp parse_inspect_options([], last_n, type_filter), do: {last_n, type_filter}
+
+  defp parse_inspect_options(["--last", n | rest], _last_n, type_filter) do
+    case Integer.parse(n) do
+      {num, ""} -> parse_inspect_options(rest, num, type_filter)
+      _ -> parse_inspect_options(rest, nil, type_filter)
+    end
+  end
+
+  defp parse_inspect_options(["--type", type | rest], last_n, _type_filter) do
+    parse_inspect_options(rest, last_n, type)
+  end
+
+  defp parse_inspect_options([_unknown | rest], last_n, type_filter) do
+    parse_inspect_options(rest, last_n, type_filter)
+  end
+
+  defp list_available_leads(leads) when map_size(leads) == 0 do
+    "  (no leads started yet)"
+  end
+
+  defp list_available_leads(leads) do
+    leads
+    |> Map.keys()
+    |> Enum.sort()
+    |> Enum.map(&"  - #{&1}")
+    |> Enum.join("\n")
   end
 end
