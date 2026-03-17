@@ -107,15 +107,10 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## skills v0.2
 
-- Implement `Deft.Skills.Registry` as Agent: on init, scan built-in (priv/skills/*.yaml, priv/commands/*.md), global (~/.deft/skills/*.yaml, ~/.deft/commands/*.md), project (.deft/skills/*.yaml, .deft/commands/*.md); parse YAML manifests using String.split(content, "\n---\n", parts: 2) on first part only; do NOT use YamlElixir.read_all_from_string; files missing --- separator are manifest-only (cannot be invoked); apply cascade (project > global > built-in); single namespace — skill wins at same cascade level; hold map of name → Entry struct
-- Implement error handling in Registry discovery: skip skill YAML files that fail to parse with warning; skip skills with missing required fields (name, description) with warning; missing directories treated as empty (not an error) (blocked: Implement Deft.Skills.Registry...)
-- Implement `Deft.Skills.Registry.list/0`: return all entries sorted by name; implement `lookup/1`: return entry by name or :not_found (blocked: Implement Deft.Skills.Registry...)
-- Implement `Deft.Skills.Registry.load_definition/1`: use Agent.get_and_update/2 to atomically read and cache the definition (avoid read/cache race); for skills, read YAML file, parse content after --- separator, cache in registry (set loaded: true), return definition string; for commands, read markdown file contents (blocked: Implement Deft.Skills.Registry...)
-- Implement `use_skill` tool for agent auto-invocation: agent emits use_skill tool call with skill name; harness intercepts, loads full definition from Registry, injects into context, continues agent loop; same mechanism as explicit slash command invocation (blocked: Implement Deft.Skills.Registry...)
-- Add skills/commands listing to system prompt: assemble "Available skills:" and "Available commands:" sections from Registry.list/0 with names + descriptions; include in system prompt build (blocked: Implement Deft.Skills.Registry...)
-- Implement slash command dispatch clarification: TUI intercepts leading / in user input, parses command name + args, looks up in Registry, loads definition if skill, injects as system instruction (skill) or user message (command); report "Unknown command" if not found (blocked: Implement Deft.Skills.Registry...)
-- Implement naming validation: reject files not matching ^[a-z][a-z0-9-]*$, log warning during discovery (blocked: Implement Deft.Skills.Registry...)
-- Implement project-level re-scan on session start: on each new session, re-run discovery for .deft/skills/ and .deft/commands/ to pick up changes; built-in and global skills persist across sessions (blocked: Implement Deft.Skills.Registry...)
+- Implement `use_skill` tool for agent auto-invocation: agent emits use_skill tool call with skill name; harness intercepts, loads full definition from Registry, injects into context, continues agent loop; same mechanism as explicit slash command invocation
+- Add skills/commands listing to system prompt: assemble "Available skills:" and "Available commands:" sections from Registry.list/0 with names + descriptions; include in system prompt build
+- Implement slash command dispatch clarification: TUI intercepts leading / in user input, parses command name + args, looks up in Registry, loads definition if skill, injects as system instruction (skill) or user message (command); report "Unknown command" if not found
+- Implement project-level re-scan on session start: on each new session, re-run discovery for .deft/skills/ and .deft/commands/ to pick up changes; built-in and global skills persist across sessions
 
 ## issues v0.2
 

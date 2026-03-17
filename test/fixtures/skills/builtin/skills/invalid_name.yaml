@@ -1,0 +1,7 @@
+name: Invalid_Name
+description: This has an invalid name
+version: "1.0"
+
+---
+
+This should be skipped.

@@ -15,6 +15,7 @@ defmodule Deft.Application do
       # Process naming registry (unique keys for :via tuples)
       {Registry, keys: :unique, name: Deft.ProcessRegistry},
       Deft.Provider.Registry,
+      Deft.Skills.Registry,
       Deft.Session.Supervisor
     ]
 

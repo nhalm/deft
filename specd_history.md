@@ -2,6 +2,7 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **skills v0.2 (2026-03-17):** Implement `Deft.Skills.Registry` as Agent: on init, scan built-in (priv/skills/*.yaml, priv/commands/*.md), global (~/.deft/skills/*.yaml, ~/.deft/commands/*.md), project (.deft/skills/*.yaml, .deft/commands/*.md); parse YAML manifests using String.split(content, "\n---\n", parts: 2) on first part only; do NOT use YamlElixir.read_all_from_string; files missing --- separator are manifest-only (cannot be invoked); apply cascade (project > global > built-in); single namespace — skill wins at same cascade level; hold map of name → Entry struct
 - **observational-memory v0.1 (2026-03-17):** Implement OM resume: load latest snapshot, initialize State, recompute pending_message_tokens from messages not in observed_message_ids, trigger observation/reflection if thresholds exceeded
 - **observational-memory v0.1 (2026-03-17):** Implement OM persistence: append observation snapshot to session JSONL after each activation + reflection activation + every 60s if snapshot_dirty; snapshot includes all persisted fields from spec section 9.2; use separate OM snapshot file to avoid JSONL write interleaving
 - **observational-memory v0.1 (2026-03-17):** Implement OM event broadcasting via Registry: observation_started, observation_complete, reflection_started, reflection_complete, buffering_started, buffering_complete, activation, sync_fallback, cycle_failed, circuit_open, hard_cap_truncation

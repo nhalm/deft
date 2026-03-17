@@ -1,0 +1,11 @@
+name: deploy
+description: Deploy the application to production
+version: "2.0"
+
+---
+
+Check deployment readiness and deploy to production.
+
+1. Run tests
+2. Build artifacts
+3. Deploy
