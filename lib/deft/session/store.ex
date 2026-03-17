@@ -402,7 +402,11 @@ defmodule Deft.Session.Store do
       active_observations: data.active_observations,
       observation_tokens: data.observation_tokens,
       observed_message_ids: data.observed_message_ids,
+      pending_message_tokens: data[:pending_message_tokens] || 0,
       generation_count: data.generation_count,
+      last_observed_at: parse_datetime_or_nil(data[:last_observed_at]),
+      activation_epoch: data[:activation_epoch] || 0,
+      calibration_factor: data[:calibration_factor] || 4.0,
       timestamp: parse_datetime(data.timestamp)
     }
   end
@@ -434,6 +438,17 @@ defmodule Deft.Session.Store do
   end
 
   defp parse_datetime(%DateTime{} = dt), do: dt
+
+  defp parse_datetime_or_nil(nil), do: nil
+
+  defp parse_datetime_or_nil(dt) when is_binary(dt) do
+    case DateTime.from_iso8601(dt) do
+      {:ok, datetime, _offset} -> datetime
+      {:error, _} -> nil
+    end
+  end
+
+  defp parse_datetime_or_nil(%DateTime{} = dt), do: dt
 
   defp parse_atom(value, allowed) when is_atom(value) do
     if value in allowed, do: value, else: :user

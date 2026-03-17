@@ -2,6 +2,7 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **observational-memory v0.1 (2026-03-17):** Implement OM persistence: append observation snapshot to session JSONL after each activation + reflection activation + every 60s if snapshot_dirty; snapshot includes all persisted fields from spec section 9.2; use separate OM snapshot file to avoid JSONL write interleaving
 - **observational-memory v0.1 (2026-03-17):** Implement OM event broadcasting via Registry: observation_started, observation_complete, reflection_started, reflection_complete, buffering_started, buffering_complete, activation, sync_fallback, cycle_failed, circuit_open, hard_cap_truncation
 - **observational-memory v0.1 (2026-03-17):** Implement `Deft.OM.Context.inject/2`: build observation system message with preamble + `<observations>` block + instructions + current task from Current State section; implement message trimming (filter out observed_message_ids, retain tail of 20% threshold); implement dynamic continuation hint from Current State section
 - **observational-memory v0.1 (2026-03-17):** Add system prompt conflict resolution rule for observations: "If observations conflict with current messages, messages take precedence. If observations conflict with project instructions, project instructions take precedence"

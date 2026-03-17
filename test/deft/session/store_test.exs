@@ -262,13 +262,18 @@ defmodule Deft.Session.StoreTest do
 
     test "deserializes Observation correctly" do
       session_id = "test-deserialize-obs"
+      last_observed = DateTime.utc_now()
 
       entry =
         Observation.new(
           "Some observations",
           1500,
           ["msg-1", "msg-2"],
-          2
+          1000,
+          2,
+          last_observed,
+          5,
+          4.0
         )
 
       append_with_dir(session_id, entry)
@@ -278,7 +283,11 @@ defmodule Deft.Session.StoreTest do
       assert loaded.active_observations == "Some observations"
       assert loaded.observation_tokens == 1500
       assert loaded.observed_message_ids == ["msg-1", "msg-2"]
+      assert loaded.pending_message_tokens == 1000
       assert loaded.generation_count == 2
+      assert loaded.last_observed_at != nil
+      assert loaded.activation_epoch == 5
+      assert loaded.calibration_factor == 4.0
     end
 
     test "deserializes Compaction correctly" do
@@ -411,7 +420,11 @@ defmodule Deft.Session.StoreTest do
       active_observations: data.active_observations,
       observation_tokens: data.observation_tokens,
       observed_message_ids: data.observed_message_ids,
+      pending_message_tokens: data[:pending_message_tokens] || 0,
       generation_count: data.generation_count,
+      last_observed_at: parse_datetime_or_nil(data[:last_observed_at]),
+      activation_epoch: data[:activation_epoch] || 0,
+      calibration_factor: data[:calibration_factor] || 4.0,
       timestamp: parse_datetime(data.timestamp)
     }
   end
@@ -443,6 +456,17 @@ defmodule Deft.Session.StoreTest do
   end
 
   defp parse_datetime(%DateTime{} = dt), do: dt
+
+  defp parse_datetime_or_nil(nil), do: nil
+
+  defp parse_datetime_or_nil(dt) when is_binary(dt) do
+    case DateTime.from_iso8601(dt) do
+      {:ok, datetime, _offset} -> datetime
+      {:error, _} -> nil
+    end
+  end
+
+  defp parse_datetime_or_nil(%DateTime{} = dt), do: dt
 
   defp parse_atom(value, allowed) when is_atom(value) do
     if value in allowed, do: value, else: :user

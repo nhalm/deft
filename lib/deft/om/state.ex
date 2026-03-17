@@ -19,6 +19,7 @@ defmodule Deft.OM.State do
   alias Deft.{Config, Message}
   alias Deft.OM.{BufferedChunk, Observer, Reflector, Supervisor, Tokens}
   alias Deft.OM.Observer.Parse
+  alias Deft.Session.Entry.Observation, as: ObservationEntry
 
   # Default thresholds from spec section 8
   @default_message_threshold 30_000
@@ -117,7 +118,29 @@ defmodule Deft.OM.State do
   @impl true
   def init({session_id, config}) do
     Logger.debug("Starting OM State for session #{session_id}")
+
+    # Schedule periodic snapshot timer (every 60 seconds)
+    schedule_snapshot_timer()
+
     {:ok, %__MODULE__{session_id: session_id, config: config}}
+  end
+
+  @impl true
+  def terminate(_reason, state) do
+    # Write final snapshot on shutdown if state has changed (spec section 9.1)
+    if state.snapshot_dirty do
+      case write_snapshot(state) do
+        :ok ->
+          Logger.debug("Final OM snapshot written for session #{state.session_id} on shutdown")
+
+        {:error, reason} ->
+          Logger.warning(
+            "Failed to write final OM snapshot for session #{state.session_id} on shutdown: #{inspect(reason)}"
+          )
+      end
+    end
+
+    :ok
   end
 
   @impl true
@@ -381,6 +404,17 @@ defmodule Deft.OM.State do
     # Check if hard cap truncation is needed (spec section 4.6)
     state = maybe_apply_hard_cap(state)
 
+    # Write snapshot after reflection activation (spec section 9.1)
+    state =
+      case write_snapshot(state) do
+        :ok ->
+          %{state | snapshot_dirty: false}
+
+        {:error, _reason} ->
+          # Log already happened in write_snapshot, continue with dirty flag set
+          state
+      end
+
     # After Reflector completes, check if there are buffered chunks to activate
     # (now that is_reflecting is false)
     state =
@@ -425,6 +459,33 @@ defmodule Deft.OM.State do
   @impl true
   def handle_info({:DOWN, ref, :process, _pid, _reason}, state) when is_reference(ref) do
     # Ignore stale task crashes
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info(:snapshot_timer, state) do
+    # Periodic snapshot timer (every 60 seconds)
+    # Only write if state has changed (snapshot_dirty flag)
+    state =
+      if state.snapshot_dirty do
+        case write_snapshot(state) do
+          :ok ->
+            %{state | snapshot_dirty: false}
+
+          {:error, reason} ->
+            Logger.warning(
+              "Failed to write periodic snapshot for session #{state.session_id}: #{inspect(reason)}"
+            )
+
+            state
+        end
+      else
+        state
+      end
+
+    # Reschedule next timer
+    schedule_snapshot_timer()
+
     {:noreply, state}
   end
 
@@ -611,8 +672,17 @@ defmodule Deft.OM.State do
         last_observed_at: DateTime.utc_now()
     }
 
-    # Check if we should trigger reflection
-    check_and_spawn_reflector(state)
+    # Write snapshot after observation activation (spec section 9.1)
+    case write_snapshot(state) do
+      :ok ->
+        state = %{state | snapshot_dirty: false}
+        # Check if we should trigger reflection
+        check_and_spawn_reflector(state)
+
+      {:error, _reason} ->
+        # Log already happened in write_snapshot, continue with dirty flag set
+        check_and_spawn_reflector(state)
+    end
   end
 
   defp check_and_spawn_reflector(state) do
@@ -928,5 +998,66 @@ defmodule Deft.OM.State do
     end)
     |> Enum.reject(&is_nil/1)
     |> Enum.join("\n\n")
+  end
+
+  ## Snapshot Persistence Functions
+
+  # Schedule the next snapshot timer (60 seconds)
+  defp schedule_snapshot_timer do
+    Process.send_after(self(), :snapshot_timer, 60_000)
+  end
+
+  # Write an OM snapshot to the separate OM snapshot file
+  # Per spec section 9.1, called:
+  # - After each observation activation
+  # - After each reflection activation
+  # - Every 60 seconds if snapshot_dirty
+  # - On session shutdown
+  defp write_snapshot(state) do
+    # Create snapshot entry with all persisted fields from spec section 9.2
+    entry =
+      ObservationEntry.new(
+        state.active_observations,
+        state.observation_tokens,
+        state.observed_message_ids,
+        state.pending_message_tokens,
+        state.generation_count,
+        state.last_observed_at,
+        state.activation_epoch,
+        state.calibration_factor
+      )
+
+    # Write to separate OM snapshot file to avoid JSONL write interleaving
+    path = om_snapshot_path(state.session_id)
+
+    with :ok <- ensure_sessions_dir(),
+         {:ok, json} <- Jason.encode(entry),
+         line <- json <> "\n",
+         :ok <- File.write(path, line, [:append]) do
+      Logger.debug("OM snapshot written for session #{state.session_id}")
+      :ok
+    else
+      {:error, reason} = error ->
+        Logger.error(
+          "Failed to write OM snapshot for session #{state.session_id}: #{inspect(reason)}"
+        )
+
+        error
+    end
+  end
+
+  # Path to the OM snapshot file (separate from session JSONL)
+  defp om_snapshot_path(session_id) do
+    sessions_dir = Path.expand("~/.deft/sessions")
+    Path.join(sessions_dir, "#{session_id}_om.jsonl")
+  end
+
+  defp ensure_sessions_dir do
+    sessions_dir = Path.expand("~/.deft/sessions")
+
+    case File.mkdir_p(sessions_dir) do
+      :ok -> :ok
+      {:error, reason} -> {:error, reason}
+    end
   end
 end

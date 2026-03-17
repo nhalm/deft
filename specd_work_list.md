@@ -19,8 +19,7 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## observational-memory v0.1
 
-- Implement OM persistence: append observation snapshot to session JSONL after each activation + reflection activation + every 60s if snapshot_dirty; snapshot includes all persisted fields from spec section 9.2; use separate OM snapshot file to avoid JSONL write interleaving
-- Implement OM resume: load latest snapshot, initialize State, recompute pending_message_tokens from messages not in observed_message_ids, trigger observation/reflection if thresholds exceeded (blocked: Implement OM persistence...)
+- Implement OM resume: load latest snapshot, initialize State, recompute pending_message_tokens from messages not in observed_message_ids, trigger observation/reflection if thresholds exceeded
 - Wire OM into Agent: in Context.build/2, call State.get_context/1 for observations + observed IDs, inject observations, trim observed messages; after each turn, call State.messages_added/2
 
 ## tui v0.1

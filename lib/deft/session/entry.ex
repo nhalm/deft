@@ -200,7 +200,7 @@ defmodule Deft.Session.Entry.Observation do
   OM state snapshot entry.
 
   Persists the observational memory state for session resume.
-  See observational-memory spec for details.
+  See observational-memory spec section 9.2 for details.
   """
 
   @derive Jason.Encoder
@@ -209,7 +209,11 @@ defmodule Deft.Session.Entry.Observation do
           active_observations: String.t(),
           observation_tokens: non_neg_integer(),
           observed_message_ids: [String.t()],
+          pending_message_tokens: non_neg_integer(),
           generation_count: non_neg_integer(),
+          last_observed_at: DateTime.t() | nil,
+          activation_epoch: non_neg_integer(),
+          calibration_factor: float(),
           timestamp: DateTime.t()
         }
 
@@ -218,7 +222,10 @@ defmodule Deft.Session.Entry.Observation do
     :active_observations,
     :observation_tokens,
     :observed_message_ids,
+    :pending_message_tokens,
     :generation_count,
+    :activation_epoch,
+    :calibration_factor,
     :timestamp
   ]
 
@@ -227,20 +234,47 @@ defmodule Deft.Session.Entry.Observation do
     :active_observations,
     :observation_tokens,
     :observed_message_ids,
+    :pending_message_tokens,
     :generation_count,
+    :last_observed_at,
+    :activation_epoch,
+    :calibration_factor,
     :timestamp
   ]
 
   @doc """
-  Creates a new Observation entry.
+  Creates a new Observation entry from OM state.
+
+  Per spec section 9.2, includes all persisted fields:
+  - active_observations
+  - observation_tokens
+  - observed_message_ids
+  - pending_message_tokens
+  - generation_count
+  - last_observed_at
+  - activation_epoch
+  - calibration_factor
   """
-  def new(active_observations, observation_tokens, observed_message_ids, generation_count) do
+  def new(
+        active_observations,
+        observation_tokens,
+        observed_message_ids,
+        pending_message_tokens,
+        generation_count,
+        last_observed_at,
+        activation_epoch,
+        calibration_factor
+      ) do
     %__MODULE__{
       type: :observation,
       active_observations: active_observations,
       observation_tokens: observation_tokens,
       observed_message_ids: observed_message_ids,
+      pending_message_tokens: pending_message_tokens,
       generation_count: generation_count,
+      last_observed_at: last_observed_at,
+      activation_epoch: activation_epoch,
+      calibration_factor: calibration_factor,
       timestamp: DateTime.utc_now()
     }
   end

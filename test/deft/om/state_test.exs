@@ -95,7 +95,8 @@ defmodule Deft.OM.StateTest do
       # After activation, buffered_chunks were cleared and epoch incremented
       # Note: There may be new chunks from the trigger message, so we check epoch instead
       assert state.activation_epoch >= 1
-      assert state.snapshot_dirty == true
+      # After activation, snapshot is written and dirty flag is cleared
+      assert state.snapshot_dirty == false
       assert state.last_observed_at != nil
       # Observation tokens should be non-zero (we merged chunks)
       assert state.observation_tokens > 0
