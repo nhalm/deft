@@ -43,6 +43,25 @@ defmodule Deft.Tool do
   """
   @callback execute(args :: map(), context :: Deft.Tool.Context.t()) ::
               {:ok, [Message.content_block()]} | {:error, String.t()}
+
+  @doc """
+  Summarizes a large tool result for cache spilling.
+
+  This callback is optional. If not implemented, the full result will be stored
+  without summarization when spilling to cache.
+
+  Returns a summary string with key information from the full result.
+  The summary should include a reference to the cache key.
+
+  ## Arguments
+
+  - `full_result` - The complete tool result (list of content blocks)
+  - `cache_key` - The cache key where the full result is stored
+  """
+  @callback summarize(full_result :: [Message.content_block()], cache_key :: String.t()) ::
+              String.t()
+
+  @optional_callbacks summarize: 2
 end
 
 defmodule Deft.Tool.Context do
@@ -57,10 +76,19 @@ defmodule Deft.Tool.Context do
   - `file_scope` - Optional list of allowed paths for write/edit operations
   - `bash_timeout` - Timeout in milliseconds for bash tool execution
   - `cache_tid` - Optional ETS table ID for cache access (present when cache is active)
+  - `cache_config` - Optional map of cache configuration (token thresholds per tool)
   """
 
   @enforce_keys [:working_dir, :session_id, :emit, :bash_timeout]
-  defstruct [:working_dir, :session_id, :emit, :file_scope, :bash_timeout, :cache_tid]
+  defstruct [
+    :working_dir,
+    :session_id,
+    :emit,
+    :file_scope,
+    :bash_timeout,
+    :cache_tid,
+    :cache_config
+  ]
 
   @type t :: %__MODULE__{
           working_dir: String.t(),
@@ -68,6 +96,7 @@ defmodule Deft.Tool.Context do
           emit: (String.t() -> :ok),
           file_scope: [String.t()] | nil,
           bash_timeout: pos_integer(),
-          cache_tid: reference() | nil
+          cache_tid: reference() | nil,
+          cache_config: map() | nil
         }
 end

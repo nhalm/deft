@@ -148,4 +148,65 @@ defmodule Deft.Tools.Find do
       "Found #{file_count} files matching pattern: #{pattern}\n\n#{formatted}"
     end
   end
+
+  @impl Deft.Tool
+  def summarize(content_blocks, cache_key) do
+    # Extract text from content blocks
+    text =
+      content_blocks
+      |> Enum.map(fn
+        %{text: t} -> t
+        _ -> ""
+      end)
+      |> Enum.join("\n")
+
+    # Parse the find output to count files and show top-level structure
+    lines = String.split(text, "\n", trim: true)
+
+    # Extract file count from first line if present
+    file_count =
+      case List.first(lines) do
+        line when is_binary(line) ->
+          case Regex.run(~r/Found (\d+)\+? files/, line) do
+            [_, count] -> String.to_integer(count)
+            _ -> length(lines) - 1
+          end
+
+        _ ->
+          length(lines)
+      end
+
+    # Get top-level structure - group by directory
+    file_lines = Enum.drop(lines, 1) |> Enum.reject(&(&1 == "" or String.starts_with?(&1, "(")))
+
+    # Group files by top-level directory
+    grouped =
+      file_lines
+      |> Enum.group_by(fn file ->
+        parts = Path.split(file)
+
+        case parts do
+          [_single] -> "."
+          [first | _] -> first
+          _ -> "."
+        end
+      end)
+
+    # Show directory summary
+    structure =
+      grouped
+      |> Enum.map(fn {dir, files} ->
+        "  #{dir}/    (#{length(files)} files)"
+      end)
+      |> Enum.take(10)
+      |> Enum.join("\n")
+
+    """
+    Found #{file_count} files. Top-level structure:
+
+    #{structure}
+
+    Full results: cache://#{cache_key}
+    """
+  end
 end

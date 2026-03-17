@@ -1,6 +1,8 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **filesystem v0.2 (2026-03-17):** Add summarize/2 callback to Deft.Tool behaviour: receives full result + cache key, returns summary string with cache://<key> reference; implement for grep (match count + top N), read (line count + first N lines), find/ls (file count + top-level structure)
+- **filesystem v0.2 (2026-03-17):** Implement tool result spilling protocol: in Deft.Agent.ToolRunner, after tool execution check if result byte_size/4 exceeds tool's cache.token_threshold; if so, call tool's summarize/2 callback, write full result to cache, replace context entry with summary + cache://<key> reference
 - **evals v0.2 (2026-03-17):** Implement skill invocation fidelity evals: agent auto-invokes via use_skill tool correctly; skill definition is loaded and followed; 20 iterations, 80% pass rate
 - **evals v0.2 (2026-03-17):** Implement skill suggestion evals: agent suggests appropriate skill when context matches skill description; 20 iterations, 80% pass rate
 - **tui v0.1 (2026-03-17):** Implement job status display in Chat view: per-Lead progress, blocked status, cost, elapsed time; /status and /inspect commands

@@ -1023,12 +1023,26 @@ defmodule Deft.Agent do
 
   defp build_tool_context(data) do
     # Build a Deft.Tool.Context struct for tool execution
+    # Extract cache configuration from config
+    config = data.config
+
+    cache_config = %{
+      "default" => Map.get(config, :cache_token_threshold, 10_000),
+      "read" => Map.get(config, :cache_token_threshold_read, 20_000),
+      "grep" => Map.get(config, :cache_token_threshold_grep, 8_000),
+      "ls" => Map.get(config, :cache_token_threshold_ls, 4_000),
+      "find" => Map.get(config, :cache_token_threshold_find, 4_000)
+    }
+
     %Deft.Tool.Context{
       working_dir: Map.get(data.config, :working_dir, File.cwd!()),
       session_id: data.session_id,
       emit: fn _output -> :ok end,
       file_scope: nil,
-      bash_timeout: Map.get(data.config, :bash_timeout, 120_000)
+      bash_timeout: Map.get(data.config, :bash_timeout, 120_000),
+      # TODO: Set when cache instance is created
+      cache_tid: nil,
+      cache_config: cache_config
     }
   end
 

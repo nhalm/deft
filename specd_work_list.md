@@ -28,7 +28,7 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement Foreman verification circuit breaker evals: verify Foreman correctly identifies broken work and does not mark it done; highest-priority eval — validates the safety net; 20 iterations, 90% pass rate (blocked: Implement Foreman gen_statem...)
 - Implement Lead task planning evals: 4-8 tasks, dependency-ordered, clear done states; 20 iterations, 75% pass rate (blocked: Implement Lead gen_statem...)
 - Implement Lead steering evals: identifies errors, provides specific corrections; 20 iterations, 75% pass rate (blocked: Implement Lead active steering...)
-- Implement spilling summary quality evals: tool-specific summaries (grep match count + top N, read line count + first N lines, ls/find file count + top-level structure) preserve key information; 20 iterations, 85% pass rate (blocked: Implement tool result spilling protocol...)
+- Implement spilling summary quality evals: tool-specific summaries (grep match count + top N, read line count + first N lines, ls/find file count + top-level structure) preserve key information; 20 iterations, 85% pass rate
 - Implement spilling cache retrieval evals: agent correctly uses cache_read tool when details not in summary; filter and lines parameters work; 20 iterations, 85% pass rate (blocked: Implement cache_read tool...)
 - Implement spilling threshold calibration grid search: test each tool's threshold across a range of values, measure summary quality vs context savings tradeoff; use to validate per-tool threshold defaults (blocked: Implement spilling summary quality evals...)
 - Implement issue elicitation quality evals: interactive session produces structured issue with meaningful context, concrete acceptance_criteria, and actionable constraints; issue_draft tool call produces valid JSON; 20 iterations, 80% pass rate (blocked: Implement interactive issue creation session...)
@@ -73,8 +73,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## filesystem v0.2
 
-- Implement tool result spilling protocol: in Deft.Agent.ToolRunner, after tool execution check if result byte_size/4 exceeds tool's cache.token_threshold; if so, call tool's summarize/2 callback, write full result to cache, replace context entry with summary + cache://<key> reference
-- Add summarize/2 callback to Deft.Tool behaviour: receives full result + cache key, returns summary string with cache://<key> reference; implement for grep (match count + top N), read (line count + first N lines), find/ls (file count + top-level structure) (blocked: Implement tool result spilling protocol...)
 - Implement site log programmatic promotion: pattern match on Lead messages — auto-promote contract, decision, correction, critical_finding; promote finding if tagged shared; never promote status or blocker (blocked: Implement Deft.Store site log instance..., Implement Foreman gen_statem...)
 - Implement per-Lead cache isolation: start one Deft.Store instance per Lead with DETS at cache/<session_id>/lead-<lead_id>.dets; Lead cleanup deletes its own cache instance (blocked: Implement Lead gen_statem...)
 - Implement session-end cache cleanup: on session termination, delete all files under cache/<session_id>/ (blocked: Implement per-Lead cache isolation...)

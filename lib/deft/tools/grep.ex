@@ -322,4 +322,52 @@ defmodule Deft.Tools.Grep do
       "#{file}-#{ctx_num}-#{ctx_line}"
     end
   end
+
+  @impl Deft.Tool
+  def summarize(content_blocks, cache_key) do
+    # Extract text from content blocks
+    text =
+      content_blocks
+      |> Enum.map(fn
+        %{text: t} -> t
+        _ -> ""
+      end)
+      |> Enum.join("\n")
+
+    # Parse the grep output to count matches and extract top N
+    lines = String.split(text, "\n", trim: true)
+
+    # Count actual match lines (format: filename:linenum:content)
+    match_lines =
+      Enum.filter(lines, fn line ->
+        Regex.match?(~r/^.+:\d+:/, line)
+      end)
+
+    match_count = length(match_lines)
+
+    # Count unique files
+    unique_files =
+      match_lines
+      |> Enum.map(fn line ->
+        case String.split(line, ":", parts: 2) do
+          [file | _] -> file
+          _ -> nil
+        end
+      end)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+
+    file_count = length(unique_files)
+
+    # Get top 10 matches
+    top_matches = Enum.take(match_lines, 10) |> Enum.join("\n")
+
+    """
+    #{match_count} matches across #{file_count} files. Top 10 shown:
+
+    #{top_matches}
+
+    Full results: cache://#{cache_key}
+    """
+  end
 end

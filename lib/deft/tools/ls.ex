@@ -134,4 +134,50 @@ defmodule Deft.Tools.Ls do
 
   defp pluralize(word, 1), do: word
   defp pluralize(word, _), do: "#{word}s"
+
+  @impl Deft.Tool
+  def summarize(content_blocks, cache_key) do
+    # Extract text from content blocks
+    text =
+      content_blocks
+      |> Enum.map(fn
+        %{text: t} -> t
+        _ -> ""
+      end)
+      |> Enum.join("\n")
+
+    # Parse the ls output to count entries and show top-level structure
+    lines = String.split(text, "\n", trim: true)
+
+    # Extract entry count from last line if present (format: "(X entries)")
+    entry_count =
+      case List.last(lines) do
+        line when is_binary(line) ->
+          case Regex.run(~r/\((\d+) (?:entry|entries)\)/, line) do
+            [_, count] -> String.to_integer(count)
+            _ -> length(lines) - 1
+          end
+
+        _ ->
+          length(lines)
+      end
+
+    # Count directories vs files
+    dir_count = Enum.count(lines, &String.starts_with?(&1, "d "))
+    file_count = Enum.count(lines, &String.starts_with?(&1, "f "))
+
+    # Get top-level structure (first 20 entries)
+    structure =
+      lines
+      |> Enum.take(20)
+      |> Enum.join("\n")
+
+    """
+    Directory with #{entry_count} entries (#{dir_count} directories, #{file_count} files). Top-level structure:
+
+    #{structure}
+
+    Full results: cache://#{cache_key}
+    """
+  end
 end

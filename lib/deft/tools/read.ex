@@ -148,4 +148,50 @@ defmodule Deft.Tools.Read do
         {:error, "Failed to read file: #{:file.format_error(reason)}"}
     end
   end
+
+  @impl Deft.Tool
+  def summarize(content_blocks, cache_key) do
+    # Extract text from content blocks
+    text =
+      content_blocks
+      |> Enum.map(fn
+        %{text: t} -> t
+        _ -> ""
+      end)
+      |> Enum.join("\n")
+
+    # Parse the read output to get line count and first N lines
+    lines = String.split(text, "\n")
+
+    # Extract file info from last line if present (format: "(X of Y lines)")
+    {line_count, _file_name} =
+      case List.last(lines) do
+        line when is_binary(line) ->
+          # Try to parse the line count info
+          case Regex.run(~r/\((\d+) of (\d+) lines\)/, line) do
+            [_, _shown, total] ->
+              {String.to_integer(total), nil}
+
+            _ ->
+              {length(lines), nil}
+          end
+
+        _ ->
+          {length(lines), nil}
+      end
+
+    # Get first 100 lines (excluding line numbers for counting)
+    first_lines =
+      lines
+      |> Enum.take(100)
+      |> Enum.join("\n")
+
+    """
+    File with #{line_count} lines. First 100 lines shown:
+
+    #{first_lines}
+
+    Full results: cache://#{cache_key}
+    """
+  end
 end

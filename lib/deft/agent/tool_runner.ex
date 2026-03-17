@@ -9,6 +9,11 @@ defmodule Deft.Agent.ToolRunner do
   Exceptions in tool execution are caught and converted to error results.
   """
 
+  alias Deft.Message.Text
+  alias Deft.Store
+
+  require Logger
+
   @doc """
   Starts the ToolRunner Task.Supervisor.
   """
@@ -91,10 +96,114 @@ defmodule Deft.Agent.ToolRunner do
         {:error, "Tool '#{tool_use.name}' not found"}
 
       tool_module ->
-        tool_module.execute(tool_use.args, context)
+        result = tool_module.execute(tool_use.args, context)
+        maybe_spill_to_cache(result, tool_use.name, tool_module, context)
     end
   rescue
     exception ->
       {:error, "Tool execution error: #{Exception.message(exception)}"}
+  end
+
+  # Check if result should be spilled to cache based on size threshold
+  defp maybe_spill_to_cache({:ok, content_blocks} = result, tool_name, tool_module, context) do
+    # Only spill if cache is available and configured
+    if context.cache_tid && context.cache_config do
+      # Calculate total byte size of all content blocks
+      total_bytes =
+        Enum.reduce(content_blocks, 0, fn block, acc ->
+          acc + content_block_byte_size(block)
+        end)
+
+      # Estimate tokens as byte_size / 4
+      estimated_tokens = div(total_bytes, 4)
+
+      # Get threshold for this tool (or default)
+      threshold = Map.get(context.cache_config, tool_name, context.cache_config["default"])
+
+      # Spill if exceeds threshold
+      if estimated_tokens > threshold do
+        spill_to_cache(result, content_blocks, tool_name, tool_module, context)
+      else
+        result
+      end
+    else
+      result
+    end
+  end
+
+  defp maybe_spill_to_cache(result, _tool_name, _tool_module, _context), do: result
+
+  # Calculate byte size of a content block
+  defp content_block_byte_size(%{text: text}) when is_binary(text), do: byte_size(text)
+  defp content_block_byte_size(_), do: 0
+
+  # Spill result to cache and return summary
+  defp spill_to_cache({:ok, content_blocks}, content_blocks, tool_name, tool_module, context) do
+    # Generate cache key
+    cache_key = generate_cache_key(tool_name)
+
+    # Write full result to cache
+    # Convert content blocks to a serializable format (just the text for now)
+    cached_value = serialize_content_blocks(content_blocks)
+
+    :ok =
+      Store.write(
+        {:via, Registry, {Deft.ProcessRegistry, {:cache, context.session_id, "default"}}},
+        cache_key,
+        cached_value,
+        %{tool: tool_name, created: System.monotonic_time()}
+      )
+
+    # Generate summary using tool's summarize callback or default
+    summary_text =
+      if function_exported?(tool_module, :summarize, 2) do
+        tool_module.summarize(content_blocks, cache_key)
+      else
+        default_summary(content_blocks, cache_key)
+      end
+
+    # Return summary as new content blocks
+    {:ok, [%Text{text: summary_text}]}
+  rescue
+    error ->
+      # If caching fails, return original result (degraded but functional)
+      require Logger
+      Logger.warning("Failed to spill to cache: #{inspect(error)}")
+      {:ok, content_blocks}
+  end
+
+  # Generate a cache key for a tool result
+  defp generate_cache_key(tool_name) do
+    # Use random hex string for uniqueness
+    random_hex =
+      :crypto.strong_rand_bytes(6)
+      |> Base.encode16(case: :lower)
+
+    "#{tool_name}-#{random_hex}"
+  end
+
+  # Serialize content blocks for cache storage
+  defp serialize_content_blocks(content_blocks) do
+    # For now, just extract and join all text
+    content_blocks
+    |> Enum.map(fn
+      %{text: text} -> text
+      _ -> ""
+    end)
+    |> Enum.join("\n")
+  end
+
+  # Default summary when tool doesn't implement summarize/2
+  defp default_summary(content_blocks, cache_key) do
+    # Count total lines and characters
+    text = serialize_content_blocks(content_blocks)
+    line_count = length(String.split(text, "\n"))
+    char_count = String.length(text)
+
+    """
+    Result cached (#{line_count} lines, #{char_count} chars).
+
+    Full results: cache://#{cache_key}
+    """
   end
 end
