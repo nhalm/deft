@@ -2,6 +2,8 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **filesystem v0.2 (2026-03-17):** Implement `Deft.Store` GenServer: init/1 opens DETS file (on :dets.open_file/2 error, fall back to new empty file; warn for site log corruption, silent for cache), creates ETS table (:set, :protected, unnamed — use tid for access), spawns async load task via Task.async (linked to GenServer) to load DETS → ETS; GenServer ready immediately — reads return :miss for not-yet-loaded entries; register via {:via, Registry, {Deft.Store, name}}
+- **observational-memory v0.1 (2026-03-17):** Implement `Deft.OM.State` GenServer: holds state struct, exposes `get_context/1` returning `{observations_text, observed_message_ids}`, `messages_added/2` that updates pending tokens and spawns Observer Tasks when thresholds approached; manages coalescing via `is_observing` + `needs_rebuffer`
 - **evals v0.2 (2026-03-17):** Implement fixture validation tooling: verify each fixture's spec_version field matches the current spec version; flag stale fixtures when specs change
 - **evals v0.2 (2026-03-17):** Create holdout fixture set: reserve 20-30% of all fixtures in test/eval/fixtures/holdout/; tag with @tag :holdout; exclude from `make test.eval`; run only via `make test.eval.holdout`; validate holdout pass rate is within 10pp of development set
 - **observational-memory v0.1 (2026-03-17):** Implement `Deft.OM.Supervisor` (rest_for_one): starts TaskSupervisor first, then State

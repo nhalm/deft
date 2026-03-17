@@ -10,7 +10,10 @@ defmodule Deft.Application do
   @impl true
   def start(_type, _args) do
     children = [
+      # Event broadcasting registry (duplicate keys for pub/sub)
       {Registry, keys: :duplicate, name: Deft.Registry},
+      # Process naming registry (unique keys for :via tuples)
+      {Registry, keys: :unique, name: Deft.ProcessRegistry},
       Deft.Provider.Registry,
       Deft.Session.Supervisor
     ]
