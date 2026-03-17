@@ -1,0 +1,97 @@
+## Current State
+- (14:20) Active task: Building the authentication system for the app
+- (14:22) Currently implementing password hashing with Argon2
+
+## User Preferences
+- 🔴 (14:05) User strongly prefers Elixir for backend development
+- 🔴 (14:06) User requires PostgreSQL as the database (no alternatives)
+- 🟡 (14:07) User prefers VSCode for editing
+- 🟡 (14:08) User likes test-first development
+- (14:09) User mentioned working on weekends occasionally
+- (14:10) User prefers minimal dependencies
+- 🟡 (14:11) User wants clear documentation
+- 🔴 (14:12) User requires comprehensive test coverage (critical for production)
+- (14:13) User mentioned coffee preference during coding
+- 🟡 (14:14) User prefers functional programming patterns
+
+## Files & Architecture
+- 🔴 (14:15) Read lib/my_app/auth.ex — core authentication module, must not be deleted
+- 🟡 (14:16) Read lib/my_app/accounts/user.ex — user schema with email and hashed_password fields
+- (14:17) Read test/my_app/auth_test.exs — authentication tests
+- 🟡 (14:18) Modified lib/my_app/auth.ex — added password verification function
+- (14:19) Read config/config.exs — application configuration
+- 🟡 (14:20) Read lib/my_app_web/router.ex — Phoenix router file
+- (14:21) Read lib/my_app/repo.ex — Ecto repository module
+- 🔴 (14:22) Modified lib/my_app/accounts/user.ex — added password validation (security critical)
+- (14:23) Read mix.exs — project dependencies
+- 🟡 (14:24) Read priv/repo/migrations/20260315_create_users.exs — users table migration
+- (14:25) Read lib/my_app_web/endpoint.ex — Phoenix endpoint configuration
+- 🟡 (14:26) Modified config/test.exs — updated bcrypt rounds for tests
+- (14:27) Read lib/my_app/application.ex — OTP application module
+- 🟡 (14:28) Read test/support/fixtures/accounts_fixtures.ex — test fixtures
+
+## Decisions
+- 🔴 (14:30) Decided to use Argon2 instead of bcrypt for password hashing (security best practice)
+- 🟡 (14:31) Decided to store sessions in database rather than cookies
+- (14:32) Decided to use Phoenix.LiveView for the UI
+- 🟡 (14:33) Decided to implement rate limiting on login attempts
+- 🔴 (14:34) Decided to require email verification before account activation (security requirement)
+- (14:35) Decided to use Swoosh for email delivery
+- 🟡 (14:36) Decided to use Oban for background jobs
+- (14:37) Decided to use Tailwind CSS for styling
+- 🔴 (14:38) Decided to implement 2FA support for admin accounts (compliance requirement)
+- 🟡 (14:39) Decided to log all authentication attempts
+- (14:40) Decided to use UUID for user IDs
+- 🟡 (14:41) Decided to implement password reset via email
+- (14:42) Decided to cache user sessions in ETS
+- 🟡 (14:43) Decided to implement "remember me" functionality
+- (14:44) Decided to use Guardian for JWT token management
+
+## Session History
+- 🔴 (14:00) User started new project for building authentication system
+- 🟡 (14:01) User asked about best practices for password hashing in Elixir
+- (14:02) Discussed various hashing algorithms
+- 🟡 (14:03) User mentioned needing to support OAuth in future
+- 🔴 (14:04) User confirmed this is for a production healthcare application (HIPAA compliance required)
+- (14:05) User asked about Argon2 configuration parameters
+- 🟡 (14:06) Discussed memory and time cost settings for Argon2
+- (14:07) User asked about database schema design
+- 🟡 (14:08) Discussed user table structure with email, hashed_password, confirmed_at fields
+- (14:09) User asked about email validation patterns
+- (14:10) Discussed regex patterns for email validation
+- 🟡 (14:11) User asked about preventing brute force attacks
+- (14:12) Discussed rate limiting strategies
+- 🟡 (14:13) User asked about session expiration policies
+- (14:14) Discussed different timeout strategies for active vs inactive sessions
+- 🟡 (14:15) User asked about password requirements
+- (14:16) Discussed minimum length, character requirements, and password strength
+- 🟡 (14:17) User asked about implementing "forgot password" flow
+- (14:18) Discussed token-based reset with expiration
+- 🟡 (14:19) User asked about testing authentication logic
+- (14:20) Discussed ExUnit test patterns for auth
+- 🟡 (14:21) User asked about handling concurrent login attempts
+- (14:22) Discussed database locks and unique constraints
+- 🔴 (14:23) User confirmed audit logging is mandatory for all auth events (compliance)
+- 🟡 (14:24) User asked about implementing account lockout after failed attempts
+- (14:25) Discussed progressive delays vs hard lockouts
+- 🟡 (14:26) User asked about email verification workflow
+- (14:27) Discussed confirmation token generation and validation
+- 🟡 (14:28) User asked about testing email delivery
+- (14:29) Discussed Swoosh test adapters and assertions
+- 🟡 (14:30) User asked about production email provider recommendations
+- (14:31) Discussed SendGrid, Mailgun, and AWS SES
+- 🟡 (14:32) User asked about handling bounced emails
+- (14:33) Discussed webhook handling for delivery failures
+- 🟡 (14:34) User asked about implementing 2FA with TOTP
+- (14:35) Discussed NimbleTOTP library
+- (14:36) User asked about backup codes for 2FA recovery
+- 🟡 (14:37) User asked about QR code generation for 2FA setup
+- (14:38) Discussed EQRCode library
+- 🟡 (14:39) User mentioned needing to support SMS as 2FA option
+- (14:40) Discussed Twilio integration
+- 🟡 (14:41) User asked about storing TOTP secrets securely
+- (14:42) Discussed encryption at rest with Cloak library
+- 🟡 (14:43) User asked about WebAuthn support for hardware keys
+- (14:44) Discussed Wax library for WebAuthn
+- (14:45) User asked about implementing role-based access control
+- (14:46) Discussed role and permission tables

@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **evals v0.2 (2026-03-17):** Implement Reflector preservation evals: all 🔴 items survive; 20 iterations, 95% pass rate
 - **evals v0.2 (2026-03-17):** Create coding conversation fixtures: short bug-fix (5-10 exchanges), long feature session (50+ exchanges), multi-topic pivot, sessions with errors/corrections, heavy tool usage
 - **issues v0.2 (2026-03-17):** Implement unblock notification: when an issue is closed, check if any blocked issues became ready, log to user output
 - **issues v0.2 (2026-03-17):** Implement `deft issue close <id>` CLI command: set status to :closed, set closed_at, print any newly unblocked issues
