@@ -56,16 +56,18 @@ defmodule Deft.Tool.Context do
   - `emit` - Function for streaming incremental output (e.g., bash stdout)
   - `file_scope` - Optional list of allowed paths for write/edit operations
   - `bash_timeout` - Timeout in milliseconds for bash tool execution
+  - `cache_tid` - Optional ETS table ID for cache access (present when cache is active)
   """
 
   @enforce_keys [:working_dir, :session_id, :emit, :bash_timeout]
-  defstruct [:working_dir, :session_id, :emit, :file_scope, :bash_timeout]
+  defstruct [:working_dir, :session_id, :emit, :file_scope, :bash_timeout, :cache_tid]
 
   @type t :: %__MODULE__{
           working_dir: String.t(),
           session_id: String.t(),
           emit: (String.t() -> :ok),
           file_scope: [String.t()] | nil,
-          bash_timeout: pos_integer()
+          bash_timeout: pos_integer(),
+          cache_tid: reference() | nil
         }
 end
