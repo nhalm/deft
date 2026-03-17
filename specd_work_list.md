@@ -24,10 +24,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ---
 
-## sessions v0.1
-
-- Implement `deft resume <id>` CLI command: load session JSONL from `~/.deft/sessions/<id>.jsonl`, reconstruct conversation state from `message` + `tool_result` entries, display summary of last 10 messages (formatted as "Role (HH:MM): first 100 chars of content"); then accept `-p "prompt"` flag for non-interactive continuation (execute one turn with that prompt, print response, exit)
-
 ## === BOOTSTRAP CHECKPOINT ===
 <!-- After the above specs are implemented, `deft -p "prompt"` works as a CLI agent. -->
 <!-- Use Deft (or Claude Code) to implement the remaining specs below. -->

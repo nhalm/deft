@@ -185,18 +185,27 @@ defmodule Deft.CLI do
     end
   end
 
-  defp execute_command({:resume_session, session_id}, _flags) do
-    # TODO: Implement interactive resume
-    # For now, just show that we parsed it correctly
-    IO.puts("Resume session: #{session_id}")
-    IO.puts("(Interactive mode not yet implemented)")
-
-    # Verify the session exists
+  defp execute_command({:resume_session, session_id}, flags) do
+    # Load the session state
     case Store.resume(session_id) do
       {:ok, state} ->
-        IO.puts("Session found: #{state.working_dir}")
-        IO.puts("Messages: #{length(state.messages)}")
-        :ok
+        # Display session summary
+        display_session_summary(session_id, state)
+
+        # Check if non-interactive continuation was requested
+        case flags[:prompt] do
+          nil ->
+            # No prompt flag - just show summary and exit
+            IO.puts(
+              "\nUse 'deft resume #{session_id} -p \"prompt\"' to continue non-interactively."
+            )
+
+            :ok
+
+          prompt ->
+            # Non-interactive continuation
+            continue_session_non_interactive(session_id, state, prompt, flags)
+        end
 
       {:error, :enoent} ->
         IO.puts(:stderr, "Error: Session not found: #{session_id}")
@@ -247,6 +256,75 @@ defmodule Deft.CLI do
     IO.puts(:stderr, "Error: #{message}")
     IO.puts(:stderr, "\nRun 'deft --help' for usage information.")
     exit({:shutdown, 1})
+  end
+
+  # Display a summary of the session's last 10 messages
+  defp display_session_summary(session_id, state) do
+    IO.puts("Session: #{session_id}")
+    IO.puts("Working Directory: #{state.working_dir}")
+    IO.puts("Model: #{state.model}")
+    IO.puts("Messages: #{length(state.messages)}")
+    IO.puts("")
+    IO.puts("Last 10 messages:")
+    IO.puts("=================")
+    IO.puts("")
+
+    state.messages
+    |> Enum.take(-10)
+    |> Enum.each(&display_message_summary/1)
+  end
+
+  # Display a single message summary in the format "Role (HH:MM): first 100 chars of content"
+  defp display_message_summary(%Deft.Message{} = msg) do
+    # Format timestamp as HH:MM
+    time = Calendar.strftime(msg.timestamp, "%H:%M")
+
+    # Extract text content and truncate to 100 chars
+    content_preview =
+      msg.content
+      |> Enum.find_value(fn
+        %Deft.Message.Text{text: text} -> text
+        _ -> nil
+      end)
+      |> case do
+        nil -> "[no text content]"
+        text -> String.slice(text, 0..99)
+      end
+
+    # Capitalize role
+    role = msg.role |> to_string() |> String.capitalize()
+
+    IO.puts("#{role} (#{time}): #{content_preview}")
+  end
+
+  # Continue a session non-interactively with a new prompt
+  defp continue_session_non_interactive(session_id, state, prompt, flags) do
+    IO.puts("\nContinuing session with new prompt...")
+    IO.puts("")
+
+    # Build configuration from session state and CLI flags
+    working_dir = state.working_dir
+    cli_flags = build_cli_flags(flags)
+    config = Config.load(cli_flags, working_dir)
+
+    # Verify API key and register provider
+    verify_api_key()
+    :ok = Deft.Provider.Registry.register("anthropic", Deft.Provider.Anthropic)
+
+    # Start agent with existing messages from the session
+    agent_pid = start_agent(session_id, working_dir, config, state.messages)
+
+    # Subscribe to agent events
+    Registry.register(Deft.Registry, {:session, session_id}, [])
+
+    # Open output handle and run
+    output_handle = open_output_handle(flags[:output])
+    Deft.Agent.prompt(agent_pid, prompt)
+    result = non_interactive_loop(output_handle)
+
+    # Clean up
+    close_output_handle(output_handle)
+    result
   end
 
   # Build CLI flags map for Config.load
@@ -335,7 +413,7 @@ defmodule Deft.CLI do
   end
 
   # Start the Agent process for a session
-  defp start_agent(session_id, working_dir, config) do
+  defp start_agent(session_id, working_dir, config, initial_messages \\ []) do
     agent_config = %{
       model: config.model,
       provider: Deft.Provider.Anthropic,
@@ -345,7 +423,13 @@ defmodule Deft.CLI do
       max_turns: config.turn_limit
     }
 
-    {:ok, agent_pid} = Deft.Agent.start_link(session_id: session_id, config: agent_config)
+    {:ok, agent_pid} =
+      Deft.Agent.start_link(
+        session_id: session_id,
+        config: agent_config,
+        messages: initial_messages
+      )
+
     agent_pid
   end
 
