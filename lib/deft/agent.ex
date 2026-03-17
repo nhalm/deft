@@ -43,6 +43,9 @@ defmodule Deft.Agent do
   alias Deft.Agent.Context
   alias Deft.Agent.ToolRunner
   alias Deft.Session.Worker
+  alias Deft.Session.Entry
+  alias Deft.Session.Entry.Compaction
+  alias Deft.Session.Store
 
   alias Deft.Provider.Event.{
     TextDelta,
@@ -994,8 +997,6 @@ defmodule Deft.Agent do
   # Session persistence helpers
 
   defp save_unsaved_messages(data) do
-    alias Deft.Session.{Entry, Store}
-
     # Find messages that haven't been saved yet
     unsaved_messages =
       Enum.reject(data.messages, fn msg ->
@@ -1103,6 +1104,10 @@ defmodule Deft.Agent do
         new_messages = system_messages ++ [summary_message] ++ to_keep
 
         broadcast_event(data.session_id, {:compaction, %{removed: length(to_remove)}})
+
+        # Persist compaction entry to session JSONL
+        compaction_entry = Compaction.new(summary_text, length(to_remove))
+        Store.append(data.session_id, compaction_entry)
 
         %{data | messages: new_messages}
       else

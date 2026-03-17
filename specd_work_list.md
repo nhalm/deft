@@ -24,7 +24,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ## sessions v0.1
 
-- Persist `Entry.Compaction` to session JSONL when compaction occurs: `maybe_compact_messages` broadcasts a `:compaction` event but never calls `Store.append/2` with an `Entry.Compaction` struct. The struct exists (entry.ex lines 249-278) but is unused. Add `Store.append` call after compaction succeeds (agent.ex line 984)
 - Persist `Entry.Cost` to session JSONL on usage updates: `handle_usage` updates `session_cost` in memory but never writes `Entry.Cost` to JSONL. On resume, cumulative cost is lost (resets to 0). Add periodic or per-turn `Store.append` with `Entry.Cost` (agent.ex lines 522-533)
 
 ---
