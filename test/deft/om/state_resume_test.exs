@@ -23,7 +23,8 @@ defmodule Deft.OM.StateResumeTest do
       cache_token_threshold_read: 20_000,
       cache_token_threshold_grep: 8_000,
       cache_token_threshold_ls: 4_000,
-      cache_token_threshold_find: 4_000
+      cache_token_threshold_find: 4_000,
+      issues_compaction_days: 90
     }
 
     {:ok, session_id: session_id, config: config}

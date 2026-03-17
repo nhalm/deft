@@ -22,7 +22,8 @@ defmodule Deft.Config do
           cache_token_threshold_read: pos_integer(),
           cache_token_threshold_grep: pos_integer(),
           cache_token_threshold_ls: pos_integer(),
-          cache_token_threshold_find: pos_integer()
+          cache_token_threshold_find: pos_integer(),
+          issues_compaction_days: pos_integer()
         }
 
   @enforce_keys [
@@ -38,7 +39,8 @@ defmodule Deft.Config do
     :cache_token_threshold_read,
     :cache_token_threshold_grep,
     :cache_token_threshold_ls,
-    :cache_token_threshold_find
+    :cache_token_threshold_find,
+    :issues_compaction_days
   ]
 
   defstruct [
@@ -54,7 +56,8 @@ defmodule Deft.Config do
     :cache_token_threshold_read,
     :cache_token_threshold_grep,
     :cache_token_threshold_ls,
-    :cache_token_threshold_find
+    :cache_token_threshold_find,
+    :issues_compaction_days
   ]
 
   @doc """
@@ -113,6 +116,9 @@ defmodule Deft.Config do
         token_threshold_grep: 8_000,
         token_threshold_ls: 4_000,
         token_threshold_find: 4_000
+      },
+      issues: %{
+        compaction_days: 90
       }
     }
   end
@@ -246,6 +252,7 @@ defmodule Deft.Config do
   defp validate_and_build(config) do
     om_config = Map.get(config, :om, %{})
     cache_config = Map.get(config, :cache, %{})
+    issues_config = Map.get(config, :issues, %{})
 
     %__MODULE__{
       model: Map.fetch!(config, :model),
@@ -260,7 +267,8 @@ defmodule Deft.Config do
       cache_token_threshold_read: Map.get(cache_config, :token_threshold_read, 20_000),
       cache_token_threshold_grep: Map.get(cache_config, :token_threshold_grep, 8_000),
       cache_token_threshold_ls: Map.get(cache_config, :token_threshold_ls, 4_000),
-      cache_token_threshold_find: Map.get(cache_config, :token_threshold_find, 4_000)
+      cache_token_threshold_find: Map.get(cache_config, :token_threshold_find, 4_000),
+      issues_compaction_days: Map.get(issues_config, :compaction_days, 90)
     }
   end
 end

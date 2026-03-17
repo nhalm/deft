@@ -139,9 +139,13 @@ defmodule Deft.Issues do
   @impl true
   def init(opts) do
     file_path = Keyword.get(opts, :file_path, resolve_file_path())
+    compaction_days = Keyword.get(opts, :compaction_days, 90)
 
     # Load issues from JSONL file
     issues = load_issues(file_path)
+
+    # Compact old closed issues
+    issues = compact_closed_issues(issues, compaction_days, file_path)
 
     # Detect and fix cycles
     issues = detect_and_fix_cycles(issues)
@@ -350,6 +354,68 @@ defmodule Deft.Issues do
       |> Map.values()
     else
       []
+    end
+  end
+
+  # Compacts closed issues older than the specified threshold
+  defp compact_closed_issues(issues, compaction_days, file_path) do
+    cutoff_date =
+      DateTime.utc_now()
+      |> DateTime.add(-compaction_days, :day)
+      |> DateTime.to_iso8601()
+
+    {compacted, remaining} =
+      Enum.split_with(issues, fn issue ->
+        issue.status == :closed && issue.closed_at != nil &&
+          issue.closed_at < cutoff_date
+      end)
+
+    compacted_count = length(compacted)
+
+    if compacted_count > 0 do
+      Logger.info("Compacted #{compacted_count} closed issues older than #{compaction_days} days")
+
+      # Rewrite the file without the compacted issues
+      # We need to write directly here since we're in init/1, not in a handle_call
+      case write_issues_during_init(remaining, file_path) do
+        :ok ->
+          remaining
+
+        {:error, reason} ->
+          Logger.warning("Failed to persist compacted issues: #{inspect(reason)}")
+          issues
+      end
+    else
+      issues
+    end
+  end
+
+  # Writes issues during init (simpler than persist_issues, no locking needed during startup)
+  defp write_issues_during_init(issues, file_path) do
+    # Ensure directory exists
+    File.mkdir_p!(Path.dirname(file_path))
+
+    # Write to temp file
+    temp_path = "#{file_path}.tmp.#{:erlang.unique_integer([:positive])}"
+
+    try do
+      lines =
+        issues
+        |> Enum.map(fn issue ->
+          {:ok, json} = Issue.encode(issue)
+          json <> "\n"
+        end)
+
+      File.write!(temp_path, lines)
+
+      # Atomic rename
+      File.rename!(temp_path, file_path)
+      :ok
+    rescue
+      e ->
+        # Clean up temp file on error
+        File.rm(temp_path)
+        {:error, e}
     end
   end
 
