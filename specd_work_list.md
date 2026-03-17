@@ -30,7 +30,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## evals v0.2
 
-- Create coding conversation fixtures: short bug-fix (5-10 exchanges), long feature session (50+ exchanges), multi-topic pivot, sessions with errors/corrections, heavy tool usage
 - Implement Observer extraction evals: 9 test cases from spec section 2.1 (explicit tech choice, preference, file read, file modify, error, command, architecture, dependency, deferred work); 20 iterations, 85% pass rate (blocked: Implement Observer Task execution...)
 - Implement Observer section routing evals: verify facts route to correct sections per spec section 2.2; 20 iterations, 85% pass rate (blocked: Implement Observer extraction evals...)
 - Implement Observer anti-hallucination evals: 4 test cases from spec section 2.3 (hypothetical, exploring options, reading about, discussing alternatives); 20 iterations, 95% pass rate (blocked: Implement Observer extraction evals...)
