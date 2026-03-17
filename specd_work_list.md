@@ -105,7 +105,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## filesystem v0.2
 
-- Implement per-tool threshold config: cache.token_threshold (default 10000), cache.token_threshold.read (20000), cache.token_threshold.grep (8000), cache.token_threshold.ls (4000), cache.token_threshold.find (4000); provisional values pending threshold calibration evals
 - Implement `cache_read` tool: parameters key (required), lines (optional line range), filter (optional grep pattern); returns full cached result or filtered subset; error cases :miss (not found) and :expired (session ended); only include in agent tool list when session has active cache entries
 - Implement system prompt integration for cache spilling: when cache entries are active, include instruction about cache:// references and cache_read tool usage; remove instruction when no cache entries active (blocked: Implement cache_read tool...)
 - Implement tool result spilling protocol: in Deft.Agent.ToolRunner, after tool execution check if result byte_size/4 exceeds tool's cache.token_threshold; if so, call tool's summarize/2 callback, write full result to cache, replace context entry with summary + cache://<key> reference

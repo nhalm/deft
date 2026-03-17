@@ -17,7 +17,12 @@ defmodule Deft.Config do
           bash_timeout: pos_integer(),
           om_enabled: boolean(),
           om_observer_model: String.t(),
-          om_reflector_model: String.t()
+          om_reflector_model: String.t(),
+          cache_token_threshold: pos_integer(),
+          cache_token_threshold_read: pos_integer(),
+          cache_token_threshold_grep: pos_integer(),
+          cache_token_threshold_ls: pos_integer(),
+          cache_token_threshold_find: pos_integer()
         }
 
   @enforce_keys [
@@ -28,7 +33,12 @@ defmodule Deft.Config do
     :bash_timeout,
     :om_enabled,
     :om_observer_model,
-    :om_reflector_model
+    :om_reflector_model,
+    :cache_token_threshold,
+    :cache_token_threshold_read,
+    :cache_token_threshold_grep,
+    :cache_token_threshold_ls,
+    :cache_token_threshold_find
   ]
 
   defstruct [
@@ -39,7 +49,12 @@ defmodule Deft.Config do
     :bash_timeout,
     :om_enabled,
     :om_observer_model,
-    :om_reflector_model
+    :om_reflector_model,
+    :cache_token_threshold,
+    :cache_token_threshold_read,
+    :cache_token_threshold_grep,
+    :cache_token_threshold_ls,
+    :cache_token_threshold_find
   ]
 
   @doc """
@@ -91,6 +106,13 @@ defmodule Deft.Config do
         enabled: true,
         observer_model: "claude-haiku-4.5",
         reflector_model: "claude-haiku-4.5"
+      },
+      cache: %{
+        token_threshold: 10_000,
+        token_threshold_read: 20_000,
+        token_threshold_grep: 8_000,
+        token_threshold_ls: 4_000,
+        token_threshold_find: 4_000
       }
     }
   end
@@ -124,26 +146,58 @@ defmodule Deft.Config do
 
   # Normalize CLI flags to nested structure
   defp normalize_cli_flags(flags) do
-    flags
-    |> Enum.reduce(%{}, fn {key, value}, acc ->
-      case key do
-        :om_enabled ->
-          Map.update(acc, :om, %{enabled: value}, fn om -> Map.put(om, :enabled, value) end)
+    Enum.reduce(flags, %{}, &normalize_flag/2)
+  end
 
-        :om_observer_model ->
-          Map.update(acc, :om, %{observer_model: value}, fn om ->
-            Map.put(om, :observer_model, value)
-          end)
+  # Normalize a single CLI flag
+  defp normalize_flag({:om_enabled, value}, acc) do
+    Map.update(acc, :om, %{enabled: value}, fn om -> Map.put(om, :enabled, value) end)
+  end
 
-        :om_reflector_model ->
-          Map.update(acc, :om, %{reflector_model: value}, fn om ->
-            Map.put(om, :reflector_model, value)
-          end)
-
-        _ ->
-          Map.put(acc, key, value)
-      end
+  defp normalize_flag({:om_observer_model, value}, acc) do
+    Map.update(acc, :om, %{observer_model: value}, fn om ->
+      Map.put(om, :observer_model, value)
     end)
+  end
+
+  defp normalize_flag({:om_reflector_model, value}, acc) do
+    Map.update(acc, :om, %{reflector_model: value}, fn om ->
+      Map.put(om, :reflector_model, value)
+    end)
+  end
+
+  defp normalize_flag({:cache_token_threshold, value}, acc) do
+    Map.update(acc, :cache, %{token_threshold: value}, fn cache ->
+      Map.put(cache, :token_threshold, value)
+    end)
+  end
+
+  defp normalize_flag({:cache_token_threshold_read, value}, acc) do
+    Map.update(acc, :cache, %{token_threshold_read: value}, fn cache ->
+      Map.put(cache, :token_threshold_read, value)
+    end)
+  end
+
+  defp normalize_flag({:cache_token_threshold_grep, value}, acc) do
+    Map.update(acc, :cache, %{token_threshold_grep: value}, fn cache ->
+      Map.put(cache, :token_threshold_grep, value)
+    end)
+  end
+
+  defp normalize_flag({:cache_token_threshold_ls, value}, acc) do
+    Map.update(acc, :cache, %{token_threshold_ls: value}, fn cache ->
+      Map.put(cache, :token_threshold_ls, value)
+    end)
+  end
+
+  defp normalize_flag({:cache_token_threshold_find, value}, acc) do
+    Map.update(acc, :cache, %{token_threshold_find: value}, fn cache ->
+      Map.put(cache, :token_threshold_find, value)
+    end)
+  end
+
+  defp normalize_flag({key, value}, acc) do
+    Map.put(acc, key, value)
   end
 
   # Load and parse YAML file
@@ -191,6 +245,7 @@ defmodule Deft.Config do
   # Validate and build the Config struct
   defp validate_and_build(config) do
     om_config = Map.get(config, :om, %{})
+    cache_config = Map.get(config, :cache, %{})
 
     %__MODULE__{
       model: Map.fetch!(config, :model),
@@ -200,7 +255,12 @@ defmodule Deft.Config do
       bash_timeout: Map.fetch!(config, :bash_timeout),
       om_enabled: Map.get(om_config, :enabled, true),
       om_observer_model: Map.get(om_config, :observer_model, "claude-haiku-4.5"),
-      om_reflector_model: Map.get(om_config, :reflector_model, "claude-haiku-4.5")
+      om_reflector_model: Map.get(om_config, :reflector_model, "claude-haiku-4.5"),
+      cache_token_threshold: Map.get(cache_config, :token_threshold, 10_000),
+      cache_token_threshold_read: Map.get(cache_config, :token_threshold_read, 20_000),
+      cache_token_threshold_grep: Map.get(cache_config, :token_threshold_grep, 8_000),
+      cache_token_threshold_ls: Map.get(cache_config, :token_threshold_ls, 4_000),
+      cache_token_threshold_find: Map.get(cache_config, :token_threshold_find, 4_000)
     }
   end
 end

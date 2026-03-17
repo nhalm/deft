@@ -2,6 +2,7 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **filesystem v0.2 (2026-03-17):** Implement per-tool threshold config: cache.token_threshold (default 10000), cache.token_threshold.read (20000), cache.token_threshold.grep (8000), cache.token_threshold.ls (4000), cache.token_threshold.find (4000); provisional values pending threshold calibration evals
 - **skills v0.2 (2026-03-17):** Define `Deft.Skills.Entry` struct: name, type (:skill | :command), level (:builtin | :global | :project), description, path, loaded (boolean)
 - **observational-memory v0.1 (2026-03-17):** Implement Observer/Reflector serialization: if is_reflecting, defer Observer activation until reflection completes; if is_observing, defer reflection until Observer completes; activation_epoch incremented on both
 - **issues v0.2 (2026-03-17):** Implement `Deft.Issue.Id.generate/1`: derive 4-hex-char ID from random UUID with `deft-` prefix, accept existing IDs list, extend to 5+ chars on collision
