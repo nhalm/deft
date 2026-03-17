@@ -11,6 +11,7 @@ burrito_out/
 # Test/coverage
 cover/
 doc/
+test/eval/results/
 
 # OS
 .DS_Store
