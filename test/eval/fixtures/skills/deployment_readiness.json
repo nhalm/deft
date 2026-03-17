@@ -1,0 +1,19 @@
+{
+  "id": "skills-deployment-001",
+  "spec_version": "0.2",
+  "description": "User asks about deployment readiness",
+  "tags": ["skills", "suggestion", "deploy"],
+  "available_skills": [
+    {"name": "deploy-check", "description": "Verify deployment readiness"},
+    {"name": "review", "description": "Perform a comprehensive code review"}
+  ],
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {"type": "text", "text": "Is this code ready to deploy to production?"}
+      ]
+    }
+  ],
+  "expected_suggestion": ["deploy-check"]
+}

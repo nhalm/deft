@@ -1,0 +1,14 @@
+{
+  "skills.suggestion": {
+    "history": [
+      {
+        "n": 1,
+        "run_id": "2026-03-17-e8295d",
+        "commit": "c3bf4b16ad493be233e2f39e0984b63313186545",
+        "rate": 0.0
+      }
+    ],
+    "baseline": 0.0,
+    "soft_floor": -0.1
+  }
+}
