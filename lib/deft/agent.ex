@@ -43,6 +43,17 @@ defmodule Deft.Agent do
   alias Deft.Agent.ToolRunner
   alias Deft.Session.Worker
 
+  alias Deft.Provider.Event.{
+    TextDelta,
+    ThinkingDelta,
+    ToolCallStart,
+    ToolCallDelta,
+    ToolCallDone,
+    Usage,
+    Done,
+    Error
+  }
+
   # Client API
 
   @doc """
@@ -254,8 +265,45 @@ defmodule Deft.Agent do
   def handle_event(:info, {:provider_event, event}, :calling, data) do
     case event do
       # First content chunk - transition to streaming
-      {event_type, _payload}
-      when event_type in [:text_delta, :thinking_delta, :tool_call_start] ->
+      %TextDelta{} ->
+        # Initialize current assistant message
+        current_message = %Message{
+          id: generate_message_id(),
+          role: :assistant,
+          content: [],
+          timestamp: DateTime.utc_now()
+        }
+
+        new_data = %{
+          data
+          | current_message: current_message,
+            retry_count: 0,
+            retry_delay: 1000
+        }
+
+        broadcast_event(data.session_id, {:state_change, :streaming})
+        {:next_state, :streaming, new_data}
+
+      %ThinkingDelta{} ->
+        # Initialize current assistant message
+        current_message = %Message{
+          id: generate_message_id(),
+          role: :assistant,
+          content: [],
+          timestamp: DateTime.utc_now()
+        }
+
+        new_data = %{
+          data
+          | current_message: current_message,
+            retry_count: 0,
+            retry_delay: 1000
+        }
+
+        broadcast_event(data.session_id, {:state_change, :streaming})
+        {:next_state, :streaming, new_data}
+
+      %ToolCallStart{} ->
         # Initialize current assistant message
         current_message = %Message{
           id: generate_message_id(),
@@ -275,8 +323,8 @@ defmodule Deft.Agent do
         {:next_state, :streaming, new_data}
 
       # Error event - retry with exponential backoff
-      {:error, error_payload} ->
-        handle_calling_error(error_payload, data)
+      %Error{} = error_event ->
+        handle_calling_error(error_event, data)
 
       # Other events (usage, etc.) - keep waiting for first content
       _ ->
@@ -304,36 +352,36 @@ defmodule Deft.Agent do
     end
   end
 
-  def handle_event(:info, {:provider_event, {:text_delta, payload}}, :streaming, data) do
-    handle_text_delta(payload, data)
+  def handle_event(:info, {:provider_event, %TextDelta{} = event}, :streaming, data) do
+    handle_text_delta(event, data)
   end
 
-  def handle_event(:info, {:provider_event, {:thinking_delta, payload}}, :streaming, data) do
-    handle_thinking_delta(payload, data)
+  def handle_event(:info, {:provider_event, %ThinkingDelta{} = event}, :streaming, data) do
+    handle_thinking_delta(event, data)
   end
 
-  def handle_event(:info, {:provider_event, {:tool_call_start, payload}}, :streaming, data) do
-    handle_tool_call_start(payload, data)
+  def handle_event(:info, {:provider_event, %ToolCallStart{} = event}, :streaming, data) do
+    handle_tool_call_start(event, data)
   end
 
-  def handle_event(:info, {:provider_event, {:tool_call_delta, payload}}, :streaming, data) do
-    handle_tool_call_delta(payload, data)
+  def handle_event(:info, {:provider_event, %ToolCallDelta{} = event}, :streaming, data) do
+    handle_tool_call_delta(event, data)
   end
 
-  def handle_event(:info, {:provider_event, {:tool_call_done, payload}}, :streaming, data) do
-    handle_tool_call_done(payload, data)
+  def handle_event(:info, {:provider_event, %ToolCallDone{} = event}, :streaming, data) do
+    handle_tool_call_done(event, data)
   end
 
-  def handle_event(:info, {:provider_event, {:usage, payload}}, :streaming, data) do
-    handle_usage(payload, data)
+  def handle_event(:info, {:provider_event, %Usage{} = event}, :streaming, data) do
+    handle_usage(event, data)
   end
 
-  def handle_event(:info, {:provider_event, {:done, _}}, :streaming, data) do
+  def handle_event(:info, {:provider_event, %Done{}}, :streaming, data) do
     handle_stream_done(data)
   end
 
-  def handle_event(:info, {:provider_event, {:error, payload}}, :streaming, data) do
-    handle_stream_error(payload, data)
+  def handle_event(:info, {:provider_event, %Error{} = event}, :streaming, data) do
+    handle_stream_error(event, data)
   end
 
   def handle_event(:info, {:provider_event, _event}, :streaming, _data) do
