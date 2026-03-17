@@ -2,6 +2,8 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **observational-memory v0.1 (2026-03-17):** Implement `Deft.OM.Supervisor` (rest_for_one): starts TaskSupervisor first, then State
+- **observational-memory v0.1 (2026-03-17):** Define `Deft.OM.State` struct with all fields from spec section 2: active_observations, observation_tokens, buffered_chunks, buffered_reflection, last_observed_at, observed_message_ids, pending_message_tokens, generation_count, is_observing, is_reflecting, needs_rebuffer, activation_epoch, snapshot_dirty, calibration_factor, sync_from - Define `Deft.OM.BufferedChunk` struct: observations, token_count, message_ids, message_tokens, epoch - Implement `Deft.OM.Tokens.estimate/1`: `div(byte_size(text), calibration_factor)` with configurable factor; implement `calibrate/2` via exponential moving average (alpha=0.1)
 - **rate-limiter v0.1 (2026-03-17):** Implement starvation protection: promote any call waiting longer than 10 seconds to highest priority; use injectable time source for testing
 - **rate-limiter v0.1 (2026-03-17):** Implement priority queue: Foreman > Runner > Lead ordering using :gb_trees or sorted list keyed by {priority, enqueue_time}; FIFO within same priority level; callers submit LLM calls and receive results via call/reply protocol
 - **rate-limiter v0.1 (2026-03-17):** Implement `Deft.Job.RateLimiter` dual token-bucket GenServer: RPM bucket (refills at provider RPM limit, deducts 1 per call) + TPM bucket (refills at provider TPM limit, deducts estimated input tokens on send via chars/4 heuristic); on API response, reconcile actual usage with credit-back capped at bucket maximum (no over-crediting); call proceeds only when both buckets have capacity
