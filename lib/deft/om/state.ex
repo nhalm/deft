@@ -46,7 +46,10 @@ defmodule Deft.OM.State do
           sync_from: GenServer.from() | nil,
           observer_ref: reference() | nil,
           reflector_ref: reference() | nil,
-          last_buffer_threshold: integer()
+          last_buffer_threshold: integer(),
+          consecutive_failures: integer(),
+          circuit_open: boolean(),
+          circuit_opened_at: DateTime.t() | nil
         }
 
   @enforce_keys [:session_id, :config]
@@ -71,7 +74,10 @@ defmodule Deft.OM.State do
     snapshot_dirty: false,
     calibration_factor: 4.0,
     sync_from: nil,
-    last_buffer_threshold: 0
+    last_buffer_threshold: 0,
+    consecutive_failures: 0,
+    circuit_open: false,
+    circuit_opened_at: nil
   ]
 
   ## Client API
@@ -208,6 +214,17 @@ defmodule Deft.OM.State do
     # Demonitor the task
     Process.demonitor(ref, [:flush])
 
+    # Check if observations are empty (indicates failure)
+    is_success = result.observations != ""
+
+    # Record success/failure for circuit breaker
+    state =
+      if is_success do
+        record_cycle_success(state)
+      else
+        record_cycle_failure(state, :observation, :empty_observations)
+      end
+
     # Check if this is a sync fallback call
     if state.sync_from do
       # Reply to the stashed caller with the result
@@ -223,21 +240,30 @@ defmodule Deft.OM.State do
 
       {:noreply, state}
     else
-      # Normal async buffering path - store the buffered chunk
-      chunk = %BufferedChunk{
-        observations: result.observations,
-        token_count: Tokens.estimate(result.observations, state.calibration_factor),
-        message_ids: result.message_ids,
-        message_tokens: result.message_tokens,
-        epoch: state.activation_epoch
-      }
+      # Normal async buffering path - only store the chunk if successful
+      state =
+        if is_success do
+          chunk = %BufferedChunk{
+            observations: result.observations,
+            token_count: Tokens.estimate(result.observations, state.calibration_factor),
+            message_ids: result.message_ids,
+            message_tokens: result.message_tokens,
+            epoch: state.activation_epoch
+          }
 
-      state = %{
-        state
-        | buffered_chunks: state.buffered_chunks ++ [chunk],
-          is_observing: false,
-          observer_ref: nil
-      }
+          %{
+            state
+            | buffered_chunks: state.buffered_chunks ++ [chunk],
+              is_observing: false,
+              observer_ref: nil
+          }
+        else
+          %{
+            state
+            | is_observing: false,
+              observer_ref: nil
+          }
+        end
 
       # Check if we need to re-observe (coalescing)
       state =
@@ -261,6 +287,9 @@ defmodule Deft.OM.State do
       when ref != nil do
     # Observer Task crashed or failed
     Logger.warning("Observer Task failed for session #{state.session_id}: #{inspect(reason)}")
+
+    # Record failure for circuit breaker
+    state = record_cycle_failure(state, :observation, reason)
 
     # Check if this is a sync fallback call
     if state.sync_from do
@@ -307,6 +336,9 @@ defmodule Deft.OM.State do
     # Demonitor the task
     Process.demonitor(ref, [:flush])
 
+    # Record success for circuit breaker
+    state = record_cycle_success(state)
+
     # Replace active_observations with compressed result
     # Increment generation_count and activation_epoch
     state = %{
@@ -338,6 +370,9 @@ defmodule Deft.OM.State do
       when ref != nil do
     # Reflector Task crashed or failed
     Logger.warning("Reflector Task failed for session #{state.session_id}: #{inspect(reason)}")
+
+    # Record failure for circuit breaker
+    state = record_cycle_failure(state, :reflection, reason)
 
     state = %{
       state
@@ -454,34 +489,46 @@ defmodule Deft.OM.State do
   end
 
   defp spawn_observer_task(state, threshold) do
-    Logger.debug(
-      "Spawning Observer Task for session #{state.session_id} at #{state.pending_message_tokens} tokens"
-    )
+    # Check circuit breaker before spawning
+    if not can_attempt_cycle?(state) do
+      Logger.debug(
+        "Skipping Observer spawn for session #{state.session_id} - circuit breaker is open"
+      )
 
-    # Get unobserved messages
-    unobserved_messages =
-      state.messages
-      |> Enum.reject(fn msg -> msg.id in state.observed_message_ids end)
-
-    task_supervisor = Supervisor.task_supervisor_name(state.session_id)
-
-    # Spawn Observer Task with actual Observer.run/4 call
-    task =
-      Task.Supervisor.async_nolink(task_supervisor, fn ->
-        Observer.run(
-          state.config,
-          unobserved_messages,
-          state.active_observations,
-          state.calibration_factor
-        )
-      end)
-
-    %{
       state
-      | is_observing: true,
-        observer_ref: task.ref,
-        last_buffer_threshold: threshold
-    }
+    else
+      # Reset circuit if cooldown has expired
+      state = if state.circuit_open, do: reset_circuit(state), else: state
+
+      Logger.debug(
+        "Spawning Observer Task for session #{state.session_id} at #{state.pending_message_tokens} tokens"
+      )
+
+      # Get unobserved messages
+      unobserved_messages =
+        state.messages
+        |> Enum.reject(fn msg -> msg.id in state.observed_message_ids end)
+
+      task_supervisor = Supervisor.task_supervisor_name(state.session_id)
+
+      # Spawn Observer Task with actual Observer.run/4 call
+      task =
+        Task.Supervisor.async_nolink(task_supervisor, fn ->
+          Observer.run(
+            state.config,
+            unobserved_messages,
+            state.active_observations,
+            state.calibration_factor
+          )
+        end)
+
+      %{
+        state
+        | is_observing: true,
+          observer_ref: task.ref,
+          last_buffer_threshold: threshold
+      }
+    end
   end
 
   defp activate_buffered_chunks(state) do
@@ -541,30 +588,131 @@ defmodule Deft.OM.State do
   end
 
   defp spawn_reflector_task(state) do
-    Logger.debug(
-      "Spawning Reflector Task for session #{state.session_id} with #{state.observation_tokens} tokens"
+    # Check circuit breaker before spawning
+    if not can_attempt_cycle?(state) do
+      Logger.debug(
+        "Skipping Reflector spawn for session #{state.session_id} - circuit breaker is open"
+      )
+
+      state
+    else
+      # Reset circuit if cooldown has expired
+      state = if state.circuit_open, do: reset_circuit(state), else: state
+
+      Logger.debug(
+        "Spawning Reflector Task for session #{state.session_id} with #{state.observation_tokens} tokens"
+      )
+
+      # Target size is 50% of reflection threshold (per spec section 4.3)
+      target_size = div(@default_observation_threshold, 2)
+
+      task_supervisor = Supervisor.task_supervisor_name(state.session_id)
+
+      # Spawn Reflector Task
+      task =
+        Task.Supervisor.async_nolink(task_supervisor, fn ->
+          Reflector.run(
+            state.config,
+            state.active_observations,
+            target_size,
+            state.calibration_factor
+          )
+        end)
+
+      %{
+        state
+        | is_reflecting: true,
+          reflector_ref: task.ref
+      }
+    end
+  end
+
+  ## Circuit Breaker Functions
+
+  defp broadcast_event(session_id, event) do
+    # Broadcast OM event via Registry for TUI and other consumers
+    Registry.dispatch(Deft.Registry, {:session, session_id}, fn entries ->
+      for {pid, _} <- entries do
+        send(pid, {:om_event, event})
+      end
+    end)
+  end
+
+  defp record_cycle_success(state) do
+    # Reset consecutive failures on successful cycle
+    %{state | consecutive_failures: 0}
+  end
+
+  defp record_cycle_failure(state, type, reason) do
+    # Increment consecutive failures
+    new_failures = state.consecutive_failures + 1
+
+    # Emit cycle_failed event
+    broadcast_event(state.session_id, {:om, :cycle_failed, %{type: type, reason: reason}})
+
+    # Check if we should open the circuit
+    state = %{state | consecutive_failures: new_failures}
+
+    if should_open_circuit?(state) do
+      open_circuit(state)
+    else
+      state
+    end
+  end
+
+  defp should_open_circuit?(state) do
+    state.consecutive_failures >= 3 and not state.circuit_open
+  end
+
+  defp open_circuit(state) do
+    Logger.warning(
+      "OM circuit breaker opened for session #{state.session_id} after 3 consecutive failures"
     )
 
-    # Target size is 50% of reflection threshold (per spec section 4.3)
-    target_size = div(@default_observation_threshold, 2)
-
-    task_supervisor = Supervisor.task_supervisor_name(state.session_id)
-
-    # Spawn Reflector Task
-    task =
-      Task.Supervisor.async_nolink(task_supervisor, fn ->
-        Reflector.run(
-          state.config,
-          state.active_observations,
-          target_size,
-          state.calibration_factor
-        )
-      end)
+    # Emit circuit_open event
+    broadcast_event(state.session_id, {:om, :circuit_open})
 
     %{
       state
-      | is_reflecting: true,
-        reflector_ref: task.ref
+      | circuit_open: true,
+        circuit_opened_at: DateTime.utc_now()
+    }
+  end
+
+  defp can_attempt_cycle?(state) do
+    cond do
+      # Circuit is not open - can attempt
+      not state.circuit_open ->
+        true
+
+      # Circuit is open - check cooldown (5 minutes)
+      state.circuit_open and state.circuit_opened_at != nil ->
+        elapsed_seconds = DateTime.diff(DateTime.utc_now(), state.circuit_opened_at, :second)
+        cooldown_seconds = 5 * 60
+
+        if elapsed_seconds >= cooldown_seconds do
+          Logger.info(
+            "OM circuit breaker cooldown expired for session #{state.session_id}, resuming"
+          )
+
+          true
+        else
+          false
+        end
+
+      # Shouldn't happen, but treat as circuit open
+      true ->
+        false
+    end
+  end
+
+  defp reset_circuit(state) do
+    # Reset circuit breaker state (called after successful cooldown)
+    %{
+      state
+      | circuit_open: false,
+        circuit_opened_at: nil,
+        consecutive_failures: 0
     }
   end
 end
