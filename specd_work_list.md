@@ -22,6 +22,19 @@ Then use Deft to build the rest of Deft. The critical path is:
   Then: OM → TUI → evals → orchestration
 -->
 
+## harness v0.1
+
+- Fix agent event pattern matching in `:calling` and `:streaming` states: handlers match on tuples (`{:text_delta, payload}`) but provider sends structs (`%TextDelta{delta: text}`). All provider events fall through to catch-all handlers silently. The agent never transitions from `:calling` to `:streaming`. Fix: match on struct patterns instead of tuples in `handle_event` clauses (agent.ex lines 257, 307-336)
+
+## providers v0.1
+
+- Add `Process.monitor/1` on stream PID in agent after `stream/3` returns: the agent stores `stream_ref` (a PID) but never monitors it. If the stream process crashes, the agent hangs in `:calling` forever with no `:DOWN` handler. Add monitor in the `:idle → :calling` transition and handle `:DOWN` in `:calling`/`:streaming` states (agent.ex lines 179-189; providers spec section 1)
+
+## sessions v0.1
+
+- Persist `Entry.Compaction` to session JSONL when compaction occurs: `maybe_compact_messages` broadcasts a `:compaction` event but never calls `Store.append/2` with an `Entry.Compaction` struct. The struct exists (entry.ex lines 249-278) but is unused. Add `Store.append` call after compaction succeeds (agent.ex line 984)
+- Persist `Entry.Cost` to session JSONL on usage updates: `handle_usage` updates `session_cost` in memory but never writes `Entry.Cost` to JSONL. On resume, cumulative cost is lost (resets to 0). Add periodic or per-turn `Store.append` with `Entry.Cost` (agent.ex lines 522-533)
+
 ---
 
 ## === BOOTSTRAP CHECKPOINT ===

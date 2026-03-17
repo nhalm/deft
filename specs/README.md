@@ -62,7 +62,7 @@ Decision reasoning is logged in [specd_decisions.jsonl](../specd_decisions.jsonl
 | [standards](standards.md) | v0.1 | Implemented | Elixir coding standards, Makefile, git hooks, testing strategy |
 | [evals](evals.md) | v0.1 | Draft | AI eval test definitions, expected outcomes, quality gates |
 | [harness](harness.md) | v0.1 | Ready | Agent loop (gen_statem), message format, process architecture, context assembly |
-| [tools](tools.md) | v0.1 | Ready | Tool behaviour, 7 built-in tools, tool execution model |
+| [tools](tools.md) | v0.1 | Implemented | Tool behaviour, 7 built-in tools, tool execution model |
 | [providers](providers.md) | v0.1 | Ready | LLM provider behaviour, SSE streaming, Anthropic implementation |
 | [sessions](sessions.md) | v0.1 | Ready | Session persistence (JSONL), resume, configuration, CLI, distribution |
 | [tui](tui.md) | v0.1 | Draft | Breeze TUI, chat view, markdown rendering, input handling, slash commands |
