@@ -47,7 +47,7 @@ defmodule Deft.Session.Worker do
       {Deft.Agent.ToolRunner, [name: tool_runner_via_tuple(session_id)]},
 
       # 3. OM.Supervisor — Observational memory processes
-      {Deft.OM.Supervisor, [session_id: session_id]}
+      {Deft.OM.Supervisor, [session_id: session_id, config: config]}
     ]
 
     Supervisor.init(children, strategy: :rest_for_one)

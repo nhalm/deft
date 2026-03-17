@@ -16,7 +16,8 @@ defmodule Deft.OM.State do
   use GenServer
   require Logger
 
-  alias Deft.OM.{BufferedChunk, Supervisor, Tokens}
+  alias Deft.{Config, Message}
+  alias Deft.OM.{BufferedChunk, Observer, Supervisor, Tokens}
 
   # Default thresholds from spec section 8
   @default_message_threshold 30_000
@@ -24,6 +25,8 @@ defmodule Deft.OM.State do
 
   @type t :: %__MODULE__{
           session_id: String.t(),
+          config: Config.t(),
+          messages: [Message.t()],
           active_observations: String.t(),
           observation_tokens: integer(),
           buffered_chunks: [BufferedChunk.t()],
@@ -43,10 +46,12 @@ defmodule Deft.OM.State do
           last_buffer_threshold: integer()
         }
 
-  @enforce_keys [:session_id]
+  @enforce_keys [:session_id, :config]
   defstruct [
     :session_id,
+    :config,
     :observer_ref,
+    messages: [],
     active_observations: "",
     observation_tokens: 0,
     buffered_chunks: [],
@@ -72,7 +77,8 @@ defmodule Deft.OM.State do
   """
   def start_link(opts) do
     session_id = Keyword.fetch!(opts, :session_id)
-    GenServer.start_link(__MODULE__, session_id, name: via_tuple(session_id))
+    config = Keyword.fetch!(opts, :config)
+    GenServer.start_link(__MODULE__, {session_id, config}, name: via_tuple(session_id))
   end
 
   @doc """
@@ -88,10 +94,10 @@ defmodule Deft.OM.State do
   @doc """
   Notifies State that new messages have been added.
 
-  Accepts a list of message metadata maps with `:id` and `:tokens` keys.
+  Accepts a list of Deft.Message structs.
   Updates pending_message_tokens and spawns Observer Tasks when buffer intervals are crossed.
   """
-  @spec messages_added(String.t(), [%{id: String.t(), tokens: integer()}]) :: :ok
+  @spec messages_added(String.t(), [Message.t()]) :: :ok
   def messages_added(session_id, messages) do
     GenServer.cast(via_tuple(session_id), {:messages_added, messages})
   end
@@ -99,9 +105,9 @@ defmodule Deft.OM.State do
   ## Server Callbacks
 
   @impl true
-  def init(session_id) do
+  def init({session_id, config}) do
     Logger.debug("Starting OM State for session #{session_id}")
-    {:ok, %__MODULE__{session_id: session_id}}
+    {:ok, %__MODULE__{session_id: session_id, config: config}}
   end
 
   @impl true
@@ -110,15 +116,42 @@ defmodule Deft.OM.State do
   end
 
   @impl true
-  def handle_cast({:messages_added, messages}, state) do
-    # Calculate new pending tokens
-    new_tokens = Enum.reduce(messages, 0, fn msg, acc -> acc + msg.tokens end)
+  def handle_cast({:messages_added, new_messages}, state) do
+    # Calculate new pending tokens from the new messages
+    new_tokens =
+      new_messages
+      |> Enum.map(fn msg ->
+        # Estimate tokens from message content
+        content_text = extract_message_text(msg)
+        Tokens.estimate(content_text, state.calibration_factor)
+      end)
+      |> Enum.sum()
+
     new_pending = state.pending_message_tokens + new_tokens
 
+    # Append new messages to the message list
+    all_messages = state.messages ++ new_messages
+
     # Check if we crossed a buffer interval threshold
-    state = check_and_spawn_observer(%{state | pending_message_tokens: new_pending})
+    state =
+      %{state | pending_message_tokens: new_pending, messages: all_messages}
+      |> check_and_spawn_observer()
 
     {:noreply, state}
+  end
+
+  defp extract_message_text(message) do
+    alias Deft.Message.{Text, ToolUse, ToolResult, Thinking, Image}
+
+    message.content
+    |> Enum.map(fn
+      %Text{text: text} -> text
+      %ToolUse{name: name, args: args} -> "#{name}(#{inspect(args)})"
+      %ToolResult{content: content} -> content
+      %Thinking{text: text} -> text
+      %Image{} -> "[image]"
+    end)
+    |> Enum.join(" ")
   end
 
   @impl true
@@ -225,18 +258,22 @@ defmodule Deft.OM.State do
       "Spawning Observer Task for session #{state.session_id} at #{state.pending_message_tokens} tokens"
     )
 
-    # TODO: Replace with actual Observer call when Observer module is implemented
-    # For now, spawn a dummy task that returns empty observations
+    # Get unobserved messages
+    unobserved_messages =
+      state.messages
+      |> Enum.reject(fn msg -> msg.id in state.observed_message_ids end)
+
     task_supervisor = Supervisor.task_supervisor_name(state.session_id)
 
+    # Spawn Observer Task with actual Observer.run/4 call
     task =
       Task.Supervisor.async_nolink(task_supervisor, fn ->
-        # Placeholder - will be replaced with actual Observer.run/2 call
-        %{
-          observations: "",
-          message_ids: [],
-          message_tokens: 0
-        }
+        Observer.run(
+          state.config,
+          unobserved_messages,
+          state.active_observations,
+          state.calibration_factor
+        )
       end)
 
     %{

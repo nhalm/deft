@@ -23,12 +23,13 @@ defmodule Deft.OM.Supervisor do
   @impl true
   def init(opts) do
     session_id = Keyword.fetch!(opts, :session_id)
+    config = Keyword.fetch!(opts, :config)
 
     children = [
       # TaskSupervisor starts FIRST (with rest_for_one, if this crashes, State also restarts)
       {Task.Supervisor, name: task_supervisor_name(session_id)},
       # State starts SECOND (if this crashes, TaskSupervisor is unaffected)
-      {Deft.OM.State, session_id: session_id}
+      {Deft.OM.State, session_id: session_id, config: config}
     ]
 
     Supervisor.init(children, strategy: :rest_for_one)
