@@ -22,10 +22,6 @@ Then use Deft to build the rest of Deft. The critical path is:
   Then: OM → TUI → evals → orchestration
 -->
 
-## harness v0.1
-
-- Fix retry counter reset on `:calling → :streaming` transition: `retry_count` and `retry_delay` are reset to 0/1000 at agent.ex:284-286 every time the first streaming chunk arrives. If a stream partially succeeds then errors, the retry counter restarts from 0, allowing unlimited retries instead of the spec's "up to 3 times" limit. Move retry_count/retry_delay reset from the `:calling → :streaming` transition to turn completion (`:executing_tools → :idle` or successful stream end)
-
 ## sessions v0.2
 
 - Implement interactive session mode (`deft` with no args): replace "Interactive mode not yet implemented" stub with minimal REPL-style session using IO.gets loop, independent of TUI (blocked: tui v0.1 reaches Ready status)

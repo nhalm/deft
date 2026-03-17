@@ -281,9 +281,7 @@ defmodule Deft.Agent do
 
         new_data = %{
           data
-          | current_message: current_message,
-            retry_count: 0,
-            retry_delay: 1000
+          | current_message: current_message
         }
 
         broadcast_event(data.session_id, {:state_change, :streaming})
@@ -300,9 +298,7 @@ defmodule Deft.Agent do
 
         new_data = %{
           data
-          | current_message: current_message,
-            retry_count: 0,
-            retry_delay: 1000
+          | current_message: current_message
         }
 
         broadcast_event(data.session_id, {:state_change, :streaming})
@@ -319,9 +315,7 @@ defmodule Deft.Agent do
 
         new_data = %{
           data
-          | current_message: current_message,
-            retry_count: 0,
-            retry_delay: 1000
+          | current_message: current_message
         }
 
         broadcast_event(data.session_id, {:state_change, :streaming})
@@ -745,7 +739,9 @@ defmodule Deft.Agent do
         current_message: nil,
         stream_ref: nil,
         stream_monitor_ref: nil,
-        tool_call_buffers: %{}
+        tool_call_buffers: %{},
+        retry_count: 0,
+        retry_delay: 1000
     }
 
     broadcast_event(data.session_id, {:state_change, :executing_tools})
