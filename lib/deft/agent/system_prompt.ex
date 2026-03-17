@@ -28,10 +28,12 @@ defmodule Deft.Agent.SystemPrompt do
   def build(config \\ %{}) do
     working_dir = Map.get(config, :working_dir, File.cwd!())
     tools = Map.get(config, :tools, [])
+    cache_active = Map.get(config, :cache_active, false)
 
     [
       build_role_definition(),
       build_tool_descriptions(tools),
+      build_cache_spilling_instruction(cache_active),
       build_skills_commands_listing(),
       build_environment_info(working_dir),
       build_conflict_resolution_rules()
@@ -118,6 +120,17 @@ defmodule Deft.Agent.SystemPrompt do
   end
 
   defp format_parameters(_), do: "No parameters"
+
+  # Cache spilling instruction section
+  defp build_cache_spilling_instruction(false), do: nil
+
+  defp build_cache_spilling_instruction(true) do
+    """
+    # Cache Spilling
+
+    When a tool result contains `Full results: cache://<key>`, the full output is stored in cache. Use the `cache_read` tool to retrieve it when you need details not in the summary. You can filter results: `cache_read(key, filter: 'pattern')` or request specific line ranges: `cache_read(key, lines: '740-760')`.
+    """
+  end
 
   # Skills and commands listing section
   defp build_skills_commands_listing do

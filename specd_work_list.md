@@ -86,7 +86,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## filesystem v0.2
 
-- Implement system prompt integration for cache spilling: when cache entries are active, include instruction about cache:// references and cache_read tool usage; remove instruction when no cache entries active
 - Implement tool result spilling protocol: in Deft.Agent.ToolRunner, after tool execution check if result byte_size/4 exceeds tool's cache.token_threshold; if so, call tool's summarize/2 callback, write full result to cache, replace context entry with summary + cache://<key> reference
 - Add summarize/2 callback to Deft.Tool behaviour: receives full result + cache key, returns summary string with cache://<key> reference; implement for grep (match count + top N), read (line count + first N lines), find/ls (file count + top-level structure) (blocked: Implement tool result spilling protocol...)
 - Implement site log programmatic promotion: pattern match on Lead messages — auto-promote contract, decision, correction, critical_finding; promote finding if tagged shared; never promote status or blocker (blocked: Implement Deft.Store site log instance..., Implement Foreman gen_statem...)

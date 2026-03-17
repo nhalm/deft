@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **filesystem v0.2 (2026-03-17):** Implement system prompt integration for cache spilling: when cache entries are active, include instruction about cache:// references and cache_read tool usage; remove instruction when no cache entries active
 - **tui v0.1 (2026-03-17):** Build Breeze streaming proof-of-concept: 1000+ lines mixed text, 30 tokens/sec append, scrollable area + fixed input + status bar; verify performance is acceptable; if not, document fallback to Termite + BackBreeze
 - **filesystem v0.2 (2026-03-17):** Implement `cache_read` tool: parameters key (required), lines (optional line range), filter (optional grep pattern); returns full cached result or filtered subset; error cases :miss (not found) and :expired (session ended); only include in agent tool list when session has active cache entries
 - **tui v0.1 (2026-03-17):** Implement markdown-to-ANSI renderer: parse with Earmark, walk AST to emit ANSI codes for bold/italic/code/lists/fenced code blocks; streaming partial markdown: buffer last incomplete line
