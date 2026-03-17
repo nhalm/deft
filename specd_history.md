@@ -2,6 +2,7 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **issues v0.2 (2026-03-17):** Implement cycle detection on load: after loading from JSONL in init/1, detect cycles in dependency graph; affected issues have dependencies cleared with warnings logged
 - **issues v0.2 (2026-03-17):** Implement `Deft.Issues` GenServer: init reads .deft/issues.jsonl into memory with dedup-on-read (last occurrence per ID wins); lines that fail JSON parsing are skipped with warnings (file not corrupt unless all lines malformed); holds list of Issue structs in state; expose create/1, update/2, close/1, get/1, list/1, ready/0
 - **skills v0.2 (2026-03-17):** Implement project-level re-scan on session start: on each new session, re-run discovery for .deft/skills/ and .deft/commands/ to pick up changes; built-in and global skills persist across sessions
 - **observational-memory v0.1 (2026-03-17):** Wire OM into Agent: in Context.build/2, call State.get_context/1 for observations + observed IDs, inject observations, trim observed messages; after each turn, call State.messages_added/2

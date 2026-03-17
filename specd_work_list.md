@@ -109,7 +109,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## issues v0.2
 
-- Implement cycle detection on load: after loading from JSONL in init/1, detect cycles in dependency graph; affected issues have dependencies cleared with warnings logged
 - Implement JSONL persistence with advisory lock: lock file at .deft/issues.jsonl.lock with exclusive create; lock file contains PID and timestamp as JSON line; stale threshold 30s; retry 100ms with jitter, 10s timeout; writes go to .deft/issues.jsonl.tmp.<random> then File.rename/2
 - Implement worktree awareness: detect worktree via `git rev-parse --git-common-dir`, resolve .deft/issues.jsonl to main repo path; use Deft.Git behaviour for testability
 - Implement git behavior outside repos: when not inside a git repository, create .deft/ in cwd; skip worktree detection (blocked: Implement worktree awareness...)
