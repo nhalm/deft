@@ -92,6 +92,7 @@ defmodule Deft.CLI do
     end
   end
 
+  # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
   defp determine_command(positional, flags) do
     cond do
       flags[:help] ->
@@ -102,6 +103,11 @@ defmodule Deft.CLI do
 
       flags[:prompt] ->
         {:non_interactive, flags[:prompt]}
+
+      # Piped stdin: detect non-TTY input and read prompt from stdin
+      Enum.empty?(positional) and stdin_piped?() ->
+        prompt = read_stdin()
+        {:non_interactive, prompt}
 
       positional == ["config"] ->
         :config
@@ -515,5 +521,16 @@ defmodule Deft.CLI do
       IO.puts(:stderr, "\nSome features may not work correctly without these tools.")
       IO.puts(:stderr, "")
     end
+  end
+
+  # Detect if stdin is piped (not a TTY)
+  defp stdin_piped? do
+    !IO.ANSI.enabled?() or :io.columns() == {:error, :enoent}
+  end
+
+  # Read prompt from stdin
+  defp read_stdin do
+    IO.read(:stdio, :all)
+    |> String.trim()
   end
 end

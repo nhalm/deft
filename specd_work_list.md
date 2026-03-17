@@ -24,10 +24,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ---
 
-## sessions v0.1
-
-- Implement piped stdin mode: detect when stdin is not a TTY (`!IO.ANSI.enabled?()` or `:io.columns() == {:error, :enoent}`), read prompt from stdin, execute as non-interactive single turn (cli.ex)
-
 ## === BOOTSTRAP CHECKPOINT ===
 <!-- After the above specs are implemented, `deft -p "prompt"` works as a CLI agent. -->
 <!-- Use Deft (or Claude Code) to implement the remaining specs below. -->
