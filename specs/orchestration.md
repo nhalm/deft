@@ -235,7 +235,7 @@ The Foreman maintains a `Deft.Store` instance (ETS+DETS) for curated job knowled
 
 **Read access:** Leads can read from the site log to access contracts, decisions, and other curated knowledge.
 
-### 9. User Interaction During Jobs
+### 7. User Interaction During Jobs
 
 The user interacts with the Foreman through the normal TUI chat interface.
 
@@ -255,7 +255,7 @@ The TUI shows Lead status (running/waiting/complete), current Runner activity, c
 | Modify plan | "Split the backend into API and middleware" |
 | Inspect Lead work | `/inspect lead-a` |
 
-### 10. Configuration
+### 8. Configuration
 
 | Field | Default | Description |
 |-------|---------|-------------|
@@ -274,7 +274,7 @@ Plan approval is controlled by the `--auto-approve-all` CLI flag (see [issues.md
 See [rate-limiter.md](rate-limiter.md) for cost ceiling, concurrency, and rate limiter configuration.
 See [git-strategy.md](git-strategy.md) for git-related configuration.
 
-### 11. Job Persistence
+### 9. Job Persistence
 
 Jobs are stored at `~/.deft/projects/<path-encoded-repo>/jobs/<job_id>/`:
 - `sitelog.dets` — the Deft.Store site log persistence
@@ -284,7 +284,7 @@ Jobs are stored at `~/.deft/projects/<path-encoded-repo>/jobs/<job_id>/`:
 
 On resume, the Foreman reads the site log to reconstruct job knowledge. For coordination state, it reads plan.json. For each incomplete deliverable, it starts a fresh Lead with instructions that account for already-completed work. Lead sessions are NOT restored — fresh Leads are simpler and more reliable.
 
-### 12. Cleanup
+### 10. Cleanup
 
 On job completion, failure, or abort:
 1. The Foreman cleans up all worktrees (see [git-strategy.md](git-strategy.md) for details)

@@ -217,9 +217,9 @@ Every eval test is tagged for selective execution:
 @tag :e2e            # full end-to-end, requires working agent
 ```
 
-### 12. Eval Result Storage
+### 2. Eval Result Storage
 
-#### 12.1 Per-Run Results
+#### 2.1 Per-Run Results
 
 Each eval run produces a JSONL file at `test/eval/results/<run_id>.jsonl`:
 
@@ -243,7 +243,7 @@ Failure examples are critical — when pass rate drops, you need to see *which* 
 
 Results directory is `.gitignore`d. Keep the last 30 runs on disk. Use `mix eval.export` to archive results to a separate tracking file if long-term history is needed.
 
-#### 12.2 Baselines with History
+#### 2.2 Baselines with History
 
 `test/eval/baselines.json` stores historical tracking, not just last-known values:
 
@@ -262,7 +262,7 @@ Results directory is `.gitignore`d. Keep the last 30 runs on disk. Use `mix eval
 
 The `soft_floor` is baseline minus 10 percentage points. Dropping below the soft floor requires documented justification, not just a baseline update.
 
-#### 12.3 Regression Detection
+#### 2.3 Regression Detection
 
 Use a proportion z-test comparing the current run against the historical distribution, not a fixed 10-point threshold:
 
@@ -296,16 +296,16 @@ end
 
 Separate infrastructure failures (same error in 8/10 failures = deterministic bug) from model quality regressions (varied errors = actual quality change).
 
-#### 12.4 Eval Diffing
+#### 2.4 Eval Diffing
 
 `mix eval.compare <run_a> <run_b>` shows:
 - Categories that changed and by how much
 - Categories that dropped below soft floor
 - Failure examples side-by-side
 
-### 13. Eval Execution
+### 3. Eval Execution
 
-#### 13.1 Tiered Execution
+#### 3.1 Tiered Execution
 
 | Tier | What | Cost | When |
 |------|------|------|------|
@@ -321,18 +321,18 @@ make test.eval.benchmark    # Tier 3: full benchmark suite
 make test.eval.calibrate    # Calibration: threshold grid search
 ```
 
-#### 13.2 CI Integration
+#### 3.2 CI Integration
 
 - Tier 1 runs on every push as a **soft gate** (warn on regression, fail only on safety evals)
 - Tier 2 runs on merge to main
 - Tier 3 runs on a weekly schedule
 - Safety evals (hallucination, PII) that drop below 90% **hard fail** the build
 
-#### 13.3 Multi-Model Strategy
+#### 3.3 Multi-Model Strategy
 
 Deft ships with configurable models. Evals run against the default model (Sonnet). When bumping the pinned model version, re-run the full Tier 1+2 suite against the new model and update baselines if pass rates change. Cross-model evals (Sonnet vs Haiku) are deferred until there's a user base to justify the cost.
 
-### 14. Bootstrapping Strategy
+### 4. Bootstrapping Strategy
 
 What to build and eval before the full agent exists, in order:
 
@@ -346,9 +346,7 @@ What to build and eval before the full agent exists, in order:
 
 **Phase 1 is available immediately** and should be the first eval work done. The issue elicitation eval is the highest-value Phase 1 eval because its output quality directly determines `deft work` quality.
 
-**Note:** The evals work items in specd_work_list.md must be updated to include: spilling evals, skill suggestion evals, issue creation evals, e2e task battery, overnight loop eval, eval result storage infrastructure, judge calibration setup, and holdout fixture creation.
-
-### 15. Eval Maintenance
+### 5. Eval Maintenance
 
 - **New features require new evals.** Any PR that adds or modifies an LLM-powered component must include eval tests for the new behavior.
 - **Fixture updates.** When the message format or observation format changes, update fixtures. Run a fixture validation check that verifies each fixture's `spec_version` matches the current spec.

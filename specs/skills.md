@@ -162,6 +162,22 @@ A skill can be invoked in three ways:
 2. **Suggested:** The agent suggests a skill in its prose response (e.g., "you might want to run /review"). The user then decides whether to invoke it.
 3. **Auto-invoked:** The agent invokes a skill directly when clearly appropriate based on context. The agent emits a `use_skill` tool call with the skill name as the argument. The harness intercepts this tool call, loads the full definition from the Registry, injects it into context, and continues the agent loop. This is the same mechanism as explicit invocation — the only difference is who initiates it (agent vs. user).
 
+#### 2.5 `use_skill` Tool Definition
+
+The `use_skill` tool enables agent-initiated skill invocation.
+
+| Field | Description |
+|-------|-------------|
+| Name | `use_skill` |
+| Parameters | `name` (required, string) — the skill name to invoke |
+| Returns | `{:ok, definition}` — the skill's full definition text |
+| Errors | `{:error, :not_found}` — no skill with that name exists |
+| | `{:error, :no_definition}` — skill exists but has no definition (manifest-only, missing `---` separator) |
+
+The harness handles the tool call by loading the full definition from the Registry and injecting it into context as a system-level instruction. The agent then follows the skill's instructions on the next turn. The tool is always available in the agent's tool list (unlike `cache_read` which is conditional).
+
+Skills with a missing `---` separator (manifest-only) appear in the system prompt listing but return `{:error, :no_definition}` if invoked.
+
 When a skill is invoked (by any means):
 1. Look up `review` in the skill registry
 2. Load the full definition (everything after the `---` separator)

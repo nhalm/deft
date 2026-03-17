@@ -170,7 +170,7 @@ In non-interactive mode, no TUI is started. Output goes to stdout.
 | `--working-dir <path>` | Override working directory |
 | `-p <prompt>` | Non-interactive single-turn mode |
 | `--output <file>` | Write response to file (non-interactive) |
-| `--auto-approve` | Skip plan approval for orchestrated jobs |
+| `--auto-approve-all` | Skip all plan approvals for orchestrated jobs |
 | `--help` / `-h` | Show help |
 | `--version` | Show version |
 

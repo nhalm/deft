@@ -92,7 +92,7 @@ On Deft launch, scan for orphaned artifacts from prior crashed jobs:
 - `deft/lead-*` worktrees that have no running Deft job
 
 **Interactive mode:** Offer to clean them up (user confirmation).
-**Non-interactive mode** (with `--auto-approve`): Clean automatically.
+**Non-interactive mode** (with `--auto-approve-all`): Clean automatically.
 
 Cleanup steps:
 1. `git worktree remove <path>` for each orphaned worktree
@@ -103,6 +103,7 @@ Cleanup steps:
 
 | Field | Default | Description |
 |-------|---------|-------------|
+| `job.test_command` | `"mix test"` | Command to run after merging a Lead's work (language-specific) |
 | `job.keep_failed_branches` | `false` | Keep job branches on failure/abort (for debugging) |
 | `job.squash_on_complete` | `true` | Squash-merge into original branch (false = merge with history) |
 

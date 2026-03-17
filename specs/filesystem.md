@@ -150,7 +150,7 @@ Tool result caching. When a tool result exceeds a token threshold, the tool writ
 | `cache.token_threshold.ls` | `4000` | Directory trees — structural summaries are fine |
 | `cache.token_threshold.find` | `4000` | File listings — structural summaries are fine |
 
-These defaults are provisional. Actual values should be determined by threshold calibration evals (see evals.md section 7.3).
+These defaults are provisional. Actual values should be determined by threshold calibration evals (see [evals/spilling.md](evals/spilling.md)).
 
 #### 4.3 Write Policy — Lazy/Batched
 
@@ -239,7 +239,7 @@ Leads obtain the site log's ETS tid via `Deft.Store.tid(server)` — a `GenServe
 
 Since the ETS table is `:protected` (owner-write, other-read), Leads can read but cannot accidentally write. Only the Foreman (the GenServer owner) can write via the `write/4` API.
 
-#### 5.5 Lifecycle
+#### 5.6 Lifecycle
 
 - Created when a job starts with orchestration (Foreman + Leads)
 - Not created for simple single-agent sessions
