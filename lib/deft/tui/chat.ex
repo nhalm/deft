@@ -13,6 +13,7 @@ defmodule Deft.TUI.Chat do
 
   use Breeze.View
 
+  alias Deft.SlashCommand
   alias Deft.TUI.Markdown
 
   @doc """
@@ -617,13 +618,55 @@ defmodule Deft.TUI.Chat do
 
       # Other slash commands are dispatched via SlashCommand module
       String.starts_with?(input, "/") ->
-        # TODO: Implement slash command dispatch
-        # For now, pass through to agent
-        {:submit, input}
+        handle_slash_command(input, term)
 
       # Regular text - submit to agent
       true ->
         {:submit, input}
+    end
+  end
+
+  defp handle_slash_command(input, term) do
+    case SlashCommand.parse(input) do
+      {:command, name, args} ->
+        case SlashCommand.dispatch(name) do
+          {:ok, :command, definition} ->
+            # Commands are injected as user messages
+            # Combine the definition with args for context
+            full_text = if args != "", do: "#{definition}\n\nArgs: #{args}", else: definition
+            {:submit, full_text}
+
+          {:ok, :skill, definition} ->
+            # Skills need to be injected as system instructions before the next agent turn
+            # For now, send to agent with skill marker
+            # TODO: Proper skill injection will be implemented with agent skill support
+            full_text = if args != "", do: "#{definition}\n\nArgs: #{args}", else: definition
+            {:submit, full_text}
+
+          {:error, :not_found, command_name} ->
+            error_msg = %{
+              role: :system,
+              content: "Unknown command: /#{command_name}",
+              timestamp: DateTime.utc_now()
+            }
+
+            new_term = assign(term, messages: term.assigns.messages ++ [error_msg])
+            {:command_handled, new_term}
+
+          {:error, :no_definition, command_name} ->
+            error_msg = %{
+              role: :system,
+              content: "Command /#{command_name} exists but has no definition",
+              timestamp: DateTime.utc_now()
+            }
+
+            new_term = assign(term, messages: term.assigns.messages ++ [error_msg])
+            {:command_handled, new_term}
+        end
+
+      {:not_slash, text} ->
+        # This shouldn't happen since we already checked for "/" prefix
+        {:submit, text}
     end
   end
 

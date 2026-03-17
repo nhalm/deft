@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## tui v0.1
 
-- Implement slash command dispatch: recognize leading `/`, parse command + args, dispatch to appropriate handler; implement /help, /clear, /quit directly; other commands dispatched to their spec owners
 - Implement `Deft.TUI.SessionPicker` Breeze view: list sessions, arrow keys to navigate, Enter to resume
 - Implement job status display in Chat view: per-Lead progress, blocked status, cost, elapsed time; /status and /inspect commands
 
