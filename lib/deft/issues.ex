@@ -621,6 +621,9 @@ defmodule Deft.Issues do
     # Ensure directory exists before attempting to acquire lock
     File.mkdir_p!(Path.dirname(state.file_path))
 
+    # Ensure .gitattributes has merge=union for issues.jsonl
+    ensure_gitattributes(state.file_path)
+
     lock_path = state.file_path <> ".lock"
     stale_threshold_ms = 30_000
     retry_interval_ms = 100
@@ -693,6 +696,52 @@ defmodule Deft.Issues do
           _ ->
             {:error, :locked}
         end
+    end
+  end
+
+  # Ensures .gitattributes contains merge=union for issues.jsonl
+  defp ensure_gitattributes(_issues_file_path) do
+    case Git.cmd(["rev-parse", "--show-toplevel"]) do
+      {output, 0} ->
+        repo_root = String.trim(output)
+        update_gitattributes_file(repo_root)
+
+      _error ->
+        # Not in a git repo, skip gitattributes setup
+        :ok
+    end
+  rescue
+    _e ->
+      # If anything goes wrong, log and continue (don't block issue creation)
+      Logger.debug("Could not update .gitattributes for issues.jsonl merge strategy")
+      :ok
+  end
+
+  # Updates or creates .gitattributes with the merge=union line
+  defp update_gitattributes_file(repo_root) do
+    gitattributes_path = Path.join(repo_root, ".gitattributes")
+    required_line = ".deft/issues.jsonl merge=union"
+
+    if File.exists?(gitattributes_path) do
+      append_to_gitattributes_if_needed(gitattributes_path, required_line)
+    else
+      File.write!(gitattributes_path, required_line <> "\n")
+    end
+  end
+
+  # Appends the required line to .gitattributes if not already present
+  defp append_to_gitattributes_if_needed(gitattributes_path, required_line) do
+    content = File.read!(gitattributes_path)
+
+    unless String.contains?(content, required_line) do
+      updated_content =
+        if String.ends_with?(content, "\n") do
+          content <> required_line <> "\n"
+        else
+          content <> "\n" <> required_line <> "\n"
+        end
+
+      File.write!(gitattributes_path, updated_content)
     end
   end
 

@@ -695,6 +695,144 @@ defmodule Deft.IssuesTest do
     end
   end
 
+  describe "gitattributes integration" do
+    test "creates .gitattributes with merge=union on first issue creation", %{tmp_dir: tmp_dir} do
+      # Set up a fake git repo structure
+      repo_root = Path.join(tmp_dir, "test-repo")
+      File.mkdir_p!(repo_root)
+      git_dir = Path.join(repo_root, ".git")
+      File.mkdir_p!(git_dir)
+
+      # Configure mock to simulate git repo
+      Application.put_env(:deft, :git_mock_response, {"#{repo_root}\n", 0})
+      Application.put_env(:deft, :git_adapter, Deft.GitMock)
+
+      # Change to repo_root so File.cwd!() returns it
+      original_cwd = File.cwd!()
+
+      try do
+        File.cd!(repo_root)
+
+        # Start Issues
+        {:ok, _pid} = Issues.start_link()
+
+        # Create an issue to trigger gitattributes creation
+        {:ok, _issue} = Issues.create(%{title: "Test issue", source: :user})
+
+        # Verify .gitattributes was created
+        gitattributes_path = Path.join(repo_root, ".gitattributes")
+        assert File.exists?(gitattributes_path)
+
+        # Verify it contains the required line
+        content = File.read!(gitattributes_path)
+        assert content =~ ".deft/issues.jsonl merge=union"
+      after
+        File.cd!(original_cwd)
+      end
+    end
+
+    test "appends to existing .gitattributes if it doesn't contain the line", %{tmp_dir: tmp_dir} do
+      # Set up a fake git repo structure
+      repo_root = Path.join(tmp_dir, "test-repo")
+      File.mkdir_p!(repo_root)
+      git_dir = Path.join(repo_root, ".git")
+      File.mkdir_p!(git_dir)
+
+      # Create existing .gitattributes with other content
+      gitattributes_path = Path.join(repo_root, ".gitattributes")
+      File.write!(gitattributes_path, "*.png binary\n")
+
+      # Configure mock to simulate git repo
+      Application.put_env(:deft, :git_mock_response, {"#{repo_root}\n", 0})
+      Application.put_env(:deft, :git_adapter, Deft.GitMock)
+
+      # Change to repo_root
+      original_cwd = File.cwd!()
+
+      try do
+        File.cd!(repo_root)
+
+        # Start Issues
+        {:ok, _pid} = Issues.start_link()
+
+        # Create an issue to trigger gitattributes update
+        {:ok, _issue} = Issues.create(%{title: "Test issue", source: :user})
+
+        # Verify .gitattributes contains both lines
+        content = File.read!(gitattributes_path)
+        assert content =~ "*.png binary"
+        assert content =~ ".deft/issues.jsonl merge=union"
+      after
+        File.cd!(original_cwd)
+      end
+    end
+
+    test "does not duplicate the line if it already exists", %{tmp_dir: tmp_dir} do
+      # Set up a fake git repo structure
+      repo_root = Path.join(tmp_dir, "test-repo")
+      File.mkdir_p!(repo_root)
+      git_dir = Path.join(repo_root, ".git")
+      File.mkdir_p!(git_dir)
+
+      # Create existing .gitattributes with the line already present
+      gitattributes_path = Path.join(repo_root, ".gitattributes")
+      File.write!(gitattributes_path, ".deft/issues.jsonl merge=union\n")
+
+      # Configure mock to simulate git repo
+      Application.put_env(:deft, :git_mock_response, {"#{repo_root}\n", 0})
+      Application.put_env(:deft, :git_adapter, Deft.GitMock)
+
+      # Change to repo_root
+      original_cwd = File.cwd!()
+
+      try do
+        File.cd!(repo_root)
+
+        # Start Issues
+        {:ok, _pid} = Issues.start_link()
+
+        # Create two issues
+        {:ok, _issue1} = Issues.create(%{title: "Test issue 1", source: :user})
+        {:ok, _issue2} = Issues.create(%{title: "Test issue 2", source: :user})
+
+        # Verify .gitattributes still contains only one occurrence of the line
+        content = File.read!(gitattributes_path)
+
+        line_count =
+          content |> String.split("\n") |> Enum.count(&(&1 == ".deft/issues.jsonl merge=union"))
+
+        assert line_count == 1
+      after
+        File.cd!(original_cwd)
+      end
+    end
+
+    test "skips gitattributes when not in a git repo", %{tmp_dir: tmp_dir} do
+      # Configure mock to simulate not being in a git repo
+      Application.put_env(:deft, :git_mock_response, {"fatal: not a git repository\n", 128})
+      Application.put_env(:deft, :git_adapter, Deft.GitMock)
+
+      # Change to tmp_dir
+      original_cwd = File.cwd!()
+
+      try do
+        File.cd!(tmp_dir)
+
+        # Start Issues
+        {:ok, _pid} = Issues.start_link()
+
+        # Create an issue
+        {:ok, _issue} = Issues.create(%{title: "Test issue", source: :user})
+
+        # Verify .gitattributes was NOT created
+        gitattributes_path = Path.join(tmp_dir, ".gitattributes")
+        refute File.exists?(gitattributes_path)
+      after
+        File.cd!(original_cwd)
+      end
+    end
+  end
+
   describe "remove_dependency/2" do
     test "removes a dependency from an issue", %{file_path: file_path} do
       {:ok, _pid} = Issues.start_link(file_path: file_path)
