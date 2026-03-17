@@ -1,0 +1,43 @@
+## Current State
+
+- (14:23) User is working on a Phoenix application with PostgreSQL backend
+- (14:25) The application uses Ecto schemas for database models
+- (14:28) Currently debugging an issue with user authentication
+- (14:30) 🔴 CORRECTION: The database is PostgreSQL, not MySQL as previously noted
+- (14:35) User prefers using ExUnit for testing
+- (14:40) The app has a REST API endpoint for user registration
+
+## User Preferences
+
+- (14:15) User prefers descriptive variable names over short abbreviations
+- (14:20) User likes to use pattern matching where applicable
+- (14:32) User wants comprehensive error handling in API endpoints
+- (14:45) 🔴 CORRECTION: Replace "user wants basic error handling" with "user wants comprehensive error handling with detailed messages"
+- (14:50) User follows Credo linting rules
+
+## Files & Architecture
+
+- (14:10) Main application code is in `lib/myapp/`
+- (14:12) Web controllers are in `lib/myapp_web/controllers/`
+- (14:18) Database schemas are in `lib/myapp/accounts/`
+- (14:22) Authentication logic is in `lib/myapp/accounts/auth.ex`
+- (14:38) Tests are organized in `test/` directory mirroring source structure
+
+## Decisions
+
+- (14:05) Decided to use argon2 for password hashing
+- (14:08) Using guardian for JWT token management
+- (14:16) API versioning will use URL path prefix (e.g., `/api/v1/`)
+- (14:42) 🔴 CORRECTION: JWT expiration is 24 hours, not 1 hour as previously noted
+- (14:48) Database migrations are run automatically on deployment
+
+## Session History
+
+- (14:00) Started session to add user registration endpoint
+- (14:02) Read existing authentication code
+- (14:06) Discussed password hashing strategies
+- (14:11) Implemented initial registration controller
+- (14:24) Debugged validation errors
+- (14:36) Fixed database schema issue
+- (14:44) Added comprehensive tests
+- (14:52) Session ongoing
