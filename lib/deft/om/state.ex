@@ -120,6 +120,48 @@ defmodule Deft.OM.State do
   end
 
   @impl true
+  def handle_call(:force_observe, from, state) do
+    Logger.info(
+      "Force observe called for session #{state.session_id} (sync fallback) - pending: #{state.pending_message_tokens} tokens"
+    )
+
+    # Get unobserved messages
+    unobserved_messages =
+      state.messages
+      |> Enum.reject(fn msg -> msg.id in state.observed_message_ids end)
+
+    # If no unobserved messages, return immediately
+    if Enum.empty?(unobserved_messages) do
+      {:reply, {:ok, :no_messages}, state}
+    else
+      task_supervisor = Supervisor.task_supervisor_name(state.session_id)
+
+      # Spawn Observer Task with 1 retry max (sync path)
+      task =
+        Task.Supervisor.async_nolink(task_supervisor, fn ->
+          run_observer_with_retry(
+            state.config,
+            unobserved_messages,
+            state.active_observations,
+            state.calibration_factor,
+            1
+          )
+        end)
+
+      # Stash the caller's from, spawn Task, return {:noreply, state}
+      # When Task completes, handle_info will reply via GenServer.reply/2
+      state = %{
+        state
+        | sync_from: from,
+          is_observing: true,
+          observer_ref: task.ref
+      }
+
+      {:noreply, state}
+    end
+  end
+
+  @impl true
   def handle_cast({:messages_added, new_messages}, state) do
     # Calculate new pending tokens from the new messages
     new_tokens =
@@ -166,36 +208,52 @@ defmodule Deft.OM.State do
     # Demonitor the task
     Process.demonitor(ref, [:flush])
 
-    # Store the buffered chunk
-    chunk = %BufferedChunk{
-      observations: result.observations,
-      token_count: Tokens.estimate(result.observations, state.calibration_factor),
-      message_ids: result.message_ids,
-      message_tokens: result.message_tokens,
-      epoch: state.activation_epoch
-    }
+    # Check if this is a sync fallback call
+    if state.sync_from do
+      # Reply to the stashed caller with the result
+      GenServer.reply(state.sync_from, {:ok, result})
 
-    state = %{
-      state
-      | buffered_chunks: state.buffered_chunks ++ [chunk],
-        is_observing: false,
-        observer_ref: nil
-    }
-
-    # Check if we need to re-observe (coalescing)
-    state =
-      if state.needs_rebuffer do
-        %{state | needs_rebuffer: false}
-        |> check_and_spawn_observer()
-      else
+      # Clear sync_from and flags
+      state = %{
         state
-      end
+        | sync_from: nil,
+          is_observing: false,
+          observer_ref: nil
+      }
 
-    # After Observer completes, check if reflection should be triggered
-    # (now that is_observing is false)
-    state = check_and_spawn_reflector(state)
+      {:noreply, state}
+    else
+      # Normal async buffering path - store the buffered chunk
+      chunk = %BufferedChunk{
+        observations: result.observations,
+        token_count: Tokens.estimate(result.observations, state.calibration_factor),
+        message_ids: result.message_ids,
+        message_tokens: result.message_tokens,
+        epoch: state.activation_epoch
+      }
 
-    {:noreply, state}
+      state = %{
+        state
+        | buffered_chunks: state.buffered_chunks ++ [chunk],
+          is_observing: false,
+          observer_ref: nil
+      }
+
+      # Check if we need to re-observe (coalescing)
+      state =
+        if state.needs_rebuffer do
+          %{state | needs_rebuffer: false}
+          |> check_and_spawn_observer()
+        else
+          state
+        end
+
+      # After Observer completes, check if reflection should be triggered
+      # (now that is_observing is false)
+      state = check_and_spawn_reflector(state)
+
+      {:noreply, state}
+    end
   end
 
   @impl true
@@ -204,22 +262,39 @@ defmodule Deft.OM.State do
     # Observer Task crashed or failed
     Logger.warning("Observer Task failed for session #{state.session_id}: #{inspect(reason)}")
 
-    state = %{
-      state
-      | is_observing: false,
-        observer_ref: nil
-    }
+    # Check if this is a sync fallback call
+    if state.sync_from do
+      # Reply to the stashed caller with an error
+      GenServer.reply(state.sync_from, {:error, reason})
 
-    # Check if we need to re-observe (coalescing)
-    state =
-      if state.needs_rebuffer do
-        %{state | needs_rebuffer: false}
-        |> check_and_spawn_observer()
-      else
+      # Clear sync_from and flags
+      state = %{
         state
-      end
+        | sync_from: nil,
+          is_observing: false,
+          observer_ref: nil
+      }
 
-    {:noreply, state}
+      {:noreply, state}
+    else
+      # Normal async path
+      state = %{
+        state
+        | is_observing: false,
+          observer_ref: nil
+      }
+
+      # Check if we need to re-observe (coalescing)
+      state =
+        if state.needs_rebuffer do
+          %{state | needs_rebuffer: false}
+          |> check_and_spawn_observer()
+        else
+          state
+        end
+
+      {:noreply, state}
+    end
   end
 
   @impl true
@@ -290,6 +365,53 @@ defmodule Deft.OM.State do
 
   defp via_tuple(session_id) do
     {:via, Registry, {Deft.ProcessRegistry, {:om_state, session_id}}}
+  end
+
+  defp run_observer_with_retry(
+         config,
+         messages,
+         existing_observations,
+         calibration_factor,
+         max_retries
+       ) do
+    run_observer_with_retry_loop(
+      config,
+      messages,
+      existing_observations,
+      calibration_factor,
+      max_retries,
+      0
+    )
+  end
+
+  defp run_observer_with_retry_loop(
+         config,
+         messages,
+         existing_observations,
+         calibration_factor,
+         max_retries,
+         attempt
+       ) do
+    case Observer.run(config, messages, existing_observations, calibration_factor) do
+      %{observations: ""} when attempt < max_retries ->
+        # Empty observations means failure - retry with exponential backoff
+        backoff_ms = trunc(:math.pow(2, attempt) * 1000)
+        Logger.warning("Observer attempt #{attempt + 1} failed, retrying after #{backoff_ms}ms")
+        Process.sleep(backoff_ms)
+
+        run_observer_with_retry_loop(
+          config,
+          messages,
+          existing_observations,
+          calibration_factor,
+          max_retries,
+          attempt + 1
+        )
+
+      result ->
+        # Success or max retries reached
+        result
+    end
   end
 
   defp check_and_spawn_observer(state) do
