@@ -50,7 +50,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## evals v0.2
 
-- Implement baselines with history in test/eval/baselines.json: store baseline, soft_floor (baseline minus 10pp), and history array per category; implement baseline update logic (baselines only go up)
 - Implement regression detection: proportion z-test comparing current run against historical distribution (p < 0.05 one-tailed); separate infrastructure failures (same error in 8/10 = deterministic bug) from model quality regressions (varied errors)
 - Implement eval diffing command: `mix eval.compare <run_a> <run_b>` showing changed categories, soft floor violations, and side-by-side failure examples
 - Spike Tribunal version verification: check hex.pm for current Tribunal version, verify it provides assert_contains, assert_regex, assert_json, assert_max_tokens, assert_faithful, refute_hallucination, refute_pii, and evaluation mode; document gaps and fallback plan if assertions are missing

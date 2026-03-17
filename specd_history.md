@@ -2,6 +2,7 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **evals v0.2 (2026-03-17):** Implement baselines with history in test/eval/baselines.json: store baseline, soft_floor (baseline minus 10pp), and history array per category; implement baseline update logic (baselines only go up)
 - **filesystem v0.2 (2026-03-17):** Create project directory layout: ~/.deft/projects/<path-encoded-repo>/ with sessions/, cache/, jobs/ subdirectories; path encoding replaces / with -, strip leading -; resolve working directory to real path via Path.expand/1; for git worktrees, use `git rev-parse --show-toplevel` for canonical repo root; monorepos share single project directory
 - **evals v0.2 (2026-03-17):** Create eval result storage infrastructure: per-run JSONL at test/eval/results/<run_id>.jsonl with commit SHA, model, category, pass_rate, iterations, cost, and failure examples; .gitignore results dir; keep last 30 runs on disk; implement `mix eval.export` for archiving
 - **sessions v0.2 (2026-03-17):** Implement interactive session mode (`deft` with no args): replaced stub with IO.gets REPL loop — creates session, starts agent, prompts with `deft> `, streams response via agent events, supports `/quit` and EOF to exit
