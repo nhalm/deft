@@ -2,6 +2,7 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **providers v0.1 (2026-03-16):** Fix tool call ID mismatch: `ToolCallDelta` and `ToolCallDone` use `"tool_#{idx}"` but `ToolCallStart` uses the real Anthropic ID (`"toolu_..."`); maintain an `index → real_id` mapping in tool_state so deltas and stop events use the correct ID — without this fix, tool call args are never accumulated and tools execute with empty args
 - **tools v0.1 (2026-03-16):** Fix grep `format_output/2`: count actual match lines (lines matching `filename:linenum:content` pattern) instead of all output lines — context lines, separators, and file headers inflate the count
 - **tools v0.1 (2026-03-16):** Fix grep global match cap: replace `--max-count` (per-file limit) with post-processing truncation — collect rg output then take only the first 100 match lines, or use `rg` output piped through a line counter
 - **tools v0.1 (2026-03-16):** Fix ToolRunner: call `Task.shutdown(task, :brutal_kill)` on timed-out tasks after `Task.yield_many/2` returns `nil` — currently timed-out tasks continue running indefinitely, leaking processes

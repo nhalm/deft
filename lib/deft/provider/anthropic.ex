@@ -151,10 +151,77 @@ defmodule Deft.Provider.Anthropic do
   defp process_single_event(caller, sse_event, tool_state) do
     event_type = Map.get(sse_event, :event, "message")
 
-    if event_type == "content_block_stop" do
-      handle_tool_call_stop(caller, sse_event, tool_state)
-    else
-      handle_parsed_event(caller, parse_event(sse_event), tool_state)
+    case event_type do
+      "content_block_start" ->
+        handle_content_block_start(caller, sse_event, tool_state)
+
+      "content_block_delta" ->
+        handle_content_block_delta(caller, sse_event, tool_state)
+
+      "content_block_stop" ->
+        handle_tool_call_stop(caller, sse_event, tool_state)
+
+      _ ->
+        # Other events don't need tool_state tracking
+        handle_parsed_event(caller, parse_event(sse_event), tool_state)
+    end
+  end
+
+  # Handle content_block_start events with index → real_id mapping for tool calls
+  defp handle_content_block_start(caller, sse_event, tool_state) do
+    data = Map.get(sse_event, :data, "")
+
+    case Jason.decode(data) do
+      {:ok,
+       %{"content_block" => %{"type" => "tool_use", "id" => id, "name" => name}, "index" => idx}} ->
+        # Store index mapping and initialize JSON buffer
+        tool_state =
+          tool_state
+          |> Map.put({:idx, idx}, id)
+          |> Map.put(id, "")
+
+        send(caller, {:provider_event, %ToolCallStart{id: id, name: name}})
+        tool_state
+
+      _ ->
+        # Text or thinking blocks - no tracking needed
+        tool_state
+    end
+  end
+
+  # Handle content_block_delta events with real ID lookup for tool calls
+  defp handle_content_block_delta(caller, sse_event, tool_state) do
+    data = Map.get(sse_event, :data, "")
+
+    case Jason.decode(data) do
+      {:ok,
+       %{
+         "delta" => %{"type" => "input_json_delta", "partial_json" => json_fragment},
+         "index" => idx
+       }} ->
+        # Look up real ID from index
+        case Map.get(tool_state, {:idx, idx}) do
+          nil ->
+            # No mapping found - shouldn't happen, but skip
+            tool_state
+
+          real_id ->
+            # Emit delta with real ID and accumulate JSON
+            send(caller, {:provider_event, %ToolCallDelta{id: real_id, delta: json_fragment}})
+            current = Map.get(tool_state, real_id, "")
+            Map.put(tool_state, real_id, current <> json_fragment)
+        end
+
+      {:ok, %{"delta" => %{"type" => "text_delta", "text" => text}}} ->
+        send(caller, {:provider_event, %TextDelta{delta: text}})
+        tool_state
+
+      {:ok, %{"delta" => %{"type" => "thinking_delta", "thinking" => text}}} ->
+        send(caller, {:provider_event, %ThinkingDelta{delta: text}})
+        tool_state
+
+      _ ->
+        tool_state
     end
   end
 
@@ -183,30 +250,45 @@ defmodule Deft.Provider.Anthropic do
 
     case Jason.decode(data) do
       {:ok, %{"index" => idx}} ->
-        id = "tool_#{idx}"
-
-        # Check if we have accumulated JSON for this tool call
-        case Map.get(tool_state, id) do
-          nil ->
-            # Not a tool call, just a regular content block stop
-            tool_state
-
-          json_str ->
-            # Parse accumulated JSON and emit ToolCallDone
-            case Jason.decode(json_str) do
-              {:ok, args} ->
-                send(caller, {:provider_event, %ToolCallDone{id: id, args: args}})
-                Map.delete(tool_state, id)
-
-              {:error, _} ->
-                # Send empty args if parsing failed
-                send(caller, {:provider_event, %ToolCallDone{id: id, args: %{}}})
-                Map.delete(tool_state, id)
-            end
-        end
+        handle_tool_call_stop_with_index(caller, idx, tool_state)
 
       _ ->
         tool_state
+    end
+  end
+
+  # Handle tool call stop when we have an index
+  defp handle_tool_call_stop_with_index(caller, idx, tool_state) do
+    case Map.get(tool_state, {:idx, idx}) do
+      nil ->
+        # Not a tool call, just a regular content block stop
+        tool_state
+
+      real_id ->
+        emit_tool_call_done_and_cleanup(caller, idx, real_id, tool_state)
+    end
+  end
+
+  # Emit ToolCallDone event and clean up tool state
+  defp emit_tool_call_done_and_cleanup(caller, idx, real_id, tool_state) do
+    json_str = Map.get(tool_state, real_id)
+
+    if json_str do
+      # Parse accumulated JSON (or use empty map if parsing fails)
+      args =
+        case Jason.decode(json_str) do
+          {:ok, parsed} -> parsed
+          {:error, _} -> %{}
+        end
+
+      send(caller, {:provider_event, %ToolCallDone{id: real_id, args: args}})
+
+      # Clean up both the mapping and the JSON buffer
+      tool_state
+      |> Map.delete({:idx, idx})
+      |> Map.delete(real_id)
+    else
+      tool_state
     end
   end
 
