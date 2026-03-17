@@ -24,6 +24,19 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ---
 
+## harness v0.1
+
+- Fix `start_tool_execution/2`: `spawn_monitor` computes tool results but never sends them back to the agent — the spawned process exits normally, the agent receives `{:DOWN, ref, :process, pid, :normal}` instead of `{ref, results}`, broadcasts "Tool execution was interrupted", and transitions to `:idle`. Replace `spawn_monitor` with `Task.Supervisor.async_nolink` under `Deft.Agent.ToolRunner`, or have the spawned process explicitly `send(caller, {ref, results})` (agent.ex:874-877)
+- Fix Usage events dropped in `:calling` state: `message_start` SSE event emits `%Usage{input: N, output: 0}` which arrives before first content (while agent is in `:calling`). The catch-all at agent.ex:347-349 discards it with `:keep_state_and_data`. Input tokens are never counted, `total_input_tokens` stays 0, and session cost is underreported. Add a `%Usage{}` handler in `:calling` state that calls `handle_usage/2`
+
+## providers v0.2
+
+- Implement extended thinking support in API requests: spec says "Enabled when the model config includes `thinking: true`" but `stream_loop/7` never reads a `thinking` key from config and never adds Anthropic's required `thinking: {"type": "enabled", "budget_tokens": N}` parameter to the request body. The `ThinkingDelta` parsing code exists but is dead code since thinking is never requested (anthropic.ex:86-95)
+
+## sessions v0.2
+
+- Fix `reconstruct_messages/1` to include `Entry.ToolResult` entries: currently filters only `Entry.Message` and drops everything else (store.ex:199-207). Resumed sessions with tool calls have assistant messages with `ToolUse` blocks but no corresponding user messages with `ToolResult` blocks, violating Anthropic's turn-structure contract and crashing the resumed session
+
 ## === BOOTSTRAP CHECKPOINT ===
 <!-- After the above specs are implemented, `deft -p "prompt"` works as a CLI agent. -->
 <!-- Use Deft (or Claude Code) to implement the remaining specs below. -->
