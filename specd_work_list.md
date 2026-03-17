@@ -24,10 +24,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ---
 
-## providers v0.2
-
-- Implement extended thinking support in API requests: spec says "Enabled when the model config includes `thinking: true`" but `stream_loop/7` never reads a `thinking` key from config and never adds Anthropic's required `thinking: {"type": "enabled", "budget_tokens": N}` parameter to the request body. The `ThinkingDelta` parsing code exists but is dead code since thinking is never requested (anthropic.ex:86-95)
-
 ## sessions v0.2
 
 - Fix `reconstruct_messages/1` to include `Entry.ToolResult` entries: currently filters only `Entry.Message` and drops everything else (store.ex:199-207). Resumed sessions with tool calls have assistant messages with `ToolUse` blocks but no corresponding user messages with `ToolResult` blocks, violating Anthropic's turn-structure contract and crashing the resumed session

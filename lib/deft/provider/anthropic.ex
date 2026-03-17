@@ -52,12 +52,24 @@ defmodule Deft.Provider.Anthropic do
       model = Map.get(config, :model, "claude-sonnet-4")
       max_tokens = Map.get(config, :max_tokens, 8192)
       temperature = Map.get(config, :temperature, 1.0)
+      thinking = Map.get(config, :thinking, false)
+      thinking_budget = Map.get(config, :thinking_budget, 4096)
 
       # Spawn a process to handle the streaming request
       # Use spawn instead of spawn_link so stream crashes don't kill the agent
       pid =
         spawn(fn ->
-          stream_loop(caller, api_key, messages, tools, model, max_tokens, temperature)
+          stream_loop(
+            caller,
+            api_key,
+            messages,
+            tools,
+            model,
+            max_tokens,
+            temperature,
+            thinking,
+            thinking_budget
+          )
         end)
 
       {:ok, pid}
@@ -77,7 +89,17 @@ defmodule Deft.Provider.Anthropic do
   end
 
   # Private streaming loop
-  defp stream_loop(caller, api_key, messages, tools, model, max_tokens, temperature) do
+  defp stream_loop(
+         caller,
+         api_key,
+         messages,
+         tools,
+         model,
+         max_tokens,
+         temperature,
+         thinking,
+         thinking_budget
+       ) do
     # Format messages and tools for Anthropic API
     {system_param, wire_messages} = format_messages(messages)
     wire_tools = format_tools(tools)
@@ -93,6 +115,7 @@ defmodule Deft.Provider.Anthropic do
       }
       |> maybe_add_system(system_param)
       |> maybe_add_tools(wire_tools)
+      |> maybe_add_thinking(thinking, thinking_budget)
 
     headers = [
       {"x-api-key", api_key},
@@ -461,6 +484,13 @@ defmodule Deft.Provider.Anthropic do
   # Add tools to request body if present
   defp maybe_add_tools(body, []), do: body
   defp maybe_add_tools(body, tools), do: Map.put(body, :tools, tools)
+
+  # Add thinking parameter to request body if enabled
+  defp maybe_add_thinking(body, false, _budget), do: body
+
+  defp maybe_add_thinking(body, true, budget) do
+    Map.put(body, :thinking, %{type: "enabled", budget_tokens: budget})
+  end
 
   @impl Deft.Provider
   def format_tools(tools) do
