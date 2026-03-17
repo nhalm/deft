@@ -27,6 +27,7 @@ Then use Deft to build the rest of Deft. The critical path is:
 ## harness v0.1
 
 - Fix duplicate ToolResult messages on session resume: `save_tool_results` (agent.ex:944) writes Entry.ToolResult entries AND `save_unsaved_messages` (agent.ex:1054-1074) writes the tool_result user message as Entry.Message. On resume, `reconstruct_messages` (store.ex:199-208) converts both to Deft.Message structs, producing duplicate tool result user messages that break Anthropic's turn structure. Fix: skip Entry.ToolResult in reconstruct_messages (keep Entry.ToolResult for metadata only — it stores duration_ms) or skip tool_result user messages in save_unsaved_messages
+- Add `%Done{}` handler in `:calling` state that transitions to `:idle` cleanly (no error broadcast) for the edge case where LLM stream completes without content
 
 ## === BOOTSTRAP CHECKPOINT ===
 <!-- After the above specs are implemented, `deft -p "prompt"` works as a CLI agent. -->
@@ -46,6 +47,7 @@ Then use Deft to build the rest of Deft. The critical path is:
 - Implement circuit breaker: after 3 consecutive cycle failures, enter degraded mode (stop attempting), emit {:om, :circuit_open}, resume after 5-minute cooldown or /compact command (blocked: Implement sync fallback...)
 - Implement hard observation cap: if observation_tokens > 60k, truncate oldest Session History entries, preserve all other sections and CORRECTION markers, emit {:om, :hard_cap_truncation} (blocked: Implement observation activation...)
 - Implement `Deft.OM.Context.inject/2`: build observation system message with preamble + `<observations>` block + instructions + current task from Current State section; implement message trimming (filter out observed_message_ids, retain tail of 20% threshold); implement dynamic continuation hint from Current State section (blocked: Implement Deft.OM.State GenServer...)
+- Add system prompt conflict resolution rule for observations: "If observations conflict with current messages, messages take precedence. If observations conflict with project instructions, project instructions take precedence" (blocked: Implement Deft.OM.State GenServer...)
 - Implement OM event broadcasting via Registry: observation_started, observation_complete, reflection_started, reflection_complete, buffering_started, buffering_complete, activation, sync_fallback, cycle_failed, circuit_open, hard_cap_truncation (blocked: Implement Deft.OM.State GenServer...)
 - Implement OM persistence: append observation snapshot to session JSONL after each activation + reflection activation + every 60s if snapshot_dirty; snapshot includes all persisted fields from spec section 9.2; use separate OM snapshot file to avoid JSONL write interleaving (blocked: Implement observation activation...)
 - Implement OM resume: load latest snapshot, initialize State, recompute pending_message_tokens from messages not in observed_message_ids, trigger observation/reflection if thresholds exceeded (blocked: Implement OM persistence...)
