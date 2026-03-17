@@ -24,6 +24,10 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ---
 
+## harness v0.1
+
+- Fix duplicate ToolResult messages on session resume: `save_tool_results` (agent.ex:944) writes Entry.ToolResult entries AND `save_unsaved_messages` (agent.ex:1054-1074) writes the tool_result user message as Entry.Message. On resume, `reconstruct_messages` (store.ex:199-208) converts both to Deft.Message structs, producing duplicate tool result user messages that break Anthropic's turn structure. Fix: skip Entry.ToolResult in reconstruct_messages (keep Entry.ToolResult for metadata only — it stores duration_ms) or skip tool_result user messages in save_unsaved_messages
+
 ## === BOOTSTRAP CHECKPOINT ===
 <!-- After the above specs are implemented, `deft -p "prompt"` works as a CLI agent. -->
 <!-- Use Deft (or Claude Code) to implement the remaining specs below. -->
