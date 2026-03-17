@@ -95,7 +95,9 @@ defmodule Deft.CLI do
           output: :string,
           auto_approve: :boolean,
           help: :boolean,
-          version: :boolean
+          version: :boolean,
+          status: :string,
+          priority: :integer
         ],
         aliases: [
           h: :help,
@@ -150,6 +152,9 @@ defmodule Deft.CLI do
         [_cmd, _subcmd, issue_id] = positional
         {:issue_show, issue_id}
 
+      positional == ["issue", "list"] ->
+        :issue_list
+
       Enum.empty?(positional) ->
         :new_session
 
@@ -203,6 +208,21 @@ defmodule Deft.CLI do
         IO.puts(:stderr, "Error: Issue not found: #{issue_id}")
         exit({:shutdown, 1})
     end
+  end
+
+  defp execute_command(:issue_list, flags) do
+    # Ensure Issues GenServer is started
+    ensure_issues_started()
+
+    # Build filter options from flags
+    opts = build_issue_list_opts(flags)
+
+    # Get filtered issues
+    issues = Issues.list(opts)
+
+    # Display in tabular format
+    display_issue_list(issues)
+    :ok
   end
 
   defp execute_command(:resume_list, flags) do
@@ -711,6 +731,105 @@ defmodule Deft.CLI do
   defp read_stdin do
     IO.read(:stdio, :all)
     |> String.trim()
+  end
+
+  # Build options for Issues.list/1 from CLI flags
+  defp build_issue_list_opts(flags) do
+    opts = []
+
+    # Add status filter if provided
+    opts =
+      case flags[:status] do
+        nil ->
+          opts
+
+        status_str ->
+          status_atom = String.to_existing_atom(status_str)
+          Keyword.put(opts, :status, status_atom)
+      end
+
+    # Add priority filter if provided
+    opts =
+      case flags[:priority] do
+        nil -> opts
+        priority -> Keyword.put(opts, :priority, priority)
+      end
+
+    opts
+  rescue
+    ArgumentError ->
+      IO.puts(:stderr, "Error: Invalid status value. Must be one of: open, in_progress, closed")
+      exit({:shutdown, 1})
+  end
+
+  # Display a list of issues in tabular format
+  defp display_issue_list(issues) when issues == [] do
+    IO.puts("No issues found.")
+  end
+
+  defp display_issue_list(issues) do
+    # Calculate column widths
+    id_width =
+      max(
+        2,
+        Enum.max_by(issues, &String.length(&1.id), fn -> %{id: "id"} end).id |> String.length()
+      )
+
+    priority_width = 8
+
+    status_width =
+      max(6, Enum.max_by(issues, &status_length/1, fn -> %{status: :open} end) |> status_length())
+
+    # Title width is flexible - use remaining space, but at least 20 chars
+    title_width = 60
+
+    # Print header
+    header = [
+      String.pad_trailing("ID", id_width),
+      String.pad_trailing("Priority", priority_width),
+      String.pad_trailing("Status", status_width),
+      "Title"
+    ]
+
+    IO.puts(Enum.join(header, "  "))
+    IO.puts(String.duplicate("-", id_width + priority_width + status_width + title_width + 6))
+
+    # Print each issue
+    Enum.each(issues, fn issue ->
+      row = [
+        String.pad_trailing(issue.id, id_width),
+        String.pad_trailing(format_priority_short(issue.priority), priority_width),
+        String.pad_trailing(format_status(issue.status), status_width),
+        truncate_title(issue.title, title_width)
+      ]
+
+      IO.puts(Enum.join(row, "  "))
+    end)
+  end
+
+  # Helper to get status string length
+  defp status_length(issue), do: format_status(issue.status) |> String.length()
+
+  # Format status for display
+  defp format_status(:open), do: "open"
+  defp format_status(:in_progress), do: "in_progress"
+  defp format_status(:closed), do: "closed"
+
+  # Format priority for table display (short version)
+  defp format_priority_short(0), do: "0 (crit)"
+  defp format_priority_short(1), do: "1 (high)"
+  defp format_priority_short(2), do: "2 (med)"
+  defp format_priority_short(3), do: "3 (low)"
+  defp format_priority_short(4), do: "4 (back)"
+  defp format_priority_short(p), do: to_string(p)
+
+  # Truncate title if too long
+  defp truncate_title(title, max_width) do
+    if String.length(title) <= max_width do
+      title
+    else
+      String.slice(title, 0, max_width - 3) <> "..."
+    end
   end
 
   # Display a single issue with all structured fields

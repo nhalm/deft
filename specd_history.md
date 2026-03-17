@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **issues v0.2 (2026-03-17):** Implement `deft issue list` CLI command: default shows open + in_progress; --status filter, --priority filter; tabular output with id, priority, status, title
 - **issues v0.2 (2026-03-17):** Implement `deft issue show <id>` CLI command: display all structured fields formatted for terminal
 - **issues v0.2 (2026-03-17):** Add .deft/issues.jsonl merge=union to .gitattributes on first `deft issue create` if not already present
 - **issues v0.2 (2026-03-17):** Implement ready/blocked queries: ready/0 returns open issues where all dependencies are closed, sorted by priority (0 first) then created_at (oldest first); blocked/0 returns open issues with at least one non-closed dependency
