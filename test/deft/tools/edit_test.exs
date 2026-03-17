@@ -20,7 +20,8 @@ defmodule Deft.Tools.EditTest do
       working_dir: @tmp_dir,
       session_id: "test-session",
       emit: fn _msg -> :ok end,
-      file_scope: nil
+      file_scope: nil,
+      bash_timeout: 120_000
     }
 
     {:ok, context: context}

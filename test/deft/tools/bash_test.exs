@@ -22,7 +22,8 @@ defmodule Deft.Tools.BashTest do
       working_dir: working_dir,
       session_id: "test-session",
       emit: emit,
-      file_scope: nil
+      file_scope: nil,
+      bash_timeout: 120_000
     }
 
     on_exit(fn ->

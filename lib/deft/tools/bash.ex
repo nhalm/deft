@@ -15,7 +15,6 @@ defmodule Deft.Tools.Bash do
   alias Deft.Message.Text
   alias Deft.Tool.Context
 
-  @default_timeout_ms 120_000
   @max_output_lines 100
   @max_output_bytes 30_000
 
@@ -47,9 +46,9 @@ defmodule Deft.Tools.Bash do
   end
 
   @impl Deft.Tool
-  def execute(args, %Context{working_dir: working_dir, emit: emit}) do
+  def execute(args, %Context{working_dir: working_dir, emit: emit, bash_timeout: bash_timeout}) do
     command = args["command"]
-    timeout = args["timeout"] || @default_timeout_ms
+    timeout = args["timeout"] || bash_timeout
 
     # Emit that we're starting the command
     emit.("$ #{command}\n")

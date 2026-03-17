@@ -55,15 +55,17 @@ defmodule Deft.Tool.Context do
   - `session_id` - Current session identifier
   - `emit` - Function for streaming incremental output (e.g., bash stdout)
   - `file_scope` - Optional list of allowed paths for write/edit operations
+  - `bash_timeout` - Timeout in milliseconds for bash tool execution
   """
 
-  @enforce_keys [:working_dir, :session_id, :emit]
-  defstruct [:working_dir, :session_id, :emit, :file_scope]
+  @enforce_keys [:working_dir, :session_id, :emit, :bash_timeout]
+  defstruct [:working_dir, :session_id, :emit, :file_scope, :bash_timeout]
 
   @type t :: %__MODULE__{
           working_dir: String.t(),
           session_id: String.t(),
           emit: (String.t() -> :ok),
-          file_scope: [String.t()] | nil
+          file_scope: [String.t()] | nil,
+          bash_timeout: pos_integer()
         }
 end

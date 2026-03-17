@@ -896,7 +896,8 @@ defmodule Deft.Agent do
       working_dir: Map.get(data.config, :working_dir, File.cwd!()),
       session_id: data.session_id,
       emit: fn _output -> :ok end,
-      file_scope: nil
+      file_scope: nil,
+      bash_timeout: Map.get(data.config, :bash_timeout, 120_000)
     }
   end
 

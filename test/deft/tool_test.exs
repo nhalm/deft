@@ -46,7 +46,8 @@ defmodule Deft.ToolTest do
         working_dir: "/tmp/test",
         session_id: "test-session",
         emit: fn _msg -> :ok end,
-        file_scope: nil
+        file_scope: nil,
+        bash_timeout: 120_000
       }
 
       assert {:ok, [%Message.Text{text: text}]} =
@@ -62,7 +63,8 @@ defmodule Deft.ToolTest do
       context = %Context{
         working_dir: "/tmp",
         session_id: "sess-123",
-        emit: fn _msg -> :ok end
+        emit: fn _msg -> :ok end,
+        bash_timeout: 120_000
       }
 
       assert context.working_dir == "/tmp"
@@ -76,7 +78,8 @@ defmodule Deft.ToolTest do
         working_dir: "/tmp",
         session_id: "sess-123",
         emit: fn _msg -> :ok end,
-        file_scope: ["lib/", "test/"]
+        file_scope: ["lib/", "test/"],
+        bash_timeout: 120_000
       }
 
       assert context.file_scope == ["lib/", "test/"]
@@ -88,7 +91,8 @@ defmodule Deft.ToolTest do
       context = %Context{
         working_dir: "/tmp",
         session_id: "sess-123",
-        emit: fn msg -> send(test_pid, {:emitted, msg}) end
+        emit: fn msg -> send(test_pid, {:emitted, msg}) end,
+        bash_timeout: 120_000
       }
 
       context.emit.("test message")

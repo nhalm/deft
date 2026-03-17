@@ -432,6 +432,7 @@ defmodule Deft.CLI do
       working_dir: working_dir,
       turn_limit: config.turn_limit,
       tool_timeout: config.tool_timeout,
+      bash_timeout: config.bash_timeout,
       max_turns: config.turn_limit
     }
 

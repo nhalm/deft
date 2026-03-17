@@ -27,7 +27,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 ## sessions v0.2
 
 - Implement interactive session picking in `deft resume` (no ID): currently lists sessions and exits (cli.ex:162-192). Spec section 5.1 requires "List recent sessions and pick one to resume." Add numbered prompt via `IO.gets/1` to select a session, then delegate to `execute_command({:resume_session, id}, flags)`
-- Wire `bash_timeout` config through to bash tool execution: config field is loaded and displayed by `deft config` but never passed to the agent or bash tool. Add `bash_timeout` to `agent_config` map in `start_agent` (cli.ex:429-436), propagate through `Tool.Context` struct (tool.ex:60-61), and use it in `tools/bash.ex` execute/2 as the default timeout instead of `@default_timeout_ms`
 
 ## === BOOTSTRAP CHECKPOINT ===
 <!-- After the above specs are implemented, `deft -p "prompt"` works as a CLI agent. -->
