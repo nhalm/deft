@@ -66,7 +66,7 @@ defmodule Deft.Agent.ToolRunner do
       |> Enum.map(fn {_id, task} -> task end)
       |> Task.yield_many(timeout)
       |> Enum.zip(tasks)
-      |> Enum.map(fn {{_task_ref, result}, {tool_use_id, _task_struct}} ->
+      |> Enum.map(fn {{_task_ref, result}, {tool_use_id, task}} ->
         case result do
           {:ok, tool_result} ->
             {tool_use_id, tool_result}
@@ -75,7 +75,8 @@ defmodule Deft.Agent.ToolRunner do
             {tool_use_id, {:error, "Tool crashed: #{inspect(reason)}"}}
 
           nil ->
-            # Task timed out
+            # Task timed out - kill it to prevent process leak
+            Task.shutdown(task, :brutal_kill)
             {tool_use_id, {:error, "Tool execution timed out after #{timeout}ms"}}
         end
       end)

@@ -2,6 +2,7 @@
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
 
+- **tools v0.1 (2026-03-16):** Fix ToolRunner: call `Task.shutdown(task, :brutal_kill)` on timed-out tasks after `Task.yield_many/2` returns `nil` — currently timed-out tasks continue running indefinitely, leaking processes
 - **tools v0.1 (2026-03-16):** Fix bash tool: change `Port.open({:spawn, "sh -c ..."})` to `Port.open({:spawn_executable, "/bin/sh"}, [{:args, ["-c", command]} | opts])`
 - **harness v0.1 (2026-03-16):** Track `current_context_tokens` and `context_window` in agent state; update `current_context_tokens` from provider `:usage` events; implement compaction fallback when `current_context_tokens > 0.7 * context_window` and OM is disabled
 - **harness v0.1 (2026-03-16):** Fix turn counter off-by-one: increment `turn_count` on the initial `call_provider_stream` (not just in `continue_after_tools`), or change the check from `> max_turns` to `>= max_turns`, so the limit triggers at exactly 25 calls
