@@ -1,6 +1,8 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **evals v0.2 (2026-03-17):** Implement Reflector compression evals: output within 50% of threshold; 20 iterations, 90% pass rate
+
 
 - **skills v0.2 (2026-03-17):** Implement slash command dispatch clarification: TUI intercepts leading / in user input, parses command name + args, looks up in Registry, loads definition if skill, injects as system instruction (skill) or user message (command); report "Unknown command" if not found
 - **issues v0.2 (2026-03-17):** Implement closed issue compaction: on startup, remove issues with status :closed and closed_at older than issues.compaction_days (default 90); atomic JSONL rewrite; log "Compacted N closed issues older than 90 days"

@@ -35,10 +35,9 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement Observer section routing evals: verify facts route to correct sections per spec section 2.2; 20 iterations, 85% pass rate (blocked: Implement Observer extraction evals...)
 - Implement Observer anti-hallucination evals: 4 test cases from spec section 2.3 (hypothetical, exploring options, reading about, discussing alternatives); 20 iterations, 95% pass rate (blocked: Implement Observer extraction evals...)
 - Implement Observer dedup evals: verify no re-extraction of existing observations; 20 iterations, 80% pass rate (blocked: Implement Observer extraction evals...)
-- Implement Reflector compression evals: output within 50% of threshold; 20 iterations, 80% pass rate
-- Implement Reflector preservation evals: all 🔴 items survive; 20 iterations, 95% pass rate (blocked: Implement Reflector compression evals...)
-- Implement Reflector section structure evals: 5 sections in canonical order; hard assertion (not statistical), 100% pass rate (blocked: Implement Reflector compression evals...)
-- Implement Reflector CORRECTION survival evals: all markers survive; hard assertion (not statistical), 100% pass rate (blocked: Implement Reflector compression evals...)
+- Implement Reflector preservation evals: all 🔴 items survive; 20 iterations, 95% pass rate
+- Implement Reflector section structure evals: 5 sections in canonical order; hard assertion (not statistical), 100% pass rate
+- Implement Reflector CORRECTION survival evals: all markers survive; hard assertion (not statistical), 100% pass rate
 - Implement Actor observation usage evals: references observation content correctly; 20 iterations, 85% pass rate
 - Implement Actor continuation evals: continues naturally after trimming, no greeting; 20 iterations, 90% pass rate
 - Implement Foreman decomposition evals: 1-3 deliverables, valid DAG, specific contracts; 20 iterations, 75% pass rate (blocked: Implement Foreman gen_statem...)
