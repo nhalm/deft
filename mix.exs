@@ -67,7 +67,7 @@ defmodule Deft.MixProject do
   defp releases do
     [
       deft: [
-        steps: [:assemble],
+        steps: [:assemble, &Burrito.wrap/1],
         burrito: [
           targets: [
             macos_arm64: [os: :darwin, cpu: :aarch64],

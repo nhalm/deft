@@ -24,7 +24,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ## sessions v0.2
 
-- Fix Burrito release config missing `&Burrito.wrap/1` step: `steps: [:assemble]` in mix.exs:70 only runs standard Mix release assembly. Burrito requires `steps: [:assemble, &Burrito.wrap/1]` to produce a self-contained single binary (per deps/burrito/README.md). Without it, `mix release` produces a standard release directory, not a portable binary
 - Implement interactive session mode (`deft` with no args): replace "Interactive mode not yet implemented" stub with minimal REPL-style session using IO.gets loop, independent of TUI (blocked: tui v0.1 reaches Ready status)
 
 ---
