@@ -28,6 +28,8 @@ defmodule Deft.Agent do
   - `turn_count` — Counter for consecutive LLM calls (optional)
   - `total_input_tokens` — Cumulative input tokens (optional)
   - `total_output_tokens` — Cumulative output tokens (optional)
+  - `current_context_tokens` — Estimated tokens in current message list (optional)
+  - `context_window` — Model's context window size (optional)
   - `session_cost` — Cumulative estimated cost (optional)
   - `retry_count` — Number of retries attempted for current request (optional)
   - `retry_delay` — Current exponential backoff delay in ms (optional)
@@ -59,6 +61,9 @@ defmodule Deft.Agent do
     initial_messages = Keyword.get(opts, :messages, [])
     name = Keyword.get(opts, :name)
 
+    # Get context window from provider model config
+    context_window = get_context_window(config)
+
     initial_data = %{
       session_id: session_id,
       config: config,
@@ -71,6 +76,8 @@ defmodule Deft.Agent do
       turn_count: 0,
       total_input_tokens: 0,
       total_output_tokens: 0,
+      current_context_tokens: 0,
+      context_window: context_window,
       session_cost: 0.0,
       retry_count: 0,
       retry_delay: 1000,
@@ -154,23 +161,26 @@ defmodule Deft.Agent do
     # Append to conversation history
     new_messages = data.messages ++ [user_message]
 
+    # Check if compaction is needed before calling provider
+    data_with_messages = %{data | messages: new_messages}
+    compacted_data = maybe_compact_messages(data_with_messages)
+
     # Assemble context
-    context_messages = Context.build(new_messages, config: data.config)
+    context_messages = Context.build(compacted_data.messages, config: compacted_data.config)
 
     # Get provider from config (default to nil for now)
-    provider = Map.get(data.config, :provider)
+    provider = Map.get(compacted_data.config, :provider)
 
     # Get tools (empty for now, will be populated by future work items)
     tools = []
 
     # Call provider.stream/3
-    case call_provider_stream(provider, context_messages, tools, data.config) do
+    case call_provider_stream(provider, context_messages, tools, compacted_data.config) do
       {:ok, stream_ref} ->
         # Store stream ref and updated messages, reset retry state and turn count, transition to :calling
         new_data = %{
-          data
-          | messages: new_messages,
-            stream_ref: stream_ref,
+          compacted_data
+          | stream_ref: stream_ref,
             retry_count: 0,
             retry_delay: 1000,
             turn_count: 0
@@ -276,18 +286,21 @@ defmodule Deft.Agent do
 
   def handle_event(:info, {:retry_stream}, :calling, data) do
     # Retry after exponential backoff delay
-    context_messages = Context.build(data.messages, config: data.config)
-    provider = Map.get(data.config, :provider)
+    # Check if compaction is needed before retrying
+    compacted_data = maybe_compact_messages(data)
+
+    context_messages = Context.build(compacted_data.messages, config: compacted_data.config)
+    provider = Map.get(compacted_data.config, :provider)
     tools = []
 
-    case call_provider_stream(provider, context_messages, tools, data.config) do
+    case call_provider_stream(provider, context_messages, tools, compacted_data.config) do
       {:ok, stream_ref} ->
         # Update stream ref, keep retry count
-        new_data = %{data | stream_ref: stream_ref}
+        new_data = %{compacted_data | stream_ref: stream_ref}
         {:keep_state, new_data}
 
       {:error, reason} ->
-        handle_calling_error(%{message: inspect(reason)}, data)
+        handle_calling_error(%{message: inspect(reason)}, compacted_data)
     end
   end
 
@@ -371,6 +384,22 @@ defmodule Deft.Agent do
   end
 
   # Private helpers
+
+  defp get_context_window(config) do
+    # Get context window from provider's model config
+    provider = Map.get(config, :provider)
+    model = Map.get(config, :model, "claude-sonnet-4")
+
+    if provider && function_exported?(provider, :model_config, 1) do
+      case provider.model_config(model) do
+        %{context_window: window} -> window
+        {:error, _} -> 200_000
+      end
+    else
+      # Default to 200k if provider not available
+      200_000
+    end
+  end
 
   defp generate_message_id do
     # Generate a unique message ID using UUID
@@ -492,10 +521,12 @@ defmodule Deft.Agent do
 
   defp handle_usage(%{input: input_tokens, output: output_tokens}, data) do
     # Update token tracking
+    # current_context_tokens represents the actual context sent to the LLM (input tokens)
     new_data = %{
       data
       | total_input_tokens: data.total_input_tokens + input_tokens,
-        total_output_tokens: data.total_output_tokens + output_tokens
+        total_output_tokens: data.total_output_tokens + output_tokens,
+        current_context_tokens: input_tokens
     }
 
     broadcast_event(data.session_id, {:usage, %{input: input_tokens, output: output_tokens}})
@@ -617,22 +648,26 @@ defmodule Deft.Agent do
         }
 
         new_messages = new_data.messages ++ [user_message]
-        context_messages = Context.build(new_messages, config: new_data.config)
-        provider = Map.get(new_data.config, :provider)
+
+        # Check if compaction is needed before calling provider
+        data_with_messages = %{new_data | messages: new_messages}
+        compacted_data = maybe_compact_messages(data_with_messages)
+
+        context_messages = Context.build(compacted_data.messages, config: compacted_data.config)
+        provider = Map.get(compacted_data.config, :provider)
         tools = []
 
-        case call_provider_stream(provider, context_messages, tools, new_data.config) do
+        case call_provider_stream(provider, context_messages, tools, compacted_data.config) do
           {:ok, stream_ref} ->
             updated_data = %{
-              new_data
-              | messages: new_messages,
-                stream_ref: stream_ref,
+              compacted_data
+              | stream_ref: stream_ref,
                 retry_count: 0,
                 retry_delay: 1000,
                 turn_count: 0
             }
 
-            broadcast_event(new_data.session_id, {:state_change, :calling})
+            broadcast_event(compacted_data.session_id, {:state_change, :calling})
             {:next_state, :calling, updated_data}
 
           {:error, reason} ->
@@ -803,28 +838,31 @@ defmodule Deft.Agent do
       updated_data = %{data | turn_count: new_turn_count}
       {:keep_state, updated_data}
     else
+      # Check if compaction is needed before calling provider
+      compacted_data = maybe_compact_messages(data)
+
       # Continue with provider call
-      context_messages = Context.build(data.messages, config: data.config)
-      provider = Map.get(data.config, :provider)
+      context_messages = Context.build(compacted_data.messages, config: compacted_data.config)
+      provider = Map.get(compacted_data.config, :provider)
       tools = []
 
-      case call_provider_stream(provider, context_messages, tools, data.config) do
+      case call_provider_stream(provider, context_messages, tools, compacted_data.config) do
         {:ok, stream_ref} ->
           updated_data = %{
-            data
+            compacted_data
             | stream_ref: stream_ref,
               retry_count: 0,
               retry_delay: 1000,
               turn_count: new_turn_count
           }
 
-          broadcast_event(data.session_id, {:state_change, :calling})
+          broadcast_event(compacted_data.session_id, {:state_change, :calling})
           {:next_state, :calling, updated_data}
 
         {:error, reason} ->
-          broadcast_event(data.session_id, {:error, reason})
+          broadcast_event(compacted_data.session_id, {:error, reason})
           # Keep turn count even on error
-          new_data = %{data | turn_count: new_turn_count}
+          new_data = %{compacted_data | turn_count: new_turn_count}
           handle_idle_transition(new_data)
       end
     end
@@ -886,5 +924,61 @@ defmodule Deft.Agent do
     end)
 
     :ok
+  end
+
+  defp maybe_compact_messages(data) do
+    # Check if compaction is needed
+    # Compaction is only enabled when OM is disabled
+    om_enabled = Map.get(data.config, :om_enabled, false)
+    threshold = trunc(data.context_window * 0.7)
+
+    if !om_enabled && data.current_context_tokens > threshold do
+      # Compact messages - remove oldest non-system messages until we're at ~50% of window
+      target_tokens = trunc(data.context_window * 0.5)
+      tokens_to_remove = data.current_context_tokens - target_tokens
+
+      # Estimate tokens per message (rough heuristic)
+      # We'll remove messages until we estimate we've removed enough tokens
+      avg_tokens_per_message =
+        if length(data.messages) > 0 do
+          div(data.current_context_tokens, max(1, length(data.messages)))
+        else
+          1000
+        end
+
+      messages_to_remove = max(1, div(tokens_to_remove, max(1, avg_tokens_per_message)))
+
+      # Separate system messages from conversation messages
+      {system_messages, conversation_messages} =
+        Enum.split_with(data.messages, fn msg -> msg.role == :system end)
+
+      # Take the oldest N conversation messages to remove
+      {to_remove, to_keep} = Enum.split(conversation_messages, messages_to_remove)
+
+      if length(to_remove) > 0 do
+        # Create a summary message
+        summary_text =
+          "[Context compaction: #{length(to_remove)} messages removed to free up context space. " <>
+            "Conversation continues from this point.]"
+
+        summary_message = %Message{
+          id: generate_message_id(),
+          role: :system,
+          content: [%Text{text: summary_text}],
+          timestamp: DateTime.utc_now()
+        }
+
+        # Rebuild messages list with summary
+        new_messages = system_messages ++ [summary_message] ++ to_keep
+
+        broadcast_event(data.session_id, {:compaction, %{removed: length(to_remove)}})
+
+        %{data | messages: new_messages}
+      else
+        data
+      end
+    else
+      data
+    end
   end
 end

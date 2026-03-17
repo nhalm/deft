@@ -24,10 +24,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ---
 
-## harness v0.1
-
-- Track `current_context_tokens` and `context_window` in agent state; update `current_context_tokens` from provider `:usage` events; implement compaction fallback when `current_context_tokens > 0.7 * context_window` and OM is disabled
-
 ## tools v0.1
 
 - Fix bash tool: change `Port.open({:spawn, "sh -c ..."})` to `Port.open({:spawn_executable, "/bin/sh"}, [{:args, ["-c", command]} | opts])` — the `{:spawn, string}` form splits on spaces, breaking `sh -c` argument passing for commands with spaces
