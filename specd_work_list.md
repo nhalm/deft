@@ -24,10 +24,6 @@ Then use Deft to build the rest of Deft. The critical path is:
 
 ---
 
-## harness v0.1
-
-- Fix Usage events dropped in `:calling` state: `message_start` SSE event emits `%Usage{input: N, output: 0}` which arrives before first content (while agent is in `:calling`). The catch-all at agent.ex:347-349 discards it with `:keep_state_and_data`. Input tokens are never counted, `total_input_tokens` stays 0, and session cost is underreported. Add a `%Usage{}` handler in `:calling` state that calls `handle_usage/2`
-
 ## providers v0.2
 
 - Implement extended thinking support in API requests: spec says "Enabled when the model config includes `thinking: true`" but `stream_loop/7` never reads a `thinking` key from config and never adds Anthropic's required `thinking: {"type": "enabled", "budget_tokens": N}` parameter to the request body. The `ThinkingDelta` parsing code exists but is dead code since thinking is never requested (anthropic.ex:86-95)

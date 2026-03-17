@@ -344,7 +344,11 @@ defmodule Deft.Agent do
       %Error{} = error_event ->
         handle_calling_error(error_event, data)
 
-      # Other events (usage, etc.) - keep waiting for first content
+      # Usage event - update token tracking even before first content
+      %Usage{} = usage_event ->
+        handle_usage(usage_event, data)
+
+      # Other events - keep waiting for first content
       _ ->
         :keep_state_and_data
     end
