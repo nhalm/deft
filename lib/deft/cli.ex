@@ -26,6 +26,7 @@ defmodule Deft.CLI do
   """
 
   alias Deft.Config
+  alias Deft.Issues
   alias Deft.Session.Entry.SessionStart
   alias Deft.Session.Store
   alias Deft.SlashCommand
@@ -42,8 +43,10 @@ defmodule Deft.CLI do
     # Ensure the OTP application is started
     {:ok, _} = Application.ensure_all_started(:deft)
 
-    # Check for required external dependencies
-    check_external_dependencies()
+    # Check for required external dependencies (skip for issue commands)
+    unless issue_command?(args) do
+      check_external_dependencies()
+    end
 
     # Parse arguments
     case parse_args(args) do
@@ -54,6 +57,28 @@ defmodule Deft.CLI do
         IO.puts(:stderr, "Error: #{message}")
         IO.puts(:stderr, "\nRun 'deft --help' for usage information.")
         exit({:shutdown, 1})
+    end
+  end
+
+  # Check if the command is an issue command
+  defp issue_command?(args) do
+    case args do
+      ["issue" | _] -> true
+      _ -> false
+    end
+  end
+
+  # Ensure the Issues GenServer is started
+  defp ensure_issues_started do
+    case Process.whereis(Issues) do
+      nil ->
+        case Issues.start_link() do
+          {:ok, _pid} -> :ok
+          {:error, {:already_started, _pid}} -> :ok
+        end
+
+      _pid ->
+        :ok
     end
   end
 
@@ -120,6 +145,11 @@ defmodule Deft.CLI do
         [_cmd, session_id] = positional
         {:resume_session, session_id}
 
+      # Issue commands
+      match?(["issue", "show", _], positional) ->
+        [_cmd, _subcmd, issue_id] = positional
+        {:issue_show, issue_id}
+
       Enum.empty?(positional) ->
         :new_session
 
@@ -158,6 +188,21 @@ defmodule Deft.CLI do
     IO.puts("Working Directory:  #{working_dir}")
 
     :ok
+  end
+
+  defp execute_command({:issue_show, issue_id}, _flags) do
+    # Ensure Issues GenServer is started
+    ensure_issues_started()
+
+    case Issues.get(issue_id) do
+      {:ok, issue} ->
+        display_issue(issue)
+        :ok
+
+      {:error, :not_found} ->
+        IO.puts(:stderr, "Error: Issue not found: #{issue_id}")
+        exit({:shutdown, 1})
+    end
   end
 
   defp execute_command(:resume_list, flags) do
@@ -666,5 +711,96 @@ defmodule Deft.CLI do
   defp read_stdin do
     IO.read(:stdio, :all)
     |> String.trim()
+  end
+
+  # Display a single issue with all structured fields
+  defp display_issue(issue) do
+    IO.puts("Issue: #{issue.id}")
+    IO.puts("Title: #{issue.title}")
+    IO.puts("Status: #{issue.status}")
+    IO.puts("Priority: #{format_priority(issue.priority)}")
+    IO.puts("Source: #{issue.source}")
+    IO.puts("")
+
+    # Context
+    IO.puts("Context:")
+
+    if issue.context == "" do
+      IO.puts("  (none)")
+    else
+      IO.puts("  #{issue.context}")
+    end
+
+    IO.puts("")
+
+    # Acceptance Criteria
+    IO.puts("Acceptance Criteria:")
+
+    if Enum.empty?(issue.acceptance_criteria) do
+      IO.puts("  (none)")
+    else
+      Enum.each(issue.acceptance_criteria, fn criterion ->
+        IO.puts("  - #{criterion}")
+      end)
+    end
+
+    IO.puts("")
+
+    # Constraints
+    IO.puts("Constraints:")
+
+    if Enum.empty?(issue.constraints) do
+      IO.puts("  (none)")
+    else
+      Enum.each(issue.constraints, fn constraint ->
+        IO.puts("  - #{constraint}")
+      end)
+    end
+
+    IO.puts("")
+
+    # Dependencies
+    IO.puts("Dependencies:")
+
+    if Enum.empty?(issue.dependencies) do
+      IO.puts("  (none)")
+    else
+      Enum.each(issue.dependencies, fn dep_id ->
+        IO.puts("  - #{dep_id}")
+      end)
+    end
+
+    IO.puts("")
+
+    # Timestamps
+    IO.puts("Created: #{format_timestamp(issue.created_at)}")
+    IO.puts("Updated: #{format_timestamp(issue.updated_at)}")
+
+    if issue.closed_at do
+      IO.puts("Closed: #{format_timestamp(issue.closed_at)}")
+    end
+
+    if issue.job_id do
+      IO.puts("Job ID: #{issue.job_id}")
+    end
+  end
+
+  # Format priority for display
+  defp format_priority(0), do: "0 (critical)"
+  defp format_priority(1), do: "1 (high)"
+  defp format_priority(2), do: "2 (medium)"
+  defp format_priority(3), do: "3 (low)"
+  defp format_priority(4), do: "4 (backlog)"
+  defp format_priority(p), do: to_string(p)
+
+  # Format ISO 8601 timestamp for display
+  defp format_timestamp(timestamp) do
+    case DateTime.from_iso8601(timestamp) do
+      {:ok, dt, _offset} ->
+        Calendar.strftime(dt, "%Y-%m-%d %H:%M:%S UTC")
+
+      _ ->
+        timestamp
+    end
   end
 end
