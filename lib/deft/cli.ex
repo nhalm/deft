@@ -155,6 +155,9 @@ defmodule Deft.CLI do
       positional == ["issue", "list"] ->
         :issue_list
 
+      positional == ["issue", "ready"] ->
+        :issue_ready
+
       Enum.empty?(positional) ->
         :new_session
 
@@ -219,6 +222,18 @@ defmodule Deft.CLI do
 
     # Get filtered issues
     issues = Issues.list(opts)
+
+    # Display in tabular format
+    display_issue_list(issues)
+    :ok
+  end
+
+  defp execute_command(:issue_ready, _flags) do
+    # Ensure Issues GenServer is started
+    ensure_issues_started()
+
+    # Get ready issues (sorted by priority, then created_at)
+    issues = Issues.ready()
 
     # Display in tabular format
     display_issue_list(issues)

@@ -107,7 +107,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement issue_create tool for agent-created issues: accessible during any session; source set to :agent; default priority 3 (low) but agent may assign higher priority for discovered bugs affecting current functionality; agent explains priority choice in issue context
 - Implement `deft issue update <id>` CLI command: --title, --priority, --status, --blocked-by flags; call Issues.update/2
 - Implement `deft issue close <id>` CLI command: set status to :closed, set closed_at, print any newly unblocked issues
-- Implement `deft issue ready` CLI command: call ready/0, display sorted list
 - Implement `deft issue dep add <id> --blocked-by <blocker_id>` and `dep remove` CLI commands (blocked: Implement dependency tracking...)
 - Implement `deft work`: call ready/0, pick first, set status :in_progress, start Foreman job with issue structured JSON as prompt (context → research, acceptance_criteria → verification targets, constraints → Lead steering), on success set :closed + job_id, on failure set back to :open (blocked: Implement Foreman gen_statem...)
 - Implement `deft work <id>`: same as `deft work` but for a specific issue ID, verify issue exists and is open (blocked: Implement deft work...)
