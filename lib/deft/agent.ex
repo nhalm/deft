@@ -50,6 +50,7 @@ defmodule Deft.Agent do
   alias Deft.Session.Entry.Compaction
   alias Deft.Session.Entry.Cost
   alias Deft.Session.Store
+  alias Deft.OM.State, as: OMState
 
   alias Deft.Provider.Event.{
     TextDelta,
@@ -190,8 +191,15 @@ defmodule Deft.Agent do
     data_with_messages = %{data | messages: new_messages}
     compacted_data = maybe_compact_messages(data_with_messages)
 
+    # Notify OM about new messages
+    notify_om_messages_added(data.session_id, [user_message])
+
     # Assemble context
-    context_messages = Context.build(compacted_data.messages, config: compacted_data.config)
+    context_messages =
+      Context.build(compacted_data.messages,
+        config: compacted_data.config,
+        session_id: data.session_id
+      )
 
     # Get provider from config (default to nil for now)
     provider = Map.get(compacted_data.config, :provider)
@@ -358,7 +366,12 @@ defmodule Deft.Agent do
     # Check if compaction is needed before retrying
     compacted_data = maybe_compact_messages(data)
 
-    context_messages = Context.build(compacted_data.messages, config: compacted_data.config)
+    context_messages =
+      Context.build(compacted_data.messages,
+        config: compacted_data.config,
+        session_id: compacted_data.session_id
+      )
+
     provider = Map.get(compacted_data.config, :provider)
     tools = []
 
@@ -597,6 +610,28 @@ defmodule Deft.Agent do
     provider.stream(messages, tools, config)
   end
 
+  # Notify OM.State about new messages added
+  # Per spec section 3, called after each turn with new messages
+  defp notify_om_messages_added(session_id, messages) do
+    # Check if OM is enabled
+    om_enabled = Application.get_env(:deft, :om_enabled, true)
+
+    if om_enabled do
+      # Check if OM.State process exists for this session
+      case Registry.lookup(Deft.ProcessRegistry, {:om_state, session_id}) do
+        [{_pid, _}] ->
+          # Process exists, safe to call
+          OMState.messages_added(session_id, messages)
+
+        [] ->
+          # OM.State process doesn't exist - session not initialized with OM
+          :ok
+      end
+    else
+      :ok
+    end
+  end
+
   defp broadcast_event(session_id, event) do
     # Broadcast event via Registry for TUI and other consumers
     # Registry key is {:session, session_id}
@@ -732,6 +767,9 @@ defmodule Deft.Agent do
     # Finalize the assistant message and transition to :executing_tools
     finalized_message = data.current_message
     new_messages = data.messages ++ [finalized_message]
+
+    # Notify OM about new assistant message
+    notify_om_messages_added(data.session_id, [finalized_message])
 
     new_data = %{
       data
@@ -886,11 +924,19 @@ defmodule Deft.Agent do
 
         new_messages = new_data.messages ++ [user_message]
 
+        # Notify OM about new user message
+        notify_om_messages_added(new_data.session_id, [user_message])
+
         # Check if compaction is needed before calling provider
         data_with_messages = %{new_data | messages: new_messages}
         compacted_data = maybe_compact_messages(data_with_messages)
 
-        context_messages = Context.build(compacted_data.messages, config: compacted_data.config)
+        context_messages =
+          Context.build(compacted_data.messages,
+            config: compacted_data.config,
+            session_id: compacted_data.session_id
+          )
+
         provider = Map.get(compacted_data.config, :provider)
         tools = []
 
@@ -1085,6 +1131,10 @@ defmodule Deft.Agent do
 
     # Append to messages, clear task list and execution times
     new_messages = data.messages ++ [tool_result_message]
+
+    # Notify OM about new tool result message
+    notify_om_messages_added(data.session_id, [tool_result_message])
+
     new_data = %{data | messages: new_messages, tool_tasks: [], tool_execution_times: %{}}
 
     # Continue the conversation by calling the provider again
@@ -1148,7 +1198,12 @@ defmodule Deft.Agent do
       compacted_data = maybe_compact_messages(data)
 
       # Continue with provider call
-      context_messages = Context.build(compacted_data.messages, config: compacted_data.config)
+      context_messages =
+        Context.build(compacted_data.messages,
+          config: compacted_data.config,
+          session_id: compacted_data.session_id
+        )
+
       provider = Map.get(compacted_data.config, :provider)
       tools = []
 
@@ -1332,6 +1387,9 @@ defmodule Deft.Agent do
 
       # Rebuild messages list with summary
       new_messages = pending.system_messages ++ [summary_message] ++ pending.to_keep
+
+      # Notify OM about summary message
+      notify_om_messages_added(data.session_id, [summary_message])
 
       broadcast_event(
         data.session_id,

@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## observational-memory v0.1
-
-- Wire OM into Agent: in Context.build/2, call State.get_context/1 for observations + observed IDs, inject observations, trim observed messages; after each turn, call State.messages_added/2
-
 ## tui v0.1
 
 - Build Breeze streaming proof-of-concept: 1000+ lines mixed text, 30 tokens/sec append, scrollable area + fixed input + status bar; verify performance is acceptable; if not, document fallback to Termite + BackBreeze - Implement `Deft.TUI.Chat` Breeze view: mount/2 subscribes to agent events via Registry, render/1 displays scrollable conversation + input + status bar (blocked: Build Breeze streaming proof-of-concept...)
@@ -43,8 +39,8 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement Reflector preservation evals: all 🔴 items survive; 20 iterations, 95% pass rate (blocked: Implement Reflector compression evals...)
 - Implement Reflector section structure evals: 5 sections in canonical order; hard assertion (not statistical), 100% pass rate (blocked: Implement Reflector compression evals...)
 - Implement Reflector CORRECTION survival evals: all markers survive; hard assertion (not statistical), 100% pass rate (blocked: Implement Reflector compression evals...)
-- Implement Actor observation usage evals: references observation content correctly; 20 iterations, 85% pass rate (blocked: Wire OM into Agent...)
-- Implement Actor continuation evals: continues naturally after trimming, no greeting; 20 iterations, 90% pass rate (blocked: Wire OM into Agent...)
+- Implement Actor observation usage evals: references observation content correctly; 20 iterations, 85% pass rate
+- Implement Actor continuation evals: continues naturally after trimming, no greeting; 20 iterations, 90% pass rate
 - Implement Foreman decomposition evals: 1-3 deliverables, valid DAG, specific contracts; 20 iterations, 75% pass rate (blocked: Implement Foreman gen_statem...)
 - Implement Foreman constraint propagation evals: constraints from issue flow correctly to Lead steering instructions; 20 iterations, 75% pass rate (blocked: Implement Foreman gen_statem...)
 - Implement Foreman verification circuit breaker evals: verify Foreman correctly identifies broken work and does not mark it done; highest-priority eval — validates the safety net; 20 iterations, 90% pass rate (blocked: Implement Foreman gen_statem...)

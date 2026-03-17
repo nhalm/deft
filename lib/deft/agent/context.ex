@@ -13,18 +13,21 @@ defmodule Deft.Agent.Context do
   alias Deft.Message
   alias Deft.Message.Text
   alias Deft.Agent.SystemPrompt
+  alias Deft.OM.State, as: OMState
+  alias Deft.OM.Context, as: OMContext
 
   @doc """
   Builds the context for an agent turn.
 
-  Assembles messages in order: system prompt, observations (empty for now),
-  conversation history, and project context files.
+  Assembles messages in order: system prompt, observations (if OM is active),
+  conversation history (with observed messages trimmed), and project context files.
 
   ## Parameters
 
   - `messages` - The conversation history
   - `opts` - Options for context assembly:
     - `:config` - Agent configuration map (required for working_dir)
+    - `:session_id` - Session ID for OM lookup (optional)
 
   ## Returns
 
@@ -32,11 +35,31 @@ defmodule Deft.Agent.Context do
   """
   def build(messages, opts \\ []) do
     config = Keyword.get(opts, :config, %{})
+    session_id = Keyword.get(opts, :session_id)
+
+    # Get OM context if session_id is provided
+    {observations, observed_ids, calibration_factor} =
+      if session_id do
+        get_om_context(session_id)
+      else
+        {"", [], 4.0}
+      end
+
+    # Inject observations and trim observed messages if OM is active
+    processed_messages =
+      if observations != "" and not Enum.empty?(observed_ids) do
+        OMContext.inject(messages,
+          observations: observations,
+          observed_message_ids: observed_ids,
+          calibration_factor: calibration_factor
+        )
+      else
+        messages
+      end
 
     [
       build_system_prompt(config),
-      build_observation_injection(),
-      messages,
+      processed_messages,
       build_project_context(config)
     ]
     |> List.flatten()
@@ -55,11 +78,37 @@ defmodule Deft.Agent.Context do
     }
   end
 
-  # Builds the observation injection message
-  # Returns nil for now since OM is not yet implemented.
-  # When OM is active, this will return a system message with observations.
-  defp build_observation_injection do
-    nil
+  # Gets OM context from State process
+  # Returns {observations, observed_ids, calibration_factor}
+  defp get_om_context(session_id) do
+    # Check if OM is enabled in config
+    om_enabled = Application.get_env(:deft, :om_enabled, true)
+
+    if om_enabled do
+      # Check if OM.State process exists for this session
+      case Registry.lookup(Deft.ProcessRegistry, {:om_state, session_id}) do
+        [{_pid, _}] ->
+          # Process exists, safe to call
+          try do
+            case OMState.get_context(session_id) do
+              {observations, observed_ids} ->
+                # TODO: Get calibration_factor from OM.State as well
+                {observations, observed_ids, 4.0}
+
+              _ ->
+                {"", [], 4.0}
+            end
+          catch
+            :exit, _ -> {"", [], 4.0}
+          end
+
+        [] ->
+          # OM.State process doesn't exist - session not initialized with OM
+          {"", [], 4.0}
+      end
+    else
+      {"", [], 4.0}
+    end
   end
 
   # Builds the project context message by reading DEFT.md, CLAUDE.md, or AGENTS.md
