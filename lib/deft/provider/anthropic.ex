@@ -298,6 +298,7 @@ defmodule Deft.Provider.Anthropic do
     data = Map.get(sse_event, :data, "")
 
     case event_type do
+      "message_start" -> parse_message_start(data)
       "content_block_start" -> parse_content_block_start(data)
       "content_block_delta" -> parse_content_block_delta(data)
       "message_delta" -> parse_message_delta(data)
@@ -351,11 +352,22 @@ defmodule Deft.Provider.Anthropic do
     end
   end
 
-  # Parse message_delta events (usage info)
+  # Parse message_start events (input token usage)
+  defp parse_message_start(data) do
+    case Jason.decode(data) do
+      {:ok, %{"message" => %{"usage" => %{"input_tokens" => input}}}} ->
+        %Usage{input: input, output: 0}
+
+      _ ->
+        :skip
+    end
+  end
+
+  # Parse message_delta events (output token usage)
   defp parse_message_delta(data) do
     case Jason.decode(data) do
-      {:ok, %{"usage" => %{"input_tokens" => input, "output_tokens" => output}}} ->
-        %Usage{input: input, output: output}
+      {:ok, %{"usage" => %{"output_tokens" => output}}} ->
+        %Usage{input: 0, output: output}
 
       _ ->
         :skip

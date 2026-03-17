@@ -150,13 +150,25 @@ defmodule Deft.Provider.AnthropicTest do
                Anthropic.parse_event(sse_event)
     end
 
-    test "parses message_delta with usage" do
+    test "parses message_start with input tokens" do
       sse_event = %{
-        event: "message_delta",
-        data: Jason.encode!(%{"usage" => %{"input_tokens" => 100, "output_tokens" => 50}})
+        event: "message_start",
+        data:
+          Jason.encode!(%{
+            "message" => %{"usage" => %{"input_tokens" => 100}}
+          })
       }
 
-      assert %Usage{input: 100, output: 50} = Anthropic.parse_event(sse_event)
+      assert %Usage{input: 100, output: 0} = Anthropic.parse_event(sse_event)
+    end
+
+    test "parses message_delta with output tokens only" do
+      sse_event = %{
+        event: "message_delta",
+        data: Jason.encode!(%{"usage" => %{"output_tokens" => 50}})
+      }
+
+      assert %Usage{input: 0, output: 50} = Anthropic.parse_event(sse_event)
     end
 
     test "parses message_stop" do
