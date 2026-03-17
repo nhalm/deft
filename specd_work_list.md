@@ -22,6 +22,10 @@ Then use Deft to build the rest of Deft. The critical path is:
   Then: OM → TUI → evals → orchestration
 -->
 
+## harness v0.1
+
+- Fix `Task.Supervisor.terminate_child/2` called with monitor ref instead of PID in `cancel_state_operations/2` (agent.ex:935) and `cancel_compaction_task/1` (agent.ex:950): `terminate_child` requires a child PID but receives `task_info.ref` (a `t:reference/0`), silently returning `{:error, :not_found}`. Abort in `:executing_tools` does not actually kill in-flight tool tasks or compaction tasks — they continue running as orphans. Fix: store `task.pid` alongside `task.ref` in `start_tool_execution/2` and `maybe_compact_messages/1`, pass pid to `terminate_child`
+
 ## sessions v0.2
 
 - Implement interactive session mode (`deft` with no args): replace "Interactive mode not yet implemented" stub with minimal REPL-style session using IO.gets loop, independent of TUI (blocked: tui v0.1 reaches Ready status)
