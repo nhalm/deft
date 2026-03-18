@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **observational-memory v0.1 (2026-03-18):** Fix `should_activate_reflection?` to check `not state.is_buffering_reflection`: when a buffered reflector is in-flight and observations reach full threshold, `activate_or_spawn_reflection` spawns an immediate reflector that overwrites `reflector_ref`; the buffered task's completion is silently dropped, leaving `is_buffering_reflection` permanently stuck as `true` and disabling all future reflection buffering
 - **evals v0.2 (2026-03-18):** Fix `ResultStore.load/1` partial corruption handling: a single corrupt JSONL line causes the entire run to return `{:error, reason}`, and `export/1` silently filters out failed loads; should skip corrupt lines and preserve valid results per-run, or at minimum log a warning when lines are skipped
 - **issues v0.2 (2026-03-18):** Fix `issues_compaction_days` config passthrough: `cli.ex:76` calls `Issues.start_link()` with no arguments; configured `issues.compaction_days` value from `Deft.Config` is never passed to the GenServer; always defaults to 90 days regardless of user config
 - **issues v0.2 (2026-03-18):** Fix `--auto-approve-all` CLI flag: `cli.ex:97` registers `auto_approve: :boolean` which maps to `--auto-approve`; spec section 8 requires `--auto-approve-all`; rename to `auto_approve_all: :boolean`

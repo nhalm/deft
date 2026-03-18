@@ -1228,7 +1228,8 @@ defmodule Deft.OM.State do
   defp should_activate_reflection?(state) do
     state.observation_tokens >= @default_observation_threshold and
       not state.is_reflecting and
-      not state.is_observing
+      not state.is_observing and
+      not state.is_buffering_reflection
   end
 
   defp should_buffer_reflection?(state, buffer_threshold) do

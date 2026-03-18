@@ -37,7 +37,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## observational-memory v0.1
 
-- Fix `should_activate_reflection?` to check `not state.is_buffering_reflection`: when a buffered reflector is in-flight and observations reach full threshold, `activate_or_spawn_reflection` spawns an immediate reflector that overwrites `reflector_ref`; the buffered task's completion is silently dropped, leaving `is_buffering_reflection` permanently stuck as `true` and disabling all future reflection buffering
 - Fix `validate_sections` in `parse.ex` to ignore unknown sections per spec section 3.5: currently returns `{:error, ...}` on unknown sections, triggering `fallback_parse` which loses `current_task` and `continuation_hint` data; should strip unknown sections from observations and continue normal parsing
 - Fix continuation hint injection condition in `context.ex`: `build_continuation_hint` injects the hint whenever `observed_message_ids` is non-empty, but spec section 5.3 requires injection only when observed messages have actually been trimmed from context
 
