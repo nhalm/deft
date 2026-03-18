@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **filesystem v0.2 (2026-03-17):** Fix ETS table access level: change `:public` to `:protected` in `Deft.Store` init; restructure async DETS→ETS load to work within owner process (or spawn load task before creating ETS so task IS the owner); spec section 3 and 5.5 require `:protected` to prevent Leads from writing directly
 - **evals v0.2 (2026-03-17):** Fix `ResultStore.load/1` to return atom-keyed maps: add `keys: :atoms` option to `Jason.decode/1` call, or convert keys after decode; current string-keyed return doesn't match `@type result()` and will cause KeyError in any caller using atom access
 - **tui v0.1 (2026-03-17):** Fix `/quit` command: currently sends `{:stop, term}` via `send/2` which is swallowed by catch-all `handle_info`; should return `{:stop, term}` directly from the handler (spec section 6)
 - **tui v0.1 (2026-03-17):** Implement Ctrl+R toggle for raw output: add `raw_mode` assign, toggle on Ctrl+R, bypass `Markdown.render/1` when enabled (spec section 5)

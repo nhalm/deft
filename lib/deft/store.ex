@@ -164,12 +164,9 @@ defmodule Deft.Store do
     # Open DETS file with error fallback
     dets_file = open_dets_file(dets_path, type)
 
-    # Create unnamed ETS table (:set, :public for async load task access)
-    # Access control is enforced at GenServer API level, not ETS level
-    tid = :ets.new(:store_table, [:set, :public])
-
-    # Start async load task (linked to GenServer)
-    load_task = Task.async(fn -> load_dets_to_ets(dets_file, tid) end)
+    # Create unnamed ETS table (:set, :protected)
+    # Only the owner (this GenServer) can write. Other processes can read.
+    tid = :ets.new(:store_table, [:set, :protected])
 
     state = %{
       type: type,
@@ -178,12 +175,14 @@ defmodule Deft.Store do
       dets_path: dets_path,
       owner_name: owner_name,
       write_buffer: [],
-      load_task: load_task,
+      loading: true,
       closed: false,
       flush_timer: schedule_flush_timer(type)
     }
 
-    {:ok, state}
+    # Load DETS into ETS asynchronously via handle_continue
+    # This keeps init fast while allowing the owner process to write to :protected ETS
+    {:ok, state, {:continue, :load_dets}}
   end
 
   @impl true
@@ -227,18 +226,11 @@ defmodule Deft.Store do
   end
 
   @impl true
-  def handle_info({ref, :loaded}, state) when ref == state.load_task.ref do
-    # Task completed successfully
-    Process.demonitor(ref, [:flush])
-    {:noreply, %{state | load_task: nil}}
-  end
-
-  @impl true
-  def handle_info({:DOWN, ref, :process, _pid, reason}, state)
-      when ref == state.load_task.ref do
-    # Task failed
-    Logger.warning("Deft.Store async load task failed: #{inspect(reason)}")
-    {:noreply, %{state | load_task: nil}}
+  def handle_continue(:load_dets, state) do
+    # Load DETS into ETS synchronously in the owner process
+    # This allows writing to :protected ETS table
+    load_dets_to_ets(state.dets_file, state.tid)
+    {:noreply, %{state | loading: false}}
   end
 
   @impl true
@@ -291,8 +283,6 @@ defmodule Deft.Store do
       :ok,
       dets_file
     )
-
-    :loaded
   end
 
   defp validate_site_log_writer(caller_pid, owner_name) when is_tuple(owner_name) do
@@ -378,11 +368,6 @@ defmodule Deft.Store do
     # Cancel flush timer if active
     if state.flush_timer do
       Process.cancel_timer(state.flush_timer)
-    end
-
-    # Kill async load task if still running
-    if state.load_task do
-      Task.shutdown(state.load_task, :brutal_kill)
     end
 
     # Flush buffered writes
