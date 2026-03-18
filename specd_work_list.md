@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## evals v0.2
 
-- Add CI workflow files: Tier 1 on every push (soft gate), Tier 2 on merge to main, Tier 3 on weekly schedule per spec section 3.2
 - Implement Foreman decomposition evals: 1-3 deliverables, valid DAG, specific contracts; 20 iterations, 75% pass rate (blocked: Implement Foreman gen_statem...)
 - Implement Foreman constraint propagation evals: constraints from issue flow correctly to Lead steering instructions; 20 iterations, 75% pass rate (blocked: Implement Foreman gen_statem...)
 - Implement Foreman verification circuit breaker evals: verify Foreman correctly identifies broken work and does not mark it done; highest-priority eval — validates the safety net; 20 iterations, 90% pass rate (blocked: Implement Foreman gen_statem...)

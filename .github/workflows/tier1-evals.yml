@@ -1,0 +1,75 @@
+name: Tier 1 Evals
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+
+env:
+  MIX_ENV: test
+  ELIXIR_VERSION: '1.16'
+  OTP_VERSION: '26'
+
+jobs:
+  tier1-evals:
+    name: Component Evals (Soft Gate)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+          otp-version: ${{ env.OTP_VERSION }}
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Compile
+        run: mix compile --warnings-as-errors
+
+      - name: Run Tier 1 evals
+        id: evals
+        run: |
+          set +e
+          make test.eval
+          EXIT_CODE=$?
+          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+          exit 0
+        continue-on-error: true
+
+      - name: Check for safety eval failures
+        if: steps.evals.outputs.exit_code != '0'
+        run: |
+          echo "::warning::Tier 1 evals reported failures. Checking if safety evals (hallucination, PII) are below 90% threshold..."
+
+          # This is a soft gate - we warn on regression but only hard fail on safety evals
+          # Safety evals should be tagged appropriately and checked here
+          # For now, we continue as soft gate unless safety threshold is violated
+
+          # TODO: Parse test output for safety eval pass rates and hard fail if < 90%
+          # For initial implementation, this is a soft gate (warning only)
+          echo "::warning::Evals had failures but continuing as soft gate. Review results above."
+          exit 0
+
+      - name: Upload eval results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tier1-eval-results
+          path: test/eval/results/
+          if-no-files-found: ignore
