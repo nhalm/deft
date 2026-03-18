@@ -52,7 +52,8 @@ defmodule Deft.OM.State do
           last_buffer_threshold: integer(),
           consecutive_failures: integer(),
           circuit_open: boolean(),
-          circuit_opened_at: DateTime.t() | nil
+          circuit_opened_at: DateTime.t() | nil,
+          continuation_hint: String.t() | nil
         }
 
   @enforce_keys [:session_id, :config]
@@ -82,7 +83,8 @@ defmodule Deft.OM.State do
     last_buffer_threshold: 0,
     consecutive_failures: 0,
     circuit_open: false,
-    circuit_opened_at: nil
+    circuit_opened_at: nil,
+    continuation_hint: nil
   ]
 
   ## Client API
@@ -115,7 +117,7 @@ defmodule Deft.OM.State do
 
   Returns `{observations_text, observed_message_ids}`.
   """
-  @spec get_context(String.t()) :: {String.t(), [String.t()]}
+  @spec get_context(String.t()) :: {String.t(), [String.t()], String.t() | nil}
   def get_context(session_id) do
     GenServer.call(via_tuple(session_id), :get_context)
   end
@@ -257,7 +259,8 @@ defmodule Deft.OM.State do
 
   @impl true
   def handle_call(:get_context, _from, state) do
-    {:reply, {state.active_observations, state.observed_message_ids}, state}
+    {:reply, {state.active_observations, state.observed_message_ids, state.continuation_hint},
+     state}
   end
 
   @impl true
@@ -436,7 +439,8 @@ defmodule Deft.OM.State do
             token_count: Tokens.estimate(result.observations, state.calibration_factor),
             message_ids: result.message_ids,
             message_tokens: result.message_tokens,
-            epoch: state.activation_epoch
+            epoch: state.activation_epoch,
+            continuation_hint: result.continuation_hint
           }
 
           %{
@@ -712,6 +716,14 @@ defmodule Deft.OM.State do
         # Decrement pending_message_tokens by the observed message tokens
         new_pending = max(0, state.pending_message_tokens - result.message_tokens)
 
+        # Update continuation hint if present
+        new_continuation_hint =
+          if is_binary(result.continuation_hint) and result.continuation_hint != "" do
+            result.continuation_hint
+          else
+            state.continuation_hint
+          end
+
         %{
           state
           | active_observations: merged_observations,
@@ -720,7 +732,8 @@ defmodule Deft.OM.State do
             pending_message_tokens: new_pending,
             activation_epoch: state.activation_epoch + 1,
             snapshot_dirty: true,
-            last_observed_at: DateTime.utc_now()
+            last_observed_at: DateTime.utc_now(),
+            continuation_hint: new_continuation_hint
         }
       else
         # Keep state unchanged on failure
@@ -1050,6 +1063,13 @@ defmodule Deft.OM.State do
     # Subtract observed tokens from pending
     new_pending = max(0, state.pending_message_tokens - observed_tokens)
 
+    # Get the most recent continuation hint (from the last chunk)
+    new_continuation_hint =
+      case List.last(current_chunks) do
+        %BufferedChunk{continuation_hint: hint} when not is_nil(hint) -> hint
+        _ -> state.continuation_hint
+      end
+
     state = %{
       state
       | active_observations: merged_observations,
@@ -1059,7 +1079,8 @@ defmodule Deft.OM.State do
         pending_message_tokens: new_pending,
         activation_epoch: state.activation_epoch + 1,
         snapshot_dirty: true,
-        last_observed_at: DateTime.utc_now()
+        last_observed_at: DateTime.utc_now(),
+        continuation_hint: new_continuation_hint
     }
 
     # Write snapshot after observation activation (spec section 9.1)

@@ -74,10 +74,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement per-Lead cache isolation: start one Deft.Store instance per Lead with DETS at cache/<session_id>/lead-<lead_id>.dets; Lead cleanup deletes its own cache instance (blocked: Implement Lead gen_statem...)
 - Implement session-end cache cleanup: on session termination, delete all files under cache/<session_id>/ (blocked: Implement per-Lead cache isolation...)
 
-## observational-memory v0.1
-
-- Implement dynamic continuation hint: extend Observer prompt to return `<continuation-hint>` with current task, last tool call, and user's last request paraphrase; parse in Observer output; pass through to Context injection; fall back to static hint when absent (spec section 5.3)
-
 ## issues v0.2
 
 - Implement `deft issue dep add <id> --blocked-by <blocker_id>` and `dep remove` CLI commands (blocked: Implement dependency tracking...)

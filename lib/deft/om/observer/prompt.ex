@@ -130,9 +130,20 @@ defmodule Deft.OM.Observer.Prompt do
     <current-task>
     [One-line description of what the user is currently working on]
     </current-task>
+
+    <continuation-hint>
+    [Dynamic hint for conversation continuity - 1-3 sentences including: current task, last action taken (last tool call), and paraphrase of user's last request]
+    </continuation-hint>
     ```
 
-    The `<current-task>` should be a single-line summary that will be used to provide conversation continuity.
+    The `<current-task>` should be a single-line summary.
+
+    The `<continuation-hint>` provides conversation continuity when earlier messages are trimmed. Include:
+    - What task is being worked on
+    - The last action taken (especially the last tool call if any)
+    - A brief paraphrase of what the user most recently asked for
+
+    Example: "You were debugging a compilation error in `src/auth.ex`. Your last action was editing that file to add the missing `verify_token/1` function. The user asked you to run the tests to verify the fix."
 
     ## Example
 
@@ -176,6 +187,10 @@ defmodule Deft.OM.Observer.Prompt do
     <current-task>
     Implementing JWT authentication in src/auth.ex
     </current-task>
+
+    <continuation-hint>
+    You are implementing JWT authentication in src/auth.ex. Your last action was reading that file to understand its current state. The user asked you to implement JWT authentication with argon2 password hashing.
+    </continuation-hint>
     ```
     """
   end

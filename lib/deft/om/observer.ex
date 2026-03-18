@@ -36,6 +36,7 @@ defmodule Deft.OM.Observer do
   - `:message_ids` - IDs of messages that were observed
   - `:message_tokens` - Token count of the messages that were observed
   - `:current_task` - Current task description (if present)
+  - `:continuation_hint` - Dynamic continuation hint (if present)
 
   ## Examples
 
@@ -50,7 +51,8 @@ defmodule Deft.OM.Observer do
             observations: String.t(),
             message_ids: [String.t()],
             message_tokens: integer(),
-            current_task: String.t() | nil
+            current_task: String.t() | nil,
+            continuation_hint: String.t() | nil
           }
   def run(config, messages, existing_observations, calibration_factor) do
     Logger.debug("Observer: Starting observation extraction for #{length(messages)} messages")
@@ -94,7 +96,12 @@ defmodule Deft.OM.Observer do
           {:ok, response_text} ->
             # Parse the Observer output
             case Parse.parse_output(response_text) do
-              {:ok, %{observations: observations, current_task: current_task}} ->
+              {:ok,
+               %{
+                 observations: observations,
+                 current_task: current_task,
+                 continuation_hint: continuation_hint
+               }} ->
                 # Calculate message tokens
                 message_tokens = calculate_message_tokens(messages, calibration_factor)
                 message_ids = Enum.map(messages, & &1.id)
@@ -107,7 +114,8 @@ defmodule Deft.OM.Observer do
                   observations: observations,
                   message_ids: message_ids,
                   message_tokens: message_tokens,
-                  current_task: current_task
+                  current_task: current_task,
+                  continuation_hint: continuation_hint
                 }
 
               {:error, reason} ->
@@ -229,7 +237,8 @@ defmodule Deft.OM.Observer do
       observations: "",
       message_ids: message_ids,
       message_tokens: message_tokens,
-      current_task: nil
+      current_task: nil,
+      continuation_hint: nil
     }
   end
 end

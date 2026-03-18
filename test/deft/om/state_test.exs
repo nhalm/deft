@@ -78,7 +78,7 @@ defmodule Deft.OM.StateTest do
       Process.sleep(50)
 
       # Check that buffered chunks were activated
-      {observations, observed_ids} = State.get_context(session_id)
+      {observations, observed_ids, _continuation_hint} = State.get_context(session_id)
 
       # Should have merged observations
       assert observations != ""
@@ -140,7 +140,7 @@ defmodule Deft.OM.StateTest do
       State.messages_added(session_id, messages)
       Process.sleep(50)
 
-      {observations, _} = State.get_context(session_id)
+      {observations, _, _} = State.get_context(session_id)
 
       # Current State should be replaced, not appended
       assert String.contains?(observations, "New task")
@@ -184,7 +184,7 @@ defmodule Deft.OM.StateTest do
       State.messages_added(session_id, messages)
       Process.sleep(50)
 
-      {observations, _} = State.get_context(session_id)
+      {observations, _, _} = State.get_context(session_id)
 
       # Session History should have both events
       assert String.contains?(observations, "First event")

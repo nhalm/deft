@@ -34,6 +34,7 @@ defmodule Deft.OM.Context do
     - `:observed_message_ids` - List of message IDs that have been observed (required)
     - `:calibration_factor` - Token calibration factor (default: 4.0)
     - `:current_task` - Current task description from Observer (optional)
+    - `:continuation_hint` - Dynamic continuation hint from Observer (optional)
 
   ## Returns
 
@@ -51,6 +52,7 @@ defmodule Deft.OM.Context do
     observed_message_ids = Keyword.get(opts, :observed_message_ids, [])
     calibration_factor = Keyword.get(opts, :calibration_factor, 4.0)
     current_task = Keyword.get(opts, :current_task)
+    continuation_hint = Keyword.get(opts, :continuation_hint)
 
     if observations == "" or Enum.empty?(observed_message_ids) do
       # No observations yet - return messages as-is
@@ -64,10 +66,11 @@ defmodule Deft.OM.Context do
       obs_message = build_observation_message(observations, current_task)
 
       # Build continuation hint if needed
-      continuation_hint = build_continuation_hint(messages, observed_message_ids, current_task)
+      hint_message =
+        build_continuation_hint(messages, observed_message_ids, current_task, continuation_hint)
 
       # Inject: observation message + trimmed messages + continuation hint (if any)
-      [obs_message] ++ trimmed_messages ++ List.wrap(continuation_hint)
+      [obs_message] ++ trimmed_messages ++ List.wrap(hint_message)
     end
   end
 
@@ -207,10 +210,10 @@ defmodule Deft.OM.Context do
   defp build_current_task_block(_), do: nil
 
   # Builds a continuation hint to prevent "fresh conversation" behavior (spec section 5.3)
-  defp build_continuation_hint(messages, observed_message_ids, current_task) do
+  defp build_continuation_hint(messages, observed_message_ids, current_task, continuation_hint) do
     # Only inject hint if we've trimmed some messages
     if Enum.any?(observed_message_ids) do
-      hint_text = generate_dynamic_hint(messages, current_task)
+      hint_text = generate_dynamic_hint(messages, current_task, continuation_hint)
 
       %Message{
         id: "om_continuation_hint",
@@ -224,8 +227,14 @@ defmodule Deft.OM.Context do
   end
 
   # Generates a dynamic continuation hint
-  # For now, uses a static fallback. The Observer will provide dynamic hints in future work.
-  defp generate_dynamic_hint(_messages, current_task) when is_binary(current_task) do
+  # Uses the Observer-provided hint if available, otherwise falls back to static hint
+  defp generate_dynamic_hint(_messages, _current_task, continuation_hint)
+       when is_binary(continuation_hint) and continuation_hint != "" do
+    continuation_hint
+  end
+
+  defp generate_dynamic_hint(_messages, current_task, _continuation_hint)
+       when is_binary(current_task) do
     """
     Continue the conversation naturally. You have observations from earlier in this conversation available above.
 
@@ -233,7 +242,7 @@ defmodule Deft.OM.Context do
     """
   end
 
-  defp generate_dynamic_hint(_messages, _current_task) do
+  defp generate_dynamic_hint(_messages, _current_task, _continuation_hint) do
     "Continue the conversation naturally. You have observations from earlier in this conversation available above."
   end
 end

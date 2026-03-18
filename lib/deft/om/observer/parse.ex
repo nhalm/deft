@@ -25,11 +25,15 @@ defmodule Deft.OM.Observer.Parse do
   <current-task>
   Brief description
   </current-task>
+
+  <continuation-hint>
+  Dynamic hint for conversation continuity
+  </continuation-hint>
   ```
 
   ## Return Value
 
-  Returns `{:ok, %{observations: text, current_task: text}}` on success.
+  Returns `{:ok, %{observations: text, current_task: text, continuation_hint: text}}` on success.
   Returns `{:error, reason}` if parsing fails completely.
 
   ## Examples
@@ -42,16 +46,26 @@ defmodule Deft.OM.Observer.Parse do
       "Working"
   """
   @spec parse_output(String.t()) ::
-          {:ok, %{observations: String.t(), current_task: String.t() | nil}}
+          {:ok,
+           %{
+             observations: String.t(),
+             current_task: String.t() | nil,
+             continuation_hint: String.t() | nil
+           }}
           | {:error, String.t()}
   def parse_output(output) when is_binary(output) do
     # Try XML parsing first
     case extract_xml_blocks(output) do
-      {:ok, observations, current_task} ->
+      {:ok, observations, current_task, continuation_hint} ->
         # Validate section headers
         case validate_sections(observations) do
           :ok ->
-            {:ok, %{observations: observations, current_task: current_task}}
+            {:ok,
+             %{
+               observations: observations,
+               current_task: current_task,
+               continuation_hint: continuation_hint
+             }}
 
           {:error, _reason} = error ->
             # Validation failed, try fallback
@@ -186,8 +200,17 @@ defmodule Deft.OM.Observer.Parse do
         _ -> nil
       end
 
+    # Extract <continuation-hint>...</continuation-hint>
+    continuation_hint =
+      case Regex.run(~r/<continuation-hint>(.*?)<\/continuation-hint>/s, output,
+             capture: :all_but_first
+           ) do
+        [content] -> String.trim(content)
+        _ -> nil
+      end
+
     if observations do
-      {:ok, observations, current_task}
+      {:ok, observations, current_task, continuation_hint}
     else
       :error
     end
@@ -213,7 +236,7 @@ defmodule Deft.OM.Observer.Parse do
     # Look for section headers and content
     if Regex.match?(~r/^## /m, output) do
       # Has section headers, treat the whole thing as observations
-      {:ok, %{observations: String.trim(output), current_task: nil}}
+      {:ok, %{observations: String.trim(output), current_task: nil, continuation_hint: nil}}
     else
       # No recognizable structure
       {:error, "Could not parse output: no XML tags and no section headers found"}

@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **observational-memory v0.1 (2026-03-18):** Implement dynamic continuation hint: extend Observer prompt to return `<continuation-hint>` with current task, last tool call, and user's last request paraphrase; parse in Observer output; pass through to Context injection; fall back to static hint when absent (spec section 5.3)
 - **observational-memory v0.1 (2026-03-17):** Implement sync reflection fallback: add `:force_reflect` GenServer.call handler with from-stashing pattern; trigger when observation_tokens >= 1.2x reflection threshold (48,000); 1 retry max (spec section 6.3)
 - **observational-memory v0.1 (2026-03-18):** Implement reflection buffering: spawn Reflector Task at 50% of reflection threshold (20,000 tokens); store result in `buffered_reflection`; on full threshold, check epoch and activate or discard+re-trigger (spec section 6.2)
 - **observational-memory v0.1 (2026-03-18):** Fix sync fallback state update: when `sync_from` is set in observer task completion handler, merge observations into `active_observations`, update `observed_message_ids`, and decrement `pending_message_tokens` before replying — currently replies but discards observation data (spec section 6.3)

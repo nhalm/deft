@@ -38,11 +38,11 @@ defmodule Deft.Agent.Context do
     session_id = Keyword.get(opts, :session_id)
 
     # Get OM context if session_id is provided
-    {observations, observed_ids, calibration_factor} =
+    {observations, observed_ids, continuation_hint, calibration_factor} =
       if session_id do
         get_om_context(session_id)
       else
-        {"", [], 4.0}
+        {"", [], nil, 4.0}
       end
 
     # Inject observations and trim observed messages if OM is active
@@ -51,7 +51,8 @@ defmodule Deft.Agent.Context do
         OMContext.inject(messages,
           observations: observations,
           observed_message_ids: observed_ids,
-          calibration_factor: calibration_factor
+          calibration_factor: calibration_factor,
+          continuation_hint: continuation_hint
         )
       else
         messages
@@ -79,7 +80,7 @@ defmodule Deft.Agent.Context do
   end
 
   # Gets OM context from State process
-  # Returns {observations, observed_ids, calibration_factor}
+  # Returns {observations, observed_ids, continuation_hint, calibration_factor}
   defp get_om_context(session_id) do
     # Check if OM is enabled in config
     om_enabled = Application.get_env(:deft, :om_enabled, true)
@@ -91,23 +92,23 @@ defmodule Deft.Agent.Context do
           # Process exists, safe to call
           try do
             case OMState.get_context(session_id) do
-              {observations, observed_ids} ->
+              {observations, observed_ids, continuation_hint} ->
                 # TODO: Get calibration_factor from OM.State as well
-                {observations, observed_ids, 4.0}
+                {observations, observed_ids, continuation_hint, 4.0}
 
               _ ->
-                {"", [], 4.0}
+                {"", [], nil, 4.0}
             end
           catch
-            :exit, _ -> {"", [], 4.0}
+            :exit, _ -> {"", [], nil, 4.0}
           end
 
         [] ->
           # OM.State process doesn't exist - session not initialized with OM
-          {"", [], 4.0}
+          {"", [], nil, 4.0}
       end
     else
-      {"", [], 4.0}
+      {"", [], nil, 4.0}
     end
   end
 

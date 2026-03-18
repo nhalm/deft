@@ -12,9 +12,17 @@ defmodule Deft.OM.BufferedChunk do
           token_count: integer(),
           message_ids: [String.t()],
           message_tokens: integer(),
-          epoch: integer()
+          epoch: integer(),
+          continuation_hint: String.t() | nil
         }
 
   @enforce_keys [:observations, :token_count, :message_ids, :message_tokens, :epoch]
-  defstruct [:observations, :token_count, :message_ids, :message_tokens, :epoch]
+  defstruct [
+    :observations,
+    :token_count,
+    :message_ids,
+    :message_tokens,
+    :epoch,
+    :continuation_hint
+  ]
 end
