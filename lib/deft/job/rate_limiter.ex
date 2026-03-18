@@ -14,6 +14,8 @@ defmodule Deft.Job.RateLimiter do
   use GenServer
   require Logger
 
+  alias Deft.Provider.Anthropic
+
   # Provider rate limits (Anthropic Tier 1 defaults)
   # TODO: Move to configuration when providers.md spec is updated
   @default_rpm 50
@@ -204,6 +206,10 @@ defmodule Deft.Job.RateLimiter do
 
   ## Parameters
   - opts: Keyword list with required :job_id and optional configuration
+    - :job_id - Required job identifier
+    - :foreman_pid - Optional Foreman process PID for cost reporting
+    - :model - Optional model name for cost tracking (default: "claude-sonnet-4")
+    - :time_source - Optional time source function for testing
   """
   def start_link(opts) do
     job_id = Keyword.fetch!(opts, :job_id)
@@ -275,12 +281,18 @@ defmodule Deft.Job.RateLimiter do
   @impl true
   def init(opts) do
     time_source = Keyword.get(opts, :time_source, &System.monotonic_time/1)
+    foreman_pid = Keyword.get(opts, :foreman_pid)
+    model = Keyword.get(opts, :model, "claude-sonnet-4")
 
     state = %{
       providers: %{},
       queue: :gb_trees.empty(),
       next_queue_id: 0,
-      time_source: time_source
+      time_source: time_source,
+      foreman_pid: foreman_pid,
+      model: model,
+      cumulative_cost: 0.0,
+      last_cost_report: 0.0
     }
 
     # Schedule periodic queue processing and starvation check
@@ -350,6 +362,9 @@ defmodule Deft.Job.RateLimiter do
     new_buckets = %{buckets | tpm: new_tpm_bucket}
     new_state = put_in(state, [:providers, provider], new_buckets)
 
+    # Track cost from actual usage
+    new_state = track_cost(new_state, actual_usage)
+
     # Process queue in case capacity became available
     new_state = process_queue(new_state)
 
@@ -416,6 +431,56 @@ defmodule Deft.Job.RateLimiter do
   end
 
   # Private helpers
+
+  # Cost tracking threshold ($0.50 increments)
+  @cost_report_threshold 0.50
+
+  defp track_cost(state, actual_usage) do
+    input_tokens = Map.get(actual_usage, :input, 0)
+    output_tokens = Map.get(actual_usage, :output, 0)
+
+    # Calculate cost for this request
+    cost = calculate_cost(state.model, input_tokens, output_tokens)
+
+    # Update cumulative cost
+    new_cumulative = state.cumulative_cost + cost
+
+    # Check if we should report to Foreman (every $0.50 increment)
+    new_state = %{state | cumulative_cost: new_cumulative}
+
+    if should_report_cost?(state.last_cost_report, new_cumulative) do
+      report_cost_to_foreman(new_state, new_cumulative)
+      %{new_state | last_cost_report: new_cumulative}
+    else
+      new_state
+    end
+  end
+
+  defp calculate_cost(model, input_tokens, output_tokens) do
+    case Anthropic.model_config(model) do
+      %{input_price_per_mtok: input_price, output_price_per_mtok: output_price} ->
+        # Prices are per million tokens, convert to actual cost
+        input_cost = input_tokens * input_price / 1_000_000
+        output_cost = output_tokens * output_price / 1_000_000
+        input_cost + output_cost
+
+      {:error, :unknown_model} ->
+        Logger.warning("Unknown model #{model} for cost tracking, using $0")
+        0.0
+    end
+  end
+
+  defp should_report_cost?(last_report, new_cumulative) do
+    # Report if we've crossed a $0.50 threshold
+    trunc(last_report / @cost_report_threshold) < trunc(new_cumulative / @cost_report_threshold)
+  end
+
+  defp report_cost_to_foreman(%{foreman_pid: nil}, _cost), do: :ok
+
+  defp report_cost_to_foreman(%{foreman_pid: foreman_pid}, cost) do
+    send(foreman_pid, {:rate_limiter, :cost, cost})
+    :ok
+  end
 
   defp ensure_provider(state, provider) do
     if Map.has_key?(state.providers, provider) do

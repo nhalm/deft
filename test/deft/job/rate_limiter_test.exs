@@ -574,4 +574,119 @@ defmodule Deft.Job.RateLimiterTest do
       assert :ok = :ok
     end
   end
+
+  describe "cost tracking" do
+    setup _context do
+      # Stop the default RateLimiter from the main setup
+      stop_supervised(RateLimiter)
+
+      # Start a process to capture messages sent to "Foreman"
+      foreman_pid = self()
+
+      job_id = "cost-test-#{System.unique_integer([:positive])}"
+
+      {:ok, _pid} =
+        start_supervised(
+          {RateLimiter, [job_id: job_id, foreman_pid: foreman_pid, model: "claude-sonnet-4"]},
+          id: {RateLimiter, job_id}
+        )
+
+      {:ok, job_id: job_id, foreman_pid: foreman_pid}
+    end
+
+    test "tracks cost from reconcile calls", %{job_id: job_id} do
+      messages = [%{content: "test"}]
+
+      # Make a request
+      {:ok, estimated} = RateLimiter.request(job_id, "anthropic", messages, :lead)
+
+      # Reconcile with actual usage
+      # claude-sonnet-4 pricing: $3.00/MTok input, $15.00/MTok output
+      # 100 input tokens = $0.0003, 50 output tokens = $0.00075
+      # Total = $0.00105
+      actual_usage = %{input: 100, output: 50}
+      :ok = RateLimiter.reconcile(job_id, "anthropic", estimated, actual_usage)
+
+      # Should not send message yet (under $0.50 threshold)
+      refute_receive {:rate_limiter, :cost, _}, 100
+    end
+
+    test "sends cost message every $0.50 increment", %{job_id: job_id} do
+      messages = [%{content: "test"}]
+
+      # Make multiple requests to accumulate cost above $0.50
+      # Each reconcile with large usage
+      # 100,000 input tokens = $0.30, 100,000 output tokens = $1.50
+      # Total per call = $1.80
+      for _ <- 1..1 do
+        {:ok, estimated} = RateLimiter.request(job_id, "anthropic", messages, :lead)
+        actual_usage = %{input: 100_000, output: 100_000}
+        :ok = RateLimiter.reconcile(job_id, "anthropic", estimated, actual_usage)
+      end
+
+      # Should receive cost message since we crossed $0.50 threshold
+      assert_receive {:rate_limiter, :cost, cost}, 500
+      assert cost >= 0.50
+    end
+
+    test "only sends cost message when crossing $0.50 threshold", %{job_id: job_id} do
+      messages = [%{content: "test"}]
+
+      # First request: $0.30
+      {:ok, estimated} = RateLimiter.request(job_id, "anthropic", messages, :lead)
+      actual_usage = %{input: 100_000, output: 0}
+      :ok = RateLimiter.reconcile(job_id, "anthropic", estimated, actual_usage)
+
+      # Should not send message (under $0.50)
+      refute_receive {:rate_limiter, :cost, _}, 100
+
+      # Second request: another $0.30 (cumulative $0.60)
+      {:ok, estimated} = RateLimiter.request(job_id, "anthropic", messages, :lead)
+      actual_usage = %{input: 100_000, output: 0}
+      :ok = RateLimiter.reconcile(job_id, "anthropic", estimated, actual_usage)
+
+      # Should send message now (crossed $0.50)
+      assert_receive {:rate_limiter, :cost, cost}, 500
+      assert cost >= 0.50
+    end
+
+    test "handles unknown model gracefully", %{foreman_pid: foreman_pid} do
+      job_id = "cost-unknown-#{System.unique_integer([:positive])}"
+
+      {:ok, _pid} =
+        start_supervised(
+          {RateLimiter, [job_id: job_id, foreman_pid: foreman_pid, model: "unknown-model"]},
+          id: {RateLimiter, job_id}
+        )
+
+      messages = [%{content: "test"}]
+
+      # Make a request
+      {:ok, estimated} = RateLimiter.request(job_id, "anthropic", messages, :lead)
+
+      # Reconcile with actual usage
+      actual_usage = %{input: 100_000, output: 100_000}
+      :ok = RateLimiter.reconcile(job_id, "anthropic", estimated, actual_usage)
+
+      # Should not crash, cost should be $0
+      refute_receive {:rate_limiter, :cost, _}, 100
+    end
+
+    test "does not send messages when foreman_pid is nil" do
+      job_id = "cost-no-foreman-#{System.unique_integer([:positive])}"
+
+      # Start without foreman_pid
+      {:ok, _pid} = start_supervised({RateLimiter, [job_id: job_id]}, id: {RateLimiter, job_id})
+
+      messages = [%{content: "test"}]
+
+      # Make request with high cost
+      {:ok, estimated} = RateLimiter.request(job_id, "anthropic", messages, :lead)
+      actual_usage = %{input: 100_000, output: 100_000}
+      :ok = RateLimiter.reconcile(job_id, "anthropic", estimated, actual_usage)
+
+      # Should not crash and should not send message
+      refute_receive {:rate_limiter, :cost, _}, 100
+    end
+  end
 end
