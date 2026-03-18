@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **evals v0.2 (2026-03-17):** Fix `make test.eval.holdout`: uses `mix test --only eval --only holdout` which is OR logic in ExUnit (runs ALL eval tests); should be `mix test --only holdout` to run only holdout-tagged tests
 - **observational-memory v0.1 (2026-03-17):** Implement `/observations` slash command: display `## Current State` + `## User Preferences` + today's entries; support `--full` for complete dump and `--search <term>` for filtering (spec section 11)
 - **observational-memory v0.1 (2026-03-18):** Fix `om_enabled` config bypass: `agent/context.ex:90` and `agent.ex:617` read `Application.get_env(:deft, :om_enabled, true)` but no code calls `Application.put_env`; must read from the config struct (`data.config.om_enabled`) instead, matching the pattern at `agent.ex:1450`
 - **observational-memory v0.1 (2026-03-17):** Fix sync fallback stale context: `get_om_context` in `agent/context.ex` calls `check_sync_fallback` after fetching OM data but returns the pre-sync observations; must re-fetch context from `OMState.get_context` after sync fallback triggers to include freshly observed/reflected data

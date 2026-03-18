@@ -28,7 +28,7 @@ test.eval:
 	mix test --only eval --exclude holdout
 
 test.eval.holdout:
-	mix test --only eval --only holdout
+	mix test --only holdout
 
 test.eval.validate_fixtures:
 	mix eval.validate_fixtures

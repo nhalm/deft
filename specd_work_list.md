@@ -95,7 +95,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## evals v0.2
 
-- Fix `make test.eval.holdout`: uses `mix test --only eval --only holdout` which is OR logic in ExUnit (runs ALL eval tests); should be `mix test --only holdout` to run only holdout-tagged tests
 - Fix `JudgeCalibration.load_latest_result/1`: when calibration directory doesn't exist, `File.ls/1` returns `{:error, :enoent}` which falls through the `with` clause; should return `{:error, :not_found}` per the docstring to match the "no calibration exists" semantic
 
 ## skills v0.2
