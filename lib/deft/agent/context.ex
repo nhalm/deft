@@ -40,7 +40,7 @@ defmodule Deft.Agent.Context do
     # Get OM context if session_id is provided
     {observations, observed_ids, continuation_hint, calibration_factor} =
       if session_id do
-        get_om_context(session_id)
+        get_om_context(session_id, config)
       else
         {"", [], nil, 4.0}
       end
@@ -85,9 +85,9 @@ defmodule Deft.Agent.Context do
   # Per spec section 6.3, implements sync fallback:
   # - If pending_message_tokens >= 36,000 (1.2x observation threshold), force observe
   # - If observation_tokens >= 48,000 (1.2x reflection threshold), force reflect
-  defp get_om_context(session_id) do
+  defp get_om_context(session_id, config) do
     # Check if OM is enabled in config
-    om_enabled = Application.get_env(:deft, :om_enabled, true)
+    om_enabled = Map.get(config, :om_enabled, true)
 
     if om_enabled do
       # Check if OM.State process exists for this session

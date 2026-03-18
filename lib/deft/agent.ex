@@ -192,7 +192,7 @@ defmodule Deft.Agent do
     compacted_data = maybe_compact_messages(data_with_messages)
 
     # Notify OM about new messages
-    notify_om_messages_added(data.session_id, [user_message])
+    notify_om_messages_added(data.session_id, [user_message], data.config)
 
     # Assemble context
     context_messages =
@@ -612,9 +612,9 @@ defmodule Deft.Agent do
 
   # Notify OM.State about new messages added
   # Per spec section 3, called after each turn with new messages
-  defp notify_om_messages_added(session_id, messages) do
+  defp notify_om_messages_added(session_id, messages, config) do
     # Check if OM is enabled
-    om_enabled = Application.get_env(:deft, :om_enabled, true)
+    om_enabled = Map.get(config, :om_enabled, true)
 
     if om_enabled do
       # Check if OM.State process exists for this session
@@ -769,7 +769,7 @@ defmodule Deft.Agent do
     new_messages = data.messages ++ [finalized_message]
 
     # Notify OM about new assistant message
-    notify_om_messages_added(data.session_id, [finalized_message])
+    notify_om_messages_added(data.session_id, [finalized_message], data.config)
 
     new_data = %{
       data
@@ -925,7 +925,7 @@ defmodule Deft.Agent do
         new_messages = new_data.messages ++ [user_message]
 
         # Notify OM about new user message
-        notify_om_messages_added(new_data.session_id, [user_message])
+        notify_om_messages_added(new_data.session_id, [user_message], new_data.config)
 
         # Check if compaction is needed before calling provider
         data_with_messages = %{new_data | messages: new_messages}
@@ -1261,7 +1261,7 @@ defmodule Deft.Agent do
     new_messages = data.messages ++ messages_to_add
 
     # Notify OM about new messages
-    notify_om_messages_added(data.session_id, messages_to_add)
+    notify_om_messages_added(data.session_id, messages_to_add, data.config)
 
     new_data = %{data | messages: new_messages, tool_tasks: [], tool_execution_times: %{}}
 
@@ -1544,7 +1544,7 @@ defmodule Deft.Agent do
       new_messages = pending.system_messages ++ [summary_message] ++ pending.to_keep
 
       # Notify OM about summary message
-      notify_om_messages_added(data.session_id, [summary_message])
+      notify_om_messages_added(data.session_id, [summary_message], data.config)
 
       broadcast_event(
         data.session_id,
