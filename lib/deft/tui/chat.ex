@@ -100,7 +100,8 @@ defmodule Deft.TUI.Chat do
         model_name: assigns.config[:model] || "claude-sonnet-4",
         agent_state_display:
           format_agent_state(assigns.agent_state, assigns.om_active, assigns.om_sync_fallback),
-        streaming_rendered: calculate_streaming_rendered(assigns)
+        streaming_rendered: calculate_streaming_rendered(assigns),
+        visible_messages: calculate_visible_messages(assigns)
       )
 
     ~H"""
@@ -108,7 +109,7 @@ defmodule Deft.TUI.Chat do
       <box style="bold border">Deft - <%= @model_name %></box>
 
       <box style="border height-20">
-        <%= for message <- @messages do %>
+        <%= for message <- @visible_messages do %>
           <%= render_message(message, @raw_mode) %>
         <% end %>
         <%= if @streaming and @streaming_rendered != "" do %>
@@ -803,6 +804,30 @@ defmodule Deft.TUI.Chat do
       end
     else
       ""
+    end
+  end
+
+  defp calculate_visible_messages(assigns) do
+    # Apply scroll offset to determine which messages are visible
+    # scroll_offset = 0: show all messages (default, no scrolling)
+    # scroll_offset > 0: scrolled up, skip the most recent messages
+
+    if assigns.scroll_offset > 0 do
+      # Approximate line count per message (user/assistant label + content ≈ 3-5 lines)
+      # Using 3 as a conservative estimate
+      messages_to_skip = div(assigns.scroll_offset, 3)
+      message_count = length(assigns.messages)
+
+      if messages_to_skip >= message_count do
+        # Scrolled past all messages, show empty or first message
+        Enum.take(assigns.messages, 1)
+      else
+        # Drop the most recent N messages to show older content
+        Enum.drop(assigns.messages, -messages_to_skip)
+      end
+    else
+      # No scrolling, show all messages
+      assigns.messages
     end
   end
 
