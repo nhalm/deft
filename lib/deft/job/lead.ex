@@ -164,6 +164,16 @@ defmodule Deft.Job.Lead do
     {:keep_state_and_data, [{:next_event, :cast, {:prompt, planning_prompt}}]}
   end
 
+  def handle_event(:enter, _old_state, {:verifying, :idle}, data) do
+    # When entering verification phase, run compile checks
+    Logger.info("Lead #{data.lead_id} starting verification")
+
+    # Spawn a testing runner to verify the deliverable
+    verification_prompt = build_verification_prompt(data)
+
+    {:keep_state_and_data, [{:next_event, :cast, {:prompt, verification_prompt}}]}
+  end
+
   def handle_event(:enter, _old_state, {chunk_phase, :executing_tools}, data) do
     # Extract tool calls from the last assistant message
     tool_calls = extract_tool_calls(data.messages)
@@ -401,6 +411,32 @@ defmodule Deft.Job.Lead do
     """
   end
 
+  defp build_verification_prompt(data) do
+    # Build prompt for verification phase
+    completed_work =
+      data.task_list
+      |> Enum.filter(fn t -> t.status == :done end)
+      |> Enum.map(fn t -> "- #{t.description}" end)
+      |> Enum.join("\n")
+
+    """
+    You are verifying the deliverable is complete and correct.
+
+    ## Deliverable
+    #{data.deliverable}
+
+    ## Completed Tasks
+    #{completed_work}
+
+    ## Verification Steps
+    1. Run compile checks (if applicable)
+    2. Run relevant tests
+    3. Review modified files for correctness
+
+    If all checks pass, report completion. If any issues found, report them for correction.
+    """
+  end
+
   # Reads relevant context from the site log.
   # Returns a formatted string with research findings, contracts, and decisions
   # from the site log, or an empty string if no site log is available.
@@ -573,27 +609,177 @@ defmodule Deft.Job.Lead do
   end
 
   defp process_runner_result(result, runner_info, data) do
-    # Placeholder for processing runner results
-    # In real implementation:
-    # - Evaluate if the task was completed correctly
-    # - Update task list
-    # - Decide if corrective action needed
-    # - Send findings/decisions to Foreman
-    Logger.debug(
+    # Evaluate runner result and update task list
+    Logger.info(
       "Processing runner result for #{runner_info.task_description}: #{inspect(result)}"
     )
 
-    data
+    case result do
+      {:ok, output} ->
+        # Update task list - mark current task as done
+        task_list =
+          update_task_status(data.task_list, runner_info.task_description, :done, output)
+
+        # Evaluate if the output meets expectations
+        evaluation = evaluate_runner_output(output, runner_info, data)
+
+        data = %{data | task_list: task_list}
+
+        # Send evaluation to Foreman
+        case evaluation do
+          {:success, summary} ->
+            send_lead_message(
+              data.foreman_pid,
+              :status,
+              "Task completed successfully: #{runner_info.task_description}\n\nSummary: #{summary}",
+              %{task: runner_info.task_description}
+            )
+
+            data
+
+          {:needs_correction, reason} ->
+            Logger.warning("Lead #{data.lead_id} detected issue: #{reason}")
+
+            send_lead_message(
+              data.foreman_pid,
+              :finding,
+              "Task needs correction: #{runner_info.task_description}\n\nReason: #{reason}",
+              %{task: runner_info.task_description, shared: false}
+            )
+
+            # Add corrective task to the task list
+            corrective_task = %{
+              description: "Fix: #{runner_info.task_description} - #{reason}",
+              status: :pending,
+              result: nil,
+              correction_for: runner_info.task_description
+            }
+
+            %{data | task_list: data.task_list ++ [corrective_task]}
+
+          {:critical_issue, issue} ->
+            Logger.error("Lead #{data.lead_id} found critical issue: #{issue}")
+
+            send_lead_message(
+              data.foreman_pid,
+              :critical_finding,
+              "Critical issue in task: #{runner_info.task_description}\n\nIssue: #{issue}",
+              %{task: runner_info.task_description}
+            )
+
+            data
+        end
+
+      {:error, error_msg} ->
+        # Mark task as failed
+        task_list =
+          update_task_status(data.task_list, runner_info.task_description, :failed, error_msg)
+
+        send_lead_message(
+          data.foreman_pid,
+          :error,
+          "Task failed: #{runner_info.task_description}\n\nError: #{error_msg}",
+          %{task: runner_info.task_description}
+        )
+
+        %{data | task_list: task_list}
+    end
   end
 
-  defp continue_work(chunk_phase, data) do
-    # Placeholder for continuing work after runner completion
-    # In real implementation:
-    # - Check if more tasks remain
-    # - Spawn next runner
-    # - Or transition to verification/complete phase
-    Logger.debug("Lead #{data.lead_id} continuing work in #{chunk_phase}")
-    {:keep_state, data}
+  defp continue_work(:verifying, data) do
+    # In verification phase, check if verification runner has completed
+    # and decide whether to report completion or go back to executing
+    if Enum.empty?(data.runner_tasks) do
+      # No runners active - check verification results
+      # For now, assume if we reached here without errors, verification passed
+      Logger.info("Lead #{data.lead_id} verification complete, reporting to Foreman")
+
+      send_lead_message(
+        data.foreman_pid,
+        :complete,
+        "Deliverable complete and verified",
+        %{
+          deliverable: data.deliverable,
+          tasks_completed: length(Enum.filter(data.task_list, &(&1.status == :done)))
+        }
+      )
+
+      {:next_state, {:complete, :idle}, data}
+    else
+      # Verification still running
+      {:keep_state, data}
+    end
+  end
+
+  defp continue_work(_chunk_phase, data) do
+    # Check if there are more tasks to execute
+    pending_tasks = Enum.filter(data.task_list, fn task -> task.status == :pending end)
+
+    cond do
+      # No pending tasks - check if deliverable is complete
+      Enum.empty?(pending_tasks) ->
+        # Check if all tasks are done (no failed tasks)
+        failed_tasks = Enum.filter(data.task_list, fn task -> task.status == :failed end)
+
+        if Enum.empty?(failed_tasks) do
+          # All tasks done - transition to verification
+          Logger.info("Lead #{data.lead_id} all tasks complete, transitioning to verification")
+
+          send_lead_message(
+            data.foreman_pid,
+            :status,
+            "All tasks complete, starting verification",
+            %{}
+          )
+
+          {:next_state, {:verifying, :idle}, data}
+        else
+          # Some tasks failed - report as blocker
+          Logger.error("Lead #{data.lead_id} has failed tasks, reporting blocker")
+          failed_descriptions = Enum.map(failed_tasks, & &1.description)
+
+          send_lead_message(
+            data.foreman_pid,
+            :blocker,
+            "Deliverable stuck: #{length(failed_tasks)} task(s) failed",
+            %{failed_tasks: failed_descriptions}
+          )
+
+          {:keep_state, data}
+        end
+
+      # Check if we're at max concurrent runners
+      length(data.runner_tasks) >= Map.get(data.config, :max_runners_per_lead, 3) ->
+        Logger.debug("Lead #{data.lead_id} at max concurrent runners, waiting")
+        {:keep_state, data}
+
+      # Spawn next pending task
+      true ->
+        next_task = List.first(pending_tasks)
+        Logger.info("Lead #{data.lead_id} spawning runner for: #{next_task.description}")
+
+        # Mark task as in-progress
+        task_list = update_task_status(data.task_list, next_task.description, :in_progress, nil)
+        data = %{data | task_list: task_list}
+
+        # Build context for the runner
+        runner_context = build_runner_context(next_task, data)
+
+        # Determine runner type based on task description
+        runner_type = determine_runner_type(next_task)
+
+        # Spawn runner
+        {:ok, _task_ref, _monitor_ref, data} =
+          spawn_runner(
+            data,
+            runner_type,
+            next_task.description,
+            next_task.description,
+            runner_context
+          )
+
+        {:keep_state, data}
+    end
   end
 
   @doc """
@@ -610,5 +796,106 @@ defmodule Deft.Job.Lead do
 
   defp generate_message_id do
     "msg_#{:crypto.strong_rand_bytes(16) |> Base.url_encode64(padding: false)}"
+  end
+
+  # Updates task status in task list
+  defp update_task_status(task_list, task_description, new_status, result) do
+    Enum.map(task_list, fn task ->
+      if task.description == task_description do
+        %{task | status: new_status, result: result}
+      else
+        task
+      end
+    end)
+  end
+
+  # Evaluates runner output to determine if task was completed correctly
+  defp evaluate_runner_output(output, runner_info, _data) do
+    # Basic evaluation logic:
+    # - Check if output indicates success or problems
+    # - Look for error indicators in output
+    # - Consider task complexity and output length
+
+    output_lower = String.downcase(output)
+
+    cond do
+      # Check for explicit error indicators
+      String.contains?(output_lower, ["error:", "failed:", "exception:", "panic:"]) ->
+        {:needs_correction, "Output contains error indicators"}
+
+      # Check for very short output (might indicate incomplete work)
+      String.length(output) < 20 ->
+        {:needs_correction, "Output too brief, task may be incomplete"}
+
+      # Check for test failures if this was a testing runner
+      runner_info.runner_type == :testing and
+          String.contains?(output_lower, ["failed", "failure"]) ->
+        {:critical_issue, "Tests failed"}
+
+      # Success case
+      true ->
+        # Extract a summary from the output (first sentence or first 100 chars)
+        summary =
+          output
+          |> String.split("\n")
+          |> Enum.reject(&(String.trim(&1) == ""))
+          |> List.first()
+          |> case do
+            nil -> "Task completed"
+            line -> String.slice(line, 0..100)
+          end
+
+        {:success, summary}
+    end
+  end
+
+  # Builds context string for runner based on current state
+  defp build_runner_context(task, data) do
+    # Read relevant information from site log
+    site_log_context = read_site_log_context(data.site_log_tid)
+
+    # Include completed task results for context
+    completed_tasks =
+      data.task_list
+      |> Enum.filter(fn t -> t.status == :done and t.result != nil end)
+      |> Enum.map(fn t -> "- #{t.description}: #{t.result}" end)
+      |> Enum.join("\n")
+
+    completed_context =
+      if completed_tasks != "" do
+        """
+
+        ## Completed Tasks
+
+        #{completed_tasks}
+        """
+      else
+        ""
+      end
+
+    """
+    #{site_log_context}#{completed_context}
+
+    ## Current Task
+
+    #{task.description}
+
+    ## Deliverable Goal
+
+    #{data.deliverable}
+    """
+  end
+
+  # Determines runner type based on task description keywords
+  defp determine_runner_type(task) do
+    desc_lower = String.downcase(task.description)
+
+    cond do
+      String.contains?(desc_lower, ["test", "verify", "validate"]) -> :testing
+      String.contains?(desc_lower, ["review", "check", "audit"]) -> :review
+      String.contains?(desc_lower, ["research", "explore", "investigate"]) -> :research
+      String.contains?(desc_lower, ["merge", "conflict", "resolve"]) -> :merge_resolution
+      true -> :implementation
+    end
   end
 end

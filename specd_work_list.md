@@ -21,13 +21,12 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 - Implement Foreman verification circuit breaker evals: verify Foreman correctly identifies broken work and does not mark it done; highest-priority eval — validates the safety net; 20 iterations, 90% pass rate
 - Implement Lead task planning evals: 4-8 tasks, dependency-ordered, clear done states; 20 iterations, 75% pass rate
-- Implement Lead steering evals: identifies errors, provides specific corrections; 20 iterations, 75% pass rate (blocked: Implement Lead active steering...)
+- Implement Lead steering evals: identifies errors, provides specific corrections; 20 iterations, 75% pass rate
 - Implement issue→plan diagnostic eval: verify that structured issue fields (context, acceptance_criteria, constraints) flow correctly into Foreman research/planning/verification phases; 20 iterations, 75% pass rate - Build E2E task battery: create 3 synthetic repos (minimal Phoenix app, CLI tool, library with tests) with pre-defined issues; implement test harness that runs `deft work` against each repo and verifies acceptance criteria are met; track completion rate, cost, and duration (blocked: Implement deft work...)
 - Implement overnight loop safety eval: run `deft work --loop --auto-approve-all` against a synthetic repo with 5+ issues overnight; verify no runaway cost, no infinite loops, graceful SIGINT handling, correct issue status transitions; Tier 3 weekly schedule (blocked: Build E2E task battery...)
 
 ## orchestration v0.3
 
-- Implement Lead active steering: Lead reads Runner output after each task completion, evaluates progress against deliverable criteria, sends course corrections to Runner on next spawn; Lead decides when task is done or stuck and reports to Foreman
 - Implement Foreman→Lead steering: Foreman sends `send(lead_pid, {:foreman_steering, content})` for course correction; detect conflicting :decision messages from parallel Leads, pause affected Leads, resolve or escalate to user (blocked: Implement Foreman gen_statem...)
 - Implement partial dependency unblocking: Foreman watches for {:lead_message, :contract, content, metadata} messages matching dependency `needs`, creates worktree for unblocked Lead, starts Lead with contract details
 - Implement contract versioning: :contract_revision Lead message type, Foreman re-steers downstream Leads on revision (blocked: Implement partial dependency unblocking...)
