@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **git-strategy v0.1 (2026-03-18):** Implement per-Lead worktree creation: `git worktree add <repo>/.deft-worktrees/lead-<lead_id> -b deft/lead-<lead_id>` branched from job branch plus already-merged Lead work; Runners operate in Lead's worktree directory; Leads commit work per-task or per-milestone
 - **evals v0.2 (2026-03-18):** Implement Foreman constraint propagation evals: constraints from issue flow correctly to Lead steering instructions; 20 iterations, 85% pass rate
 - **evals v0.2 (2026-03-18):** Implement Foreman decomposition evals: 1-3 deliverables, valid DAG, specific contracts; 20 iterations, 75% pass rate
 - **git-strategy v0.1 (2026-03-18):** Implement job branch creation: verify working tree is clean (warn + ask to stash if uncommitted changes), create `deft/job-<job_id>` branch from current HEAD

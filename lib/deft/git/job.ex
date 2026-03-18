@@ -138,4 +138,72 @@ defmodule Deft.Git.Job do
         {:error, {:branch_creation_failed, exit_code}}
     end
   end
+
+  @doc """
+  Creates a worktree for a Lead.
+
+  The worktree is branched from the job branch and contains all previously
+  merged Lead work. Each Lead gets an isolated working directory to avoid
+  file conflicts during parallel execution.
+
+  ## Options
+
+  - `:lead_id` - Required. Unique Lead identifier.
+  - `:job_id` - Required. Job identifier (for job branch name).
+  - `:git` - Optional. Git adapter module (defaults to Deft.Git).
+  - `:working_dir` - Optional. Repository root (defaults to File.cwd!()).
+
+  ## Returns
+
+  - `{:ok, worktree_path}` - Worktree created successfully
+  - `{:error, reason}` - Git command failed
+
+  ## Examples
+
+      # Success
+      Deft.Git.Job.create_lead_worktree(lead_id: "lead-1", job_id: "abc123")
+      # => {:ok, "/path/to/repo/.deft-worktrees/lead-lead-1"}
+
+      # Error if job branch doesn't exist
+      Deft.Git.Job.create_lead_worktree(lead_id: "lead-1", job_id: "invalid")
+      # => {:error, {:worktree_creation_failed, 128}}
+  """
+  @spec create_lead_worktree(keyword()) :: {:ok, String.t()} | {:error, term()}
+  def create_lead_worktree(opts) do
+    lead_id = Keyword.fetch!(opts, :lead_id)
+    job_id = Keyword.fetch!(opts, :job_id)
+    git = Keyword.get(opts, :git, Deft.Git)
+    working_dir = Keyword.get(opts, :working_dir, File.cwd!())
+
+    job_branch = "deft/job-#{job_id}"
+    lead_branch = "deft/lead-#{lead_id}"
+    worktree_path = Path.join([working_dir, ".deft-worktrees", "lead-#{lead_id}"])
+
+    # Ensure .deft-worktrees directory exists
+    worktrees_dir = Path.join(working_dir, ".deft-worktrees")
+
+    case File.mkdir_p(worktrees_dir) do
+      :ok ->
+        create_worktree(git, worktree_path, lead_branch, job_branch)
+
+      {:error, reason} ->
+        Logger.error("Failed to create .deft-worktrees directory: #{inspect(reason)}")
+        {:error, {:worktrees_dir_creation_failed, reason}}
+    end
+  end
+
+  # Create a git worktree branched from the job branch
+  defp create_worktree(git, worktree_path, lead_branch, job_branch) do
+    # git worktree add <path> -b <lead_branch> <job_branch>
+    case git.cmd(["worktree", "add", worktree_path, "-b", lead_branch, job_branch]) do
+      {_output, 0} ->
+        Logger.info("Created worktree at #{worktree_path} (branch: #{lead_branch})")
+        {:ok, worktree_path}
+
+      {error_output, exit_code} ->
+        Logger.error("Failed to create worktree at #{worktree_path}: #{error_output}")
+
+        {:error, {:worktree_creation_failed, exit_code}}
+    end
+  end
 end
