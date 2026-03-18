@@ -85,6 +85,9 @@ defmodule Deft.Eval.ResultStore do
   Loads all eval results for a specific run ID.
 
   Returns a list of result maps (one per category) or {:error, :not_found} if the run doesn't exist.
+
+  If individual JSONL lines are corrupt, they are skipped with a warning logged.
+  Valid results from the same run are preserved.
   """
   @spec load(String.t()) :: {:ok, [result()]} | {:error, :not_found | term()}
   def load(run_id) do
@@ -93,21 +96,33 @@ defmodule Deft.Eval.ResultStore do
     case File.read(file_path) do
       {:ok, content} ->
         # Split on newlines and decode each line separately
-        results =
-          content
-          |> String.split("\n", trim: true)
-          |> Enum.map(fn line ->
+        lines = String.split(content, "\n", trim: true)
+
+        {valid_results, corrupt_count} =
+          lines
+          |> Enum.with_index(1)
+          |> Enum.reduce({[], 0}, fn {line, line_num}, {results, corrupt} ->
             case Jason.decode(line, keys: :atoms) do
-              {:ok, result} -> result
-              {:error, reason} -> {:error, reason}
+              {:ok, result} ->
+                {[result | results], corrupt}
+
+              {:error, reason} ->
+                IO.warn(
+                  "Skipping corrupt JSONL line #{line_num} in #{file_path}: #{inspect(reason)}"
+                )
+
+                {results, corrupt + 1}
             end
           end)
 
-        # Check if any line failed to decode
-        case Enum.find(results, fn r -> match?({:error, _}, r) end) do
-          nil -> {:ok, results}
-          {:error, reason} -> {:error, reason}
+        # Log summary if any lines were skipped
+        if corrupt_count > 0 do
+          IO.warn(
+            "Loaded #{length(valid_results)} valid results from #{run_id}, skipped #{corrupt_count} corrupt line(s)"
+          )
         end
+
+        {:ok, Enum.reverse(valid_results)}
 
       {:error, :enoent} ->
         {:error, :not_found}
@@ -161,20 +176,31 @@ defmodule Deft.Eval.ResultStore do
 
   Used for long-term history tracking outside of the working directory.
   Format: JSONL with one result per line.
+
+  If individual runs fail to load, a warning is logged and the run is skipped.
   """
   @spec export(Path.t()) :: :ok | {:error, term()}
   def export(output_path) do
     runs = list_runs()
 
     # Load all results (each run can have multiple categories)
-    results =
+    {results, failed_runs} =
       runs
-      |> Enum.map(&load/1)
-      |> Enum.filter(fn
-        {:ok, _} -> true
-        _ -> false
+      |> Enum.reduce({[], []}, fn run_id, {results_acc, failed_acc} ->
+        case load(run_id) do
+          {:ok, run_results} ->
+            {results_acc ++ run_results, failed_acc}
+
+          {:error, reason} ->
+            IO.warn("Skipping run #{run_id} during export: failed to load (#{inspect(reason)})")
+            {results_acc, [run_id | failed_acc]}
+        end
       end)
-      |> Enum.flat_map(fn {:ok, results} -> results end)
+
+    # Log summary if any runs were skipped
+    if length(failed_runs) > 0 do
+      IO.warn("Export skipped #{length(failed_runs)} run(s) that failed to load")
+    end
 
     # Write all results as JSONL
     jsonl_content =

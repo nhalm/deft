@@ -120,6 +120,50 @@ defmodule Deft.Eval.ResultStoreTest do
       lines = String.split(content, "\n", trim: true)
       assert length(lines) == 2
     end
+
+    test "skips corrupt JSONL lines and preserves valid results" do
+      run_id = "#{@test_run_prefix}-corrupt"
+
+      # Store two valid results
+      result1 = %{create_test_result(run_id) | category: "observer.extraction"}
+      result2 = %{create_test_result(run_id) | category: "observer.priority"}
+
+      assert :ok = ResultStore.store(result1)
+      assert :ok = ResultStore.store(result2)
+
+      # Manually inject a corrupt line in the middle
+      file_path = Path.join(@results_dir, "#{run_id}.jsonl")
+      assert {:ok, content} = File.read(file_path)
+
+      lines = String.split(content, "\n", trim: true)
+
+      corrupted_content =
+        Enum.at(lines, 0) <> "\n" <> "{invalid json here\n" <> Enum.at(lines, 1) <> "\n"
+
+      File.write!(file_path, corrupted_content)
+
+      # Load should skip the corrupt line and return the two valid results
+      assert {:ok, results} = ResultStore.load(run_id)
+      assert length(results) == 2
+
+      # Verify both valid categories are present
+      categories = Enum.map(results, & &1.category)
+      assert "observer.extraction" in categories
+      assert "observer.priority" in categories
+    end
+
+    test "returns empty list when all lines are corrupt" do
+      run_id = "#{@test_run_prefix}-all-corrupt"
+
+      # Create the file with only corrupt content
+      file_path = Path.join(@results_dir, "#{run_id}.jsonl")
+      File.mkdir_p!(@results_dir)
+      File.write!(file_path, "{invalid json\n{also invalid\n")
+
+      # Should return empty list, not error
+      assert {:ok, results} = ResultStore.load(run_id)
+      assert results == []
+    end
   end
 
   describe "list_runs/0" do
@@ -235,6 +279,43 @@ defmodule Deft.Eval.ResultStoreTest do
       # Should create an empty file
       assert {:ok, content} = File.read(export_path)
       assert String.trim(content) == ""
+    end
+
+    test "skips runs with corrupt data and exports valid runs" do
+      # Create two valid results
+      result1 = create_test_result("#{@test_run_prefix}-exp-valid-001")
+      result2 = create_test_result("#{@test_run_prefix}-exp-valid-002")
+
+      ResultStore.store(result1)
+      ResultStore.store(result2)
+
+      # Create a run with corrupt data
+      corrupt_run_id = "#{@test_run_prefix}-exp-corrupt"
+      file_path = Path.join(@results_dir, "#{corrupt_run_id}.jsonl")
+      File.mkdir_p!(@results_dir)
+      File.write!(file_path, "{invalid json\n")
+
+      # Export should skip the corrupt run and export valid ones
+      export_path = Path.join(System.tmp_dir!(), "eval-export-skip-test.jsonl")
+
+      on_exit(fn ->
+        File.rm(export_path)
+      end)
+
+      assert :ok = ResultStore.export(export_path)
+
+      # Verify only the valid results were exported
+      assert {:ok, content} = File.read(export_path)
+
+      lines = String.split(content, "\n", trim: true)
+      assert length(lines) == 2
+
+      # Verify each line is valid JSON
+      Enum.each(lines, fn line ->
+        assert {:ok, decoded} = Jason.decode(line)
+        # Should not contain the corrupt run
+        refute Map.get(decoded, "run_id") == corrupt_run_id
+      end)
     end
   end
 

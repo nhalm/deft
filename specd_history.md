@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **evals v0.2 (2026-03-18):** Fix `ResultStore.load/1` partial corruption handling: a single corrupt JSONL line causes the entire run to return `{:error, reason}`, and `export/1` silently filters out failed loads; should skip corrupt lines and preserve valid results per-run, or at minimum log a warning when lines are skipped
 - **issues v0.2 (2026-03-18):** Fix `issues_compaction_days` config passthrough: `cli.ex:76` calls `Issues.start_link()` with no arguments; configured `issues.compaction_days` value from `Deft.Config` is never passed to the GenServer; always defaults to 90 days regardless of user config
 - **issues v0.2 (2026-03-18):** Fix `--auto-approve-all` CLI flag: `cli.ex:97` registers `auto_approve: :boolean` which maps to `--auto-approve`; spec section 8 requires `--auto-approve-all`; rename to `auto_approve_all: :boolean`
 - **skills v0.2 (2026-03-18):** Exclude `use_skill` tool results from cache spilling: `tool_runner.ex:108-132` runs `maybe_spill_to_cache` on all tool results including `use_skill`; if a skill definition exceeds the spilling threshold, the agent receives a cache stub instead of the actual definition in the system injection at `agent.ex:1405-1413`; add a guard to skip spilling for `use_skill` results
