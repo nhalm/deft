@@ -82,3 +82,26 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement `deft work --loop`: approve every plan by default (each issue gets plan approval checkpoint); --auto-approve-all flag skips all plan approvals for fully autonomous mode; stop when no ready issues remain, cumulative cost exceeds work.cost_ceiling, or user aborts; re-evaluate unblocked issues between jobs (blocked: Implement deft work...)
 - Implement SIGINT handling: catch Ctrl+C, send graceful shutdown to Foreman, wait for current issue status rollback to :open (5-second timeout), then exit; if timeout expires, issue left at :in_progress (detected as stale on next startup) (blocked: Implement deft work --loop...)
 
+## observational-memory v0.1
+
+- Fix sync fallback stale context: `get_om_context` in `agent/context.ex` calls `check_sync_fallback` after fetching OM data but returns the pre-sync observations; must re-fetch context from `OMState.get_context` after sync fallback triggers to include freshly observed/reflected data
+- Fix `om_enabled` config bypass: `agent/context.ex:90` and `agent.ex:617` read `Application.get_env(:deft, :om_enabled, true)` but no code calls `Application.put_env`; must read from the config struct (`data.config.om_enabled`) instead, matching the pattern at `agent.ex:1450`
+- Implement `/observations` slash command: display `## Current State` + `## User Preferences` + today's entries; support `--full` for complete dump and `--search <term>` for filtering (spec section 11)
+- Implement `/forget <text>` slash command: search observations for matches, show matches, confirm, append CORRECTION marker; Reflector must preserve CORRECTION markers through compression (spec section 11)
+- Implement `/correct <old> → <new>` slash command: search observations for old text, show match, confirm, append CORRECTION marker with replacement (spec section 11)
+- Implement token calibration from provider usage: wire usage events to `Tokens.calibrate/3` in OM.State; update calibration_factor via exponential moving average when actual token counts are available from provider responses (spec section 7)
+
+## tui v0.1
+
+- Fix OM event handling: OM state broadcasts `{:om_event, {:om, ...}}` but TUI `chat.ex` matches `{:om, ...}` directly; all OM events fall through to catch-all and are silently discarded; OM spinner, `memorizing...` indicator, and memory token counts never update
+- Fix `extract_prompt_text/1` in `Session.Store`: pattern matches `%{type: "text", text: text}` but `Deft.Message.Text` structs have no `:type` field; match always fails, returning `""` for `last_user_prompt` in session picker
+
+## evals v0.2
+
+- Fix `make test.eval.holdout`: uses `mix test --only eval --only holdout` which is OR logic in ExUnit (runs ALL eval tests); should be `mix test --only holdout` to run only holdout-tagged tests
+- Fix `JudgeCalibration.load_latest_result/1`: when calibration directory doesn't exist, `File.ls/1` returns `{:error, :enoent}` which falls through the `with` clause; should return `{:error, :not_found}` per the docstring to match the "no calibration exists" semantic
+
+## skills v0.2
+
+- Fix slash command skill injection: TUI `chat.ex` sends skills via `{:submit, full_text}` (user message) instead of injecting as a system instruction; spec section 2.4 requires skills to be system-level instructions, not user messages; commands correctly use user messages but the skill path must inject into the agent's system context
+
