@@ -129,12 +129,13 @@ defmodule Deft.Project do
 
   # Resolve to git repository root if inside a git repo
   defp resolve_git_root(path) do
-    case System.cmd("git", ["rev-parse", "--show-toplevel"],
+    case System.cmd("git", ["rev-parse", "--git-common-dir"],
            cd: path,
            stderr_to_stdout: true
          ) do
       {output, 0} ->
-        String.trim(output)
+        common_dir = String.trim(output)
+        Path.dirname(common_dir)
 
       {_output, _exit_code} ->
         # Not a git repo, use the path as-is
