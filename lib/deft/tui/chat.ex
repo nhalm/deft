@@ -388,6 +388,23 @@ defmodule Deft.TUI.Chat do
     {:noreply, assign(term, input: new_input)}
   end
 
+  def handle_event(_event, %{"key" => key}, term) when key in ["esc", "escape"] do
+    # Esc: cancel current input or abort current operation
+    if term.assigns.input != "" do
+      # Clear input buffer
+      {:noreply, assign(term, input: "", input_history_index: nil)}
+    else
+      # No input - abort current operation if agent is active
+      if term.assigns.agent_state != :idle do
+        Deft.Agent.abort(term.assigns.agent_pid)
+        {:noreply, term}
+      else
+        # Agent idle and no input - do nothing
+        {:noreply, term}
+      end
+    end
+  end
+
   def handle_event(_event, %{"key" => key}, term) do
     # Regular character input - append to input buffer with paste detection
     handle_character_input(key, term)
