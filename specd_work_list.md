@@ -84,5 +84,4 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## tui v0.1
 
-- Fix streaming markdown rendering: `handle_text_delta/2` appends raw text to `current_text` but render/1 displays it as a raw `<box>` with no markdown processing; must call `Markdown.render_streaming/1` during streaming to buffer incomplete lines and render complete blocks (spec section 3)
 - Fix scroll_offset not applied to render: Page Up/Down handlers update `scroll_offset` assign but `render/1` iterates all messages with no offset or slicing applied; scrollback is non-functional (spec section 3)

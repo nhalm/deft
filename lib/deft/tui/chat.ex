@@ -99,7 +99,8 @@ defmodule Deft.TUI.Chat do
       assign(assigns,
         model_name: assigns.config[:model] || "claude-sonnet-4",
         agent_state_display:
-          format_agent_state(assigns.agent_state, assigns.om_active, assigns.om_sync_fallback)
+          format_agent_state(assigns.agent_state, assigns.om_active, assigns.om_sync_fallback),
+        streaming_rendered: calculate_streaming_rendered(assigns)
       )
 
     ~H"""
@@ -110,8 +111,8 @@ defmodule Deft.TUI.Chat do
         <%= for message <- @messages do %>
           <%= render_message(message, @raw_mode) %>
         <% end %>
-        <%= if @streaming and @current_text != "" do %>
-          <box><%= @current_text %></box>
+        <%= if @streaming and @streaming_rendered != "" do %>
+          <box><%= @streaming_rendered %></box>
         <% end %>
         <%= if @streaming do %>
           <box>▊</box>
@@ -787,6 +788,23 @@ defmodule Deft.TUI.Chat do
   end
 
   # Rendering helpers
+
+  defp calculate_streaming_rendered(assigns) do
+    # Return empty if not streaming or no current text
+    if assigns.streaming and assigns.current_text != "" do
+      # If raw mode is enabled, show raw text
+      if assigns.raw_mode do
+        assigns.current_text
+      else
+        # Use Markdown.render_streaming/1 to buffer incomplete lines
+        # and only render complete blocks
+        {rendered, _buffer} = Markdown.render_streaming(assigns.current_text)
+        rendered
+      end
+    else
+      ""
+    end
+  end
 
   defp render_message(%{role: :user, content: content}, _raw_mode) do
     assigns = %{content: content}

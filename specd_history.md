@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **tui v0.1 (2026-03-17):** Fix streaming markdown rendering: `handle_text_delta/2` appends raw text to `current_text` but render/1 displays it as a raw `<box>` with no markdown processing; must call `Markdown.render_streaming/1` during streaming to buffer incomplete lines and render complete blocks
 - **skills v0.2 (2026-03-18):** Wire `Session.Supervisor.start_session/1` into CLI: `rescan_project/1` is only called from `start_session/1` but CLI calls `Agent.start_link/1` directly, bypassing it; project-level skills in `.deft/skills/` are never refreshed between sessions (spec section 5)
 - **skills v0.2 (2026-03-17):** Fix `tools = []` in `continue_after_tools` and queued prompt path: `continue_after_tools/1` (line 1300) and `handle_idle_transition` queued prompt path (line 941) both hardcode `tools = []`; must use `Map.get(compacted_data.config, :tools, [])` like the initial `:calling` entry (line 208); agent loses all tools (including `use_skill`) after first tool execution round (spec section 2.5)
 - **observational-memory v0.1 (2026-03-17):** Add retry wrapper to async Observer Task: `spawn_observer_task` calls `Observer.run/4` directly with no retries; must wrap in retry logic (3 retries with exponential backoff) matching the existing `run_observer_with_retry` pattern used by the sync path (spec section 6.3)
