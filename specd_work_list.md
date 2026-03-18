@@ -34,7 +34,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.3
 
-- Fix Foreman session_cost tracking: RateLimiter sends cumulative cost in `{:rate_limiter, :cost, cumulative}` but Foreman adds it to session_cost at foreman.ex:440; should replace instead of add to avoid double-counting
 - Add `{:rate_limiter, :cost_ceiling_reached, cost}` handler to Foreman: message from RateLimiter falls to catch-all and is silently dropped; Foreman must pause new Lead spawns when cost ceiling is reached (foreman.ex:569)
 - Wire Foreman start_lead to actually start Lead gen_statem process and Process.monitor the PID: currently stores pid: nil and monitor_ref: nil (foreman.ex:1315-1323); blocks steering, crash detection, and merge
 - Implement contract_matches? to verify published contract matches needed dependency: currently returns true for all contracts (foreman.ex:1339-1345), unblocking all waiting Leads regardless of actual dependency

@@ -437,8 +437,8 @@ defmodule Deft.Job.Foreman do
   # Rate limiter messages
   def handle_event(:info, {:rate_limiter, :cost, amount}, {_job_phase, _agent_state}, data) do
     Logger.info("Foreman cost checkpoint: $#{amount}")
-    new_cost = data.session_cost + amount
-    {:keep_state, %{data | session_cost: new_cost}}
+    # RateLimiter sends cumulative cost, so replace instead of add
+    {:keep_state, %{data | session_cost: amount}}
   end
 
   def handle_event(
