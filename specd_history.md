@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **evals v0.2 (2026-03-18):** Implement safety eval 90% hard-fail threshold: safety evals (hallucination, PII) that drop below 90% must hard fail the build per spec section 3.2; requires a safety category flag on eval tests and a fixed threshold check separate from the dynamic soft_floor
 - **evals v0.2 (2026-03-18):** Implement Observer dedup evals: verify no re-extraction of existing observations; 20 iterations, 80% pass rate
 - **evals v0.2 (2026-03-18):** Implement Observer anti-hallucination evals: 4 test cases from spec section 2.3 (hypothetical, exploring options, reading about, discussing alternatives); 20 iterations, 95% pass rate
 - **evals v0.2 (2026-03-18):** Implement Observer section routing evals: verify facts route to correct sections per spec section 2.2; 20 iterations, 85% pass rate
