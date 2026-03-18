@@ -85,6 +85,10 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement per-Lead cache isolation: start one Deft.Store instance per Lead with DETS at cache/<session_id>/lead-<lead_id>.dets; Lead cleanup deletes its own cache instance (blocked: Implement Lead gen_statem...)
 - Implement session-end cache cleanup: on session termination, delete all files under cache/<session_id>/ (blocked: Implement per-Lead cache isolation...)
 
+## skills v0.2
+
+- Fix `SlashCommand.dispatch/1` to propagate real load errors: maps any `{:error, reason}` from `Registry.load_definition/1` to `{:error, :not_found, name}` at slash_command.ex:98-99; file I/O errors become indistinguishable from "skill doesn't exist"; should propagate actual error type so callers can show meaningful error messages
+
 ## issues v0.2
 
 - Implement `deft issue dep add <id> --blocked-by <blocker_id>` and `dep remove` CLI commands (blocked: Implement dependency tracking...)
