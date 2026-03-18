@@ -82,6 +82,70 @@ defmodule Deft.Tools.IssueCreateTest do
   end
 
   describe "execute/2" do
+    @tag :skip_async
+    test "starts Issues GenServer if not already running" do
+      # Create a fresh test environment without starting Issues GenServer in setup
+      working_dir =
+        System.tmp_dir!() |> Path.join("deft_issue_create_nostart_test_#{:rand.uniform(100_000)}")
+
+      File.mkdir_p!(working_dir)
+      File.mkdir_p!(Path.join(working_dir, ".deft"))
+
+      # Track emitted output
+      {:ok, emit_agent} = Agent.start_link(fn -> [] end)
+
+      emit = fn text ->
+        Agent.update(emit_agent, &[text | &1])
+        :ok
+      end
+
+      context = %Context{
+        working_dir: working_dir,
+        session_id: "test-session-nostart",
+        emit: emit,
+        file_scope: nil,
+        bash_timeout: 120_000
+      }
+
+      # Stop Issues GenServer if it's running from other tests
+      existing_pid = Process.whereis(Deft.Issues)
+
+      if existing_pid && Process.alive?(existing_pid) do
+        GenServer.stop(Deft.Issues)
+        # Wait a bit for it to stop
+        Process.sleep(10)
+      end
+
+      # Verify Issues GenServer is NOT running
+      assert Process.whereis(Deft.Issues) == nil
+
+      args = %{
+        "title" => "Test auto-start",
+        "context" => "Testing that the tool auto-starts the Issues GenServer."
+      }
+
+      # Execute the tool - it should start the GenServer automatically
+      assert {:ok, [%Text{text: result}]} = IssueCreate.execute(args, context)
+      assert result =~ "Created issue"
+      assert result =~ "Test auto-start"
+
+      # Verify Issues GenServer is NOW running
+      assert Process.whereis(Deft.Issues) != nil
+
+      # Clean up
+      pid = Process.whereis(Deft.Issues)
+
+      if pid && Process.alive?(pid) do
+        GenServer.stop(Deft.Issues)
+      end
+
+      File.rm_rf(working_dir)
+
+      if Process.alive?(emit_agent) do
+        Agent.stop(emit_agent)
+      end
+    end
+
     test "creates an issue with minimal required fields", %{context: context} do
       args = %{
         "title" => "Fix bug in authentication",

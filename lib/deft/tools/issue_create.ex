@@ -93,6 +93,9 @@ defmodule Deft.Tools.IssueCreate do
          :ok <- validate_acceptance_criteria(args["acceptance_criteria"]),
          :ok <- validate_constraints(args["constraints"]),
          :ok <- validate_priority(args["priority"]) do
+      # Ensure Issues GenServer is running
+      ensure_issues_started()
+
       # Build issue attributes with agent source
       attrs = %{
         title: args["title"],
@@ -152,4 +155,29 @@ defmodule Deft.Tools.IssueCreate do
   defp priority_name(3), do: "low"
   defp priority_name(4), do: "backlog"
   defp priority_name(_), do: "unknown"
+
+  # Ensures the Issues GenServer is running, starting it if necessary
+  defp ensure_issues_started do
+    case Process.whereis(Issues) do
+      nil ->
+        # Not running, start it
+        case Issues.start_link() do
+          {:ok, _pid} ->
+            Logger.debug("Started Issues GenServer from issue_create tool")
+            :ok
+
+          {:error, {:already_started, _pid}} ->
+            # Race condition: another process started it between check and start
+            :ok
+
+          {:error, reason} ->
+            Logger.error("Failed to start Issues GenServer: #{inspect(reason)}")
+            :ok
+        end
+
+      _pid ->
+        # Already running
+        :ok
+    end
+  end
 end
