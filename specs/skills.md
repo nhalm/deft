@@ -2,11 +2,16 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.2 |
+| Version | 0.3 |
 | Status | Ready |
-| Last Updated | 2026-03-16 |
+| Last Updated | 2026-03-18 |
 
 ## Changelog
+
+### v0.3 (2026-03-18)
+- Added command descriptions: extract the first non-empty line of the command markdown file as the description.
+- Updated section 4.2 (system prompt integration) to show commands with descriptions in the listing.
+- Updated section 1 (command format) to specify description extraction mechanism.
 
 ### v0.2 (2026-03-16)
 - Auto-selection: the agent can now suggest and auto-invoke skills when contextually appropriate. Removed "explicitly rejected" language.
@@ -63,6 +68,8 @@ test.md   → /test
 ```
 
 No frontmatter, no metadata. The file is the prompt.
+
+**Command descriptions:** The first non-empty line of the markdown file is extracted as the command's description. This line is shown in the system prompt listing and help text. The full file contents (including this line) are injected as the user message when the command is invoked.
 
 #### 1.2 Directory Layout
 
@@ -228,6 +235,8 @@ The registry is a map of name → entry, where each entry contains:
 #### 4.2 System Prompt Integration
 
 The agent's system prompt includes a listing of available skills and commands so the model knows what's available. Only names and descriptions — not full definitions. This listing gives the agent enough information to suggest or auto-invoke skills when contextually appropriate.
+
+Skills show their manifest description. Commands show their extracted first-line description (see section 1.1).
 
 ```
 Available skills:

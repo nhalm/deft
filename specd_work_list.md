@@ -81,6 +81,7 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## filesystem v0.2
 
+- Fix ETS table access control in Deft.Store.init: currently creates `:public` table at store.ex:170 but spec section 3 requires `:protected`; implement option (c) — spawn async load task, collect entries, send to GenServer via message, GenServer inserts into `:protected` ETS to preserve async loading without exposing table access
 - Implement site log programmatic promotion: pattern match on Lead messages — auto-promote contract, decision, correction, critical_finding; promote finding if tagged shared; never promote status or blocker (blocked: Implement Deft.Store site log instance..., Implement Foreman gen_statem...)
 - Implement per-Lead cache isolation: start one Deft.Store instance per Lead with DETS at cache/<session_id>/lead-<lead_id>.dets; Lead cleanup deletes its own cache instance (blocked: Implement Lead gen_statem...)
 - Implement session-end cache cleanup: on session termination, delete all files under cache/<session_id>/ (blocked: Implement per-Lead cache isolation...)
@@ -88,6 +89,10 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 ## skills v0.2
 
 - Fix `SlashCommand.dispatch/1` to propagate real load errors: maps any `{:error, reason}` from `Registry.load_definition/1` to `{:error, :not_found, name}` at slash_command.ex:98-99; file I/O errors become indistinguishable from "skill doesn't exist"; should propagate actual error type so callers can show meaningful error messages
+
+## skills v0.3
+
+- Implement command descriptions: extract the first non-empty line of each command markdown file as its description; pass descriptions through to system prompt listing and help text per spec section 1.1 and 4.2
 
 ## issues v0.2
 
