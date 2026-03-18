@@ -47,9 +47,8 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## rate-limiter v0.1
 
-- Implement 429 handling: parse Retry-After header, reduce bucket capacity by 20% for affected provider, apply exponential backoff (1s, 2s, 4s, 8s... capped at 60s), restore capacity gradually after 60s without 429s (10% per minute up to configured limit)
 - Implement cost tracking: read usage (input_tokens, output_tokens) from API responses, multiply by per-model pricing table; send {:rate_limiter, :cost, amount} to Foreman every $0.50 increment (not {:lead_message, ...})
-- Implement adaptive concurrency: starting at job.initial_concurrency (default 2) Lead slots; scale-up signal (bucket >60% for 30s + zero queued calls → +1 slot up to job.max_leads); scale-down signal (>2 429s/min → -1 slot, minimum 1); send {:rate_limiter, :concurrency_change, new_limit} to Foreman (blocked: Implement 429 handling...)
+- Implement adaptive concurrency: starting at job.initial_concurrency (default 2) Lead slots; scale-up signal (bucket >60% for 30s + zero queued calls → +1 slot up to job.max_leads); scale-down signal (>2 429s/min → -1 slot, minimum 1); send {:rate_limiter, :concurrency_change, new_limit} to Foreman
 - Implement cost ceiling: pause job at cost_ceiling - $1.00 buffer; in-flight calls complete (slight overshoot accepted); no new calls dispatched until user approves continued spending (blocked: Implement cost tracking...)
 
 ## git-strategy v0.1

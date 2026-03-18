@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **rate-limiter v0.1 (2026-03-18):** Implement 429 handling: parse Retry-After header, reduce bucket capacity by 20% for affected provider, apply exponential backoff (1s, 2s, 4s, 8s... capped at 60s), restore capacity gradually after 60s without 429s (10% per minute up to configured limit)
 - **evals v0.2 (2026-03-18):** Implement spilling cache retrieval evals: agent correctly uses cache_read tool when details not in summary; filter and lines parameters work; 20 iterations, 85% pass rate
 - **evals v0.2 (2026-03-18):** Add CI workflow files: Tier 1 on every push (soft gate), Tier 2 on merge to main, Tier 3 on weekly schedule per spec section 3.2
 - **evals v0.2 (2026-03-18):** Implement safety eval 90% hard-fail threshold: safety evals (hallucination, PII) that drop below 90% must hard fail the build per spec section 3.2; requires a safety category flag on eval tests and a fixed threshold check separate from the dynamic soft_floor

@@ -105,10 +105,23 @@ defmodule Deft.Job.RateLimiter do
     """
     @type t :: %__MODULE__{
             rpm: Bucket.t(),
-            tpm: Bucket.t()
+            tpm: Bucket.t(),
+            rpm_original_capacity: float(),
+            tpm_original_capacity: float(),
+            last_429_at: integer() | nil,
+            consecutive_429s: integer(),
+            backoff_until: integer() | nil
           }
 
-    defstruct [:rpm, :tpm]
+    defstruct [
+      :rpm,
+      :tpm,
+      :rpm_original_capacity,
+      :tpm_original_capacity,
+      :last_429_at,
+      consecutive_429s: 0,
+      backoff_until: nil
+    ]
 
     @doc """
     Creates new buckets for a provider.
@@ -120,7 +133,51 @@ defmodule Deft.Job.RateLimiter do
     def new(rpm_limit, tpm_limit) do
       %__MODULE__{
         rpm: Bucket.new(rpm_limit, rpm_limit / 60.0),
-        tpm: Bucket.new(tpm_limit, tpm_limit / 60.0)
+        tpm: Bucket.new(tpm_limit, tpm_limit / 60.0),
+        rpm_original_capacity: rpm_limit,
+        tpm_original_capacity: tpm_limit,
+        last_429_at: nil
+      }
+    end
+
+    @doc """
+    Reduces bucket capacity by 20% for 429 handling.
+
+    Returns updated buckets with reduced capacity.
+    """
+    def reduce_capacity(%__MODULE__{} = buckets) do
+      new_rpm_capacity = buckets.rpm.capacity * 0.8
+      new_tpm_capacity = buckets.tpm.capacity * 0.8
+
+      %{
+        buckets
+        | rpm: %{
+            buckets.rpm
+            | capacity: new_rpm_capacity,
+              tokens: min(buckets.rpm.tokens, new_rpm_capacity)
+          },
+          tpm: %{
+            buckets.tpm
+            | capacity: new_tpm_capacity,
+              tokens: min(buckets.tpm.tokens, new_tpm_capacity)
+          }
+      }
+    end
+
+    @doc """
+    Restores bucket capacity by 10% toward original capacity.
+
+    Returns updated buckets with increased capacity (capped at original).
+    """
+    def restore_capacity(%__MODULE__{} = buckets) do
+      # Increase by 10% of current capacity
+      new_rpm_capacity = min(buckets.rpm.capacity * 1.1, buckets.rpm_original_capacity)
+      new_tpm_capacity = min(buckets.tpm.capacity * 1.1, buckets.tpm_original_capacity)
+
+      %{
+        buckets
+        | rpm: %{buckets.rpm | capacity: new_rpm_capacity},
+          tpm: %{buckets.tpm | capacity: new_tpm_capacity}
       }
     end
   end
@@ -135,6 +192,10 @@ defmodule Deft.Job.RateLimiter do
 
   # Queue processing check interval
   @queue_check_interval_ms 1_000
+
+  # 429 handling constants
+  @capacity_restore_grace_period_ms 60_000
+  @max_backoff_seconds 60
 
   # Client API
 
@@ -189,6 +250,21 @@ defmodule Deft.Job.RateLimiter do
     GenServer.cast(via_tuple(job_id), {:reconcile, provider, estimated_tokens, actual_usage})
   end
 
+  @doc """
+  Reports a 429 rate limit error for a provider.
+
+  Reduces bucket capacity by 20% and applies exponential backoff.
+  Capacity is restored gradually after 60s without 429s.
+
+  ## Parameters
+  - job_id: The job identifier for the RateLimiter instance
+  - provider: Provider name that returned the 429
+  - retry_after: Optional Retry-After header value in seconds
+  """
+  def report_429(job_id, provider, retry_after \\ nil) do
+    GenServer.cast(via_tuple(job_id), {:report_429, provider, retry_after})
+  end
+
   # Private helper for Registry via tuple
   defp via_tuple(job_id) do
     {:via, Registry, {Deft.ProcessRegistry, {:rate_limiter, job_id}}}
@@ -217,20 +293,45 @@ defmodule Deft.Job.RateLimiter do
   def handle_call({:request, provider, estimated_tokens, priority}, from, state) do
     state = ensure_provider(state, provider)
     buckets = state.providers[provider]
+    now = state.time_source.(:millisecond)
 
-    # Try to deduct from both buckets
-    with {:ok, rpm_bucket} <- Bucket.deduct(buckets.rpm, 1),
-         {:ok, tpm_bucket} <- Bucket.deduct(buckets.tpm, estimated_tokens) do
-      # Both buckets have capacity - update state and grant permission
-      new_buckets = %{buckets | rpm: rpm_bucket, tpm: tpm_bucket}
-      new_state = put_in(state, [:providers, provider], new_buckets)
-
-      {:reply, {:ok, estimated_tokens}, new_state}
+    # Check if provider is in backoff period
+    if buckets.backoff_until != nil and now < buckets.backoff_until do
+      # In backoff - enqueue the request
+      new_state = enqueue_request(state, provider, estimated_tokens, priority, from)
+      {:noreply, new_state}
     else
-      {:error, :insufficient} ->
-        # Not enough capacity - enqueue the request
-        new_state = enqueue_request(state, provider, estimated_tokens, priority, from)
-        {:noreply, new_state}
+      # Clear backoff if we've passed the backoff period
+      buckets =
+        if buckets.backoff_until != nil and now >= buckets.backoff_until do
+          %{buckets | backoff_until: nil}
+        else
+          buckets
+        end
+
+      state = put_in(state, [:providers, provider], buckets)
+
+      # Try to deduct from both buckets
+      with {:ok, rpm_bucket} <- Bucket.deduct(buckets.rpm, 1),
+           {:ok, tpm_bucket} <- Bucket.deduct(buckets.tpm, estimated_tokens) do
+        # Both buckets have capacity - update state and grant permission
+        # Reset consecutive 429s on successful grant
+        new_buckets = %{
+          buckets
+          | rpm: rpm_bucket,
+            tpm: tpm_bucket,
+            consecutive_429s: 0
+        }
+
+        new_state = put_in(state, [:providers, provider], new_buckets)
+
+        {:reply, {:ok, estimated_tokens}, new_state}
+      else
+        {:error, :insufficient} ->
+          # Not enough capacity - enqueue the request
+          new_state = enqueue_request(state, provider, estimated_tokens, priority, from)
+          {:noreply, new_state}
+      end
     end
   end
 
@@ -256,7 +357,52 @@ defmodule Deft.Job.RateLimiter do
   end
 
   @impl true
+  def handle_cast({:report_429, provider, retry_after}, state) do
+    state = ensure_provider(state, provider)
+    buckets = state.providers[provider]
+    now = state.time_source.(:millisecond)
+
+    # Reduce capacity by 20%
+    reduced_buckets = ProviderBuckets.reduce_capacity(buckets)
+
+    # Increment consecutive 429s counter
+    consecutive = reduced_buckets.consecutive_429s + 1
+
+    # Calculate exponential backoff: min(2^consecutive, 60) seconds
+    backoff_seconds = min(:math.pow(2, consecutive - 1) |> trunc(), @max_backoff_seconds)
+
+    # Use Retry-After header if provided and larger than exponential backoff
+    backoff_seconds =
+      if retry_after != nil and retry_after > backoff_seconds do
+        retry_after
+      else
+        backoff_seconds
+      end
+
+    backoff_until = now + backoff_seconds * 1000
+
+    # Update buckets with 429 tracking
+    new_buckets = %{
+      reduced_buckets
+      | last_429_at: now,
+        consecutive_429s: consecutive,
+        backoff_until: backoff_until
+    }
+
+    new_state = put_in(state, [:providers, provider], new_buckets)
+
+    Logger.warning(
+      "Rate limit 429 for provider #{provider}, reduced capacity to #{trunc(new_buckets.rpm.capacity)} RPM, #{trunc(new_buckets.tpm.capacity)} TPM, backing off for #{backoff_seconds}s"
+    )
+
+    {:noreply, new_state}
+  end
+
+  @impl true
   def handle_info(:check_queue, state) do
+    # Restore capacity for providers that haven't had 429s recently
+    state = restore_provider_capacities(state)
+
     # Check for starvation and promote old requests
     state = promote_starved_requests(state)
 
@@ -321,6 +467,39 @@ defmodule Deft.Job.RateLimiter do
 
   defp schedule_queue_check do
     Process.send_after(self(), :check_queue, @queue_check_interval_ms)
+  end
+
+  defp restore_provider_capacities(state) do
+    now = state.time_source.(:millisecond)
+
+    # Iterate through providers and restore capacity where appropriate
+    new_providers =
+      Enum.reduce(state.providers, %{}, fn {provider, buckets}, acc ->
+        if should_restore_capacity?(buckets, now) do
+          restored_buckets = ProviderBuckets.restore_capacity(buckets)
+
+          # Check if we've fully restored to original capacity
+          if restored_buckets.rpm.capacity >= buckets.rpm_original_capacity and
+               restored_buckets.tpm.capacity >= buckets.tpm_original_capacity do
+            # Fully restored, clear last_429_at
+            Map.put(acc, provider, %{restored_buckets | last_429_at: nil})
+          else
+            Map.put(acc, provider, restored_buckets)
+          end
+        else
+          Map.put(acc, provider, buckets)
+        end
+      end)
+
+    %{state | providers: new_providers}
+  end
+
+  defp should_restore_capacity?(buckets, now) do
+    # Only restore if we had a 429 and it's been at least 60s
+    buckets.last_429_at != nil and
+      now - buckets.last_429_at >= @capacity_restore_grace_period_ms and
+      (buckets.rpm.capacity < buckets.rpm_original_capacity or
+         buckets.tpm.capacity < buckets.tpm_original_capacity)
   end
 
   defp enqueue_request(state, provider, estimated_tokens, priority, from) do
@@ -388,37 +567,64 @@ defmodule Deft.Job.RateLimiter do
       state
     else
       {queue_key, request, remaining_queue} = :gb_trees.take_smallest(state.queue)
-
       state = %{state | queue: remaining_queue}
-      state = ensure_provider(state, request.provider)
-      buckets = state.providers[request.provider]
-
-      # Try to deduct from both buckets
-      case Bucket.deduct(buckets.rpm, 1) do
-        {:ok, rpm_bucket} ->
-          case Bucket.deduct(buckets.tpm, request.estimated_tokens) do
-            {:ok, tpm_bucket} ->
-              # Both buckets have capacity - grant permission
-              new_buckets = %{buckets | rpm: rpm_bucket, tpm: tpm_bucket}
-              new_state = put_in(state, [:providers, request.provider], new_buckets)
-
-              # Reply to the waiting caller
-              GenServer.reply(request.from, {:ok, request.estimated_tokens})
-
-              # Try to process more requests
-              process_queue(new_state)
-
-            {:error, :insufficient} ->
-              # Not enough TPM capacity - re-enqueue and stop processing
-              new_queue = :gb_trees.insert(queue_key, request, state.queue)
-              %{state | queue: new_queue}
-          end
-
-        {:error, :insufficient} ->
-          # Not enough RPM capacity - re-enqueue and stop processing
-          new_queue = :gb_trees.insert(queue_key, request, state.queue)
-          %{state | queue: new_queue}
-      end
+      process_request(state, queue_key, request)
     end
+  end
+
+  defp process_request(state, queue_key, request) do
+    state = ensure_provider(state, request.provider)
+    buckets = state.providers[request.provider]
+    now = state.time_source.(:millisecond)
+
+    if in_backoff?(buckets, now) do
+      re_enqueue_request(state, queue_key, request)
+    else
+      state = clear_expired_backoff(state, request.provider, buckets, now)
+      attempt_deduction(state, queue_key, request)
+    end
+  end
+
+  defp in_backoff?(buckets, now) do
+    buckets.backoff_until != nil and now < buckets.backoff_until
+  end
+
+  defp clear_expired_backoff(state, provider, buckets, now) do
+    if buckets.backoff_until != nil and now >= buckets.backoff_until do
+      updated_buckets = %{buckets | backoff_until: nil}
+      put_in(state, [:providers, provider], updated_buckets)
+    else
+      state
+    end
+  end
+
+  defp attempt_deduction(state, queue_key, request) do
+    buckets = state.providers[request.provider]
+
+    with {:ok, rpm_bucket} <- Bucket.deduct(buckets.rpm, 1),
+         {:ok, tpm_bucket} <- Bucket.deduct(buckets.tpm, request.estimated_tokens) do
+      grant_request_permission(state, request, rpm_bucket, tpm_bucket, buckets)
+    else
+      {:error, :insufficient} ->
+        re_enqueue_request(state, queue_key, request)
+    end
+  end
+
+  defp grant_request_permission(state, request, rpm_bucket, tpm_bucket, buckets) do
+    new_buckets = %{
+      buckets
+      | rpm: rpm_bucket,
+        tpm: tpm_bucket,
+        consecutive_429s: 0
+    }
+
+    new_state = put_in(state, [:providers, request.provider], new_buckets)
+    GenServer.reply(request.from, {:ok, request.estimated_tokens})
+    process_queue(new_state)
+  end
+
+  defp re_enqueue_request(state, queue_key, request) do
+    new_queue = :gb_trees.insert(queue_key, request, state.queue)
+    %{state | queue: new_queue}
   end
 end
