@@ -340,6 +340,31 @@ defmodule Deft.TUI.Chat do
 
             {:noreply, new_term}
 
+          {:inject_skill, definition} ->
+            # Add to history
+            history = [input | term.assigns.input_history]
+
+            # Add system message to chat (so user can see the skill was invoked)
+            system_msg = %{
+              role: :system,
+              content: "[Skill invoked: #{input}]",
+              timestamp: DateTime.utc_now()
+            }
+
+            # Inject skill as system instruction to agent
+            Deft.Agent.inject_skill(term.assigns.agent_pid, definition)
+
+            # Clear input
+            new_term =
+              term
+              |> assign(messages: term.assigns.messages ++ [system_msg])
+              |> assign(input: "")
+              |> assign(input_history: history)
+              |> assign(input_history_index: nil)
+              |> assign(last_char_timestamp: nil)
+
+            {:noreply, new_term}
+
           {:command_handled, new_term} ->
             # Command was handled, clear input
             history = [input | term.assigns.input_history]
@@ -765,11 +790,10 @@ defmodule Deft.TUI.Chat do
             {:submit, full_text}
 
           {:ok, :skill, definition} ->
-            # Skills need to be injected as system instructions before the next agent turn
-            # For now, send to agent with skill marker
-            # TODO: Proper skill injection will be implemented with agent skill support
+            # Skills must be injected as system instructions per spec section 2.4
+            # Combine the definition with args for context
             full_text = if args != "", do: "#{definition}\n\nArgs: #{args}", else: definition
-            {:submit, full_text}
+            {:inject_skill, full_text}
 
           {:error, :not_found, command_name} ->
             error_msg = %{

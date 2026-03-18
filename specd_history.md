@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **skills v0.2 (2026-03-18):** Fix slash command skill injection: TUI `chat.ex` sends skills via `{:submit, full_text}` (user message) instead of injecting as a system instruction; spec section 2.4 requires skills to be system-level instructions, not user messages; commands correctly use user messages but the skill path must inject into the agent's system context
 - **observational-memory v0.1 (2026-03-18):** Implement token calibration from provider usage: wire usage events to `Tokens.calibrate/3` in OM.State; update calibration_factor via exponential moving average when actual token counts are available from provider responses (spec section 7)
 - **observational-memory v0.1 (2026-03-18):** Implement `/correct <old> → <new>` slash command: search observations for old text, show match, confirm, append CORRECTION marker with replacement (spec section 11)
 - **observational-memory v0.1 (2026-03-18):** Implement `/forget <text>` slash command: search observations for matches, show matches, ask for confirmation before appending CORRECTION marker; Reflector must preserve CORRECTION markers through compression (spec section 11)

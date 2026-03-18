@@ -125,6 +125,18 @@ defmodule Deft.Agent do
   end
 
   @doc """
+  Injects a skill definition as a system-level instruction.
+
+  Per spec section 2.4, skills must be injected as system instructions, not user messages.
+  This function is used when a user invokes a skill via slash command (e.g., /review).
+
+  If the agent is not idle, the skill injection is queued and delivered when idle.
+  """
+  def inject_skill(agent, definition) do
+    :gen_statem.cast(agent, {:inject_skill, definition})
+  end
+
+  @doc """
   Aborts the current operation and returns to idle state.
 
   Cancels any in-flight stream or tool executions.
@@ -236,6 +248,68 @@ defmodule Deft.Agent do
   def handle_event(:cast, {:prompt, text}, _state, data) do
     # Queue prompt if not idle
     new_queue = :queue.in(text, data.prompt_queue)
+    new_data = %{data | prompt_queue: new_queue}
+    {:keep_state, new_data}
+  end
+
+  def handle_event(:cast, {:inject_skill, definition}, :idle, data) do
+    # Create system message with skill definition
+    system_message = %Message{
+      id: generate_message_id(),
+      role: :system,
+      content: [%Text{text: definition}],
+      timestamp: DateTime.utc_now()
+    }
+
+    # Append to conversation history
+    new_messages = data.messages ++ [system_message]
+
+    # Notify OM about new message
+    notify_om_messages_added(data.session_id, [system_message], data.config)
+
+    # Check if compaction is needed before calling provider
+    compacted_data = maybe_compact_messages(%{data | messages: new_messages})
+
+    # Immediately call provider with the updated message history
+    # Build context from all messages
+    context_messages =
+      Context.build(compacted_data.messages,
+        config: compacted_data.config,
+        session_id: compacted_data.session_id
+      )
+
+    provider = Map.get(compacted_data.config, :provider)
+    tools = Map.get(compacted_data.config, :tools, [])
+
+    case call_provider_stream(provider, context_messages, tools, compacted_data.config) do
+      {:ok, stream_ref} ->
+        # Monitor the stream process to detect crashes (only if stream_ref is a PID)
+        monitor_ref = if is_pid(stream_ref), do: Process.monitor(stream_ref), else: nil
+
+        new_data = %{
+          compacted_data
+          | stream_ref: stream_ref,
+            stream_monitor_ref: monitor_ref,
+            current_message: nil,
+            tool_call_buffers: %{},
+            retry_count: 0,
+            retry_delay: 1000
+        }
+
+        broadcast_event(data.session_id, {:state_change, :calling})
+        {:next_state, :calling, new_data}
+
+      {:error, reason} ->
+        # On error, stay in :idle and emit error event
+        broadcast_event(data.session_id, {:error, reason})
+        :keep_state_and_data
+    end
+  end
+
+  def handle_event(:cast, {:inject_skill, definition}, _state, data) do
+    # Queue skill injection if not idle
+    # Use a special marker to distinguish from regular prompts
+    new_queue = :queue.in({:skill, definition}, data.prompt_queue)
     new_data = %{data | prompt_queue: new_queue}
     {:keep_state, new_data}
   end
@@ -908,64 +982,77 @@ defmodule Deft.Agent do
     # Save any unsaved messages before transitioning to idle
     data_with_saved = save_unsaved_messages(data)
 
-    # Check if there are queued prompts
+    # Check if there are queued prompts or skill injections
     case :queue.out(data_with_saved.prompt_queue) do
-      {{:value, text}, new_queue} ->
-        # Process the queued prompt
-        new_data = %{data_with_saved | prompt_queue: new_queue}
+      {{:value, {:skill, definition}}, new_queue} ->
+        # Process the queued skill injection - create system message
+        message = %Message{
+          id: generate_message_id(),
+          role: :system,
+          content: [%Text{text: definition}],
+          timestamp: DateTime.utc_now()
+        }
 
-        # Create user message and transition to calling
-        user_message = %Message{
+        process_queued_message(message, new_queue, data_with_saved)
+
+      {{:value, text}, new_queue} when is_binary(text) ->
+        # Process the queued prompt - create user message
+        message = %Message{
           id: generate_message_id(),
           role: :user,
           content: [%Text{text: text}],
           timestamp: DateTime.utc_now()
         }
 
-        new_messages = new_data.messages ++ [user_message]
-
-        # Notify OM about new user message
-        notify_om_messages_added(new_data.session_id, [user_message], new_data.config)
-
-        # Check if compaction is needed before calling provider
-        data_with_messages = %{new_data | messages: new_messages}
-        compacted_data = maybe_compact_messages(data_with_messages)
-
-        context_messages =
-          Context.build(compacted_data.messages,
-            config: compacted_data.config,
-            session_id: compacted_data.session_id
-          )
-
-        provider = Map.get(compacted_data.config, :provider)
-        tools = Map.get(compacted_data.config, :tools, [])
-
-        case call_provider_stream(provider, context_messages, tools, compacted_data.config) do
-          {:ok, stream_ref} ->
-            # Monitor the stream process to detect crashes (only if stream_ref is a PID)
-            monitor_ref = if is_pid(stream_ref), do: Process.monitor(stream_ref), else: nil
-
-            updated_data = %{
-              compacted_data
-              | stream_ref: stream_ref,
-                stream_monitor_ref: monitor_ref,
-                retry_count: 0,
-                retry_delay: 1000,
-                turn_count: 0
-            }
-
-            broadcast_event(compacted_data.session_id, {:state_change, :calling})
-            {:next_state, :calling, updated_data}
-
-          {:error, reason} ->
-            broadcast_event(new_data.session_id, {:error, reason})
-            {:next_state, :idle, new_data}
-        end
+        process_queued_message(message, new_queue, data_with_saved)
 
       {:empty, _} ->
         # No queued prompts - transition to idle
         broadcast_event(data_with_saved.session_id, {:state_change, :idle})
         {:next_state, :idle, data_with_saved}
+    end
+  end
+
+  defp process_queued_message(message, new_queue, data) do
+    # Update data with new message and queue
+    new_data = %{data | prompt_queue: new_queue, messages: data.messages ++ [message]}
+
+    # Notify OM about new message
+    notify_om_messages_added(new_data.session_id, [message], new_data.config)
+
+    # Check if compaction is needed before calling provider
+    compacted_data = maybe_compact_messages(new_data)
+
+    # Build context and call provider
+    context_messages =
+      Context.build(compacted_data.messages,
+        config: compacted_data.config,
+        session_id: compacted_data.session_id
+      )
+
+    provider = Map.get(compacted_data.config, :provider)
+    tools = Map.get(compacted_data.config, :tools, [])
+
+    case call_provider_stream(provider, context_messages, tools, compacted_data.config) do
+      {:ok, stream_ref} ->
+        # Monitor the stream process to detect crashes (only if stream_ref is a PID)
+        monitor_ref = if is_pid(stream_ref), do: Process.monitor(stream_ref), else: nil
+
+        updated_data = %{
+          compacted_data
+          | stream_ref: stream_ref,
+            stream_monitor_ref: monitor_ref,
+            retry_count: 0,
+            retry_delay: 1000,
+            turn_count: 0
+        }
+
+        broadcast_event(compacted_data.session_id, {:state_change, :calling})
+        {:next_state, :calling, updated_data}
+
+      {:error, reason} ->
+        broadcast_event(new_data.session_id, {:error, reason})
+        {:next_state, :idle, new_data}
     end
   end
 
