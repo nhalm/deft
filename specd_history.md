@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **filesystem v0.2 (2026-03-18):** Fix resolve_git_root for normal (non-worktree) repos: `git rev-parse --git-common-dir` returns relative `.git`, `Path.dirname(".git")` returns `"."`, all normal repos map to same `~/.deft/projects/` directory (project.ex:131-138); must expand relative path against working dir before dirname
 - **evals v0.2 (2026-03-18):** Implement Actor eval suite: observation usage (20 iters, 85%), continuation (20 iters, 90%), tool selection (20 iters, 85%)
 - **evals v0.2 (2026-03-18):** Implement Reflector eval suite: compression (20 iters, 80%), preservation (20 iters, 95%), section structure (hard assertion), CORRECTION survival (hard assertion)
 - **orchestration v0.3 (2026-03-18):** Wire Foreman start_lead to actually start Lead gen_statem process and Process.monitor the PID: currently stores pid: nil and monitor_ref: nil (foreman.ex:1315-1323); blocks steering, crash detection, and merge

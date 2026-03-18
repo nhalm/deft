@@ -54,7 +54,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## filesystem v0.2
 
-- Fix resolve_git_root for normal (non-worktree) repos: `git rev-parse --git-common-dir` returns relative `.git`, `Path.dirname(".git")` returns `"."`, all normal repos map to same `~/.deft/projects/` directory (project.ex:131-138); must expand relative path against working dir before dirname
 - Fix cache spill to use actual lead_id from context instead of hardcoded "main": tool_runner.ex:157 builds cache name as `{:cache, context.session_id, "main"}` regardless of which Lead is executing; breaks multi-Lead cache isolation
 - Fix cache_read :expired error path: Store.read internally catches ArgumentError and returns :miss before cache_read.ex:75-79 rescue can trigger; :expired error message is unreachable; store.ex should propagate the ArgumentError for cleaned-up tables or cache_read should detect expired state differently
 - Implement site log programmatic promotion: pattern match on Lead messages — auto-promote contract, decision, correction, critical_finding; promote finding if tagged shared; never promote status or blocker
