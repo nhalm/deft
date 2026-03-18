@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **issues v0.2 (2026-03-18):** Fix CLI help text to show `--auto-approve-all`: moduledoc (cli.ex:23) and `print_help` (cli.ex:607) advertise `--auto-approve` but OptionParser (cli.ex:102) parses `--auto-approve-all`; user typing the documented flag gets an unknown flag error
 - **skills v0.3 (2026-03-18):** Implement command descriptions: extract the first non-empty line of each command markdown file as its description; pass descriptions through to system prompt listing and help text per spec section 1.1 and 4.2
 - **skills v0.2 (2026-03-18):** Fix `SlashCommand.dispatch/1` to propagate real load errors: maps any `{:error, reason}` from `Registry.load_definition/1` to `{:error, :not_found, name}` at slash_command.ex:98-99; file I/O errors become indistinguishable from "skill doesn't exist"; should propagate actual error type so callers can show meaningful error messages
 - **filesystem v0.2 (2026-03-18):** Fix ETS table access control in Deft.Store.init: currently creates `:public` table at store.ex:170 but spec section 3 requires `:protected`; implement option (c) — spawn async load task, collect entries, send to GenServer via message, GenServer inserts into `:protected` ETS to preserve async loading without exposing table access

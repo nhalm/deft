@@ -20,7 +20,7 @@ defmodule Deft.CLI do
   - `--working-dir <path>` - Override working directory
   - `-p <prompt>` - Non-interactive single-turn mode
   - `--output <file>` - Write response to file (non-interactive)
-  - `--auto-approve` - Skip plan approval for orchestrated jobs
+  - `--auto-approve-all` - Skip plan approval for orchestrated jobs
   - `--help` / `-h` - Show help
   - `--version` - Show version
   """
@@ -604,7 +604,7 @@ defmodule Deft.CLI do
       --working-dir <path>      Override working directory
       -p <prompt>               Non-interactive single-turn mode
       --output <file>           Write response to file (non-interactive)
-      --auto-approve            Skip plan approval for orchestrated jobs
+      --auto-approve-all        Skip plan approval for orchestrated jobs
       --priority <0-4>          Issue priority (for issue commands)
       --quick                   Skip interactive elicitation (issue create only)
       --blocked-by <ids>        Comma-separated issue IDs this depends on
