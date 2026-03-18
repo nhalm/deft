@@ -36,6 +36,12 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement overnight loop safety eval: run `deft work --loop --auto-approve-all` against a synthetic repo with 5+ issues overnight; verify no runaway cost, no infinite loops, graceful SIGINT handling, correct issue status transitions; Tier 3 weekly schedule (blocked: Build E2E task battery...)
 - Fix `ResultStore.load/1` partial corruption handling: a single corrupt JSONL line causes the entire run to return `{:error, reason}`, and `export/1` silently filters out failed loads; should skip corrupt lines and preserve valid results per-run, or at minimum log a warning when lines are skipped
 
+## observational-memory v0.1
+
+- Fix `should_activate_reflection?` to check `not state.is_buffering_reflection`: when a buffered reflector is in-flight and observations reach full threshold, `activate_or_spawn_reflection` spawns an immediate reflector that overwrites `reflector_ref`; the buffered task's completion is silently dropped, leaving `is_buffering_reflection` permanently stuck as `true` and disabling all future reflection buffering
+- Fix `validate_sections` in `parse.ex` to ignore unknown sections per spec section 3.5: currently returns `{:error, ...}` on unknown sections, triggering `fallback_parse` which loses `current_task` and `continuation_hint` data; should strip unknown sections from observations and continue normal parsing
+- Fix continuation hint injection condition in `context.ex`: `build_continuation_hint` injects the hint whenever `observed_message_ids` is non-empty, but spec section 5.3 requires injection only when observed messages have actually been trimmed from context
+
 ## orchestration v0.3
 
 - Implement Foreman gen_statem: extends Agent with tuple states `{job_phase, agent_state}` using handle_event mode; phases: :planning, :researching, :decomposing, :executing, :verifying, :complete; single-agent fallback detection during :planning; Foreman handles `{:lead_message, type, content, metadata}` in handle_info for any state (blocked: Implement Deft.Job.Runner.run/1...)
