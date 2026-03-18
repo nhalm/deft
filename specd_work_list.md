@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## evals v0.2
 
-- Create test/eval/ directory structure: component subdirectories (observer/, reflector/, actor/, foreman/, lead/, spilling/, skills/, issues/, e2e/), fixtures/ with coding_conversations/, codebase_snapshots/, observation_sets/, tool_results/, issue_transcripts/, holdout/ subdirs, support/ with eval_helpers.ex, scoring.ex, judge_calibration.ex
 - Implement Observer eval suite: extraction (9 test cases from spec section 2.1), priority, section routing, anti-hallucination (4 test cases from spec section 2.3), dedup; 20 iterations, 85%/95% pass rates per spec section 1.5
 - Implement Reflector eval suite: compression (20 iters, 80%), preservation (20 iters, 95%), section structure (hard assertion), CORRECTION survival (hard assertion)
 - Implement Actor eval suite: observation usage (20 iters, 85%), continuation (20 iters, 90%), tool selection (20 iters, 85%)

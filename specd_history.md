@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **evals v0.2 (2026-03-18):** Create test/eval/ directory structure: component subdirectories (observer/, reflector/, actor/, foreman/, lead/, spilling/, skills/, issues/, e2e/), fixtures/ with coding_conversations/, codebase_snapshots/, observation_sets/, tool_results/, issue_transcripts/, holdout/ subdirs, support/ with eval_helpers.ex, scoring.ex, judge_calibration.ex
 - **git-strategy v0.1 (2026-03-18):** Fix parse_worktree_entry branch parsing: uses `String.trim_leading(line, "branch refs/heads/")` (job.ex:525) which strips individual characters, not the prefix; branch "deft/lead-abc" is mangled to "t/lead-abc" because 'd','e','f' are in the character set; use `String.replace_prefix/3` instead
 - **orchestration v0.3 (2026-03-18):** Fix Runner to use RateLimiter.request/4 public API instead of direct GenServer.call with `{:acquire, ...}` tuple: current code at runner.ex:232 sends a message format the RateLimiter doesn't handle, causing function clause crash on first LLM call
 - **git-strategy v0.1 (2026-03-18):** Implement squash-merge on job complete: after verification passes, squash-merge deft/job-<job_id> into original branch (configurable: job.squash_on_complete, default true); delete job branch; verify no worktrees remain via `git worktree list`
