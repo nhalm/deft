@@ -201,11 +201,13 @@ defmodule Deft.Skills.Registry do
         name = path |> Path.basename(".md")
 
         if valid_name?(name) do
+          description = extract_command_description(path)
+
           entry = %Entry{
             name: name,
             type: :command,
             level: level,
-            description: nil,
+            description: description,
             path: path,
             loaded: false
           }
@@ -275,6 +277,22 @@ defmodule Deft.Skills.Registry do
 
   defp valid_name?(name) do
     Regex.match?(@name_pattern, name)
+  end
+
+  defp extract_command_description(path) do
+    case File.read(path) do
+      {:ok, content} ->
+        content
+        |> String.split("\n")
+        |> Enum.find(&(String.trim(&1) != ""))
+        |> case do
+          nil -> nil
+          line -> String.trim(line)
+        end
+
+      {:error, _reason} ->
+        nil
+    end
   end
 
   defp read_definition(%Entry{type: :command, path: path}) do

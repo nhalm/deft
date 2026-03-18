@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **skills v0.3 (2026-03-18):** Implement command descriptions: extract the first non-empty line of each command markdown file as its description; pass descriptions through to system prompt listing and help text per spec section 1.1 and 4.2
 - **skills v0.2 (2026-03-18):** Fix `SlashCommand.dispatch/1` to propagate real load errors: maps any `{:error, reason}` from `Registry.load_definition/1` to `{:error, :not_found, name}` at slash_command.ex:98-99; file I/O errors become indistinguishable from "skill doesn't exist"; should propagate actual error type so callers can show meaningful error messages
 - **filesystem v0.2 (2026-03-18):** Fix ETS table access control in Deft.Store.init: currently creates `:public` table at store.ex:170 but spec section 3 requires `:protected`; implement option (c) — spawn async load task, collect entries, send to GenServer via message, GenServer inserts into `:protected` ETS to preserve async loading without exposing table access
 - **rate-limiter v0.1 (2026-03-18):** Fix token estimation to use `String.length` instead of `byte_size`: `estimate_message_tokens` and `estimate_content_block_tokens` at rate_limiter.ex:280,292,299 use `byte_size/1` which overcounts multi-byte UTF-8 characters; over-deducts from TPM bucket, reducing effective throughput below configured limit for non-ASCII content

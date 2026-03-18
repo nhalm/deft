@@ -144,7 +144,13 @@ defmodule Deft.Agent.SystemPrompt do
     commands =
       entries
       |> Enum.filter(&(&1.type == :command))
-      |> Enum.map(fn entry -> "- /#{entry.name}" end)
+      |> Enum.map(fn entry ->
+        if entry.description do
+          "- /#{entry.name} — #{entry.description}"
+        else
+          "- /#{entry.name}"
+        end
+      end)
 
     skills_section =
       if Enum.empty?(skills) do

@@ -76,10 +76,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement per-Lead cache isolation: start one Deft.Store instance per Lead with DETS at cache/<session_id>/lead-<lead_id>.dets; Lead cleanup deletes its own cache instance (blocked: Implement Lead gen_statem...)
 - Implement session-end cache cleanup: on session termination, delete all files under cache/<session_id>/ (blocked: Implement per-Lead cache isolation...)
 
-## skills v0.3
-
-- Implement command descriptions: extract the first non-empty line of each command markdown file as its description; pass descriptions through to system prompt listing and help text per spec section 1.1 and 4.2
-
 ## issues v0.2
 
 - Implement `deft issue dep add <id> --blocked-by <blocker_id>` and `dep remove` CLI commands (blocked: Implement dependency tracking...)
