@@ -97,14 +97,23 @@ defmodule Deft.Tools.IssueCreate do
       ensure_issues_started()
 
       # Build issue attributes with agent source
+      # Note: priority defaults to 3 (low) for agent-created issues when not provided
+      # This is handled by the GenServer based on source
       attrs = %{
         title: args["title"],
         context: args["context"],
         acceptance_criteria: args["acceptance_criteria"] || [],
         constraints: args["constraints"] || [],
-        priority: args["priority"] || 3,
         source: :agent
       }
+
+      # Only include priority if explicitly provided by agent
+      attrs =
+        if args["priority"] do
+          Map.put(attrs, :priority, args["priority"])
+        else
+          attrs
+        end
 
       # Create the issue
       case Issues.create(attrs) do

@@ -215,6 +215,10 @@ defmodule Deft.Issues do
     existing_ids = Enum.map(state.issues, & &1.id)
     id = Id.generate(existing_ids)
 
+    source = Map.fetch!(attrs, :source)
+    # Default priority depends on source: agent defaults to 3 (low), user defaults to 2 (medium)
+    default_priority = if source == :agent, do: 3, else: 2
+
     issue = %Issue{
       id: id,
       title: Map.fetch!(attrs, :title),
@@ -222,12 +226,12 @@ defmodule Deft.Issues do
       acceptance_criteria: Map.get(attrs, :acceptance_criteria, []),
       constraints: Map.get(attrs, :constraints, []),
       status: :open,
-      priority: Map.get(attrs, :priority, 2),
+      priority: Map.get(attrs, :priority, default_priority),
       dependencies: Map.get(attrs, :dependencies, []),
       created_at: timestamp,
       updated_at: timestamp,
       closed_at: nil,
-      source: Map.fetch!(attrs, :source),
+      source: source,
       job_id: nil
     }
 

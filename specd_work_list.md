@@ -83,5 +83,4 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement `deft work <id>`: same as `deft work` but for a specific issue ID, verify issue exists and is open (blocked: Implement deft work...)
 - Implement `deft work --loop`: approve every plan by default (each issue gets plan approval checkpoint); --auto-approve-all flag skips all plan approvals for fully autonomous mode; stop when no ready issues remain, cumulative cost exceeds work.cost_ceiling, or user aborts; re-evaluate unblocked issues between jobs (blocked: Implement deft work...)
 - Implement SIGINT handling: catch Ctrl+C, send graceful shutdown to Foreman, wait for current issue status rollback to :open (5-second timeout), then exit; if timeout expires, issue left at :in_progress (detected as stale on next startup) (blocked: Implement deft work --loop...)
-- Fix `Issues.create/1` priority default for agent-created issues: GenServer defaults to `priority: 2` at issues.ex:225 but spec section 6.2 requires agent-created issues to default to priority 3 (low); `IssueCreate` tool works around this by setting priority 3 explicitly, but the GenServer contract is wrong
 
