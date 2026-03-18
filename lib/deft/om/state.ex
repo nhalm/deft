@@ -308,6 +308,51 @@ defmodule Deft.OM.State do
   end
 
   @impl true
+  def handle_call(:force_reflect, from, state) do
+    Logger.info(
+      "Force reflect called for session #{state.session_id} (sync fallback) - observation_tokens: #{state.observation_tokens}"
+    )
+
+    # If observation_tokens is below threshold, return immediately
+    if state.observation_tokens < @default_observation_threshold do
+      {:reply, {:ok, :below_threshold}, state}
+    else
+      # Emit sync fallback event
+      broadcast_event(state.session_id, {:om, :sync_fallback, %{type: :reflection}})
+      # Emit reflection_started event (LLM call begins immediately)
+      broadcast_event(state.session_id, {:om, :reflection_started, %{level: 0}})
+
+      task_supervisor = Supervisor.task_supervisor_name(state.session_id)
+
+      # Target size is 50% of reflection threshold (per spec section 4.3)
+      target_size = div(@default_observation_threshold, 2)
+
+      # Spawn Reflector Task with 1 retry max (sync path)
+      task =
+        Task.Supervisor.async_nolink(task_supervisor, fn ->
+          run_reflector_with_retry(
+            state.config,
+            state.active_observations,
+            target_size,
+            state.calibration_factor,
+            1
+          )
+        end)
+
+      # Stash the caller's from, spawn Task, return {:noreply, state}
+      # When Task completes, handle_info will reply via GenServer.reply/2
+      state = %{
+        state
+        | sync_from: from,
+          is_reflecting: true,
+          reflector_ref: task.ref
+      }
+
+      {:noreply, state}
+    end
+  end
+
+  @impl true
   def handle_cast({:messages_added, new_messages}, state) do
     # Calculate new pending tokens from the new messages
     new_tokens =
@@ -479,78 +524,91 @@ defmodule Deft.OM.State do
     # Demonitor the task
     Process.demonitor(ref, [:flush])
 
-    # Record success for circuit breaker
-    state = record_cycle_success(state)
+    # Check if result indicates success
+    is_success = result.compressed_observations != ""
 
-    # Check if this was a buffered reflection or immediate reflection
+    # Record success/failure for circuit breaker
     state =
-      if state.is_buffering_reflection do
-        # This was a buffered reflection - store it for later activation
-        Logger.debug(
-          "Storing buffered reflection for session #{state.session_id} (epoch #{result.epoch})"
-        )
-
-        # Emit buffering_complete event
-        broadcast_event(state.session_id, {:om, :buffering_complete, %{type: :reflection}})
-
-        state = %{
-          state
-          | buffered_reflection: result.compressed_observations,
-            buffered_reflection_epoch: result.epoch,
-            is_buffering_reflection: false,
-            reflector_ref: nil
-        }
-
-        # After buffering completes, check if we should activate immediately
-        # (in case we already crossed the full threshold while buffering)
-        check_and_spawn_reflector(state)
+      if is_success do
+        record_cycle_success(state)
       else
-        # This was an immediate reflection - apply it now
-        # Emit reflection_complete event
-        broadcast_event(state.session_id, {
-          :om,
-          :reflection_complete,
-          %{before_tokens: result.before_tokens, after_tokens: result.after_tokens}
-        })
-
-        # Replace active_observations with compressed result
-        # Increment generation_count and activation_epoch
-        state = %{
-          state
-          | active_observations: result.compressed_observations,
-            observation_tokens: result.after_tokens,
-            generation_count: state.generation_count + 1,
-            activation_epoch: state.activation_epoch + 1,
-            is_reflecting: false,
-            reflector_ref: nil,
-            snapshot_dirty: true
-        }
-
-        # Check if hard cap truncation is needed (spec section 4.6)
-        state = maybe_apply_hard_cap(state)
-
-        # Write snapshot after reflection activation (spec section 9.1)
-        state =
-          case write_snapshot(state) do
-            :ok ->
-              %{state | snapshot_dirty: false}
-
-            {:error, _reason} ->
-              # Log already happened in write_snapshot, continue with dirty flag set
-              state
-          end
-
-        # After Reflector completes, check if there are buffered chunks to activate
-        # (now that is_reflecting is false)
-        if not Enum.empty?(state.buffered_chunks) and
-             state.pending_message_tokens >= @default_message_threshold do
-          activate_buffered_chunks(state)
-        else
-          state
-        end
+        record_cycle_failure(state, :reflection, :empty_compressed_observations)
       end
 
-    {:noreply, state}
+    # Check if this is a sync fallback call
+    if state.sync_from do
+      handle_sync_reflector_completion(state, result, is_success)
+    else
+      # Check if this was a buffered reflection or immediate reflection
+      state =
+        if state.is_buffering_reflection do
+          # This was a buffered reflection - store it for later activation
+          Logger.debug(
+            "Storing buffered reflection for session #{state.session_id} (epoch #{result.epoch})"
+          )
+
+          # Emit buffering_complete event
+          broadcast_event(state.session_id, {:om, :buffering_complete, %{type: :reflection}})
+
+          state = %{
+            state
+            | buffered_reflection: result.compressed_observations,
+              buffered_reflection_epoch: result.epoch,
+              is_buffering_reflection: false,
+              reflector_ref: nil
+          }
+
+          # After buffering completes, check if we should activate immediately
+          # (in case we already crossed the full threshold while buffering)
+          check_and_spawn_reflector(state)
+        else
+          # This was an immediate reflection - apply it now
+          # Emit reflection_complete event
+          broadcast_event(state.session_id, {
+            :om,
+            :reflection_complete,
+            %{before_tokens: result.before_tokens, after_tokens: result.after_tokens}
+          })
+
+          # Replace active_observations with compressed result
+          # Increment generation_count and activation_epoch
+          state = %{
+            state
+            | active_observations: result.compressed_observations,
+              observation_tokens: result.after_tokens,
+              generation_count: state.generation_count + 1,
+              activation_epoch: state.activation_epoch + 1,
+              is_reflecting: false,
+              reflector_ref: nil,
+              snapshot_dirty: true
+          }
+
+          # Check if hard cap truncation is needed (spec section 4.6)
+          state = maybe_apply_hard_cap(state)
+
+          # Write snapshot after reflection activation (spec section 9.1)
+          state =
+            case write_snapshot(state) do
+              :ok ->
+                %{state | snapshot_dirty: false}
+
+              {:error, _reason} ->
+                # Log already happened in write_snapshot, continue with dirty flag set
+                state
+            end
+
+          # After Reflector completes, check if there are buffered chunks to activate
+          # (now that is_reflecting is false)
+          if not Enum.empty?(state.buffered_chunks) and
+               state.pending_message_tokens >= @default_message_threshold do
+            activate_buffered_chunks(state)
+          else
+            state
+          end
+        end
+
+      {:noreply, state}
+    end
   end
 
   @impl true
@@ -562,17 +620,34 @@ defmodule Deft.OM.State do
     # Record failure for circuit breaker
     state = record_cycle_failure(state, :reflection, reason)
 
-    state = %{
-      state
-      | is_reflecting: false,
-        is_buffering_reflection: false,
-        reflector_ref: nil
-    }
+    # Check if this is a sync fallback call
+    if state.sync_from do
+      # Reply to the stashed caller with an error
+      GenServer.reply(state.sync_from, {:error, reason})
 
-    # Check if hard cap truncation is needed after failure (spec section 4.6)
-    state = maybe_apply_hard_cap(state)
+      # Clear sync_from and flags
+      state = %{
+        state
+        | sync_from: nil,
+          is_reflecting: false,
+          reflector_ref: nil
+      }
 
-    {:noreply, state}
+      {:noreply, state}
+    else
+      # Normal async path
+      state = %{
+        state
+        | is_reflecting: false,
+          is_buffering_reflection: false,
+          reflector_ref: nil
+      }
+
+      # Check if hard cap truncation is needed after failure (spec section 4.6)
+      state = maybe_apply_hard_cap(state)
+
+      {:noreply, state}
+    end
   end
 
   @impl true
@@ -683,6 +758,66 @@ defmodule Deft.OM.State do
     {:noreply, state}
   end
 
+  # Handle sync reflector completion (spec section 6.3)
+  # Per spec: replace active_observations with compressed result BEFORE replying
+  defp handle_sync_reflector_completion(state, result, is_success) do
+    # Apply reflection if successful
+    state =
+      if is_success do
+        # Emit reflection_complete event
+        broadcast_event(state.session_id, {
+          :om,
+          :reflection_complete,
+          %{before_tokens: result.before_tokens, after_tokens: result.after_tokens}
+        })
+
+        # Replace active_observations with compressed result
+        # Increment generation_count and activation_epoch
+        state = %{
+          state
+          | active_observations: result.compressed_observations,
+            observation_tokens: result.after_tokens,
+            generation_count: state.generation_count + 1,
+            activation_epoch: state.activation_epoch + 1,
+            snapshot_dirty: true
+        }
+
+        # Check if hard cap truncation is needed (spec section 4.6)
+        maybe_apply_hard_cap(state)
+      else
+        # Keep state unchanged on failure
+        state
+      end
+
+    # Reply to the stashed caller with the result
+    GenServer.reply(state.sync_from, {:ok, result})
+
+    # Clear sync_from and flags
+    state = %{
+      state
+      | sync_from: nil,
+        is_reflecting: false,
+        reflector_ref: nil
+    }
+
+    # Write snapshot after sync reflection if state was updated (spec section 9.1)
+    state =
+      if is_success do
+        case write_snapshot(state) do
+          :ok ->
+            %{state | snapshot_dirty: false}
+
+          {:error, _reason} ->
+            # Log already happened in write_snapshot, continue with dirty flag set
+            state
+        end
+      else
+        state
+      end
+
+    {:noreply, state}
+  end
+
   defp via_tuple(session_id) do
     {:via, Registry, {Deft.ProcessRegistry, {:om_state, session_id}}}
   end
@@ -723,6 +858,53 @@ defmodule Deft.OM.State do
           config,
           messages,
           existing_observations,
+          calibration_factor,
+          max_retries,
+          attempt + 1
+        )
+
+      result ->
+        # Success or max retries reached
+        result
+    end
+  end
+
+  defp run_reflector_with_retry(
+         config,
+         observations,
+         target_size,
+         calibration_factor,
+         max_retries
+       ) do
+    run_reflector_with_retry_loop(
+      config,
+      observations,
+      target_size,
+      calibration_factor,
+      max_retries,
+      0
+    )
+  end
+
+  defp run_reflector_with_retry_loop(
+         config,
+         observations,
+         target_size,
+         calibration_factor,
+         max_retries,
+         attempt
+       ) do
+    case Reflector.run(config, observations, target_size, calibration_factor) do
+      %{compressed_observations: ""} when attempt < max_retries ->
+        # Empty compressed observations means failure - retry with exponential backoff
+        backoff_ms = trunc(:math.pow(2, attempt) * 1000)
+        Logger.warning("Reflector attempt #{attempt + 1} failed, retrying after #{backoff_ms}ms")
+        Process.sleep(backoff_ms)
+
+        run_reflector_with_retry_loop(
+          config,
+          observations,
+          target_size,
           calibration_factor,
           max_retries,
           attempt + 1

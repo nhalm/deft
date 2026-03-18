@@ -76,7 +76,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## observational-memory v0.1
 
-- Implement sync reflection fallback: add `:force_reflect` GenServer.call handler with from-stashing pattern; trigger when observation_tokens >= 1.2x reflection threshold (48,000); 1 retry max (spec section 6.3)
 - Implement dynamic continuation hint: extend Observer prompt to return `<continuation-hint>` with current task, last tool call, and user's last request paraphrase; parse in Observer output; pass through to Context injection; fall back to static hint when absent (spec section 5.3)
 
 ## issues v0.2
