@@ -59,6 +59,10 @@ defmodule Mix.Tasks.Eval.Compare do
         Mix.shell().error("Run not found: #{run_id}")
         exit({:shutdown, 1})
 
+      {:error, :corrupt_data, run_id} ->
+        Mix.shell().error("Run file exists but contains corrupt JSONL data: #{run_id}")
+        exit({:shutdown, 1})
+
       {:error, reason} ->
         Mix.shell().error("Failed to load data: #{inspect(reason)}")
         exit({:shutdown, 1})
@@ -83,7 +87,7 @@ defmodule Mix.Tasks.Eval.Compare do
           |> Enum.reject(&is_nil/1)
 
         if Enum.empty?(results) do
-          {:error, :not_found, run_id}
+          {:error, :corrupt_data, run_id}
         else
           {:ok, results}
         end
