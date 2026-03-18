@@ -82,10 +82,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement `deft work --loop`: approve every plan by default (each issue gets plan approval checkpoint); --auto-approve-all flag skips all plan approvals for fully autonomous mode; stop when no ready issues remain, cumulative cost exceeds work.cost_ceiling, or user aborts; re-evaluate unblocked issues between jobs (blocked: Implement deft work...)
 - Implement SIGINT handling: catch Ctrl+C, send graceful shutdown to Foreman, wait for current issue status rollback to :open (5-second timeout), then exit; if timeout expires, issue left at :in_progress (detected as stale on next startup) (blocked: Implement deft work --loop...)
 
-## skills v0.2
-
-- Fix missing `tool_result` for successful `use_skill` calls: `build_tool_result_blocks` is only called for `regular_results`, not `use_skill_success_results`; the assistant message contains a `tool_use` block for `use_skill` but no matching `tool_result` in the following user message; Anthropic API returns 400 on next call; must generate a `tool_result` block (e.g. "Skill loaded") for each successful `use_skill` alongside the system message injection
-
 ## observational-memory v0.1
 
 - Fix `keep_tail/3` non-contiguous window in context.ex: `Enum.reduce` skips oversized messages but continues iterating, allowing older smaller messages to be included after a gap; replace with `Enum.reduce_while` and halt on first message that exceeds budget (same pattern as the fix applied to `truncate_session_history_to_target/4`)

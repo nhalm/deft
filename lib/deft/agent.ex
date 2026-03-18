@@ -1223,9 +1223,26 @@ defmodule Deft.Agent do
     # Build messages from the results
     messages_to_add =
       [
-        # Regular tool results go in a user message with ToolResult blocks
-        if regular_results != [] do
-          tool_result_blocks = build_tool_result_blocks(regular_results, tool_calls)
+        # All tool results go in a user message with ToolResult blocks
+        # This includes both regular results and use_skill results
+        # (use_skill needs a tool_result block even though the definition goes in a system message)
+        if regular_results != [] or use_skill_success_results != [] do
+          # Build tool result blocks for regular results
+          regular_tool_results = build_tool_result_blocks(regular_results, tool_calls)
+
+          # Build simple tool result blocks for use_skill (just "Skill loaded")
+          # The full skill definition is injected separately as a system message
+          use_skill_tool_results =
+            Enum.map(use_skill_success_results, fn {tool_use_id, _result} ->
+              %Deft.Message.ToolResult{
+                tool_use_id: tool_use_id,
+                name: "use_skill",
+                content: "Skill loaded",
+                is_error: false
+              }
+            end)
+
+          tool_result_blocks = regular_tool_results ++ use_skill_tool_results
 
           %Message{
             id: generate_message_id(),
@@ -1234,7 +1251,7 @@ defmodule Deft.Agent do
             timestamp: DateTime.utc_now()
           }
         end,
-        # use_skill results are injected as system messages (skill definitions)
+        # use_skill results are also injected as system messages (skill definitions)
         build_use_skill_messages(use_skill_success_results)
       ]
       |> List.flatten()
