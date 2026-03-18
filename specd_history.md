@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **observational-memory v0.1 (2026-03-18):** Implement `/correct <old> → <new>` slash command: search observations for old text, show match, confirm, append CORRECTION marker with replacement (spec section 11)
 - **observational-memory v0.1 (2026-03-18):** Implement `/forget <text>` slash command: search observations for matches, show matches, ask for confirmation before appending CORRECTION marker; Reflector must preserve CORRECTION markers through compression (spec section 11)
 - **evals v0.2 (2026-03-18):** Fix `JudgeCalibration.load_latest_result/1`: when calibration directory doesn't exist, `File.ls/1` returns `{:error, :enoent}` which falls through the `with` clause; should return `{:error, :not_found}` per the docstring to match the "no calibration exists" semantic
 - **tui v0.1 (2026-03-18):** Fix `extract_prompt_text/1` in `Session.Store`: pattern matches `%{type: "text", text: text}` but `Deft.Message.Text` structs have no `:type` field; match always fails, returning `""` for `last_user_prompt` in session picker
