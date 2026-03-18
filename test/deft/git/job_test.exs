@@ -370,4 +370,187 @@ defmodule Deft.Git.JobTest do
       assert content == "node_modules/\n.deft-worktrees/\n"
     end
   end
+
+  describe "merge_lead_branch/1" do
+    setup do
+      # Create a temporary directory for testing
+      tmp_dir = System.tmp_dir!() |> Path.join("deft-test-#{:rand.uniform(1_000_000)}")
+      File.mkdir_p!(tmp_dir)
+
+      on_exit(fn ->
+        File.rm_rf(tmp_dir)
+      end)
+
+      %{tmp_dir: tmp_dir}
+    end
+
+    defmodule MergeMockGit do
+      @moduledoc false
+
+      def cmd(args) do
+        send(self(), {:git_cmd, args})
+
+        case get_mock_response(args) do
+          nil -> {"", 0}
+          response -> response
+        end
+      end
+
+      defp get_mock_response(["checkout", _branch_name]) do
+        Process.get(:mock_checkout_response)
+      end
+
+      defp get_mock_response(["merge", "--no-ff", _branch_name]) do
+        Process.get(:mock_merge_response)
+      end
+
+      defp get_mock_response(["diff", "--name-only", "--diff-filter=U"]) do
+        Process.get(:mock_diff_response)
+      end
+
+      defp get_mock_response(_), do: nil
+    end
+
+    test "successfully merges Lead branch into job branch", %{tmp_dir: tmp_dir} do
+      # Mock successful checkout and merge
+      Process.put(:mock_checkout_response, {"", 0})
+      Process.put(:mock_merge_response, {"", 0})
+
+      assert {:ok, :merged} =
+               Job.merge_lead_branch(
+                 lead_id: "lead-1",
+                 job_id: "job123",
+                 git: MergeMockGit,
+                 working_dir: tmp_dir
+               )
+
+      # Verify git commands were called in correct order
+      assert_received {:git_cmd, ["checkout", "deft/job-job123"]}
+      assert_received {:git_cmd, ["merge", "--no-ff", "deft/lead-lead-1"]}
+    end
+
+    test "detects merge conflicts", %{tmp_dir: tmp_dir} do
+      # Mock successful checkout but merge conflict
+      Process.put(:mock_checkout_response, {"", 0})
+
+      Process.put(
+        :mock_merge_response,
+        {"Auto-merging lib/app.ex\nCONFLICT (content): Merge conflict in lib/app.ex\n", 1}
+      )
+
+      Process.put(:mock_diff_response, {"lib/app.ex\ntest/app_test.exs\n", 0})
+
+      assert {:ok, :conflict, conflicted_files} =
+               Job.merge_lead_branch(
+                 lead_id: "lead-1",
+                 job_id: "job123",
+                 git: MergeMockGit,
+                 working_dir: tmp_dir
+               )
+
+      assert "lib/app.ex" in conflicted_files
+      assert "test/app_test.exs" in conflicted_files
+
+      # Verify git commands were called
+      assert_received {:git_cmd, ["checkout", "deft/job-job123"]}
+      assert_received {:git_cmd, ["merge", "--no-ff", "deft/lead-lead-1"]}
+      assert_received {:git_cmd, ["diff", "--name-only", "--diff-filter=U"]}
+    end
+
+    test "handles merge conflict when diff command fails", %{tmp_dir: tmp_dir} do
+      # Mock successful checkout, merge conflict, but diff fails
+      Process.put(:mock_checkout_response, {"", 0})
+      Process.put(:mock_merge_response, {"CONFLICT detected\n", 1})
+      Process.put(:mock_diff_response, {"error\n", 1})
+
+      assert {:ok, :conflict, conflicted_files} =
+               Job.merge_lead_branch(
+                 lead_id: "lead-1",
+                 job_id: "job123",
+                 git: MergeMockGit,
+                 working_dir: tmp_dir
+               )
+
+      # Should return empty list if diff fails
+      assert conflicted_files == []
+    end
+
+    test "handles checkout failure", %{tmp_dir: tmp_dir} do
+      # Mock checkout failure
+      Process.put(:mock_checkout_response, {"fatal: invalid branch\n", 1})
+
+      assert {:error, {:checkout_failed, 1}} =
+               Job.merge_lead_branch(
+                 lead_id: "lead-1",
+                 job_id: "invalid",
+                 git: MergeMockGit,
+                 working_dir: tmp_dir
+               )
+
+      # Should attempt checkout but not merge
+      assert_received {:git_cmd, ["checkout", "deft/job-invalid"]}
+      refute_received {:git_cmd, ["merge" | _]}
+    end
+
+    test "handles merge failure (non-conflict error)", %{tmp_dir: tmp_dir} do
+      # Mock successful checkout but merge failure (not a conflict)
+      Process.put(:mock_checkout_response, {"", 0})
+      Process.put(:mock_merge_response, {"fatal: unable to merge\n", 128})
+
+      assert {:error, {:merge_failed, 128}} =
+               Job.merge_lead_branch(
+                 lead_id: "lead-1",
+                 job_id: "job123",
+                 git: MergeMockGit,
+                 working_dir: tmp_dir
+               )
+
+      assert_received {:git_cmd, ["checkout", "deft/job-job123"]}
+      assert_received {:git_cmd, ["merge", "--no-ff", "deft/lead-lead-1"]}
+    end
+
+    test "creates correct branch names", %{tmp_dir: tmp_dir} do
+      Process.put(:mock_checkout_response, {"", 0})
+      Process.put(:mock_merge_response, {"", 0})
+
+      assert {:ok, :merged} =
+               Job.merge_lead_branch(
+                 lead_id: "lead-abc-123",
+                 job_id: "job-xyz-789",
+                 git: MergeMockGit,
+                 working_dir: tmp_dir
+               )
+
+      assert_received {:git_cmd, ["checkout", "deft/job-job-xyz-789"]}
+      assert_received {:git_cmd, ["merge", "--no-ff", "deft/lead-lead-abc-123"]}
+    end
+
+    test "requires lead_id option" do
+      assert_raise KeyError, fn ->
+        Job.merge_lead_branch(job_id: "job123", git: MergeMockGit)
+      end
+    end
+
+    test "requires job_id option" do
+      assert_raise KeyError, fn ->
+        Job.merge_lead_branch(lead_id: "lead-1", git: MergeMockGit)
+      end
+    end
+
+    test "defaults to File.cwd! when working_dir not provided" do
+      Process.put(:mock_checkout_response, {"", 0})
+      Process.put(:mock_merge_response, {"", 0})
+
+      assert {:ok, :merged} =
+               Job.merge_lead_branch(
+                 lead_id: "lead-1",
+                 job_id: "job123",
+                 git: MergeMockGit
+               )
+
+      # Should work - git commands executed in current directory context
+      assert_received {:git_cmd, ["checkout", "deft/job-job123"]}
+      assert_received {:git_cmd, ["merge", "--no-ff", "deft/lead-lead-1"]}
+    end
+  end
 end

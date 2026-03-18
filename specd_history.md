@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **git-strategy v0.1 (2026-03-18):** Implement merge in dependency order: when Lead sends {:lead_message, :complete, ...}, Foreman merges Lead branch into deft/job-<job_id>; on conflict, spawn merge-resolution Runner; independent Leads merged in completion order
 - **orchestration v0.3 (2026-03-18):** Implement contract versioning: :contract_revision Lead message type, Foreman re-steers downstream Leads on revision
 - **rate-limiter v0.1 (2026-03-18):** Implement cost ceiling: pause job at cost_ceiling - $1.00 buffer; in-flight calls complete (slight overshoot accepted); no new calls dispatched until user approves continued spending
 - **rate-limiter v0.1 (2026-03-18):** Implement adaptive concurrency: starting at job.initial_concurrency (default 2) Lead slots; scale-up signal (bucket >60% for 30s + zero queued calls → +1 slot up to job.max_leads); scale-down signal (>2 429s/min → -1 slot, minimum 1); send {:rate_limiter, :concurrency_change, new_limit} to Foreman

@@ -263,6 +263,110 @@ defmodule Deft.Git.Job do
   end
 
   @doc """
+  Merges a Lead branch into the job branch.
+
+  When a Lead completes, the Foreman merges the Lead's branch back into the
+  job branch in dependency order. Independent Leads are merged in completion order.
+
+  ## Options
+
+  - `:lead_id` - Required. Lead identifier.
+  - `:job_id` - Required. Job identifier (for job branch name).
+  - `:git` - Optional. Git adapter module (defaults to Deft.Git).
+  - `:working_dir` - Optional. Repository root (defaults to File.cwd!()).
+
+  ## Returns
+
+  - `{:ok, :merged}` - Merge completed successfully
+  - `{:ok, :conflict, conflicted_files}` - Merge has conflicts (list of file paths)
+  - `{:error, reason}` - Git command failed
+
+  ## Examples
+
+      # Successful merge
+      Deft.Git.Job.merge_lead_branch(lead_id: "lead-1", job_id: "abc123")
+      # => {:ok, :merged}
+
+      # Merge with conflicts
+      Deft.Git.Job.merge_lead_branch(lead_id: "lead-1", job_id: "abc123")
+      # => {:ok, :conflict, ["lib/app.ex", "test/app_test.exs"]}
+
+      # Error - Lead branch doesn't exist
+      Deft.Git.Job.merge_lead_branch(lead_id: "invalid", job_id: "abc123")
+      # => {:error, {:merge_failed, 1}}
+  """
+  @spec merge_lead_branch(keyword()) ::
+          {:ok, :merged} | {:ok, :conflict, [String.t()]} | {:error, term()}
+  def merge_lead_branch(opts) do
+    lead_id = Keyword.fetch!(opts, :lead_id)
+    job_id = Keyword.fetch!(opts, :job_id)
+    git = Keyword.get(opts, :git, Deft.Git)
+    working_dir = Keyword.get(opts, :working_dir, File.cwd!())
+
+    lead_branch = "deft/lead-#{lead_id}"
+    job_branch = "deft/job-#{job_id}"
+
+    # Change to working directory to ensure git commands work correctly
+    File.cd!(working_dir, fn ->
+      with {:ok, :checkout} <- checkout_branch(git, job_branch),
+           merge_result <- attempt_merge(git, lead_branch, job_branch) do
+        merge_result
+      end
+    end)
+  end
+
+  # Checkout the job branch
+  defp checkout_branch(git, job_branch) do
+    case git.cmd(["checkout", job_branch]) do
+      {_output, 0} ->
+        {:ok, :checkout}
+
+      {error_output, exit_code} ->
+        Logger.error("Failed to checkout #{job_branch}: #{error_output}")
+        {:error, {:checkout_failed, exit_code}}
+    end
+  end
+
+  # Attempt to merge the Lead branch into the job branch
+  defp attempt_merge(git, lead_branch, job_branch) do
+    case git.cmd(["merge", "--no-ff", lead_branch]) do
+      {_output, 0} ->
+        Logger.info("Successfully merged #{lead_branch} into #{job_branch}")
+        {:ok, :merged}
+
+      {output, exit_code} ->
+        handle_merge_failure(git, output, exit_code, lead_branch, job_branch)
+    end
+  end
+
+  # Handle merge failure - either conflict or error
+  defp handle_merge_failure(git, output, exit_code, lead_branch, job_branch) do
+    if exit_code == 1 and String.contains?(output, "CONFLICT") do
+      # Extract conflicted files
+      conflicted_files = extract_conflicted_files(git)
+      Logger.warning("Merge conflict: #{lead_branch} -> #{job_branch}")
+      Logger.warning("Conflicted files: #{inspect(conflicted_files)}")
+      {:ok, :conflict, conflicted_files}
+    else
+      Logger.error("Failed to merge #{lead_branch} into #{job_branch}: #{output}")
+      {:error, {:merge_failed, exit_code}}
+    end
+  end
+
+  # Extract list of conflicted files from git status
+  defp extract_conflicted_files(git) do
+    case git.cmd(["diff", "--name-only", "--diff-filter=U"]) do
+      {output, 0} ->
+        output
+        |> String.split("\n", trim: true)
+
+      {_error_output, _exit_code} ->
+        # Fallback - return empty list if we can't get conflicted files
+        []
+    end
+  end
+
+  @doc """
   Scans for and cleans up orphaned git artifacts from crashed jobs.
 
   Orphans include:

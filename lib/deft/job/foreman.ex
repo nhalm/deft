@@ -697,12 +697,6 @@ defmodule Deft.Job.Foreman do
     updated_data
   end
 
-  defp process_lead_message(:complete, _content, _metadata, data) do
-    Logger.info("Lead completed deliverable")
-    # TODO: merge lead branch, check if all leads done
-    data
-  end
-
   defp process_lead_message(:critical_finding, content, metadata, data) do
     Logger.info("Lead critical finding: #{content}")
     # Auto-promote to site log
@@ -816,6 +810,73 @@ defmodule Deft.Job.Foreman do
     data
   end
 
+  defp process_lead_message(:complete, _content, metadata, data) do
+    lead_id = Map.get(metadata, :lead_id)
+    deliverable_name = Map.get(metadata, :deliverable)
+
+    Logger.info("Lead #{lead_id} completed deliverable: #{deliverable_name}")
+
+    # Get Lead info for worktree cleanup
+    lead_info = Map.get(data.leads, lead_id)
+
+    if is_nil(lead_info) do
+      Logger.warning("Lead #{lead_id} not found in tracking map, cannot merge")
+      data
+    else
+      # Merge Lead branch into job branch
+      case GitJob.merge_lead_branch(
+             lead_id: lead_id,
+             job_id: data.session_id,
+             working_dir: data.working_dir
+           ) do
+        {:ok, :merged} ->
+          Logger.info("Successfully merged Lead #{lead_id} into job branch")
+
+          # Clean up the Lead's worktree
+          cleanup_worktree(lead_info.worktree_path, data.working_dir)
+
+          # Remove Lead from tracking
+          leads = Map.delete(data.leads, lead_id)
+          data = %{data | leads: leads}
+
+          # Check if all Leads are done
+          if all_leads_complete?(data) do
+            Logger.info("All Leads complete, ready to transition to verification")
+            # Note: The actual phase transition happens in check_phase_transition/3
+          end
+
+          data
+
+        {:ok, :conflict, conflicted_files} ->
+          Logger.error("Merge conflict for Lead #{lead_id}: #{inspect(conflicted_files)}")
+
+          # Send critical finding to notify about conflict
+          send_to_self =
+            {:lead_message, :critical_finding,
+             "Merge conflict detected for Lead #{lead_id}: #{Enum.join(conflicted_files, ", ")}. Manual intervention required.",
+             %{lead_id: lead_id, conflicted_files: conflicted_files}}
+
+          send(self(), send_to_self)
+
+          # TODO: Spawn merge-resolution Runner to resolve conflicts
+          # For now, mark as blocker and keep Lead in tracking
+          data
+
+        {:error, reason} ->
+          Logger.error("Failed to merge Lead #{lead_id}: #{inspect(reason)}")
+
+          # Send error message to self
+          send_to_self =
+            {:lead_message, :error, "Failed to merge Lead #{lead_id}: #{inspect(reason)}",
+             %{lead_id: lead_id}}
+
+          send(self(), send_to_self)
+
+          data
+      end
+    end
+  end
+
   defp process_lead_message(type, content, _metadata, data) do
     Logger.debug("Lead message (#{type}): #{inspect(content)}")
     data
@@ -853,15 +914,38 @@ defmodule Deft.Job.Foreman do
     "#{category}-#{base_key}-#{timestamp}"
   end
 
-  defp check_phase_transition(:complete, :executing, _data) do
-    # Check if all leads are complete
-    # If so, transition to verifying
-    # This is a placeholder - real implementation would check lead status
-    {:transition, :verifying}
+  defp check_phase_transition(:complete, :executing, data) do
+    # Check if all leads are complete and merged
+    if all_leads_complete?(data) do
+      Logger.info("All Leads complete, transitioning to verification phase")
+      {:transition, :verifying}
+    else
+      :no_transition
+    end
   end
 
   defp check_phase_transition(_type, _phase, _data) do
     :no_transition
+  end
+
+  # Check if all Leads have completed and been merged
+  defp all_leads_complete?(data) do
+    # All Leads complete if:
+    # 1. We have a plan with deliverables
+    # 2. All deliverables have been started
+    # 3. No Leads remain in the tracking map (all merged and cleaned up)
+    has_plan = not is_nil(data.plan) and not is_nil(Map.get(data.plan, :deliverables))
+
+    if has_plan do
+      deliverables_count = length(Map.get(data.plan, :deliverables, []))
+      started_count = MapSet.size(data.started_leads)
+      remaining_leads = map_size(data.leads)
+
+      # All deliverables started and no Leads remain
+      deliverables_count > 0 and started_count == deliverables_count and remaining_leads == 0
+    else
+      false
+    end
   end
 
   defp generate_message_id do
