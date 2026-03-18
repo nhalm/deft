@@ -184,6 +184,8 @@ defmodule Deft.Git.Job do
 
     case File.mkdir_p(worktrees_dir) do
       :ok ->
+        # Add .deft-worktrees/ to .gitignore if not already present
+        ensure_gitignore_entry(working_dir, ".deft-worktrees/")
         create_worktree(git, worktree_path, lead_branch, job_branch)
 
       {:error, reason} ->
@@ -204,6 +206,59 @@ defmodule Deft.Git.Job do
         Logger.error("Failed to create worktree at #{worktree_path}: #{error_output}")
 
         {:error, {:worktree_creation_failed, exit_code}}
+    end
+  end
+
+  # Ensure entry exists in .gitignore
+  defp ensure_gitignore_entry(working_dir, entry) do
+    gitignore_path = Path.join(working_dir, ".gitignore")
+    content = read_gitignore(gitignore_path)
+    normalized_entry = String.trim(entry)
+
+    if gitignore_contains?(content, normalized_entry) do
+      Logger.debug("#{entry} already in .gitignore")
+    else
+      write_gitignore_entry(gitignore_path, content, normalized_entry)
+    end
+  end
+
+  defp read_gitignore(gitignore_path) do
+    case File.read(gitignore_path) do
+      {:ok, existing} ->
+        existing
+
+      {:error, :enoent} ->
+        ""
+
+      {:error, reason} ->
+        Logger.warning("Failed to read .gitignore: #{inspect(reason)}")
+        ""
+    end
+  end
+
+  defp gitignore_contains?(content, entry) do
+    content
+    |> String.split("\n")
+    |> Enum.any?(fn line ->
+      trimmed = String.trim(line)
+      trimmed == entry or trimmed == "/" <> entry
+    end)
+  end
+
+  defp write_gitignore_entry(gitignore_path, content, entry) do
+    new_content =
+      if String.ends_with?(content, "\n") or content == "" do
+        content <> entry <> "\n"
+      else
+        content <> "\n" <> entry <> "\n"
+      end
+
+    case File.write(gitignore_path, new_content) do
+      :ok ->
+        Logger.info("Added #{entry} to .gitignore")
+
+      {:error, reason} ->
+        Logger.error("Failed to write .gitignore: #{inspect(reason)}")
     end
   end
 end

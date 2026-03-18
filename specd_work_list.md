@@ -50,7 +50,7 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement post-merge test command: run configurable test command (not hardcoded `mix test`) on merged job branch after each Lead merge to catch semantic conflicts early; on failure, spawn fix-up Runner or flag for user intervention (blocked: Implement merge in dependency order...)
 - Implement squash-merge on job complete: after verification passes, squash-merge deft/job-<job_id> into original branch (configurable: job.squash_on_complete, default true); delete job branch; verify no worktrees remain via `git worktree list` (blocked: Implement post-merge test command...)
 - Implement worktree cleanup on Lead crash: Foreman cleans up Lead's worktree immediately on crash; use `git worktree remove --force` if index.lock exists
-- Implement startup orphan cleanup: scan for orphaned deft/job-* branches and deft/lead-* worktrees with no running Deft job; interactive mode: user confirmation; non-interactive with --auto-approve: clean automatically; cleanup: worktree remove, branch -D, worktree prune- Add .deft-worktrees/ to .gitignore on first worktree creation if not already present
+- Implement startup orphan cleanup: scan for orphaned deft/job-* branches and deft/lead-* worktrees with no running Deft job; interactive mode: user confirmation; non-interactive with --auto-approve: clean automatically; cleanup: worktree remove, branch -D, worktree prune
 
 ## filesystem v0.2
 

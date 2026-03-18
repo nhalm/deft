@@ -266,5 +266,108 @@ defmodule Deft.Git.JobTest do
       # Should not attempt git worktree command
       refute_received {:git_cmd, ["worktree" | _]}
     end
+
+    test "creates .gitignore with .deft-worktrees/ if it doesn't exist", %{tmp_dir: tmp_dir} do
+      Process.put(:mock_worktree_response, {"", 0})
+
+      gitignore_path = Path.join(tmp_dir, ".gitignore")
+      refute File.exists?(gitignore_path)
+
+      assert {:ok, _} =
+               Job.create_lead_worktree(
+                 lead_id: "lead-1",
+                 job_id: "job123",
+                 git: MockGit,
+                 working_dir: tmp_dir
+               )
+
+      assert File.exists?(gitignore_path)
+      content = File.read!(gitignore_path)
+      assert content =~ ".deft-worktrees/"
+    end
+
+    test "adds .deft-worktrees/ to existing .gitignore if not present", %{tmp_dir: tmp_dir} do
+      Process.put(:mock_worktree_response, {"", 0})
+
+      gitignore_path = Path.join(tmp_dir, ".gitignore")
+      File.write!(gitignore_path, "node_modules/\n*.log\n")
+
+      assert {:ok, _} =
+               Job.create_lead_worktree(
+                 lead_id: "lead-1",
+                 job_id: "job123",
+                 git: MockGit,
+                 working_dir: tmp_dir
+               )
+
+      content = File.read!(gitignore_path)
+      assert content =~ "node_modules/"
+      assert content =~ "*.log"
+      assert content =~ ".deft-worktrees/"
+    end
+
+    test "does not duplicate .deft-worktrees/ in .gitignore", %{tmp_dir: tmp_dir} do
+      Process.put(:mock_worktree_response, {"", 0})
+
+      gitignore_path = Path.join(tmp_dir, ".gitignore")
+      original_content = "node_modules/\n.deft-worktrees/\n*.log\n"
+      File.write!(gitignore_path, original_content)
+
+      assert {:ok, _} =
+               Job.create_lead_worktree(
+                 lead_id: "lead-1",
+                 job_id: "job123",
+                 git: MockGit,
+                 working_dir: tmp_dir
+               )
+
+      content = File.read!(gitignore_path)
+      # Should be unchanged
+      assert content == original_content
+
+      # Count occurrences - should be exactly 1
+      occurrences = content |> String.split("\n") |> Enum.count(&(&1 == ".deft-worktrees/"))
+      assert occurrences == 1
+    end
+
+    test "recognizes .deft-worktrees/ with leading slash as already present", %{tmp_dir: tmp_dir} do
+      Process.put(:mock_worktree_response, {"", 0})
+
+      gitignore_path = Path.join(tmp_dir, ".gitignore")
+      original_content = "node_modules/\n/.deft-worktrees/\n*.log\n"
+      File.write!(gitignore_path, original_content)
+
+      assert {:ok, _} =
+               Job.create_lead_worktree(
+                 lead_id: "lead-1",
+                 job_id: "job123",
+                 git: MockGit,
+                 working_dir: tmp_dir
+               )
+
+      content = File.read!(gitignore_path)
+      # Should be unchanged since /.deft-worktrees/ is equivalent
+      assert content == original_content
+    end
+
+    test "adds .deft-worktrees/ with proper newline formatting", %{tmp_dir: tmp_dir} do
+      Process.put(:mock_worktree_response, {"", 0})
+
+      gitignore_path = Path.join(tmp_dir, ".gitignore")
+
+      # Test with file that doesn't end in newline
+      File.write!(gitignore_path, "node_modules/")
+
+      assert {:ok, _} =
+               Job.create_lead_worktree(
+                 lead_id: "lead-1",
+                 job_id: "job123",
+                 git: MockGit,
+                 working_dir: tmp_dir
+               )
+
+      content = File.read!(gitignore_path)
+      assert content == "node_modules/\n.deft-worktrees/\n"
+    end
   end
 end

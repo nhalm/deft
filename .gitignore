@@ -33,3 +33,4 @@ priv/plts/
 
 # specd lock files
 *.lock
+.deft-worktrees/
