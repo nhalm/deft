@@ -24,8 +24,8 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement spilling eval suite: summary quality (20 iters, 85%), cache retrieval (20 iters, 85%), threshold calibration grid search
 - Implement skills eval suite: suggestion (20 iters, 80%), invocation fidelity (20 iters, 80%)
 - Implement issues eval suite: elicitation quality (20 iters, 80%), agent-created quality (20 iters, 80%)
-- Implement Foreman eval suite: decomposition (20 iters, 75%), dependency, contract, constraint propagation, verification accuracy (blocked: Wire Foreman start_lead to actually start Lead gen_statem...)
-- Implement Lead eval suite: task planning, steering (blocked: Wire Foreman start_lead to actually start Lead gen_statem...)
+- Implement Foreman eval suite: decomposition (20 iters, 75%), dependency, contract, constraint propagation, verification accuracy
+- Implement Lead eval suite: task planning, steering
 - Fix `mix eval.compare` load_run to distinguish corrupt JSONL data from missing run files: currently returns `{:error, :not_found, run_id}` for both cases (compare.ex:85-86); should return a distinct error when file exists but all lines fail JSON decode
 - Implement issue→plan diagnostic eval: verify that structured issue fields (context, acceptance_criteria, constraints) flow correctly into Foreman research/planning/verification phases; 20 iterations, 75% pass rate (blocked: Implement deft work...)
 - Build E2E task battery: create 3 synthetic repos (minimal Phoenix app, CLI tool, library with tests) with pre-defined issues; implement test harness that runs `deft work` against each repo and verifies acceptance criteria are met; track completion rate, cost, and duration (blocked: Implement deft work...)
@@ -34,12 +34,11 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 ## orchestration v0.3
 
 - Add `{:rate_limiter, :cost_ceiling_reached, cost}` handler to Foreman: message from RateLimiter falls to catch-all and is silently dropped; Foreman must pause new Lead spawns when cost ceiling is reached (foreman.ex:569)
-- Wire Foreman start_lead to actually start Lead gen_statem process and Process.monitor the PID: currently stores pid: nil and monitor_ref: nil (foreman.ex:1315-1323); blocks steering, crash detection, and merge
 - Implement contract_matches? to verify published contract matches needed dependency: currently returns true for all contracts (foreman.ex:1339-1345), unblocking all waiting Leads regardless of actual dependency
 - Implement extract_plan_from_messages to parse deliverables, dependencies, and contracts from LLM plan output: currently returns empty lists (foreman.ex:1200-1208), making execution phase non-functional (no Leads started)
 - Fix Foreman/Lead to look up ToolRunner Task.Supervisor via session Registry via-tuple instead of bare module atom: foreman.ex:182 and lead.ex:188 use `Task.Supervisor.async_nolink(ToolRunner, ...)` but no process is registered under that atom in job context
 - Fix Lead tool task handler to not consume runner completion messages: when in :executing_tools state, the tool handler at lead.ex:267 matches `{ref, results}` before the runner handler at lead.ex:297; if ref is a runner task, tool_tasks list is unchanged but message is consumed and runner result is lost
-- Implement Foreman→Lead steering: Foreman sends `send(lead_pid, {:foreman_steering, content})` for course correction; detect conflicting :decision messages from parallel Leads, pause affected Leads, resolve or escalate to user (blocked: Wire Foreman start_lead to actually start Lead gen_statem..., Implement extract_plan_from_messages...)
+- Implement Foreman→Lead steering: Foreman sends `send(lead_pid, {:foreman_steering, content})` for course correction; detect conflicting :decision messages from parallel Leads, pause affected Leads, resolve or escalate to user (blocked: Implement extract_plan_from_messages...)
 - Implement verification phase: after all Leads complete, Foreman spawns verification Runner (full test suite + reviews modified files); on pass, trigger squash-merge; on fail, identify responsible Lead and report (blocked: Implement Foreman→Lead steering..., Implement merge in dependency order...)
 - Implement job cleanup: Foreman cleans all worktrees on completion/failure/abort, archives job files to ~/.deft/projects/<path-encoded-repo>/jobs/<job_id>/; on Lead crash, Foreman cleans that Lead's worktree immediately (blocked: Implement verification phase..., Implement worktree cleanup on Lead crash...)
 - Implement job persistence and resume: store sitelog.dets, plan.json, foreman_session.jsonl, lead_<id>_session.jsonl at ~/.deft/projects/<path-encoded-repo>/jobs/<job_id>/; on resume, read site log + plan.json, start fresh Leads for incomplete deliverables (blocked: Implement verification phase...)
@@ -60,8 +59,8 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Fix resolve_git_root for normal (non-worktree) repos: `git rev-parse --git-common-dir` returns relative `.git`, `Path.dirname(".git")` returns `"."`, all normal repos map to same `~/.deft/projects/` directory (project.ex:131-138); must expand relative path against working dir before dirname
 - Fix cache spill to use actual lead_id from context instead of hardcoded "main": tool_runner.ex:157 builds cache name as `{:cache, context.session_id, "main"}` regardless of which Lead is executing; breaks multi-Lead cache isolation
 - Fix cache_read :expired error path: Store.read internally catches ArgumentError and returns :miss before cache_read.ex:75-79 rescue can trigger; :expired error message is unreachable; store.ex should propagate the ArgumentError for cleaned-up tables or cache_read should detect expired state differently
-- Implement site log programmatic promotion: pattern match on Lead messages — auto-promote contract, decision, correction, critical_finding; promote finding if tagged shared; never promote status or blocker (blocked: Wire Foreman start_lead to actually start Lead gen_statem...)
-- Implement per-Lead cache isolation: start one Deft.Store instance per Lead with DETS at cache/<session_id>/lead-<lead_id>.dets; Lead cleanup deletes its own cache instance (blocked: Wire Foreman start_lead to actually start Lead gen_statem...)
+- Implement site log programmatic promotion: pattern match on Lead messages — auto-promote contract, decision, correction, critical_finding; promote finding if tagged shared; never promote status or blocker
+- Implement per-Lead cache isolation: start one Deft.Store instance per Lead with DETS at cache/<session_id>/lead-<lead_id>.dets; Lead cleanup deletes its own cache instance
 - Implement session-end cache cleanup: on session termination, delete all files under cache/<session_id>/ (blocked: Implement per-Lead cache isolation...)
 
 ## issues v0.2

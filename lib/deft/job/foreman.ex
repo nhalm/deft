@@ -37,6 +37,7 @@ defmodule Deft.Job.Foreman do
   alias Deft.Project
   alias Deft.Git
   alias Deft.Git.Job, as: GitJob
+  alias Deft.Job.Lead
   alias Deft.Job.Runner
 
   require Logger
@@ -1309,25 +1310,55 @@ defmodule Deft.Job.Foreman do
            working_dir: data.working_dir
          ) do
       {:ok, worktree_path} ->
-        # Start Lead process
-        # Note: In a full implementation, this would start a supervised Lead process
-        # For now, we'll track it in the leads map
-        lead_info = %{
-          deliverable: deliverable,
+        # Start RunnerSupervisor (Task.Supervisor) for this Lead
+        runner_supervisor_name =
+          {:via, Registry, {Deft.ProcessRegistry, {:runner_supervisor, lead_id}}}
+
+        {:ok, _runner_supervisor_pid} = Task.Supervisor.start_link(name: runner_supervisor_name)
+
+        # Get site log name
+        site_log_name = {:sitelog, data.session_id}
+
+        # Start Lead gen_statem process
+        lead_opts = [
+          lead_id: lead_id,
+          session_id: data.session_id,
+          config: data.config,
+          deliverable: deliverable.description,
+          foreman_pid: self(),
+          site_log_name: site_log_name,
+          rate_limiter_pid: data.rate_limiter_pid,
           worktree_path: worktree_path,
-          status: :running,
-          pid: nil,
-          # In real implementation, would store Lead PID for sending steering messages
-          monitor_ref: nil
-          # In real implementation, would monitor the Lead process
-        }
+          runner_supervisor: runner_supervisor_name
+        ]
 
-        leads = Map.put(data.leads, lead_id, lead_info)
-        started_leads = MapSet.put(data.started_leads, deliverable.name)
+        case Lead.start_link(lead_opts) do
+          {:ok, lead_pid} ->
+            # Monitor the Lead process
+            monitor_ref = Process.monitor(lead_pid)
 
-        Logger.info("Lead #{lead_id} started with worktree at #{worktree_path}")
+            lead_info = %{
+              deliverable: deliverable,
+              worktree_path: worktree_path,
+              status: :running,
+              pid: lead_pid,
+              monitor_ref: monitor_ref,
+              runner_supervisor: runner_supervisor_name
+            }
 
-        %{data | leads: leads, started_leads: started_leads}
+            leads = Map.put(data.leads, lead_id, lead_info)
+            started_leads = MapSet.put(data.started_leads, deliverable.name)
+
+            Logger.info(
+              "Lead #{lead_id} started with PID #{inspect(lead_pid)} and worktree at #{worktree_path}"
+            )
+
+            %{data | leads: leads, started_leads: started_leads}
+
+          {:error, reason} ->
+            Logger.error("Failed to start Lead #{lead_id}: #{inspect(reason)}")
+            data
+        end
 
       {:error, reason} ->
         Logger.error("Failed to create worktree for Lead #{lead_id}: #{inspect(reason)}")
