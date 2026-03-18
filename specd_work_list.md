@@ -84,5 +84,4 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## tui v0.1
 
-- Fix user messages not displayed in chat view: when user submits prompt via Enter (chat.ex:316-331), code calls `Deft.Agent.prompt/2` and clears input but never adds a `%{role: :user, content: text}` message to `assigns.messages`; the `render_message` function for `:user` role exists (line 834) but is never reached
 - Fix `memorizing...` status indicator never visible: OM state.ex broadcasts `:sync_fallback` immediately followed by `:observation_started` (lines 312-314); TUI handles `:sync_fallback` by setting `om_sync_fallback: true` but the immediately subsequent `:observation_started` sets it to `false` before any render cycle; either delay the `:observation_started` broadcast or don't clear `om_sync_fallback` on `:observation_started`

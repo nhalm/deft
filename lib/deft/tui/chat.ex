@@ -317,12 +317,20 @@ defmodule Deft.TUI.Chat do
             # Add to history
             history = [input | term.assigns.input_history]
 
+            # Add user message to chat
+            user_msg = %{
+              role: :user,
+              content: text,
+              timestamp: DateTime.utc_now()
+            }
+
             # Send prompt to agent
             Deft.Agent.prompt(term.assigns.agent_pid, text)
 
             # Clear input
             new_term =
               term
+              |> assign(messages: term.assigns.messages ++ [user_msg])
               |> assign(input: "")
               |> assign(input_history: history)
               |> assign(input_history_index: nil)
