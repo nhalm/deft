@@ -27,16 +27,16 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.3
 
-- Implement research phase: Foreman spawns research Runners via Task.Supervisor.async_nolink in parallel (Sonnet model, read-only tools), collects findings from Task return values, configurable timeout (default 120s) via Process.send_after - Implement decomposition phase: Foreman reads research findings, produces deliverables + dependency DAG + interface contracts + cost estimate, writes plan to Deft.Store site log instance, presents to user for approval; --auto-approve-all flag skips approval gate (blocked: Implement research phase..., Implement Deft.Store site log instance...)
-- Implement Deft.Store site log instance: Foreman creates a Deft.Store instance for curated job knowledge; programmatic promotion via pattern matching — auto-promote contract, decision, correction, critical_finding; promote finding if tagged shared; never promote status or blocker; site log uses sync DETS write + :dets.sync/1 - Implement Lead→Foreman messaging: Lead sends messages via `send(foreman_pid, {:lead_message, type, content, metadata})` for types: :status, :decision, :artifact, :contract, :contract_revision, :plan_amendment, :complete, :blocker, :error, :critical_finding
+- Implement research phase: Foreman spawns research Runners via Task.Supervisor.async_nolink in parallel (Sonnet model, read-only tools), collects findings from Task return values, configurable timeout (default 120s) via Process.send_after - Implement decomposition phase: Foreman reads research findings, produces deliverables + dependency DAG + interface contracts + cost estimate, writes plan to Deft.Store site log instance, presents to user for approval; --auto-approve-all flag skips approval gate (blocked: Implement research phase...)
+- Implement Lead→Foreman messaging: Lead sends messages via `send(foreman_pid, {:lead_message, type, content, metadata})` for types: :status, :decision, :artifact, :contract, :contract_revision, :plan_amendment, :complete, :blocker, :error, :critical_finding
 - Implement Lead active steering: Lead reads Runner output after each task completion, evaluates progress against deliverable criteria, sends course corrections to Runner on next spawn; Lead decides when task is done or stuck and reports to Foreman
 - Implement Foreman→Lead steering: Foreman sends `send(lead_pid, {:foreman_steering, content})` for course correction; detect conflicting :decision messages from parallel Leads, pause affected Leads, resolve or escalate to user (blocked: Implement Foreman gen_statem...)
-- Implement site log Lead read access: Leads obtain site log ETS tid via Deft.Store.tid/1 GenServer.call; Foreman passes site log registered name to each Lead at startup; ETS :protected allows Lead reads without GenServer calls (blocked: Implement Deft.Store site log instance...)
+- Implement site log Lead read access: Leads obtain site log ETS tid via Deft.Store.tid/1 GenServer.call; Foreman passes site log registered name to each Lead at startup; ETS :protected allows Lead reads without GenServer calls
 - Implement partial dependency unblocking: Foreman watches for {:lead_message, :contract, content, metadata} messages matching dependency `needs`, creates worktree for unblocked Lead, starts Lead with contract details (blocked: Implement decomposition phase...)
 - Implement contract versioning: :contract_revision Lead message type, Foreman re-steers downstream Leads on revision (blocked: Implement partial dependency unblocking...)
 - Implement verification phase: after all Leads complete, Foreman spawns verification Runner (full test suite + reviews modified files); on pass, trigger squash-merge; on fail, identify responsible Lead and report (blocked: Implement Foreman→Lead steering..., Implement merge in dependency order...)
 - Implement job cleanup: Foreman cleans all worktrees on completion/failure/abort, archives job files to ~/.deft/projects/<path-encoded-repo>/jobs/<job_id>/; on Lead crash, Foreman cleans that Lead's worktree immediately (blocked: Implement verification phase..., Implement worktree cleanup on Lead crash...)
-- Implement job persistence and resume: store sitelog.dets, plan.json, foreman_session.jsonl, lead_<id>_session.jsonl at ~/.deft/projects/<path-encoded-repo>/jobs/<job_id>/; on resume, read site log + plan.json, start fresh Leads for incomplete deliverables (blocked: Implement Deft.Store site log instance..., Implement verification phase...)
+- Implement job persistence and resume: store sitelog.dets, plan.json, foreman_session.jsonl, lead_<id>_session.jsonl at ~/.deft/projects/<path-encoded-repo>/jobs/<job_id>/; on resume, read site log + plan.json, start fresh Leads for incomplete deliverables (blocked: Implement verification phase...)
 
 ## rate-limiter v0.1
 
@@ -54,7 +54,7 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## filesystem v0.2
 
-- Implement site log programmatic promotion: pattern match on Lead messages — auto-promote contract, decision, correction, critical_finding; promote finding if tagged shared; never promote status or blocker (blocked: Implement Deft.Store site log instance..., Implement Foreman gen_statem...)
+- Implement site log programmatic promotion: pattern match on Lead messages — auto-promote contract, decision, correction, critical_finding; promote finding if tagged shared; never promote status or blocker (blocked: Implement Foreman gen_statem...)
 - Implement per-Lead cache isolation: start one Deft.Store instance per Lead with DETS at cache/<session_id>/lead-<lead_id>.dets; Lead cleanup deletes its own cache instance (blocked: Implement Lead gen_statem...)
 - Implement session-end cache cleanup: on session termination, delete all files under cache/<session_id>/ (blocked: Implement per-Lead cache isolation...)
 

@@ -33,6 +33,8 @@ defmodule Deft.Job.Foreman do
 
   alias Deft.Message
   alias Deft.Agent.ToolRunner
+  alias Deft.Store
+  alias Deft.Project
 
   require Logger
 
@@ -46,24 +48,24 @@ defmodule Deft.Job.Foreman do
   - `:session_id` — Required. Job identifier.
   - `:config` — Required. Configuration map.
   - `:prompt` — Required. Initial user prompt/issue.
-  - `:site_log_name` — Required. Registered name of Deft.Store site log instance.
   - `:rate_limiter_pid` — Required. PID of Deft.Job.RateLimiter.
+  - `:working_dir` — Optional. Working directory for the project (defaults to File.cwd!()).
   - `:name` — Optional. Name for the gen_statem process.
   """
   def start_link(opts) do
     session_id = Keyword.fetch!(opts, :session_id)
     config = Keyword.fetch!(opts, :config)
     prompt = Keyword.fetch!(opts, :prompt)
-    site_log_name = Keyword.fetch!(opts, :site_log_name)
     rate_limiter_pid = Keyword.fetch!(opts, :rate_limiter_pid)
+    working_dir = Keyword.get(opts, :working_dir, File.cwd!())
     name = Keyword.get(opts, :name)
 
     initial_data = %{
       session_id: session_id,
       config: config,
       prompt: prompt,
-      site_log_name: site_log_name,
       rate_limiter_pid: rate_limiter_pid,
+      working_dir: working_dir,
       messages: [],
       leads: %{},
       current_message: nil,
@@ -75,7 +77,8 @@ defmodule Deft.Job.Foreman do
       total_input_tokens: 0,
       total_output_tokens: 0,
       session_cost: 0.0,
-      research_tasks: []
+      research_tasks: [],
+      site_log_pid: nil
     }
 
     gen_statem_opts = if name, do: [name: name], else: []
@@ -105,16 +108,39 @@ defmodule Deft.Job.Foreman do
 
   @impl :gen_statem
   def init(initial_data) do
+    # Create site log instance for curated job knowledge
+    site_log_name = {:sitelog, initial_data.session_id}
+    foreman_name = {:foreman, initial_data.session_id}
+
+    # Register ourselves for site log access control
+    {:ok, _} = Registry.register(Deft.ProcessRegistry, foreman_name, nil)
+
+    # Build path to site log DETS file
+    jobs_dir = Project.jobs_dir(initial_data.working_dir)
+    sitelog_path = Path.join([jobs_dir, initial_data.session_id, "sitelog.dets"])
+
+    # Start the site log instance
+    {:ok, site_log_pid} =
+      Store.start_link(
+        name: site_log_name,
+        type: :sitelog,
+        dets_path: sitelog_path,
+        owner_name: foreman_name
+      )
+
     # Start in planning phase, idle agent state
     initial_state = {:planning, :idle}
-    {:ok, initial_state, initial_data}
+    data = %{initial_data | site_log_pid: site_log_pid}
+    {:ok, initial_state, data}
   end
 
   @impl :gen_statem
   # State entry handlers
   def handle_event(:enter, _old_state, {:planning, :idle}, data) do
-    # When entering planning phase, automatically start by sending prompt to ourselves
-    {:keep_state_and_data, [{:next_event, :cast, {:prompt, data.prompt}}]}
+    # When entering planning phase, send initial prompt as a cast (not next_event)
+    # next_event is not allowed in state_enter handlers in newer OTP versions
+    :gen_statem.cast(self(), {:prompt, data.prompt})
+    :keep_state_and_data
   end
 
   def handle_event(:enter, _old_state, {job_phase, :executing_tools}, data) do
@@ -342,11 +368,6 @@ defmodule Deft.Job.Foreman do
     data.turn_count < max_turns
   end
 
-  defp process_lead_message(:status, content, _metadata, data) do
-    Logger.debug("Lead status: #{content}")
-    data
-  end
-
   defp process_lead_message(:decision, content, metadata, data) do
     Logger.info("Lead decision: #{content}")
     # Auto-promote to site log
@@ -375,15 +396,71 @@ defmodule Deft.Job.Foreman do
     data
   end
 
+  defp process_lead_message(:finding, content, metadata, data) do
+    Logger.debug("Lead finding: #{inspect(content)}")
+
+    # Promote if tagged as 'shared'
+    if Map.get(metadata, :shared, false) do
+      Logger.info("Lead shared finding - promoting to site log")
+      write_to_site_log(:research, content, metadata, data)
+    end
+
+    data
+  end
+
+  defp process_lead_message(:correction, content, metadata, data) do
+    Logger.info("User correction received via Lead")
+    # Auto-promote to site log
+    write_to_site_log(:correction, content, metadata, data)
+    data
+  end
+
+  defp process_lead_message(:status, _content, _metadata, data) do
+    # Never promote status messages
+    data
+  end
+
+  defp process_lead_message(:blocker, content, _metadata, data) do
+    Logger.info("Lead blocker: #{content}")
+    # Never promote blocker messages (coordination, not knowledge)
+    data
+  end
+
   defp process_lead_message(type, content, _metadata, data) do
     Logger.debug("Lead message (#{type}): #{inspect(content)}")
     data
   end
 
-  defp write_to_site_log(type, _content, _metadata, _data) do
-    # Placeholder for writing to Deft.Store site log
-    Logger.debug("Writing to site log: #{type}")
-    :ok
+  defp write_to_site_log(category, content, metadata, data) do
+    # Generate a descriptive key for the site log entry
+    key = generate_site_log_key(category, metadata)
+
+    # Build the entry metadata
+    entry_metadata = %{
+      category: category,
+      written_at: DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+
+    # Merge with any additional metadata from the Lead
+    entry_metadata = Map.merge(entry_metadata, metadata)
+
+    # Write to site log
+    case Store.write(data.site_log_pid, key, content, entry_metadata) do
+      :ok ->
+        Logger.debug("Wrote to site log: #{category} -> #{key}")
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("Failed to write to site log: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+
+  defp generate_site_log_key(category, metadata) do
+    # Generate a human-readable key with timestamp for uniqueness
+    timestamp = System.system_time(:millisecond)
+    base_key = Map.get(metadata, :key, "entry")
+    "#{category}-#{base_key}-#{timestamp}"
   end
 
   defp check_phase_transition(:complete, :executing, _data) do
