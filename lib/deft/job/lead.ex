@@ -454,6 +454,7 @@ defmodule Deft.Job.Lead do
           case Store.read(site_log_tid, key) do
             {:ok, entry} -> {key, entry}
             :miss -> nil
+            :expired -> nil
           end
         end)
         |> Enum.reject(&is_nil/1)

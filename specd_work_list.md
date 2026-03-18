@@ -36,7 +36,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## filesystem v0.2
 
-- Fix cache_read :expired error path: Store.read internally catches ArgumentError and returns :miss before cache_read.ex:75-79 rescue can trigger; :expired error message is unreachable; store.ex should propagate the ArgumentError for cleaned-up tables or cache_read should detect expired state differently
 - Implement site log programmatic promotion: pattern match on Lead messages — auto-promote contract, decision, correction, critical_finding; promote finding if tagged shared; never promote status or blocker
 - Implement per-Lead cache isolation: start one Deft.Store instance per Lead with DETS at cache/<session_id>/lead-<lead_id>.dets; Lead cleanup deletes its own cache instance
 - Implement session-end cache cleanup: on session termination, delete all files under cache/<session_id>/ (blocked: Implement per-Lead cache isolation...)

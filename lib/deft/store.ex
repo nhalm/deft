@@ -103,9 +103,11 @@ defmodule Deft.Store do
   @doc """
   Reads an entry from the store by direct ETS lookup.
 
-  Returns `{:ok, entry}` or `:miss`.
+  Returns `{:ok, entry}`, `:miss`, or `:expired`.
 
   Wraps ETS access in try/rescue to handle table-owner crash gracefully.
+  When the table no longer exists (ArgumentError), returns `:expired` to
+  distinguish from `:miss` (key not found in an active table).
   """
   def read(tid, key) do
     try do
@@ -114,7 +116,7 @@ defmodule Deft.Store do
         [] -> :miss
       end
     rescue
-      ArgumentError -> :miss
+      ArgumentError -> :expired
     end
   end
 

@@ -71,11 +71,10 @@ defmodule Deft.Tools.CacheRead do
 
       :miss ->
         {:error, "Cache key not found: #{key}"}
+
+      :expired ->
+        {:error, "Cache expired (session or lead ended)"}
     end
-  rescue
-    # Handle case where cache has been cleaned up (table owner crashed)
-    ArgumentError ->
-      {:error, "Cache expired (session or lead ended)"}
   end
 
   defp process_result(result, nil, nil) do

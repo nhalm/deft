@@ -245,7 +245,8 @@ defmodule Deft.StoreTest do
       assert_receive {:EXIT, ^pid, :killed}, 1000
 
       # ETS table should be gone, but read/keys should not crash
-      assert :miss = Store.read(tid, "key-1")
+      # Should return :expired (not :miss) to distinguish from key-not-found
+      assert :expired = Store.read(tid, "key-1")
       assert [] = Store.keys(tid)
     end
 

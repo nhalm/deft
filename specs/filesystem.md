@@ -117,7 +117,7 @@ The ETS table is the authority for reads. DETS is the write-behind persistence l
 **Read path:**
 1. Read from ETS directly — this is a function call using the tid (table reference integer), not a GenServer call. No process bottleneck.
 2. If the ETS table is still loading (async startup), return `:miss` for entries not yet loaded.
-3. Reads wrap ETS access in `try/rescue ArgumentError -> :miss` to handle the case where the table-owning process has crashed and the table no longer exists.
+3. Reads wrap ETS access in `try/rescue ArgumentError -> :expired` to handle the case where the table-owning process has crashed and the table no longer exists. Returns `:expired` (not `:miss`) to distinguish from "key not found".
 
 **Startup:**
 1. Open DETS file. If `:dets.open_file/2` returns an error, fall back to creating a new empty DETS file. Log a warning for site log corruption. Cache corruption is silent (ephemeral data).
@@ -344,7 +344,7 @@ Byte length / 4 as a rough heuristic. Precision doesn't matter — the threshold
 Deft.Store.write(server, key, value, metadata)  # => :ok | {:error, reason}
 
 # Read (direct ETS lookup by tid, no GenServer call)
-Deft.Store.read(tid, key)                       # => {:ok, entry} | :miss
+Deft.Store.read(tid, key)                       # => {:ok, entry} | :miss | :expired
 
 # Delete (goes through GenServer)
 Deft.Store.delete(server, key)                  # => :ok
@@ -368,7 +368,7 @@ def read(tid, key) do
       [] -> :miss
     end
   rescue
-    ArgumentError -> :miss
+    ArgumentError -> :expired
   end
 end
 ```
