@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## evals v0.2
 
-- Fix `ResultStore.store/1` truncation: uses `File.write/2` which overwrites the file on each call; must use `File.write/3` with `[:append]` flag so multiple category results accumulate in a single `<run_id>.jsonl` file (spec section 2.1)
 - Fix `ResultStore.load/1` single-line parsing: `String.trim() |> Jason.decode()` fails on multi-line JSONL; must split on newlines and decode each line, returning a list of results (spec section 2.1)
 - Implement Observer extraction evals: 9 test cases from spec section 2.1 (explicit tech choice, preference, file read, file modify, error, command, architecture, dependency, deferred work); 20 iterations, 85% pass rate (blocked: Implement Observer Task execution...)
 - Implement Observer section routing evals: verify facts route to correct sections per spec section 2.2; 20 iterations, 85% pass rate (blocked: Implement Observer extraction evals...)

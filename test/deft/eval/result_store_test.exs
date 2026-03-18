@@ -87,6 +87,33 @@ defmodule Deft.Eval.ResultStoreTest do
       assert failure.output == "some model output"
       assert failure.reason == "Missing PostgreSQL in extraction"
     end
+
+    test "multiple categories accumulate in the same run_id file" do
+      run_id = "#{@test_run_prefix}-multi-category"
+
+      # Store two different categories with the same run_id
+      result1 = %{create_test_result(run_id) | category: "observer.extraction"}
+      result2 = %{create_test_result(run_id) | category: "observer.priority"}
+
+      assert :ok = ResultStore.store(result1)
+      assert :ok = ResultStore.store(result2)
+
+      # Verify both results are in the file
+      file_path = Path.join(@results_dir, "#{run_id}.jsonl")
+      assert {:ok, content} = File.read(file_path)
+
+      lines = String.split(content, "\n", trim: true)
+      assert length(lines) == 2
+
+      # Verify both categories are present
+      [line1, line2] = lines
+      assert {:ok, decoded1} = Jason.decode(line1, keys: :atoms)
+      assert {:ok, decoded2} = Jason.decode(line2, keys: :atoms)
+
+      categories = [decoded1.category, decoded2.category]
+      assert "observer.extraction" in categories
+      assert "observer.priority" in categories
+    end
   end
 
   describe "list_runs/0" do

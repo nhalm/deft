@@ -69,7 +69,7 @@ defmodule Deft.Eval.ResultStore do
     file_path = Path.join(@results_dir, "#{result.run_id}.jsonl")
     json_line = Jason.encode!(result) <> "\n"
 
-    case File.write(file_path, json_line) do
+    case File.write(file_path, json_line, [:append]) do
       :ok ->
         # Trigger cleanup after successful write
         cleanup_old_runs()
