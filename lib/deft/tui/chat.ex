@@ -195,7 +195,7 @@ defmodule Deft.TUI.Chat do
 
   # OM (Observational Memory) events
   def handle_info({:om, :observation_started}, term) do
-    {:noreply, assign(term, om_active: true, om_sync_fallback: false)}
+    {:noreply, assign(term, om_active: true)}
   end
 
   def handle_info({:om, :observation_complete, metadata}, term) do
@@ -206,11 +206,12 @@ defmodule Deft.TUI.Chat do
         _ -> term.assigns.memory_tokens
       end
 
-    {:noreply, assign(term, om_active: false, memory_tokens: memory_tokens)}
+    {:noreply,
+     assign(term, om_active: false, om_sync_fallback: false, memory_tokens: memory_tokens)}
   end
 
   def handle_info({:om, :reflection_started, _metadata}, term) do
-    {:noreply, assign(term, om_active: true, om_sync_fallback: false)}
+    {:noreply, assign(term, om_active: true)}
   end
 
   def handle_info({:om, :reflection_complete, metadata}, term) do
@@ -221,11 +222,12 @@ defmodule Deft.TUI.Chat do
         _ -> term.assigns.memory_tokens
       end
 
-    {:noreply, assign(term, om_active: false, memory_tokens: memory_tokens)}
+    {:noreply,
+     assign(term, om_active: false, om_sync_fallback: false, memory_tokens: memory_tokens)}
   end
 
   def handle_info({:om, :buffering_started, _metadata}, term) do
-    {:noreply, assign(term, om_active: true, om_sync_fallback: false)}
+    {:noreply, assign(term, om_active: true)}
   end
 
   def handle_info({:om, :buffering_complete, _metadata}, term) do
