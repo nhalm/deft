@@ -37,10 +37,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement job cleanup: Foreman cleans all worktrees on completion/failure/abort, archives job files to ~/.deft/projects/<path-encoded-repo>/jobs/<job_id>/; on Lead crash, Foreman cleans that Lead's worktree immediately (blocked: Implement verification phase..., Implement worktree cleanup on Lead crash...)
 - Implement job persistence and resume: store sitelog.dets, plan.json, foreman_session.jsonl, lead_<id>_session.jsonl at ~/.deft/projects/<path-encoded-repo>/jobs/<job_id>/; on resume, read site log + plan.json, start fresh Leads for incomplete deliverables (blocked: Implement verification phase...)
 
-## rate-limiter v0.1
-
-- Implement cost_warning config and TUI notification: spec section 7 defines `job.cost_warning` at $5.00 default to display warning in TUI when reached; entirely absent from code — no config field, no threshold check, no message to Foreman
-
 ## filesystem v0.2
 
 - Fix cache spill to use actual lead_id from context instead of hardcoded "main": tool_runner.ex:157 builds cache name as `{:cache, context.session_id, "main"}` regardless of which Lead is executing; breaks multi-Lead cache isolation

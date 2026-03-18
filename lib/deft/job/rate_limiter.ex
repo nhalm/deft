@@ -230,6 +230,7 @@ defmodule Deft.Job.RateLimiter do
     - :initial_concurrency - Starting number of concurrent Leads (default: 2)
     - :max_concurrency - Maximum number of concurrent Leads (default: 10)
     - :cost_ceiling - Maximum cost before pausing (default: 10.0)
+    - :cost_warning - Cost threshold for warning display (default: 5.0)
   """
   def start_link(opts) do
     job_id = Keyword.fetch!(opts, :job_id)
@@ -318,6 +319,7 @@ defmodule Deft.Job.RateLimiter do
     initial_concurrency = Keyword.get(opts, :initial_concurrency, 2)
     max_concurrency = Keyword.get(opts, :max_concurrency, 10)
     cost_ceiling = Keyword.get(opts, :cost_ceiling, 10.0)
+    cost_warning = Keyword.get(opts, :cost_warning, 5.0)
 
     state = %{
       providers: %{},
@@ -330,6 +332,8 @@ defmodule Deft.Job.RateLimiter do
       last_cost_report: 0.0,
       cost_ceiling: cost_ceiling,
       cost_ceiling_reached: false,
+      cost_warning: cost_warning,
+      cost_warning_sent: false,
       # Adaptive concurrency tracking
       current_concurrency: initial_concurrency,
       max_concurrency: max_concurrency,
@@ -529,6 +533,21 @@ defmodule Deft.Job.RateLimiter do
         new_state
       end
 
+    # Check if we've JUST crossed the cost warning threshold
+    # Only trigger if we haven't sent the warning yet and we just crossed it
+    new_state =
+      if !new_state.cost_warning_sent and prev_cumulative < new_state.cost_warning and
+           new_cumulative >= new_state.cost_warning do
+        Logger.info(
+          "Cost warning reached: $#{Float.round(new_cumulative, 2)} (warning threshold: $#{new_state.cost_warning})"
+        )
+
+        report_cost_warning_to_foreman(new_state, new_cumulative)
+        %{new_state | cost_warning_sent: true}
+      else
+        new_state
+      end
+
     # Check if we've JUST crossed the cost ceiling threshold (with $1.00 buffer)
     # Only trigger if we weren't already at the ceiling and we just crossed it
     threshold = new_state.cost_ceiling - @cost_ceiling_buffer
@@ -576,6 +595,13 @@ defmodule Deft.Job.RateLimiter do
 
   defp report_cost_ceiling_reached(%{foreman_pid: foreman_pid}, cost) do
     send(foreman_pid, {:rate_limiter, :cost_ceiling_reached, cost})
+    :ok
+  end
+
+  defp report_cost_warning_to_foreman(%{foreman_pid: nil}, _cost), do: :ok
+
+  defp report_cost_warning_to_foreman(%{foreman_pid: foreman_pid}, cost) do
+    send(foreman_pid, {:rate_limiter, :cost_warning, cost})
     :ok
   end
 

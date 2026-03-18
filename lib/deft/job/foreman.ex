@@ -449,6 +449,12 @@ defmodule Deft.Job.Foreman do
     {:keep_state, %{data | session_cost: amount}}
   end
 
+  def handle_event(:info, {:rate_limiter, :cost_warning, cost}, {_job_phase, _agent_state}, _data) do
+    Logger.warning("Cost warning reached: $#{Float.round(cost, 2)}")
+    # Cost warning is just informational - no state change needed
+    :keep_state_and_data
+  end
+
   def handle_event(
         :info,
         {:rate_limiter, :concurrency_change, new_limit},

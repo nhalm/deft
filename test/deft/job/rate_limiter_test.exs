@@ -868,4 +868,103 @@ defmodule Deft.Job.RateLimiterTest do
       refute_receive {:rate_limiter, :cost_ceiling_reached, _}, 100
     end
   end
+
+  describe "cost warning" do
+    setup _context do
+      # Stop the default RateLimiter from the main setup
+      stop_supervised(RateLimiter)
+
+      # Start a process to capture messages sent to "Foreman"
+      foreman_pid = self()
+
+      job_id = "cost-warning-test-#{System.unique_integer([:positive])}"
+
+      # Set low cost warning for testing ($0.50)
+      {:ok, _pid} =
+        start_supervised(
+          {RateLimiter,
+           [
+             job_id: job_id,
+             foreman_pid: foreman_pid,
+             model: "claude-sonnet-4",
+             cost_warning: 0.5,
+             cost_ceiling: 10.0
+           ]},
+          id: {RateLimiter, job_id}
+        )
+
+      {:ok, job_id: job_id, foreman_pid: foreman_pid}
+    end
+
+    test "sends warning when reaching cost warning threshold", %{job_id: job_id} do
+      messages = [%{content: "test"}]
+
+      # Make a request with cost that exceeds warning ($0.50)
+      # 50,000 input tokens = $0.15, 50,000 output tokens = $0.75
+      # Total = $0.90 (exceeds $0.50 threshold)
+      {:ok, estimated} = RateLimiter.request(job_id, "anthropic", messages, :lead)
+      actual_usage = %{input: 50_000, output: 50_000}
+      :ok = RateLimiter.reconcile(job_id, "anthropic", estimated, actual_usage)
+
+      # Should receive cost warning message
+      assert_receive {:rate_limiter, :cost_warning, cost}, 500
+      assert cost >= 0.5
+    end
+
+    test "only sends warning once", %{job_id: job_id} do
+      messages = [%{content: "test"}]
+
+      # Make a request that exceeds the warning ($0.50)
+      {:ok, estimated1} = RateLimiter.request(job_id, "anthropic", messages, :lead)
+      actual_usage1 = %{input: 50_000, output: 50_000}
+      :ok = RateLimiter.reconcile(job_id, "anthropic", estimated1, actual_usage1)
+
+      # First should trigger warning
+      assert_receive {:rate_limiter, :cost_warning, _}, 500
+
+      # Make another request with additional cost
+      {:ok, estimated2} = RateLimiter.request(job_id, "anthropic", messages, :lead)
+      actual_usage2 = %{input: 10_000, output: 10_000}
+      :ok = RateLimiter.reconcile(job_id, "anthropic", estimated2, actual_usage2)
+
+      # Should not trigger warning again
+      refute_receive {:rate_limiter, :cost_warning, _}, 100
+    end
+
+    test "does not send warning when foreman_pid is nil" do
+      job_id = "cost-warning-no-foreman-#{System.unique_integer([:positive])}"
+
+      # Start without foreman_pid, with low warning
+      {:ok, _pid} =
+        start_supervised(
+          {RateLimiter, [job_id: job_id, cost_warning: 0.5]},
+          id: {RateLimiter, job_id}
+        )
+
+      messages = [%{content: "test"}]
+
+      # Exceed cost warning
+      {:ok, estimated} = RateLimiter.request(job_id, "anthropic", messages, :lead)
+      actual_usage = %{input: 50_000, output: 50_000}
+      :ok = RateLimiter.reconcile(job_id, "anthropic", estimated, actual_usage)
+
+      # Should not crash and should not send message
+      refute_receive {:rate_limiter, :cost_warning, _}, 100
+    end
+
+    test "does not block requests when warning is reached", %{job_id: job_id} do
+      messages = [%{content: "test"}]
+
+      # Exceed cost warning
+      {:ok, estimated} = RateLimiter.request(job_id, "anthropic", messages, :lead)
+      actual_usage = %{input: 50_000, output: 50_000}
+      :ok = RateLimiter.reconcile(job_id, "anthropic", estimated, actual_usage)
+
+      # Wait for warning message
+      assert_receive {:rate_limiter, :cost_warning, _}, 500
+
+      # New requests should still succeed (warning doesn't block)
+      {:ok, _} = RateLimiter.request(job_id, "anthropic", messages, :lead)
+    end
+  end
 end

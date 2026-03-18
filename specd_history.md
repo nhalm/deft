@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **rate-limiter v0.1 (2026-03-18):** Implement cost_warning config and TUI notification: spec section 7 defines `job.cost_warning` at $5.00 default to display warning in TUI when reached; entirely absent from code — no config field, no threshold check, no message to Foreman
 - **rate-limiter v0.1 (2026-03-18):** Fix capacity restore to use 10% of original capacity (linear) instead of 10% of current (compounding): rate_limiter.ex:176-177 uses `buckets.rpm.capacity * 1.1` which compounds; spec says "10% per minute" meaning fixed 10% of original limit
 - **rate-limiter v0.1 (2026-03-18):** Fix capacity restore timing: runs every 1s (queue check interval at rate_limiter.ex:196) after 60s grace period instead of once per minute; should_restore_capacity? (rate_limiter.ex:649-655) returns true on every tick after grace period because last_429_at is never updated during restore
 - **evals v0.2 (2026-03-18):** Implement skills eval suite: suggestion (20 iters, 80%), invocation fidelity (20 iters, 85%)
