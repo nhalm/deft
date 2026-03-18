@@ -32,6 +32,9 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement issue→plan diagnostic eval: verify that structured issue fields (context, acceptance_criteria, constraints) flow correctly into Foreman research/planning/verification phases; 20 iterations, 75% pass rate (blocked: Implement Foreman gen_statem...)
 - Build E2E task battery: create 3 synthetic repos (minimal Phoenix app, CLI tool, library with tests) with pre-defined issues; implement test harness that runs `deft work` against each repo and verifies acceptance criteria are met; track completion rate, cost, and duration (blocked: Implement deft work..., Create coding conversation fixtures...)
 - Implement overnight loop safety eval: run `deft work --loop --auto-approve-all` against a synthetic repo with 5+ issues overnight; verify no runaway cost, no infinite loops, graceful SIGINT handling, correct issue status transitions; Tier 3 weekly schedule (blocked: Build E2E task battery...)
+- Fix `ResultStore.load/1` to return atom-keyed maps: add `keys: :atoms` option to `Jason.decode/1` call, or convert keys after decode; current string-keyed return doesn't match `@type result()` and will cause KeyError in any caller using atom access
+- Fix `infrastructure_failure?/1` to use proportion instead of absolute count: replace `max_count >= 8` with `max_count / length(failures) >= 0.8`; current code incorrectly flags infrastructure failure when 8+ failures share a reason in any size set (e.g. 8/50 = 16% would be flagged)
+- Fix `calculate_cache_retrieval_rate/1` denominator in threshold calibration: store `spilled` flag in task result map from `run_task_with_threshold/3`, then count actual spilled results instead of using hardcoded `context_tokens < 1000` proxy which is unrelated to test thresholds (2000-24000)
 
 ## orchestration v0.3
 
