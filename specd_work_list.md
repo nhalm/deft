@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## evals v0.2
 
-- Implement Observer eval suite: extraction (9 test cases from spec section 2.1), priority, section routing, anti-hallucination (4 test cases from spec section 2.3), dedup; 20 iterations, 85%/95% pass rates per spec section 1.5
 - Implement Reflector eval suite: compression (20 iters, 80%), preservation (20 iters, 95%), section structure (hard assertion), CORRECTION survival (hard assertion)
 - Implement Actor eval suite: observation usage (20 iters, 85%), continuation (20 iters, 90%), tool selection (20 iters, 85%)
 - Implement spilling eval suite: summary quality (20 iters, 85%), cache retrieval (20 iters, 85%), threshold calibration grid search
