@@ -41,6 +41,7 @@ defmodule Deft.Job.Lead do
   alias Deft.Message
   alias Deft.Agent.ToolRunner
   alias Deft.Job.Runner
+  alias Deft.Store
 
   require Logger
 
@@ -81,6 +82,7 @@ defmodule Deft.Job.Lead do
       deliverable: deliverable,
       foreman_pid: foreman_pid,
       site_log_name: site_log_name,
+      site_log_tid: nil,
       rate_limiter_pid: rate_limiter_pid,
       worktree_path: worktree_path,
       runner_supervisor: runner_supervisor,
@@ -132,6 +134,21 @@ defmodule Deft.Job.Lead do
 
   @impl :gen_statem
   def init(initial_data) do
+    # Obtain site log ETS tid for direct reads
+    # The Foreman passes the site log registered name; we resolve it to get the PID,
+    # then call Deft.Store.tid/1 to get the ETS tid for direct reads.
+    site_log_tid =
+      case Registry.lookup(Deft.ProcessRegistry, initial_data.site_log_name) do
+        [{site_log_pid, _}] ->
+          Store.tid(site_log_pid)
+
+        [] ->
+          Logger.warning("Lead #{initial_data.lead_id}: site log not found, reads will fail")
+          nil
+      end
+
+    initial_data = %{initial_data | site_log_tid: site_log_tid}
+
     # Start in planning phase, idle agent state
     initial_state = {:planning, :idle}
     {:ok, initial_state, initial_data}
@@ -364,6 +381,9 @@ defmodule Deft.Job.Lead do
   # Private helpers
 
   defp build_planning_prompt(data) do
+    # Read from site log if available
+    site_log_context = read_site_log_context(data.site_log_tid)
+
     """
     You are a Lead managing this deliverable:
 
@@ -374,8 +394,90 @@ defmodule Deft.Job.Lead do
     2. Decompose this deliverable into a task list (4-8 tasks, dependency-ordered)
     3. Define clear done states for each task
 
+    #{site_log_context}
+
     Use the available tools to explore the codebase and plan your approach.
     Once you have a task list, report it back.
+    """
+  end
+
+  # Reads relevant context from the site log.
+  # Returns a formatted string with research findings, contracts, and decisions
+  # from the site log, or an empty string if no site log is available.
+  defp read_site_log_context(nil), do: ""
+
+  defp read_site_log_context(site_log_tid) do
+    # Get all keys from the site log
+    keys = Store.keys(site_log_tid)
+
+    if Enum.empty?(keys) do
+      ""
+    else
+      # Read all entries and group by category
+      entries =
+        Enum.map(keys, fn key ->
+          case Store.read(site_log_tid, key) do
+            {:ok, entry} -> {key, entry}
+            :miss -> nil
+          end
+        end)
+        |> Enum.reject(&is_nil/1)
+
+      # Group entries by category
+      grouped =
+        Enum.group_by(entries, fn {_key, entry} ->
+          Map.get(entry.metadata, :category, :other)
+        end)
+
+      # Format the context
+      sections =
+        [
+          format_site_log_section(
+            "Research Findings",
+            Map.get(grouped, :research, [])
+          ),
+          format_site_log_section(
+            "Interface Contracts",
+            Map.get(grouped, :contract, [])
+          ),
+          format_site_log_section(
+            "Decisions",
+            Map.get(grouped, :decision, [])
+          ),
+          format_site_log_section(
+            "Critical Findings",
+            Map.get(grouped, :critical_finding, [])
+          )
+        ]
+        |> Enum.reject(&is_nil/1)
+        |> Enum.join("\n\n")
+
+      if sections == "" do
+        ""
+      else
+        """
+        ## Site Log Context
+
+        #{sections}
+        """
+      end
+    end
+  end
+
+  defp format_site_log_section(_title, []), do: nil
+
+  defp format_site_log_section(title, entries) do
+    formatted_entries =
+      entries
+      |> Enum.map(fn {key, entry} ->
+        "  - **#{key}**: #{inspect(entry.value)}"
+      end)
+      |> Enum.join("\n")
+
+    """
+    ### #{title}
+
+    #{formatted_entries}
     """
   end
 
