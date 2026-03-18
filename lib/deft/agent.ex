@@ -1147,22 +1147,44 @@ defmodule Deft.Agent do
     # Save tool result entries to session file
     save_tool_results(tool_results_with_timing, data)
 
-    # Convert results to ToolResult blocks for the conversation
-    tool_result_blocks = build_tool_result_blocks(results, tool_calls)
+    # Separate successful use_skill results from other tool results
+    # Only successful use_skill results are injected as system messages
+    # Failed use_skill results are treated as regular tool results
+    {use_skill_success_results, regular_results} =
+      Enum.split_with(results, fn {tool_use_id, result} ->
+        tool_name =
+          Enum.find_value(tool_calls, fn tool_use ->
+            if tool_use.id == tool_use_id, do: tool_use.name
+          end)
 
-    # Create a user message with tool results
-    tool_result_message = %Message{
-      id: generate_message_id(),
-      role: :user,
-      content: tool_result_blocks,
-      timestamp: DateTime.utc_now()
-    }
+        tool_name == "use_skill" and match?({:ok, _}, result)
+      end)
+
+    # Build messages from the results
+    messages_to_add =
+      [
+        # Regular tool results go in a user message with ToolResult blocks
+        if regular_results != [] do
+          tool_result_blocks = build_tool_result_blocks(regular_results, tool_calls)
+
+          %Message{
+            id: generate_message_id(),
+            role: :user,
+            content: tool_result_blocks,
+            timestamp: DateTime.utc_now()
+          }
+        end,
+        # use_skill results are injected as system messages (skill definitions)
+        build_use_skill_messages(use_skill_success_results)
+      ]
+      |> List.flatten()
+      |> Enum.reject(&is_nil/1)
 
     # Append to messages, clear task list and execution times
-    new_messages = data.messages ++ [tool_result_message]
+    new_messages = data.messages ++ messages_to_add
 
-    # Notify OM about new tool result message
-    notify_om_messages_added(data.session_id, [tool_result_message])
+    # Notify OM about new messages
+    notify_om_messages_added(data.session_id, messages_to_add)
 
     new_data = %{data | messages: new_messages, tool_tasks: [], tool_execution_times: %{}}
 
@@ -1207,6 +1229,30 @@ defmodule Deft.Agent do
       content: error_message,
       is_error: true
     }
+  end
+
+  defp build_use_skill_messages(use_skill_success_results) do
+    # Build system messages from successful use_skill results
+    # Each successful use_skill result contains a skill definition that should
+    # be injected as a system-level instruction (per spec sections 2.4, 2.5)
+    Enum.map(use_skill_success_results, fn {_tool_use_id, {:ok, content_blocks}} ->
+      # Extract the skill definition from content blocks
+      definition_text =
+        content_blocks
+        |> Enum.map(fn
+          %Deft.Message.Text{text: text} -> text
+          other -> inspect(other)
+        end)
+        |> Enum.join("\n")
+
+      # Inject as a system message (system-level instruction)
+      %Message{
+        id: generate_message_id(),
+        role: :system,
+        content: [%Deft.Message.Text{text: definition_text}],
+        timestamp: DateTime.utc_now()
+      }
+    end)
   end
 
   defp continue_after_tools(data) do

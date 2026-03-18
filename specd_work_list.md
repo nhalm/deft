@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## skills v0.2
-
-- Fix `use_skill` result injection: add special handling in agent tool result processing to inject `use_skill` results as system-level instructions instead of user-role tool result blocks; spec sections 2.4, 2.5 require system-level injection for appropriate authority
-
 ## tui v0.1
 
 - Fix Ctrl+C to abort current operation instead of always exiting: check `agent_state`; if agent is streaming/executing, send abort signal and stay in session; only exit if idle (spec section 5)
