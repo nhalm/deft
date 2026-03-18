@@ -261,4 +261,197 @@ defmodule Deft.Git.Job do
         Logger.error("Failed to write .gitignore: #{inspect(reason)}")
     end
   end
+
+  @doc """
+  Scans for and cleans up orphaned git artifacts from crashed jobs.
+
+  Orphans include:
+  - `deft/job-*` branches with no running Deft job
+  - `deft/lead-*` worktrees with no running Deft job
+
+  ## Options
+
+  - `:git` - Optional. Git adapter module (defaults to Deft.Git).
+  - `:working_dir` - Optional. Repository root (defaults to File.cwd!()).
+  - `:auto_approve` - Optional. Skip user prompts (defaults to false).
+
+  ## Returns
+
+  - `:ok` - Cleanup completed or user declined
+  - `{:error, reason}` - Git command failed
+
+  ## Examples
+
+      # Interactive mode - prompts user
+      Deft.Git.Job.cleanup_orphans()
+      # => :ok
+
+      # Non-interactive mode - auto-cleans
+      Deft.Git.Job.cleanup_orphans(auto_approve: true)
+      # => :ok
+  """
+  @spec cleanup_orphans(keyword()) :: :ok | {:error, term()}
+  def cleanup_orphans(opts \\ []) do
+    git = Keyword.get(opts, :git, Deft.Git)
+    working_dir = Keyword.get(opts, :working_dir, File.cwd!())
+    auto_approve = Keyword.get(opts, :auto_approve, false)
+
+    with {:ok, orphaned_worktrees} <- find_orphaned_worktrees(git, working_dir),
+         {:ok, orphaned_branches} <- find_orphaned_branches(git) do
+      if Enum.empty?(orphaned_worktrees) and Enum.empty?(orphaned_branches) do
+        Logger.debug("No orphaned artifacts found")
+        :ok
+      else
+        perform_cleanup(git, orphaned_worktrees, orphaned_branches, auto_approve)
+      end
+    end
+  end
+
+  # Find orphaned deft/lead-* worktrees
+  defp find_orphaned_worktrees(git, working_dir) do
+    case git.cmd(["worktree", "list", "--porcelain"]) do
+      {output, 0} ->
+        worktrees = parse_worktree_list(output, working_dir)
+        {:ok, worktrees}
+
+      {error_output, exit_code} ->
+        Logger.error("Failed to list worktrees: #{error_output}")
+        {:error, {:worktree_list_failed, exit_code}}
+    end
+  end
+
+  # Parse git worktree list --porcelain output
+  defp parse_worktree_list(output, _working_dir) do
+    output
+    |> String.split("\n")
+    |> Enum.chunk_by(&(&1 == ""))
+    |> Enum.reject(&(&1 == [""]))
+    |> Enum.map(&parse_worktree_entry/1)
+    |> Enum.filter(fn
+      %{branch: "deft/lead-" <> _} = worktree ->
+        # Only include lead worktrees (not job worktrees, if any)
+        # Check if worktree path is under .deft-worktrees
+        String.contains?(worktree.path, ".deft-worktrees")
+
+      _ ->
+        false
+    end)
+  end
+
+  # Parse a single worktree entry from --porcelain output
+  defp parse_worktree_entry(lines) do
+    Enum.reduce(lines, %{}, fn line, acc ->
+      cond do
+        String.starts_with?(line, "worktree ") ->
+          Map.put(acc, :path, String.trim_leading(line, "worktree "))
+
+        String.starts_with?(line, "branch ") ->
+          Map.put(acc, :branch, String.trim_leading(line, "branch refs/heads/"))
+
+        true ->
+          acc
+      end
+    end)
+  end
+
+  # Find orphaned deft/job-* and deft/lead-* branches
+  defp find_orphaned_branches(git) do
+    case git.cmd(["branch", "--list", "deft/*"]) do
+      {output, 0} ->
+        branches =
+          output
+          |> String.split("\n", trim: true)
+          |> Enum.map(&String.trim/1)
+          |> Enum.map(&String.trim_leading(&1, "* "))
+          |> Enum.filter(&String.starts_with?(&1, "deft/"))
+
+        {:ok, branches}
+
+      {error_output, exit_code} ->
+        Logger.error("Failed to list branches: #{error_output}")
+        {:error, {:branch_list_failed, exit_code}}
+    end
+  end
+
+  # Perform cleanup after user confirmation (if needed)
+  defp perform_cleanup(git, orphaned_worktrees, orphaned_branches, auto_approve) do
+    if auto_approve or prompt_user_for_cleanup(orphaned_worktrees, orphaned_branches) do
+      do_cleanup(git, orphaned_worktrees, orphaned_branches)
+    else
+      Logger.info("Orphan cleanup cancelled by user")
+      :ok
+    end
+  end
+
+  # Prompt user to confirm cleanup
+  defp prompt_user_for_cleanup(orphaned_worktrees, orphaned_branches) do
+    IO.puts("\nFound orphaned git artifacts from previous crashed jobs:\n")
+
+    unless Enum.empty?(orphaned_worktrees) do
+      IO.puts("Orphaned worktrees:")
+
+      Enum.each(orphaned_worktrees, fn worktree ->
+        IO.puts("  - #{worktree.branch} (#{worktree.path})")
+      end)
+
+      IO.puts("")
+    end
+
+    unless Enum.empty?(orphaned_branches) do
+      IO.puts("Orphaned branches:")
+
+      Enum.each(orphaned_branches, fn branch ->
+        IO.puts("  - #{branch}")
+      end)
+
+      IO.puts("")
+    end
+
+    IO.write("Clean up these artifacts? [y/N]: ")
+
+    case IO.gets("") do
+      :eof ->
+        false
+
+      input when is_binary(input) ->
+        answer = input |> String.trim() |> String.downcase()
+        answer in ["y", "yes"]
+    end
+  end
+
+  # Execute cleanup operations
+  defp do_cleanup(git, orphaned_worktrees, orphaned_branches) do
+    # Remove orphaned worktrees first
+    Enum.each(orphaned_worktrees, fn worktree ->
+      case git.cmd(["worktree", "remove", worktree.path, "--force"]) do
+        {_output, 0} ->
+          Logger.info("Removed orphaned worktree: #{worktree.branch}")
+
+        {error_output, _exit_code} ->
+          Logger.warning("Failed to remove worktree #{worktree.path}: #{error_output}")
+      end
+    end)
+
+    # Delete orphaned branches
+    Enum.each(orphaned_branches, fn branch ->
+      case git.cmd(["branch", "-D", branch]) do
+        {_output, 0} ->
+          Logger.info("Deleted orphaned branch: #{branch}")
+
+        {error_output, _exit_code} ->
+          Logger.warning("Failed to delete branch #{branch}: #{error_output}")
+      end
+    end)
+
+    # Prune stale worktree metadata
+    case git.cmd(["worktree", "prune"]) do
+      {_output, 0} ->
+        Logger.info("Pruned stale worktree metadata")
+
+      {error_output, _exit_code} ->
+        Logger.warning("Failed to prune worktrees: #{error_output}")
+    end
+
+    :ok
+  end
 end

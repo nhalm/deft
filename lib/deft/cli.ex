@@ -26,6 +26,8 @@ defmodule Deft.CLI do
   """
 
   alias Deft.Config
+  alias Deft.Git
+  alias Deft.Git.Job, as: GitJob
   alias Deft.Issue.ElicitationPrompt
   alias Deft.Issues
   alias Deft.Session.Entry.SessionStart
@@ -484,6 +486,10 @@ defmodule Deft.CLI do
   end
 
   defp execute_command({:resume_session, session_id}, flags) do
+    # Clean up orphaned git artifacts from crashed jobs
+    working_dir = flags[:working_dir] || File.cwd!()
+    cleanup_git_orphans(working_dir, flags[:auto_approve_all])
+
     # Load the session state
     case Store.resume(session_id) do
       {:ok, state} ->
@@ -519,6 +525,9 @@ defmodule Deft.CLI do
     working_dir = flags[:working_dir] || File.cwd!()
     cli_flags = build_cli_flags(flags)
     config = Config.load(cli_flags, working_dir)
+
+    # Clean up orphaned git artifacts from crashed jobs
+    cleanup_git_orphans(working_dir, flags[:auto_approve_all])
 
     verify_api_key()
     :ok = Deft.Provider.Registry.register("anthropic", Deft.Provider.Anthropic)
@@ -952,6 +961,23 @@ defmodule Deft.CLI do
 
       IO.puts(:stderr, "\nSome features may not work correctly without these tools.")
       IO.puts(:stderr, "")
+    end
+  end
+
+  # Clean up orphaned git artifacts from crashed jobs
+  defp cleanup_git_orphans(working_dir, auto_approve) do
+    # Only attempt cleanup if we're in a git repository
+    case Git.cmd(["rev-parse", "--git-dir"]) do
+      {_output, 0} ->
+        # We're in a git repo - attempt cleanup
+        GitJob.cleanup_orphans(
+          working_dir: working_dir,
+          auto_approve: auto_approve || false
+        )
+
+      {_error, _exit_code} ->
+        # Not a git repo - skip cleanup silently
+        :ok
     end
   end
 
