@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **filesystem v0.2 (2026-03-18):** Fix ETS table access control in Deft.Store.init: currently creates `:public` table at store.ex:170 but spec section 3 requires `:protected`; implement option (c) — spawn async load task, collect entries, send to GenServer via message, GenServer inserts into `:protected` ETS to preserve async loading without exposing table access
 - **rate-limiter v0.1 (2026-03-18):** Fix token estimation to use `String.length` instead of `byte_size`: `estimate_message_tokens` and `estimate_content_block_tokens` at rate_limiter.ex:280,292,299 use `byte_size/1` which overcounts multi-byte UTF-8 characters; over-deducts from TPM bucket, reducing effective throughput below configured limit for non-ASCII content
 - **rate-limiter v0.1 (2026-03-18):** Fix `RateLimiter.start_link/1` to support per-job instances: currently registers with `name: __MODULE__` (global singleton); second concurrent job's RateLimiter will crash with `{:error, {:already_started, pid}}`; should use `{:via, Registry, ...}` registration keyed by job_id
 - **observational-memory v0.1 (2026-03-18):** Fix continuation hint injection condition in `context.ex`: `build_continuation_hint` injects the hint whenever `observed_message_ids` is non-empty, but spec section 5.3 requires injection only when observed messages have actually been trimmed from context

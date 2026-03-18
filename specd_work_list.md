@@ -72,7 +72,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## filesystem v0.2
 
-- Fix ETS table access control in Deft.Store.init: currently creates `:public` table at store.ex:170 but spec section 3 requires `:protected`; implement option (c) — spawn async load task, collect entries, send to GenServer via message, GenServer inserts into `:protected` ETS to preserve async loading without exposing table access
 - Implement site log programmatic promotion: pattern match on Lead messages — auto-promote contract, decision, correction, critical_finding; promote finding if tagged shared; never promote status or blocker (blocked: Implement Deft.Store site log instance..., Implement Foreman gen_statem...)
 - Implement per-Lead cache isolation: start one Deft.Store instance per Lead with DETS at cache/<session_id>/lead-<lead_id>.dets; Lead cleanup deletes its own cache instance (blocked: Implement Lead gen_statem...)
 - Implement session-end cache cleanup: on session termination, delete all files under cache/<session_id>/ (blocked: Implement per-Lead cache isolation...)

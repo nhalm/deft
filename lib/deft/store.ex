@@ -164,14 +164,15 @@ defmodule Deft.Store do
     # Open DETS file with error fallback
     dets_file = open_dets_file(dets_path, type)
 
-    # Create unnamed ETS table (:set, :public)
-    # Public mode allows the async load task to write during initialization.
-    # Access control is enforced via the GenServer API (write/4).
-    tid = :ets.new(:store_table, [:set, :public])
+    # Create unnamed ETS table (:set, :protected)
+    # Protected mode: GenServer (owner) can write, other processes can read.
+    # Async load task sends entries to GenServer for insertion.
+    tid = :ets.new(:store_table, [:set, :protected])
 
     # Start async load task (linked to GenServer)
-    # GenServer is ready immediately; reads return :miss for not-yet-loaded entries
-    load_task = Task.async(fn -> load_dets_to_ets(dets_file, tid) end)
+    # Task collects entries and sends them to GenServer for insertion.
+    # GenServer is ready immediately; reads return :miss for not-yet-loaded entries.
+    load_task = Task.async(fn -> collect_dets_entries(dets_file) end)
 
     state = %{
       type: type,
@@ -235,8 +236,12 @@ defmodule Deft.Store do
   end
 
   @impl true
-  def handle_info({ref, :ok}, %{load_task: %Task{ref: ref}} = state) do
-    # Task completed successfully - demonitor and discard the DOWN message
+  def handle_info({ref, entries}, %{load_task: %Task{ref: ref}} = state) when is_list(entries) do
+    # Task completed successfully - insert collected entries into ETS
+    # The GenServer owns the :protected ETS table, so only it can insert.
+    Enum.each(entries, fn entry -> :ets.insert(state.tid, entry) end)
+
+    # Demonitor and discard the DOWN message
     Process.demonitor(ref, [:flush])
     {:noreply, %{state | load_task: nil}}
   end
@@ -289,13 +294,12 @@ defmodule Deft.Store do
     end
   end
 
-  defp load_dets_to_ets(dets_file, tid) do
+  defp collect_dets_entries(dets_file) do
     :dets.foldl(
       fn {key, entry}, acc ->
-        :ets.insert(tid, {key, entry})
-        acc
+        [{key, entry} | acc]
       end,
-      :ok,
+      [],
       dets_file
     )
   end
