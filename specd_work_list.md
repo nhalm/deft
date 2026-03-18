@@ -66,6 +66,7 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement squash-merge on job complete: after verification passes, squash-merge deft/job-<job_id> into original branch (configurable: job.squash_on_complete, default true); delete job branch; verify no worktrees remain via `git worktree list` (blocked: Implement post-merge test command...)
 - Implement worktree cleanup on Lead crash: Foreman cleans up Lead's worktree immediately on crash; use `git worktree remove --force` if index.lock exists (blocked: Implement per-Lead worktree creation...)
 - Implement startup orphan cleanup: scan for orphaned deft/job-* branches and deft/lead-* worktrees with no running Deft job; interactive mode: user confirmation; non-interactive with --auto-approve: clean automatically; cleanup: worktree remove, branch -D, worktree prune- Add .deft-worktrees/ to .gitignore on first worktree creation if not already present (blocked: Implement per-Lead worktree creation...)
+- Fix `Deft.Project.resolve_git_root/1`: use `git rev-parse --git-common-dir` + `Path.dirname/1` instead of `--show-toplevel`; current code returns worktree root when running inside a Lead worktree, causing wrong project_dir path resolution; `Deft.Issues` already uses the correct pattern (blocked: Implement per-Lead worktree creation...)
 
 ## filesystem v0.2
 
