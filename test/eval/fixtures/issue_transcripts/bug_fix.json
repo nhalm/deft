@@ -1,0 +1,13 @@
+{
+  "id": "issue-elicitation-003",
+  "spec_version": "0.2",
+  "description": "Bug fix with reproduction steps",
+  "tags": ["issue", "elicitation", "bug"],
+  "title": "Fix session timeout not working",
+  "messages": [
+    {"role": "assistant", "content": "Can you describe what's happening with the session timeout, and what should happen instead?"},
+    {"role": "user", "content": "Users are staying logged in indefinitely even though we set session.timeout to 1 hour in config. They should be logged out after 1 hour of inactivity."},
+    {"role": "assistant", "content": "Got it. Do you know where the timeout is supposed to be enforced - is it in a plug, the session store, or somewhere else?"},
+    {"role": "user", "content": "It should be in the SessionPlug. The timeout value is read from config but I don't think it's actually being checked on each request."}
+  ]
+}

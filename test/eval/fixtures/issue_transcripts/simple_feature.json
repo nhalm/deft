@@ -1,0 +1,13 @@
+{
+  "id": "issue-elicitation-001",
+  "spec_version": "0.2",
+  "description": "Simple feature addition with clear requirements",
+  "tags": ["issue", "elicitation", "simple"],
+  "title": "Add user authentication",
+  "messages": [
+    {"role": "assistant", "content": "I'd like to understand what 'done' looks like for user authentication. What specific functionality do you need, and are there any constraints on how it should be implemented?"},
+    {"role": "user", "content": "We need users to be able to sign up with email/password and log in. Use Argon2 for password hashing. It's done when we have signup, login, and logout endpoints working."},
+    {"role": "assistant", "content": "Got it. Just to clarify - should the login sessions persist across browser restarts, or is this session-only? And are there any specific error cases you want handled (like rate limiting on login attempts)?"},
+    {"role": "user", "content": "Sessions should persist. No rate limiting for now - keep it simple."}
+  ]
+}

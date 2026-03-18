@@ -1,0 +1,13 @@
+{
+  "id": "issue-elicitation-002",
+  "spec_version": "0.2",
+  "description": "Refactoring task with constraints",
+  "tags": ["issue", "elicitation", "refactoring"],
+  "title": "Refactor database access layer",
+  "messages": [
+    {"role": "assistant", "content": "What's driving this refactoring, and how will we know when it's complete?"},
+    {"role": "user", "content": "The current code directly calls Ecto everywhere. I want to introduce a Repository pattern to decouple the business logic from the database. It's done when all business logic modules use the Repository instead of Ecto.Repo directly."},
+    {"role": "assistant", "content": "That makes sense. Are there any constraints on the approach - like whether to keep the existing schemas, or any modules that should be excluded from this change?"},
+    {"role": "user", "content": "Keep existing schemas unchanged. Don't touch the admin panel - it can keep using Ecto.Repo directly for now."}
+  ]
+}
