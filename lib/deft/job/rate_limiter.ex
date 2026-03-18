@@ -199,6 +199,12 @@ defmodule Deft.Job.RateLimiter do
   @capacity_restore_grace_period_ms 60_000
   @max_backoff_seconds 60
 
+  # Adaptive concurrency constants
+  @scale_up_capacity_threshold 0.6
+  @scale_up_duration_ms 30_000
+  @scale_down_429_threshold 2
+  @scale_down_window_ms 60_000
+
   # Client API
 
   @doc """
@@ -210,6 +216,8 @@ defmodule Deft.Job.RateLimiter do
     - :foreman_pid - Optional Foreman process PID for cost reporting
     - :model - Optional model name for cost tracking (default: "claude-sonnet-4")
     - :time_source - Optional time source function for testing
+    - :initial_concurrency - Starting number of concurrent Leads (default: 2)
+    - :max_concurrency - Maximum number of concurrent Leads (default: 10)
   """
   def start_link(opts) do
     job_id = Keyword.fetch!(opts, :job_id)
@@ -283,6 +291,8 @@ defmodule Deft.Job.RateLimiter do
     time_source = Keyword.get(opts, :time_source, &System.monotonic_time/1)
     foreman_pid = Keyword.get(opts, :foreman_pid)
     model = Keyword.get(opts, :model, "claude-sonnet-4")
+    initial_concurrency = Keyword.get(opts, :initial_concurrency, 2)
+    max_concurrency = Keyword.get(opts, :max_concurrency, 10)
 
     state = %{
       providers: %{},
@@ -292,7 +302,12 @@ defmodule Deft.Job.RateLimiter do
       foreman_pid: foreman_pid,
       model: model,
       cumulative_cost: 0.0,
-      last_cost_report: 0.0
+      last_cost_report: 0.0,
+      # Adaptive concurrency tracking
+      current_concurrency: initial_concurrency,
+      max_concurrency: max_concurrency,
+      scale_up_eligible_since: nil,
+      recent_429s: []
     }
 
     # Schedule periodic queue processing and starvation check
@@ -377,6 +392,9 @@ defmodule Deft.Job.RateLimiter do
     buckets = state.providers[provider]
     now = state.time_source.(:millisecond)
 
+    # Track 429 for adaptive concurrency (add to recent_429s list)
+    new_recent_429s = [now | state.recent_429s]
+
     # Reduce capacity by 20%
     reduced_buckets = ProviderBuckets.reduce_capacity(buckets)
 
@@ -404,7 +422,10 @@ defmodule Deft.Job.RateLimiter do
         backoff_until: backoff_until
     }
 
-    new_state = put_in(state, [:providers, provider], new_buckets)
+    new_state =
+      state
+      |> put_in([:providers, provider], new_buckets)
+      |> Map.put(:recent_429s, new_recent_429s)
 
     Logger.warning(
       "Rate limit 429 for provider #{provider}, reduced capacity to #{trunc(new_buckets.rpm.capacity)} RPM, #{trunc(new_buckets.tpm.capacity)} TPM, backing off for #{backoff_seconds}s"
@@ -423,6 +444,9 @@ defmodule Deft.Job.RateLimiter do
 
     # Process any requests that can now be fulfilled
     state = process_queue(state)
+
+    # Check adaptive concurrency conditions
+    state = check_adaptive_concurrency(state)
 
     # Schedule next check
     schedule_queue_check()
@@ -691,5 +715,112 @@ defmodule Deft.Job.RateLimiter do
   defp re_enqueue_request(state, queue_key, request) do
     new_queue = :gb_trees.insert(queue_key, request, state.queue)
     %{state | queue: new_queue}
+  end
+
+  # Adaptive concurrency helpers
+
+  defp check_adaptive_concurrency(state) do
+    now = state.time_source.(:millisecond)
+
+    # Clean up old 429s (outside 1-minute window)
+    state = clean_old_429s(state, now)
+
+    # Check scale-down condition first (takes precedence)
+    state = check_scale_down(state, now)
+
+    # Check scale-up condition
+    check_scale_up(state, now)
+  end
+
+  defp clean_old_429s(state, now) do
+    cutoff = now - @scale_down_window_ms
+    new_recent_429s = Enum.filter(state.recent_429s, fn ts -> ts > cutoff end)
+    %{state | recent_429s: new_recent_429s}
+  end
+
+  defp check_scale_down(state, _now) do
+    # Count 429s in the last minute
+    count_429s = length(state.recent_429s)
+
+    if count_429s > @scale_down_429_threshold and state.current_concurrency > 1 do
+      new_concurrency = state.current_concurrency - 1
+
+      Logger.info(
+        "Scaling down concurrency from #{state.current_concurrency} to #{new_concurrency} (#{count_429s} 429s in last minute)"
+      )
+
+      notify_concurrency_change(state, new_concurrency)
+
+      # Reset scale-up tracking when scaling down
+      %{state | current_concurrency: new_concurrency, scale_up_eligible_since: nil}
+    else
+      state
+    end
+  end
+
+  defp check_scale_up(state, now) do
+    queue_is_empty = :gb_trees.is_empty(state.queue)
+    buckets_healthy = buckets_above_threshold?(state)
+
+    cond do
+      # Can't scale up - already at max
+      state.current_concurrency >= state.max_concurrency ->
+        %{state | scale_up_eligible_since: nil}
+
+      # Conditions met for scale-up eligibility
+      queue_is_empty and buckets_healthy ->
+        if state.scale_up_eligible_since == nil do
+          # Start tracking eligibility
+          %{state | scale_up_eligible_since: now}
+        else
+          # Check if we've been eligible long enough
+          elapsed = now - state.scale_up_eligible_since
+
+          if elapsed >= @scale_up_duration_ms do
+            new_concurrency = state.current_concurrency + 1
+
+            Logger.info(
+              "Scaling up concurrency from #{state.current_concurrency} to #{new_concurrency} (buckets >60%, queue empty for 30s)"
+            )
+
+            notify_concurrency_change(state, new_concurrency)
+
+            # Reset tracking after scaling up
+            %{state | current_concurrency: new_concurrency, scale_up_eligible_since: nil}
+          else
+            state
+          end
+        end
+
+      # Conditions not met - reset tracking
+      true ->
+        %{state | scale_up_eligible_since: nil}
+    end
+  end
+
+  defp buckets_above_threshold?(state) do
+    # Check if any provider has buckets above 60% capacity
+    # If no providers exist yet, return false
+    if map_size(state.providers) == 0 do
+      false
+    else
+      Enum.any?(state.providers, fn {_provider, buckets} ->
+        rpm_refilled = Bucket.refill(buckets.rpm)
+        tpm_refilled = Bucket.refill(buckets.tpm)
+
+        rpm_utilization = rpm_refilled.tokens / rpm_refilled.capacity
+        tpm_utilization = tpm_refilled.tokens / tpm_refilled.capacity
+
+        rpm_utilization >= @scale_up_capacity_threshold and
+          tpm_utilization >= @scale_up_capacity_threshold
+      end)
+    end
+  end
+
+  defp notify_concurrency_change(%{foreman_pid: nil}, _new_concurrency), do: :ok
+
+  defp notify_concurrency_change(%{foreman_pid: foreman_pid}, new_concurrency) do
+    send(foreman_pid, {:rate_limiter, :concurrency_change, new_concurrency})
+    :ok
   end
 end
