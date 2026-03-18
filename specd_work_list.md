@@ -86,6 +86,12 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement `deft work --loop`: approve every plan by default (each issue gets plan approval checkpoint); --auto-approve-all flag skips all plan approvals for fully autonomous mode; stop when no ready issues remain, cumulative cost exceeds work.cost_ceiling, or user aborts; re-evaluate unblocked issues between jobs (blocked: Implement deft work...)
 - Implement SIGINT handling: catch Ctrl+C, send graceful shutdown to Foreman, wait for current issue status rollback to :open (5-second timeout), then exit; if timeout expires, issue left at :in_progress (detected as stale on next startup) (blocked: Implement deft work --loop...)
 
+## observational-memory v0.1
+
+- Wire sync fallback calls from Agent.Context: `get_om_context/1` must check `pending_message_tokens` against 1.2x observation threshold (36,000) and call `OMState.force_observe/1`; check `observation_tokens` against 1.2x reflection threshold (48,000) and call `OMState.force_reflect/1`; currently no threshold check or sync fallback invocation exists (spec section 6.3)
+- Add retry wrapper to async Observer Task: `spawn_observer_task` calls `Observer.run/4` directly with no retries; must wrap in retry logic (3 retries with exponential backoff) matching the existing `run_observer_with_retry` pattern used by the sync path (spec section 6.3)
+- Pass calibration_factor from OM.State to Agent.Context: `get_om_context/1` hardcodes 4.0 (line 97 with TODO); must retrieve actual `calibration_factor` from State, which is updated via exponential moving average as LLM reports actual token counts (spec section 7)
+
 ## tui v0.1
 
 - Fix streaming markdown rendering: `handle_text_delta/2` appends raw text to `current_text` but render/1 displays it as a raw `<box>` with no markdown processing; must call `Markdown.render_streaming/1` during streaming to buffer incomplete lines and render complete blocks (spec section 3)
