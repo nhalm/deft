@@ -1108,9 +1108,9 @@ defmodule Deft.Agent do
     GenServer.whereis(via_tuple)
   end
 
-  defp get_cache_tid(session_id) do
+  defp get_cache_tid(session_id, lead_id \\ "main") do
     # Get the cache Store's ETS tid for direct reads
-    cache_server = Worker.cache_via_tuple(session_id)
+    cache_server = Worker.cache_via_tuple(session_id, lead_id)
 
     case GenServer.whereis(cache_server) do
       nil ->
@@ -1127,6 +1127,7 @@ defmodule Deft.Agent do
     # Build a Deft.Tool.Context struct for tool execution
     # Extract cache configuration from config
     config = data.config
+    lead_id = Map.get(data, :lead_id, "main")
 
     cache_config = %{
       "default" => Map.get(config, :cache_token_threshold, 10_000),
@@ -1137,11 +1138,12 @@ defmodule Deft.Agent do
     }
 
     # Get cache tid from the Store instance
-    cache_tid = get_cache_tid(data.session_id)
+    cache_tid = get_cache_tid(data.session_id, lead_id)
 
     %Deft.Tool.Context{
       working_dir: Map.get(data.config, :working_dir, File.cwd!()),
       session_id: data.session_id,
+      lead_id: lead_id,
       emit: fn _output -> :ok end,
       file_scope: nil,
       bash_timeout: Map.get(data.config, :bash_timeout, 120_000),

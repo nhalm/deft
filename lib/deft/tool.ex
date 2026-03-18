@@ -72,6 +72,7 @@ defmodule Deft.Tool.Context do
 
   - `working_dir` - The directory the session is operating in
   - `session_id` - Current session identifier
+  - `lead_id` - Lead identifier for cache isolation (defaults to "main" for single-agent sessions)
   - `emit` - Function for streaming incremental output (e.g., bash stdout)
   - `file_scope` - Optional list of allowed paths for write/edit operations
   - `bash_timeout` - Timeout in milliseconds for bash tool execution
@@ -87,12 +88,14 @@ defmodule Deft.Tool.Context do
     :file_scope,
     :bash_timeout,
     :cache_tid,
-    :cache_config
+    :cache_config,
+    lead_id: "main"
   ]
 
   @type t :: %__MODULE__{
           working_dir: String.t(),
           session_id: String.t(),
+          lead_id: String.t(),
           emit: (String.t() -> :ok),
           file_scope: [String.t()] | nil,
           bash_timeout: pos_integer(),

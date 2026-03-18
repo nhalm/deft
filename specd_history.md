@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **filesystem v0.2 (2026-03-18):** Fix cache spill to use actual lead_id from context instead of hardcoded "main": tool_runner.ex:157 builds cache name as `{:cache, context.session_id, "main"}` regardless of which Lead is executing; breaks multi-Lead cache isolation
 - **orchestration v0.3 (2026-03-18):** Fix Foreman/Lead to look up ToolRunner Task.Supervisor via session Registry via-tuple instead of bare module atom: foreman.ex:182 and lead.ex:188 use `Task.Supervisor.async_nolink(ToolRunner, ...)` but no process is registered under that atom in job context
 - **orchestration v0.3 (2026-03-18):** Implement contract_matches? to verify published contract matches needed dependency: currently returns true for all contracts (foreman.ex:1339-1345), unblocking all waiting Leads regardless of actual dependency
 - **orchestration v0.3 (2026-03-18):** Implement extract_plan_from_messages to parse deliverables, dependencies, and contracts from LLM plan output: currently returns empty lists (foreman.ex:1200-1208), making execution phase non-functional (no Leads started)
