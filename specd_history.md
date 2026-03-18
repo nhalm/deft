@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **skills v0.2 (2026-03-18):** Exclude `use_skill` tool results from cache spilling: `tool_runner.ex:108-132` runs `maybe_spill_to_cache` on all tool results including `use_skill`; if a skill definition exceeds the spilling threshold, the agent receives a cache stub instead of the actual definition in the system injection at `agent.ex:1405-1413`; add a guard to skip spilling for `use_skill` results
 - **observational-memory v0.1 (2026-03-18):** Fix buffered reflection serialization guard: `maybe_activate_buffered_chunks` in `state.ex:1052-1059` must also check `not state.is_buffering_reflection`; currently only checks `not state.is_reflecting`, allowing observation chunks to activate while a buffered Reflector is running (wastes an LLM call when the stale reflection is discarded by epoch check)
 - **observational-memory v0.1 (2026-03-18):** Fix image formatting in Observer prompt: format images as `[Image: filename.png]` per spec section 3.3; currently outputs `[Image attachment]` with no filename; requires `Message.Image` struct to carry filename and `observer/prompt.ex:269` to use it
 - **observational-memory v0.2 (2026-03-18):** Verify OM persistence implementation uses separate `<session_id>_om.jsonl` snapshot file per spec section 9; ensure code at `lib/deft/om/state.ex:1737-1741` aligns with updated spec describing file-based (not session JSONL) persistence

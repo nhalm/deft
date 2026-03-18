@@ -106,28 +106,34 @@ defmodule Deft.Agent.ToolRunner do
 
   # Check if result should be spilled to cache based on size threshold
   defp maybe_spill_to_cache({:ok, content_blocks} = result, tool_name, tool_module, context) do
-    # Only spill if cache is available and configured
-    if context.cache_tid && context.cache_config do
-      # Calculate total byte size of all content blocks
-      total_bytes =
-        Enum.reduce(content_blocks, 0, fn block, acc ->
-          acc + content_block_byte_size(block)
-        end)
+    # Never spill use_skill results — the agent needs the full skill definition
+    # in the system injection at agent.ex:1405-1413 (skills spec section 2.5)
+    if tool_name == "use_skill" do
+      result
+      # Only spill if cache is available and configured
+    else
+      if context.cache_tid && context.cache_config do
+        # Calculate total byte size of all content blocks
+        total_bytes =
+          Enum.reduce(content_blocks, 0, fn block, acc ->
+            acc + content_block_byte_size(block)
+          end)
 
-      # Estimate tokens as byte_size / 4
-      estimated_tokens = div(total_bytes, 4)
+        # Estimate tokens as byte_size / 4
+        estimated_tokens = div(total_bytes, 4)
 
-      # Get threshold for this tool (or default)
-      threshold = Map.get(context.cache_config, tool_name, context.cache_config["default"])
+        # Get threshold for this tool (or default)
+        threshold = Map.get(context.cache_config, tool_name, context.cache_config["default"])
 
-      # Spill if exceeds threshold
-      if estimated_tokens > threshold do
-        spill_to_cache(result, content_blocks, tool_name, tool_module, context)
+        # Spill if exceeds threshold
+        if estimated_tokens > threshold do
+          spill_to_cache(result, content_blocks, tool_name, tool_module, context)
+        else
+          result
+        end
       else
         result
       end
-    else
-      result
     end
   end
 
