@@ -35,10 +35,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Build E2E task battery: create 3 synthetic repos (minimal Phoenix app, CLI tool, library with tests) with pre-defined issues; implement test harness that runs `deft work` against each repo and verifies acceptance criteria are met; track completion rate, cost, and duration (blocked: Implement deft work..., Create coding conversation fixtures...)
 - Implement overnight loop safety eval: run `deft work --loop --auto-approve-all` against a synthetic repo with 5+ issues overnight; verify no runaway cost, no infinite loops, graceful SIGINT handling, correct issue status transitions; Tier 3 weekly schedule (blocked: Build E2E task battery...)
 
-## observational-memory v0.1
-
-- Fix continuation hint injection condition in `context.ex`: `build_continuation_hint` injects the hint whenever `observed_message_ids` is non-empty, but spec section 5.3 requires injection only when observed messages have actually been trimmed from context
-
 ## orchestration v0.3
 
 - Implement Foreman gen_statem: extends Agent with tuple states `{job_phase, agent_state}` using handle_event mode; phases: :planning, :researching, :decomposing, :executing, :verifying, :complete; single-agent fallback detection during :planning; Foreman handles `{:lead_message, type, content, metadata}` in handle_info for any state (blocked: Implement Deft.Job.Runner.run/1...)

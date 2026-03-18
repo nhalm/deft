@@ -65,9 +65,15 @@ defmodule Deft.OM.Context do
       # Build observation system message
       obs_message = build_observation_message(observations, current_task)
 
-      # Build continuation hint if needed
+      # Build continuation hint if needed (only if messages were actually trimmed)
       hint_message =
-        build_continuation_hint(messages, observed_message_ids, current_task, continuation_hint)
+        build_continuation_hint(
+          messages,
+          trimmed_messages,
+          observed_message_ids,
+          current_task,
+          continuation_hint
+        )
 
       # Inject: observation message + trimmed messages + continuation hint (if any)
       [obs_message] ++ trimmed_messages ++ List.wrap(hint_message)
@@ -210,10 +216,24 @@ defmodule Deft.OM.Context do
   defp build_current_task_block(_), do: nil
 
   # Builds a continuation hint to prevent "fresh conversation" behavior (spec section 5.3)
-  defp build_continuation_hint(messages, observed_message_ids, current_task, continuation_hint) do
-    # Only inject hint if we've trimmed some messages
-    if Enum.any?(observed_message_ids) do
-      hint_text = generate_dynamic_hint(messages, current_task, continuation_hint)
+  # Per spec: hint is only injected when observed messages have ACTUALLY been trimmed from context
+  defp build_continuation_hint(
+         original_messages,
+         trimmed_messages,
+         observed_message_ids,
+         current_task,
+         continuation_hint
+       ) do
+    # Count how many observed messages are in the original vs trimmed message list
+    observed_in_original =
+      Enum.count(original_messages, fn msg -> msg.id in observed_message_ids end)
+
+    observed_in_trimmed =
+      Enum.count(trimmed_messages, fn msg -> msg.id in observed_message_ids end)
+
+    # Only inject hint if some observed messages were actually removed (trimmed)
+    if observed_in_original > observed_in_trimmed do
+      hint_text = generate_dynamic_hint(original_messages, current_task, continuation_hint)
 
       %Message{
         id: "om_continuation_hint",
