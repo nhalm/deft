@@ -376,6 +376,19 @@ defmodule Deft.TUI.Chat do
     handle_history_navigation(:next, term)
   end
 
+  def handle_event(_event, %{"key" => key}, term) when key in ["page-up", "Page Up", "pageup"] do
+    # Scroll conversation up (show older messages)
+    new_offset = term.assigns.scroll_offset + 10
+    {:noreply, assign(term, scroll_offset: new_offset)}
+  end
+
+  def handle_event(_event, %{"key" => key}, term)
+      when key in ["page-down", "Page Down", "pagedown"] do
+    # Scroll conversation down (show newer messages)
+    new_offset = max(0, term.assigns.scroll_offset - 10)
+    {:noreply, assign(term, scroll_offset: new_offset)}
+  end
+
   def handle_event(_event, %{"key" => "backspace"}, term) do
     # Remove last character from input
     new_input =
