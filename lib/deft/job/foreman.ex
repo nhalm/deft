@@ -87,7 +87,8 @@ defmodule Deft.Job.Foreman do
       site_log_pid: nil,
       plan: nil,
       blocked_leads: %{},
-      started_leads: MapSet.new()
+      started_leads: MapSet.new(),
+      cost_ceiling_reached: false
     }
 
     gen_statem_opts = if name, do: [name: name], else: []
@@ -300,16 +301,22 @@ defmodule Deft.Job.Foreman do
 
   # Start ready Leads handling
   def handle_event(:cast, :start_ready_leads, {:executing, :idle}, data) do
-    # Determine which Leads can start immediately (no dependencies or dependencies satisfied)
-    ready_deliverables = get_ready_deliverables(data)
+    # Check if cost ceiling has been reached
+    if data.cost_ceiling_reached do
+      Logger.info("Cost ceiling reached - not starting new Leads until spending approved")
+      {:keep_state_and_data}
+    else
+      # Determine which Leads can start immediately (no dependencies or dependencies satisfied)
+      ready_deliverables = get_ready_deliverables(data)
 
-    # Start each ready Lead
-    updated_data =
-      Enum.reduce(ready_deliverables, data, fn deliverable, acc_data ->
-        start_lead(deliverable, acc_data)
-      end)
+      # Start each ready Lead
+      updated_data =
+        Enum.reduce(ready_deliverables, data, fn deliverable, acc_data ->
+          start_lead(deliverable, acc_data)
+        end)
 
-    {:keep_state, updated_data}
+      {:keep_state, updated_data}
+    end
   end
 
   # Abort handling (works in any state)
@@ -452,6 +459,19 @@ defmodule Deft.Job.Foreman do
     # Store the new concurrency limit
     config = Map.put(data.config, :current_concurrency, new_limit)
     {:keep_state, %{data | config: config}}
+  end
+
+  def handle_event(
+        :info,
+        {:rate_limiter, :cost_ceiling_reached, cost},
+        {_job_phase, _agent_state},
+        data
+      ) do
+    Logger.warning("Cost ceiling reached: $#{Float.round(cost, 2)} - pausing new Lead spawns")
+    # Set flag to prevent new Lead spawns
+    # In-flight Leads continue executing, but no new Leads will start
+    # until user approves continued spending via RateLimiter.approve_continued_spending/1
+    {:keep_state, %{data | cost_ceiling_reached: true}}
   end
 
   # Provider event handling during streaming
@@ -671,7 +691,7 @@ defmodule Deft.Job.Foreman do
       "Contract from #{publishing_deliverable || lead_id} unblocked #{length(unblocked_deliverables)} deliverable(s)"
     )
 
-    # Start each unblocked Lead
+    # Start each unblocked Lead (unless cost ceiling reached)
     updated_data =
       Enum.reduce(unblocked_deliverables, data, fn deliverable_name, acc_data ->
         # Find deliverable details from plan
@@ -687,8 +707,16 @@ defmodule Deft.Job.Foreman do
             | blocked_leads: Map.delete(acc_data.blocked_leads, deliverable_name)
           }
 
-          # Start the Lead
-          start_lead(deliverable, acc_data)
+          # Start the Lead if cost ceiling not reached
+          if acc_data.cost_ceiling_reached do
+            Logger.info(
+              "Cost ceiling reached - not starting unblocked Lead #{deliverable_name} until spending approved"
+            )
+
+            acc_data
+          else
+            start_lead(deliverable, acc_data)
+          end
         else
           Logger.warning("Could not find deliverable #{deliverable_name} in plan")
           acc_data
