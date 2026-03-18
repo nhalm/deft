@@ -19,6 +19,9 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## evals v0.2
 
+- Add `test.eval.e2e` and `test.eval.benchmark` Makefile targets per spec section 3.1; `test.eval.e2e` runs Tier 2 end-to-end harness, `test.eval.benchmark` runs Tier 3 full benchmark suite
+- Implement safety eval 90% hard-fail threshold: safety evals (hallucination, PII) that drop below 90% must hard fail the build per spec section 3.2; requires a safety category flag on eval tests and a fixed threshold check separate from the dynamic soft_floor (blocked: Implement Observer anti-hallucination evals...)
+- Add CI workflow files: Tier 1 on every push (soft gate), Tier 2 on merge to main, Tier 3 on weekly schedule per spec section 3.2 (blocked: Implement Observer extraction evals...)
 - Implement Observer extraction evals: 9 test cases from spec section 2.1 (explicit tech choice, preference, file read, file modify, error, command, architecture, dependency, deferred work); 20 iterations, 85% pass rate (blocked: Implement Observer Task execution...)
 - Implement Observer section routing evals: verify facts route to correct sections per spec section 2.2; 20 iterations, 85% pass rate (blocked: Implement Observer extraction evals...)
 - Implement Observer anti-hallucination evals: 4 test cases from spec section 2.3 (hypothetical, exploring options, reading about, discussing alternatives); 20 iterations, 95% pass rate (blocked: Implement Observer extraction evals...)
@@ -74,8 +77,19 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement per-Lead cache isolation: start one Deft.Store instance per Lead with DETS at cache/<session_id>/lead-<lead_id>.dets; Lead cleanup deletes its own cache instance (blocked: Implement Lead gen_statem...)
 - Implement session-end cache cleanup: on session termination, delete all files under cache/<session_id>/ (blocked: Implement per-Lead cache isolation...)
 
+## observational-memory v0.1
+
+- Fix image formatting in Observer prompt: format images as `[Image: filename.png]` per spec section 3.3; currently outputs `[Image attachment]` with no filename; requires `Message.Image` struct to carry filename and `observer/prompt.ex:269` to use it
+- Fix buffered reflection serialization guard: `maybe_activate_buffered_chunks` in `state.ex:1052-1059` must also check `not state.is_buffering_reflection`; currently only checks `not state.is_reflecting`, allowing observation chunks to activate while a buffered Reflector is running (wastes an LLM call when the stale reflection is discarded by epoch check)
+
+## skills v0.2
+
+- Exclude `use_skill` tool results from cache spilling: `tool_runner.ex:108-132` runs `maybe_spill_to_cache` on all tool results including `use_skill`; if a skill definition exceeds the spilling threshold, the agent receives a cache stub instead of the actual definition in the system injection at `agent.ex:1405-1413`; add a guard to skip spilling for `use_skill` results
+
 ## issues v0.2
 
+- Fix `--auto-approve-all` CLI flag: `cli.ex:97` registers `auto_approve: :boolean` which maps to `--auto-approve`; spec section 8 requires `--auto-approve-all`; rename to `auto_approve_all: :boolean`
+- Fix `issues_compaction_days` config passthrough: `cli.ex:76` calls `Issues.start_link()` with no arguments; configured `issues.compaction_days` value from `Deft.Config` is never passed to the GenServer; always defaults to 90 days regardless of user config
 - Implement `deft issue dep add <id> --blocked-by <blocker_id>` and `dep remove` CLI commands (blocked: Implement dependency tracking...)
 - Implement `deft work`: call ready/0, pick first, set status :in_progress, start Foreman job with issue structured JSON as prompt (context → research, acceptance_criteria → verification targets, constraints → Lead steering), on success set :closed + job_id, on failure set back to :open (blocked: Implement Foreman gen_statem...)
 - Implement `deft work <id>`: same as `deft work` but for a specific issue ID, verify issue exists and is open (blocked: Implement deft work...)
