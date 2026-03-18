@@ -1,0 +1,492 @@
+defmodule Deft.Job.Runner do
+  @moduledoc """
+  Inline agent loop for short-lived task execution.
+
+  Runners are lightweight, stateless task executors. They:
+  - Build minimal context from task instructions
+  - Call LLM through RateLimiter
+  - Parse tool calls from provider events
+  - Execute tools inline with try/catch
+  - Loop until done or error
+  - Return results via Task return value
+
+  ## Design
+
+  - No gen_statem, no OM — simple inline loop
+  - Spawned via Task.Supervisor.async_nolink
+  - Timeout enforced by Lead via Process.send_after
+  - Different tool sets per runner type
+  - All LLM calls through RateLimiter
+
+  ## Runner Types
+
+  - `:research` — read-only tools (read, grep, find, ls)
+  - `:implementation` — full tool set (read, write, edit, bash, grep, find, ls)
+  - `:testing` — read + bash only (read, bash, grep, find, ls)
+  - `:review` — read-only tools (read, grep, find, ls)
+  - `:merge_resolution` — conflict resolution (read, write, edit, grep)
+  """
+
+  alias Deft.Message
+  alias Deft.Message.{Text, ToolUse, ToolResult}
+
+  alias Deft.Provider.Event.{
+    TextDelta,
+    ThinkingDelta,
+    ToolCallStart,
+    ToolCallDelta,
+    ToolCallDone,
+    Usage,
+    Done,
+    Error
+  }
+
+  require Logger
+
+  @type runner_type :: :research | :implementation | :testing | :review | :merge_resolution
+  @type result :: {:ok, String.t()} | {:error, String.t()}
+
+  # Tool sets per runner type
+  @tool_sets %{
+    research: [Deft.Tools.Read, Deft.Tools.Grep, Deft.Tools.Find, Deft.Tools.Ls],
+    implementation: [
+      Deft.Tools.Read,
+      Deft.Tools.Write,
+      Deft.Tools.Edit,
+      Deft.Tools.Bash,
+      Deft.Tools.Grep,
+      Deft.Tools.Find,
+      Deft.Tools.Ls
+    ],
+    testing: [Deft.Tools.Read, Deft.Tools.Bash, Deft.Tools.Grep, Deft.Tools.Find, Deft.Tools.Ls],
+    review: [Deft.Tools.Read, Deft.Tools.Grep, Deft.Tools.Find, Deft.Tools.Ls],
+    merge_resolution: [Deft.Tools.Read, Deft.Tools.Write, Deft.Tools.Edit, Deft.Tools.Grep]
+  }
+
+  @doc """
+  Runs a Runner task inline.
+
+  ## Parameters
+
+  - `type` — Runner type (:research, :implementation, etc.)
+  - `instructions` — Task instructions from the Lead
+  - `context` — Curated context (findings, contracts, etc.)
+  - `rate_limiter_pid` — PID of the RateLimiter GenServer
+  - `config` — Configuration map (model, provider, etc.)
+  - `worktree_path` — Path to Lead's worktree
+
+  ## Returns
+
+  - `{:ok, output}` — Task completed successfully, output is collected text
+  - `{:error, reason}` — Task failed
+  """
+  def run(type, instructions, context, rate_limiter_pid, config, worktree_path) do
+    # Validate runner type
+    tools = Map.get(@tool_sets, type)
+
+    unless tools do
+      raise ArgumentError, "Invalid runner type: #{inspect(type)}"
+    end
+
+    # Build initial message
+    initial_message = build_initial_message(instructions, context)
+
+    # Get provider and model from config
+    provider = Map.get(config, :provider)
+
+    unless provider do
+      {:error, "No provider configured"}
+    end
+
+    # Build tool context
+    tool_context = %Deft.Tool.Context{
+      session_id: "runner-#{:erlang.unique_integer([:positive])}",
+      working_dir: worktree_path,
+      # No-op emit for Runners
+      emit: fn _ -> :ok end,
+      # 2 minute timeout for bash commands
+      bash_timeout: 120_000,
+      file_scope: nil,
+      cache_tid: nil,
+      cache_config: nil
+    }
+
+    # Start agent loop
+    messages = [initial_message]
+    loop(messages, tools, tool_context, rate_limiter_pid, provider, config, max_turns: 20)
+  rescue
+    exception ->
+      {:error, "Runner crashed: #{Exception.message(exception)}"}
+  end
+
+  # Main agent loop
+  defp loop(messages, tools, tool_context, rate_limiter_pid, provider, config, opts) do
+    max_turns = Keyword.get(opts, :max_turns, 20)
+    current_turn = Keyword.get(opts, :current_turn, 1)
+
+    cond do
+      current_turn > max_turns ->
+        {:error, "Runner exceeded maximum turns (#{max_turns})"}
+
+      true ->
+        do_loop_iteration(
+          messages,
+          tools,
+          tool_context,
+          rate_limiter_pid,
+          provider,
+          config,
+          max_turns,
+          current_turn
+        )
+    end
+  end
+
+  defp do_loop_iteration(
+         messages,
+         tools,
+         tool_context,
+         rate_limiter_pid,
+         provider,
+         config,
+         max_turns,
+         current_turn
+       ) do
+    with {:ok, :proceed} <- request_llm_call(rate_limiter_pid, messages, tools, provider, config),
+         {:ok, assistant_message} <- call_provider(messages, tools, provider, config) do
+      handle_assistant_message(
+        assistant_message,
+        messages,
+        tools,
+        tool_context,
+        rate_limiter_pid,
+        provider,
+        config,
+        max_turns,
+        current_turn
+      )
+    else
+      {:error, reason} -> {:error, "Call failed: #{reason}"}
+    end
+  end
+
+  defp handle_assistant_message(
+         assistant_message,
+         messages,
+         tools,
+         tool_context,
+         rate_limiter_pid,
+         provider,
+         config,
+         max_turns,
+         current_turn
+       ) do
+    if has_tool_calls?(assistant_message) do
+      {:ok, tool_results} = execute_tools_inline(assistant_message, tools, tool_context)
+      result_messages = messages ++ [assistant_message | tool_results]
+
+      loop(result_messages, tools, tool_context, rate_limiter_pid, provider, config,
+        max_turns: max_turns,
+        current_turn: current_turn + 1
+      )
+    else
+      output = extract_text_from_message(assistant_message)
+      {:ok, output}
+    end
+  end
+
+  # Build initial system message with instructions and context
+  defp build_initial_message(instructions, context) do
+    text = """
+    You are a Runner executing a single task.
+
+    # Task
+
+    #{instructions}
+
+    # Context
+
+    #{context}
+
+    # Instructions
+
+    Execute the task using the available tools. When complete, provide a summary of what you did.
+    """
+
+    %Message{
+      id: generate_message_id(),
+      role: :user,
+      content: [%Text{text: text}],
+      timestamp: DateTime.utc_now()
+    }
+  end
+
+  # Request permission from rate limiter to make LLM call
+  defp request_llm_call(rate_limiter_pid, messages, _tools, _provider, config) do
+    # Estimate input tokens (simple heuristic: chars / 4)
+    estimated_tokens = estimate_tokens(messages)
+
+    _model = Map.get(config, :model, "claude-sonnet-4")
+    provider_name = Map.get(config, :provider_name, "anthropic")
+
+    case GenServer.call(rate_limiter_pid, {:acquire, provider_name, estimated_tokens}, :infinity) do
+      :ok -> {:ok, :proceed}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # Call provider and collect full response (non-streaming for simplicity)
+  defp call_provider(messages, tools, provider, config) do
+    # For Runner, we'll use a simplified approach:
+    # Start stream and collect all events inline
+    case provider.stream(messages, tools, config) do
+      {:ok, stream_ref} ->
+        collect_stream_events(stream_ref, provider)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  # Collect all stream events into a single assistant message
+  defp collect_stream_events(stream_ref, _provider, opts \\ []) do
+    timeout = Keyword.get(opts, :timeout, 300_000)
+
+    current_message = %Message{
+      id: generate_message_id(),
+      role: :assistant,
+      content: [],
+      timestamp: DateTime.utc_now()
+    }
+
+    tool_call_buffers = %{}
+
+    collect_loop(stream_ref, current_message, tool_call_buffers, timeout)
+  end
+
+  defp collect_loop(stream_ref, current_message, tool_call_buffers, timeout) do
+    receive do
+      {:provider_event, %TextDelta{delta: text}} ->
+        # Append text to content
+        new_content = append_text_delta(current_message.content, text)
+        new_message = %{current_message | content: new_content}
+        collect_loop(stream_ref, new_message, tool_call_buffers, timeout)
+
+      {:provider_event, %ThinkingDelta{}} ->
+        # Ignore thinking deltas for now
+        collect_loop(stream_ref, current_message, tool_call_buffers, timeout)
+
+      {:provider_event, %ToolCallStart{id: tool_id, name: tool_name}} ->
+        # Initialize tool call buffer
+        new_buffers = Map.put(tool_call_buffers, tool_id, %{name: tool_name, args_json: ""})
+        collect_loop(stream_ref, current_message, new_buffers, timeout)
+
+      {:provider_event, %ToolCallDelta{id: tool_id, delta: args_delta}} ->
+        # Append to tool call buffer
+        new_buffers =
+          Map.update!(tool_call_buffers, tool_id, fn buffer ->
+            %{buffer | args_json: buffer.args_json <> args_delta}
+          end)
+
+        collect_loop(stream_ref, current_message, new_buffers, timeout)
+
+      {:provider_event, %ToolCallDone{id: tool_id}} ->
+        # Finalize tool call
+        buffer = Map.fetch!(tool_call_buffers, tool_id)
+
+        case Jason.decode(buffer.args_json) do
+          {:ok, args} ->
+            tool_use = %ToolUse{
+              id: tool_id,
+              name: buffer.name,
+              args: args
+            }
+
+            new_content = current_message.content ++ [tool_use]
+            new_message = %{current_message | content: new_content}
+            collect_loop(stream_ref, new_message, tool_call_buffers, timeout)
+
+          {:error, _} ->
+            {:error, "Failed to parse tool arguments for #{tool_id}"}
+        end
+
+      {:provider_event, %Usage{}} ->
+        # Ignore usage events (rate limiter handles reconciliation at job level)
+        collect_loop(stream_ref, current_message, tool_call_buffers, timeout)
+
+      {:provider_event, %Done{}} ->
+        # Stream complete
+        {:ok, current_message}
+
+      {:provider_event, %Error{message: error_msg}} ->
+        {:error, error_msg}
+    after
+      timeout ->
+        {:error, "Stream timeout after #{timeout}ms"}
+    end
+  end
+
+  # Append text delta to content blocks
+  defp append_text_delta([], text) do
+    [%Text{text: text}]
+  end
+
+  defp append_text_delta(content, text) do
+    case List.last(content) do
+      %Text{} = last_text ->
+        List.replace_at(content, -1, %Text{text: last_text.text <> text})
+
+      _ ->
+        content ++ [%Text{text: text}]
+    end
+  end
+
+  # Check if message has tool calls
+  defp has_tool_calls?(%Message{content: content}) do
+    Enum.any?(content, fn
+      %ToolUse{} -> true
+      _ -> false
+    end)
+  end
+
+  # Execute tool calls inline with try/catch
+  defp execute_tools_inline(message, tools, tool_context) do
+    tool_map = Map.new(tools, fn tool_module -> {tool_module.name(), tool_module} end)
+
+    tool_uses =
+      Enum.filter(message.content, fn
+        %ToolUse{} -> true
+        _ -> false
+      end)
+
+    results =
+      Enum.map(tool_uses, fn %ToolUse{id: tool_id, name: tool_name, args: args} = _tool_use ->
+        case Map.get(tool_map, tool_name) do
+          nil ->
+            %Message{
+              id: generate_message_id(),
+              role: :user,
+              content: [
+                %ToolResult{
+                  tool_use_id: tool_id,
+                  name: tool_name,
+                  content: "Error: Tool '#{tool_name}' not found",
+                  is_error: true
+                }
+              ],
+              timestamp: DateTime.utc_now()
+            }
+
+          tool_module ->
+            try do
+              case tool_module.execute(args, tool_context) do
+                {:ok, content_blocks} ->
+                  # Convert content blocks to string
+                  content_text =
+                    content_blocks
+                    |> Enum.map(fn
+                      %Text{text: text} -> text
+                      _ -> ""
+                    end)
+                    |> Enum.join("\n")
+
+                  %Message{
+                    id: generate_message_id(),
+                    role: :user,
+                    content: [
+                      %ToolResult{
+                        tool_use_id: tool_id,
+                        name: tool_name,
+                        content: content_text,
+                        is_error: false
+                      }
+                    ],
+                    timestamp: DateTime.utc_now()
+                  }
+
+                {:error, error_msg} ->
+                  %Message{
+                    id: generate_message_id(),
+                    role: :user,
+                    content: [
+                      %ToolResult{
+                        tool_use_id: tool_id,
+                        name: tool_name,
+                        content: error_msg,
+                        is_error: true
+                      }
+                    ],
+                    timestamp: DateTime.utc_now()
+                  }
+              end
+            rescue
+              exception ->
+                %Message{
+                  id: generate_message_id(),
+                  role: :user,
+                  content: [
+                    %ToolResult{
+                      tool_use_id: tool_id,
+                      name: tool_name,
+                      content: "Tool execution error: #{Exception.message(exception)}",
+                      is_error: true
+                    }
+                  ],
+                  timestamp: DateTime.utc_now()
+                }
+            end
+        end
+      end)
+
+    {:ok, results}
+  end
+
+  # Extract text from assistant message
+  defp extract_text_from_message(%Message{content: content}) do
+    content
+    |> Enum.filter(fn
+      %Text{} -> true
+      _ -> false
+    end)
+    |> Enum.map(fn %Text{text: text} -> text end)
+    |> Enum.join("\n")
+  end
+
+  # Estimate tokens from messages (simple heuristic: chars / 4)
+  defp estimate_tokens(messages) do
+    total_chars =
+      messages
+      |> Enum.map(&estimate_message_chars/1)
+      |> Enum.sum()
+
+    div(total_chars, 4)
+  end
+
+  defp estimate_message_chars(message) do
+    message.content
+    |> Enum.map(&estimate_block_chars/1)
+    |> Enum.sum()
+  end
+
+  defp estimate_block_chars(%Text{text: text}), do: String.length(text)
+  defp estimate_block_chars(%ToolUse{}), do: 50
+
+  defp estimate_block_chars(%ToolResult{content: content}) when is_binary(content),
+    do: String.length(content)
+
+  defp estimate_block_chars(%ToolResult{content: content}) when is_list(content) do
+    content
+    |> Enum.map(fn
+      %Text{text: text} -> String.length(text)
+      _ -> 0
+    end)
+    |> Enum.sum()
+  end
+
+  defp estimate_block_chars(_), do: 0
+
+  # Generate unique message ID
+  defp generate_message_id do
+    "msg-" <> (:crypto.strong_rand_bytes(12) |> Base.encode16(case: :lower))
+  end
+end
