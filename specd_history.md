@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **tui v0.1 (2026-03-17):** Fix `/quit` command: currently sends `{:stop, term}` via `send/2` which is swallowed by catch-all `handle_info`; should return `{:stop, term}` directly from the handler (spec section 6)
 - **tui v0.1 (2026-03-17):** Implement Ctrl+R toggle for raw output: add `raw_mode` assign, toggle on Ctrl+R, bypass `Markdown.render/1` when enabled (spec section 5)
 - **tui v0.1 (2026-03-17):** Implement Page Up/Down scroll handlers: update `scroll_offset` on key events; currently initialized to 0 and never modified, so conversation area has no working scrollback (spec sections 3, 5)
 - **tui v0.1 (2026-03-17):** Implement Esc key handler: cancel current input or abort current operation; currently falls through to catch-all character handler and appends raw escape to input buffer (spec section 5)

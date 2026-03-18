@@ -340,6 +340,10 @@ defmodule Deft.TUI.Chat do
               |> assign(last_char_timestamp: nil)
 
             {:noreply, new_term}
+
+          {:quit, term} ->
+            # Quit command - stop the view
+            {:stop, term}
         end
       else
         {:noreply, term}
@@ -688,8 +692,7 @@ defmodule Deft.TUI.Chat do
     cond do
       # Handle /quit command directly in TUI
       input == "/quit" ->
-        send(self(), {:stop, term})
-        {:command_handled, term}
+        {:quit, term}
 
       # Handle /clear command directly in TUI
       input == "/clear" ->
