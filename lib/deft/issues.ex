@@ -586,7 +586,7 @@ defmodule Deft.Issues do
     issue.status == :open &&
       Enum.all?(issue.dependencies, fn dep_id ->
         case Enum.find(all_issues, &(&1.id == dep_id)) do
-          nil -> false
+          nil -> true
           dep -> dep.status == :closed
         end
       end)

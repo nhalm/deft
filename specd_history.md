@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **issues v0.2 (2026-03-17):** Fix `is_ready?/2` to treat missing dependencies as satisfied: when a dependency ID is not found in `all_issues` (e.g., compacted away), return `true` instead of `false`; currently issues blocked by compacted issues are permanently stuck (spec section 3)
 - **observational-memory v0.1 (2026-03-17):** Fix hard cap truncation: replace `Enum.reduce` with `Enum.reduce_while` in `truncate_session_history_to_target/4` so processing halts when budget is exceeded; current code can skip newer lines and keep older ones non-contiguously (spec section 4.6)
 - **filesystem v0.2 (2026-03-17):** Wire cache Store instance to agent: start a Deft.Store cache instance during session startup, set `cache_tid` in Tool.Context to the ETS tid; currently nil (TODO at agent.ex:1043), making all spilling and cache_read inoperative (spec section 6)
 - **observational-memory v0.1 (2026-03-18):** Fix epoch staleness check in `activate_buffered_chunks/1`: filter out buffered chunks whose `epoch` < current `activation_epoch` before merging; stale chunks were computed against pre-reflection state
