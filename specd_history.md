@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **issues v0.2 (2026-03-18):** Implement `deft issue dep add <id> --blocked-by <blocker_id>` and `dep remove` CLI commands
 - **orchestration v0.3 (2026-03-18):** Implement Runner inline loop: build minimal context → call LLM through RateLimiter → parse tool calls → execute tools inline with try/catch → loop until done → return results to Lead via Task return value; no gen_statem, no OM; Runner timeout via Process.send_after in Lead
 - **issues v0.3 (2026-03-18):** Fix `Issues.create/1` priority default for agent-created issues: GenServer defaults to `priority: 2` at issues.ex:225 but spec section 6.2 requires agent-created issues to default to priority 3 (low); `IssueCreate` tool works around this by setting priority 3 explicitly, but the GenServer contract is wrong
 - **issues v0.2 (2026-03-18):** Fix CLI help text to show `--auto-approve-all`: moduledoc (cli.ex:23) and `print_help` (cli.ex:607) advertise `--auto-approve` but OptionParser (cli.ex:102) parses `--auto-approve-all`; user typing the documented flag gets an unknown flag error

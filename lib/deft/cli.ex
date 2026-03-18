@@ -185,6 +185,14 @@ defmodule Deft.CLI do
       positional == ["issue", "ready"] ->
         :issue_ready
 
+      match?(["issue", "dep", "add", _], positional) ->
+        [_cmd, _subcmd, _action, issue_id] = positional
+        {:issue_dep_add, issue_id}
+
+      match?(["issue", "dep", "remove", _], positional) ->
+        [_cmd, _subcmd, _action, issue_id] = positional
+        {:issue_dep_remove, issue_id}
+
       Enum.empty?(positional) ->
         :new_session
 
@@ -353,6 +361,70 @@ defmodule Deft.CLI do
 
       {:error, reason} ->
         IO.puts(:stderr, "Error: Failed to update issue: #{inspect(reason)}")
+        exit({:shutdown, 1})
+    end
+  end
+
+  defp execute_command({:issue_dep_add, issue_id}, flags) do
+    # Ensure Issues GenServer is started
+    ensure_issues_started(flags)
+
+    # Get blocker_id from --blocked-by flag
+    blocker_id = flags[:blocked_by]
+
+    if is_nil(blocker_id) do
+      IO.puts(:stderr, "Error: --blocked-by flag is required")
+      exit({:shutdown, 1})
+    end
+
+    # Add the dependency
+    case Issues.add_dependency(issue_id, blocker_id) do
+      {:ok, _issue} ->
+        IO.puts("Added dependency: #{issue_id} is now blocked by #{blocker_id}")
+        :ok
+
+      {:error, :not_found} ->
+        IO.puts(:stderr, "Error: Issue not found: #{issue_id}")
+        exit({:shutdown, 1})
+
+      {:error, :blocker_not_found} ->
+        IO.puts(:stderr, "Error: Blocker issue not found: #{blocker_id}")
+        exit({:shutdown, 1})
+
+      {:error, :cycle_detected} ->
+        IO.puts(:stderr, "Error: Adding this dependency would create a cycle")
+        exit({:shutdown, 1})
+
+      {:error, reason} ->
+        IO.puts(:stderr, "Error: Failed to add dependency: #{inspect(reason)}")
+        exit({:shutdown, 1})
+    end
+  end
+
+  defp execute_command({:issue_dep_remove, issue_id}, flags) do
+    # Ensure Issues GenServer is started
+    ensure_issues_started(flags)
+
+    # Get blocker_id from --blocked-by flag
+    blocker_id = flags[:blocked_by]
+
+    if is_nil(blocker_id) do
+      IO.puts(:stderr, "Error: --blocked-by flag is required")
+      exit({:shutdown, 1})
+    end
+
+    # Remove the dependency
+    case Issues.remove_dependency(issue_id, blocker_id) do
+      {:ok, _issue} ->
+        IO.puts("Removed dependency: #{issue_id} is no longer blocked by #{blocker_id}")
+        :ok
+
+      {:error, :not_found} ->
+        IO.puts(:stderr, "Error: Issue not found: #{issue_id}")
+        exit({:shutdown, 1})
+
+      {:error, reason} ->
+        IO.puts(:stderr, "Error: Failed to remove dependency: #{inspect(reason)}")
         exit({:shutdown, 1})
     end
   end
@@ -594,6 +666,9 @@ defmodule Deft.CLI do
       deft issue show <id>                Show issue details
       deft issue close <id>               Close an issue
       deft issue ready                    List ready issues
+      deft issue update <id> [FLAGS]      Update an issue
+      deft issue dep add <id> --blocked-by <blocker_id>      Add a dependency
+      deft issue dep remove <id> --blocked-by <blocker_id>   Remove a dependency
       deft --help                         Show this help
       deft --version                      Show version
 
@@ -632,6 +707,12 @@ defmodule Deft.CLI do
 
       # Create an issue with priority and dependencies
       deft issue create "Implement user profiles" --priority 1 --blocked-by deft-a1b2
+
+      # Add a dependency to an existing issue
+      deft issue dep add deft-b3c4 --blocked-by deft-a1b2
+
+      # Remove a dependency from an existing issue
+      deft issue dep remove deft-b3c4 --blocked-by deft-a1b2
 
     Configuration:
       Configuration is loaded in priority order:
