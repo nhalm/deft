@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **orchestration v0.3 (2026-03-18):** Implement Foreman gen_statem: extends Agent with tuple states `{job_phase, agent_state}` using handle_event mode; phases: :planning, :researching, :decomposing, :executing, :verifying, :complete; single-agent fallback detection during :planning; Foreman handles `{:lead_message, type, content, metadata}` in handle_info for any state
 - **rate-limiter v0.1 (2026-03-18):** Implement 429 handling: parse Retry-After header, reduce bucket capacity by 20% for affected provider, apply exponential backoff (1s, 2s, 4s, 8s... capped at 60s), restore capacity gradually after 60s without 429s (10% per minute up to configured limit)
 - **evals v0.2 (2026-03-18):** Implement spilling cache retrieval evals: agent correctly uses cache_read tool when details not in summary; filter and lines parameters work; 20 iterations, 85% pass rate
 - **evals v0.2 (2026-03-18):** Add CI workflow files: Tier 1 on every push (soft gate), Tier 2 on merge to main, Tier 3 on weekly schedule per spec section 3.2
