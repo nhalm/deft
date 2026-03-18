@@ -39,7 +39,6 @@ defmodule Deft.Job.Lead do
   @behaviour :gen_statem
 
   alias Deft.Message
-  alias Deft.Agent.ToolRunner
   alias Deft.Job.Runner
   alias Deft.Store
 
@@ -185,7 +184,7 @@ defmodule Deft.Job.Lead do
       # Execute tools
       tasks =
         Enum.map(tool_calls, fn tool_call ->
-          Task.Supervisor.async_nolink(ToolRunner, fn ->
+          Task.Supervisor.async_nolink(data.runner_supervisor, fn ->
             execute_tool(tool_call, data)
           end)
         end)

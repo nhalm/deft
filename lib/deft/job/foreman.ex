@@ -32,7 +32,7 @@ defmodule Deft.Job.Foreman do
   @behaviour :gen_statem
 
   alias Deft.Message
-  alias Deft.Agent.ToolRunner
+  alias Deft.Session.Worker, as: SessionWorker
   alias Deft.Store
   alias Deft.Project
   alias Deft.Git
@@ -181,26 +181,29 @@ defmodule Deft.Job.Foreman do
     tasks =
       Enum.map(research_specs, fn %{instructions: instructions, context: context} ->
         task =
-          Task.Supervisor.async_nolink(ToolRunner, fn ->
-            # Get research runner model from config (defaults to same as lead model)
-            research_model =
-              Map.get(data.config, :research_runner_model, Map.get(data.config, :lead_model))
+          Task.Supervisor.async_nolink(
+            SessionWorker.tool_runner_via_tuple(data.session_id),
+            fn ->
+              # Get research runner model from config (defaults to same as lead model)
+              research_model =
+                Map.get(data.config, :research_runner_model, Map.get(data.config, :lead_model))
 
-            runner_config = %{
-              provider: get_provider(data),
-              model: research_model
-            }
+              runner_config = %{
+                provider: get_provider(data),
+                model: research_model
+              }
 
-            # Call Runner with :research type (read-only tools)
-            Runner.run(
-              :research,
-              instructions,
-              context,
-              data.session_id,
-              runner_config,
-              data.working_dir
-            )
-          end)
+              # Call Runner with :research type (read-only tools)
+              Runner.run(
+                :research,
+                instructions,
+                context,
+                data.session_id,
+                runner_config,
+                data.working_dir
+              )
+            end
+          )
 
         # Monitor the task for timeout
         Process.monitor(task.pid)
@@ -245,9 +248,12 @@ defmodule Deft.Job.Foreman do
       # Execute tools
       tasks =
         Enum.map(tool_calls, fn tool_call ->
-          Task.Supervisor.async_nolink(ToolRunner, fn ->
-            execute_tool(tool_call, data)
-          end)
+          Task.Supervisor.async_nolink(
+            SessionWorker.tool_runner_via_tuple(data.session_id),
+            fn ->
+              execute_tool(tool_call, data)
+            end
+          )
         end)
 
       {:keep_state, %{data | tool_tasks: tasks}}
