@@ -97,6 +97,32 @@ defmodule Deft.Eval.RegressionDetectionTest do
 
       assert :model_quality = RegressionDetection.infrastructure_failure?(failures)
     end
+
+    test "proportion-based: 8/50 (16%) same errors is model quality" do
+      # 8 out of 50 is only 16%, should not flag as infrastructure
+      failures =
+        Enum.map(1..8, fn i ->
+          %{fixture: "fixture-#{i}", output: "output", reason: "timeout"}
+        end) ++
+          Enum.map(9..50, fn i ->
+            %{fixture: "fixture-#{i}", output: "output", reason: "error-#{i}"}
+          end)
+
+      assert :model_quality = RegressionDetection.infrastructure_failure?(failures)
+    end
+
+    test "proportion-based: 40/50 (80%) same errors is infrastructure" do
+      # 40 out of 50 is 80%, should flag as infrastructure
+      failures =
+        Enum.map(1..40, fn i ->
+          %{fixture: "fixture-#{i}", output: "output", reason: "crash"}
+        end) ++
+          Enum.map(41..50, fn i ->
+            %{fixture: "fixture-#{i}", output: "output", reason: "error-#{i}"}
+          end)
+
+      assert {:infrastructure, "crash"} = RegressionDetection.infrastructure_failure?(failures)
+    end
   end
 
   describe "analyze/4" do

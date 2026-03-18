@@ -70,7 +70,7 @@ defmodule Deft.Eval.RegressionDetection do
   Detects if failures represent an infrastructure bug vs model quality issue.
 
   Infrastructure failures are deterministic bugs where the same error appears repeatedly.
-  Threshold: if 8+ out of 10 failures have the same reason, it's infrastructure.
+  Threshold: if 80% or more of failures have the same reason, it's infrastructure.
 
   ## Parameters
   - failures: List of failure maps with :reason field
@@ -129,8 +129,8 @@ defmodule Deft.Eval.RegressionDetection do
       reason_counts
       |> Enum.max_by(fn {_reason, count} -> count end)
 
-    # If same error appears in 8+ out of 10 failures, it's infrastructure
-    if max_count >= 8 do
+    # If same error appears in 80% or more of failures, it's infrastructure
+    if max_count / length(failures) >= 0.8 do
       {:infrastructure, most_common_reason}
     else
       :model_quality
