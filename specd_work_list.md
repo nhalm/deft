@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## tui v0.1
 
-- Fix Ctrl+C to abort current operation instead of always exiting: check `agent_state`; if agent is streaming/executing, send abort signal and stay in session; only exit if idle (spec section 5)
 - Implement Esc key handler: cancel current input or abort current operation; currently falls through to catch-all character handler and appends raw escape to input buffer (spec section 5)
 - Implement Page Up/Down scroll handlers: update `scroll_offset` on key events; currently initialized to 0 and never modified, so conversation area has no working scrollback (spec sections 3, 5)
 - Implement Ctrl+R toggle for raw output: add `raw_mode` assign, toggle on Ctrl+R, bypass `Markdown.render/1` when enabled (spec section 5)

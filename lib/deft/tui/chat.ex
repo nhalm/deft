@@ -345,8 +345,19 @@ defmodule Deft.TUI.Chat do
     end
   end
 
-  def handle_event(_event, %{"key" => key}, term) when key in ["ctrl-c", "ctrl-d"] do
-    # Quit the application
+  def handle_event(_event, %{"key" => "ctrl-c"}, term) do
+    # Ctrl+C: abort current operation if active, exit if idle
+    if term.assigns.agent_state == :idle do
+      {:stop, term}
+    else
+      # Agent is active - send abort signal and stay in session
+      Deft.Agent.abort(term.assigns.agent_pid)
+      {:noreply, term}
+    end
+  end
+
+  def handle_event(_event, %{"key" => "ctrl-d"}, term) do
+    # Ctrl+D: always quit (standard Unix EOF)
     {:stop, term}
   end
 
