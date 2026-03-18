@@ -41,6 +41,8 @@ defmodule Deft.Job.Runner do
     Error
   }
 
+  alias Deft.Job.RateLimiter
+
   require Logger
 
   @type runner_type :: :research | :implementation | :testing | :review | :merge_resolution
@@ -71,7 +73,7 @@ defmodule Deft.Job.Runner do
   - `type` — Runner type (:research, :implementation, etc.)
   - `instructions` — Task instructions from the Lead
   - `context` — Curated context (findings, contracts, etc.)
-  - `rate_limiter_pid` — PID of the RateLimiter GenServer
+  - `job_id` — Job identifier for RateLimiter registry lookup
   - `config` — Configuration map (model, provider, etc.)
   - `worktree_path` — Path to Lead's worktree
 
@@ -80,7 +82,7 @@ defmodule Deft.Job.Runner do
   - `{:ok, output}` — Task completed successfully, output is collected text
   - `{:error, reason}` — Task failed
   """
-  def run(type, instructions, context, rate_limiter_pid, config, worktree_path) do
+  def run(type, instructions, context, job_id, config, worktree_path) do
     # Validate runner type
     tools = Map.get(@tool_sets, type)
 
@@ -113,14 +115,14 @@ defmodule Deft.Job.Runner do
 
     # Start agent loop
     messages = [initial_message]
-    loop(messages, tools, tool_context, rate_limiter_pid, provider, config, max_turns: 20)
+    loop(messages, tools, tool_context, job_id, provider, config, max_turns: 20)
   rescue
     exception ->
       {:error, "Runner crashed: #{Exception.message(exception)}"}
   end
 
   # Main agent loop
-  defp loop(messages, tools, tool_context, rate_limiter_pid, provider, config, opts) do
+  defp loop(messages, tools, tool_context, job_id, provider, config, opts) do
     max_turns = Keyword.get(opts, :max_turns, 20)
     current_turn = Keyword.get(opts, :current_turn, 1)
 
@@ -133,7 +135,7 @@ defmodule Deft.Job.Runner do
           messages,
           tools,
           tool_context,
-          rate_limiter_pid,
+          job_id,
           provider,
           config,
           max_turns,
@@ -146,20 +148,20 @@ defmodule Deft.Job.Runner do
          messages,
          tools,
          tool_context,
-         rate_limiter_pid,
+         job_id,
          provider,
          config,
          max_turns,
          current_turn
        ) do
-    with {:ok, :proceed} <- request_llm_call(rate_limiter_pid, messages, tools, provider, config),
+    with {:ok, :proceed} <- request_llm_call(job_id, messages, tools, provider, config),
          {:ok, assistant_message} <- call_provider(messages, tools, provider, config) do
       handle_assistant_message(
         assistant_message,
         messages,
         tools,
         tool_context,
-        rate_limiter_pid,
+        job_id,
         provider,
         config,
         max_turns,
@@ -175,7 +177,7 @@ defmodule Deft.Job.Runner do
          messages,
          tools,
          tool_context,
-         rate_limiter_pid,
+         job_id,
          provider,
          config,
          max_turns,
@@ -185,7 +187,7 @@ defmodule Deft.Job.Runner do
       {:ok, tool_results} = execute_tools_inline(assistant_message, tools, tool_context)
       result_messages = messages ++ [assistant_message | tool_results]
 
-      loop(result_messages, tools, tool_context, rate_limiter_pid, provider, config,
+      loop(result_messages, tools, tool_context, job_id, provider, config,
         max_turns: max_turns,
         current_turn: current_turn + 1
       )
@@ -222,14 +224,10 @@ defmodule Deft.Job.Runner do
   end
 
   # Request permission from rate limiter to make LLM call
-  defp request_llm_call(rate_limiter_pid, messages, _tools, _provider, config) do
-    # Estimate input tokens (simple heuristic: chars / 4)
-    estimated_tokens = estimate_tokens(messages)
-
-    _model = Map.get(config, :model, "claude-sonnet-4")
+  defp request_llm_call(job_id, messages, _tools, _provider, config) do
     provider_name = Map.get(config, :provider_name, "anthropic")
 
-    case GenServer.call(rate_limiter_pid, {:acquire, provider_name, estimated_tokens}, :infinity) do
+    case RateLimiter.request(job_id, provider_name, messages, :runner) do
       :ok -> {:ok, :proceed}
       {:error, reason} -> {:error, reason}
     end
@@ -453,38 +451,6 @@ defmodule Deft.Job.Runner do
   end
 
   # Estimate tokens from messages (simple heuristic: chars / 4)
-  defp estimate_tokens(messages) do
-    total_chars =
-      messages
-      |> Enum.map(&estimate_message_chars/1)
-      |> Enum.sum()
-
-    div(total_chars, 4)
-  end
-
-  defp estimate_message_chars(message) do
-    message.content
-    |> Enum.map(&estimate_block_chars/1)
-    |> Enum.sum()
-  end
-
-  defp estimate_block_chars(%Text{text: text}), do: String.length(text)
-  defp estimate_block_chars(%ToolUse{}), do: 50
-
-  defp estimate_block_chars(%ToolResult{content: content}) when is_binary(content),
-    do: String.length(content)
-
-  defp estimate_block_chars(%ToolResult{content: content}) when is_list(content) do
-    content
-    |> Enum.map(fn
-      %Text{text: text} -> String.length(text)
-      _ -> 0
-    end)
-    |> Enum.sum()
-  end
-
-  defp estimate_block_chars(_), do: 0
-
   # Generate unique message ID
   defp generate_message_id do
     "msg-" <> (:crypto.strong_rand_bytes(12) |> Base.encode16(case: :lower))

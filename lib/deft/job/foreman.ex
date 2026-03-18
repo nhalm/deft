@@ -194,7 +194,7 @@ defmodule Deft.Job.Foreman do
               :research,
               instructions,
               context,
-              data.rate_limiter_pid,
+              data.session_id,
               runner_config,
               data.working_dir
             )

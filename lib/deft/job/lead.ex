@@ -583,7 +583,7 @@ defmodule Deft.Job.Lead do
           runner_type,
           instructions,
           context,
-          data.rate_limiter_pid,
+          data.session_id,
           data.config,
           data.worktree_path
         )
