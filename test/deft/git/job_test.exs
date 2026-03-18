@@ -553,4 +553,265 @@ defmodule Deft.Git.JobTest do
       assert_received {:git_cmd, ["merge", "--no-ff", "deft/lead-lead-1"]}
     end
   end
+
+  describe "complete_job/1" do
+    # Mock Git adapter for complete_job tests
+    defmodule CompleteJobMockGit do
+      @moduledoc false
+
+      def cmd(args) do
+        send(self(), {:git_cmd, args})
+
+        case args do
+          ["checkout", _branch] ->
+            Process.get(:mock_checkout_response, {"", 0})
+
+          ["merge", "--squash", _job_branch] ->
+            Process.get(:mock_merge_response, {"", 0})
+
+          ["merge", "--no-ff", _job_branch] ->
+            Process.get(:mock_merge_response, {"", 0})
+
+          ["commit", "-m", _message] ->
+            Process.get(:mock_commit_response, {"", 0})
+
+          ["branch", "-d", _branch] ->
+            Process.get(:mock_branch_delete_response, {"", 0})
+
+          ["worktree", "list", "--porcelain"] ->
+            Process.get(:mock_worktree_list_response, {"worktree /path/to/repo\n", 0})
+
+          _ ->
+            {"", 0}
+        end
+      end
+    end
+
+    setup do
+      tmp_dir = System.tmp_dir!() |> Path.join("deft-test-#{:rand.uniform(1_000_000)}")
+      File.mkdir_p!(tmp_dir)
+
+      on_exit(fn ->
+        File.rm_rf!(tmp_dir)
+      end)
+
+      %{tmp_dir: tmp_dir}
+    end
+
+    test "completes job with squash merge (default)", %{tmp_dir: tmp_dir} do
+      # Mock successful operations
+      Process.put(:mock_checkout_response, {"", 0})
+      Process.put(:mock_merge_response, {"", 0})
+      Process.put(:mock_commit_response, {"", 0})
+      Process.put(:mock_branch_delete_response, {"", 0})
+      Process.put(:mock_worktree_list_response, {"worktree /path/to/repo\n", 0})
+
+      assert {:ok, :completed} =
+               Job.complete_job(
+                 job_id: "abc123",
+                 original_branch: "main",
+                 git: CompleteJobMockGit,
+                 working_dir: tmp_dir
+               )
+
+      # Verify git commands were called in correct order
+      assert_received {:git_cmd, ["checkout", "main"]}
+      assert_received {:git_cmd, ["merge", "--squash", "deft/job-abc123"]}
+      assert_received {:git_cmd, ["commit", "-m", _message]}
+      assert_received {:git_cmd, ["branch", "-d", "deft/job-abc123"]}
+      assert_received {:git_cmd, ["worktree", "list", "--porcelain"]}
+    end
+
+    test "completes job with regular merge when squash is false", %{tmp_dir: tmp_dir} do
+      # Mock successful operations
+      Process.put(:mock_checkout_response, {"", 0})
+      Process.put(:mock_merge_response, {"", 0})
+      Process.put(:mock_branch_delete_response, {"", 0})
+      Process.put(:mock_worktree_list_response, {"worktree /path/to/repo\n", 0})
+
+      assert {:ok, :completed} =
+               Job.complete_job(
+                 job_id: "abc123",
+                 original_branch: "main",
+                 squash: false,
+                 git: CompleteJobMockGit,
+                 working_dir: tmp_dir
+               )
+
+      # Verify git commands - should use --no-ff, not --squash
+      assert_received {:git_cmd, ["checkout", "main"]}
+      assert_received {:git_cmd, ["merge", "--no-ff", "deft/job-abc123"]}
+      # No commit command for regular merge
+      refute_received {:git_cmd, ["commit" | _]}
+      assert_received {:git_cmd, ["branch", "-d", "deft/job-abc123"]}
+      assert_received {:git_cmd, ["worktree", "list", "--porcelain"]}
+    end
+
+    test "handles checkout failure", %{tmp_dir: tmp_dir} do
+      Process.put(:mock_checkout_response, {"fatal: invalid branch\n", 128})
+
+      assert {:error, {:checkout_failed, 128}} =
+               Job.complete_job(
+                 job_id: "abc123",
+                 original_branch: "invalid",
+                 git: CompleteJobMockGit,
+                 working_dir: tmp_dir
+               )
+
+      # Should attempt checkout but not merge
+      assert_received {:git_cmd, ["checkout", "invalid"]}
+      refute_received {:git_cmd, ["merge" | _]}
+    end
+
+    test "handles merge failure", %{tmp_dir: tmp_dir} do
+      Process.put(:mock_checkout_response, {"", 0})
+      Process.put(:mock_merge_response, {"fatal: unable to merge\n", 1})
+
+      assert {:error, {:merge_failed, 1}} =
+               Job.complete_job(
+                 job_id: "abc123",
+                 original_branch: "main",
+                 git: CompleteJobMockGit,
+                 working_dir: tmp_dir
+               )
+
+      # Should attempt checkout and merge but not delete branch
+      assert_received {:git_cmd, ["checkout", "main"]}
+      assert_received {:git_cmd, ["merge", "--squash", "deft/job-abc123"]}
+      refute_received {:git_cmd, ["branch", "-d" | _]}
+    end
+
+    test "handles commit failure (squash merge)", %{tmp_dir: tmp_dir} do
+      Process.put(:mock_checkout_response, {"", 0})
+      Process.put(:mock_merge_response, {"", 0})
+      Process.put(:mock_commit_response, {"fatal: commit failed\n", 1})
+
+      assert {:error, {:commit_failed, 1}} =
+               Job.complete_job(
+                 job_id: "abc123",
+                 original_branch: "main",
+                 git: CompleteJobMockGit,
+                 working_dir: tmp_dir
+               )
+
+      # Should attempt merge and commit but not delete branch
+      assert_received {:git_cmd, ["merge", "--squash", "deft/job-abc123"]}
+      assert_received {:git_cmd, ["commit", "-m", _message]}
+      refute_received {:git_cmd, ["branch", "-d" | _]}
+    end
+
+    test "handles branch deletion failure", %{tmp_dir: tmp_dir} do
+      Process.put(:mock_checkout_response, {"", 0})
+      Process.put(:mock_merge_response, {"", 0})
+      Process.put(:mock_commit_response, {"", 0})
+      Process.put(:mock_branch_delete_response, {"fatal: branch not found\n", 1})
+
+      assert {:error, {:branch_deletion_failed, 1}} =
+               Job.complete_job(
+                 job_id: "abc123",
+                 original_branch: "main",
+                 git: CompleteJobMockGit,
+                 working_dir: tmp_dir
+               )
+
+      # Should attempt all steps up to branch deletion
+      assert_received {:git_cmd, ["checkout", "main"]}
+      assert_received {:git_cmd, ["merge", "--squash", "deft/job-abc123"]}
+      assert_received {:git_cmd, ["commit", "-m", _message]}
+      assert_received {:git_cmd, ["branch", "-d", "deft/job-abc123"]}
+    end
+
+    test "handles worktree verification failure", %{tmp_dir: tmp_dir} do
+      Process.put(:mock_checkout_response, {"", 0})
+      Process.put(:mock_merge_response, {"", 0})
+      Process.put(:mock_commit_response, {"", 0})
+      Process.put(:mock_branch_delete_response, {"", 0})
+
+      # Mock multiple worktrees remaining
+      Process.put(
+        :mock_worktree_list_response,
+        {"worktree /path/to/repo\nworktree /path/to/worktree1\nworktree /path/to/worktree2\n", 0}
+      )
+
+      assert {:error, {:worktrees_remain, 3}} =
+               Job.complete_job(
+                 job_id: "abc123",
+                 original_branch: "main",
+                 git: CompleteJobMockGit,
+                 working_dir: tmp_dir
+               )
+
+      # Should complete all steps but fail on verification
+      assert_received {:git_cmd, ["worktree", "list", "--porcelain"]}
+    end
+
+    test "handles worktree list command failure", %{tmp_dir: tmp_dir} do
+      Process.put(:mock_checkout_response, {"", 0})
+      Process.put(:mock_merge_response, {"", 0})
+      Process.put(:mock_commit_response, {"", 0})
+      Process.put(:mock_branch_delete_response, {"", 0})
+      Process.put(:mock_worktree_list_response, {"fatal: not a git repo\n", 128})
+
+      assert {:error, {:worktree_list_failed, 128}} =
+               Job.complete_job(
+                 job_id: "abc123",
+                 original_branch: "main",
+                 git: CompleteJobMockGit,
+                 working_dir: tmp_dir
+               )
+    end
+
+    test "requires job_id option" do
+      assert_raise KeyError, fn ->
+        Job.complete_job(original_branch: "main", git: CompleteJobMockGit)
+      end
+    end
+
+    test "requires original_branch option" do
+      assert_raise KeyError, fn ->
+        Job.complete_job(job_id: "abc123", git: CompleteJobMockGit)
+      end
+    end
+
+    test "defaults squash to true" do
+      Process.put(:mock_checkout_response, {"", 0})
+      Process.put(:mock_merge_response, {"", 0})
+      Process.put(:mock_commit_response, {"", 0})
+      Process.put(:mock_branch_delete_response, {"", 0})
+      Process.put(:mock_worktree_list_response, {"worktree /path/to/repo\n", 0})
+
+      # Don't specify squash option
+      assert {:ok, :completed} =
+               Job.complete_job(
+                 job_id: "test",
+                 original_branch: "main",
+                 git: CompleteJobMockGit,
+                 working_dir: System.tmp_dir!()
+               )
+
+      # Should use squash merge by default
+      assert_received {:git_cmd, ["merge", "--squash", "deft/job-test"]}
+    end
+
+    test "creates correct job branch name", %{tmp_dir: tmp_dir} do
+      Process.put(:mock_checkout_response, {"", 0})
+      Process.put(:mock_merge_response, {"", 0})
+      Process.put(:mock_commit_response, {"", 0})
+      Process.put(:mock_branch_delete_response, {"", 0})
+      Process.put(:mock_worktree_list_response, {"worktree /path/to/repo\n", 0})
+
+      assert {:ok, :completed} =
+               Job.complete_job(
+                 job_id: "my-job-456",
+                 original_branch: "feature/new-thing",
+                 git: CompleteJobMockGit,
+                 working_dir: tmp_dir
+               )
+
+      # Verify correct branch names
+      assert_received {:git_cmd, ["checkout", "feature/new-thing"]}
+      assert_received {:git_cmd, ["merge", "--squash", "deft/job-my-job-456"]}
+      assert_received {:git_cmd, ["branch", "-d", "deft/job-my-job-456"]}
+    end
+  end
 end

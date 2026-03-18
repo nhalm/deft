@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **git-strategy v0.1 (2026-03-18):** Implement squash-merge on job complete: after verification passes, squash-merge deft/job-<job_id> into original branch (configurable: job.squash_on_complete, default true); delete job branch; verify no worktrees remain via `git worktree list`
 - **git-strategy v0.1 (2026-03-18):** Implement post-merge test command: run configurable test command (not hardcoded `mix test`) on merged job branch after each Lead merge to catch semantic conflicts early; on failure, spawn fix-up Runner or flag for user intervention
 - **evals v0.2 (2026-03-18):** Implement Lead steering evals: identifies errors, provides specific corrections; 20 iterations, 75% pass rate
 - **evals v0.2 (2026-03-18):** Implement Lead task planning evals: 4-8 tasks, dependency-ordered, clear done states; 20 iterations, 75% pass rate

@@ -630,4 +630,141 @@ defmodule Deft.Git.Job do
 
     :ok
   end
+
+  @doc """
+  Completes a job by merging the job branch into the original branch and cleaning up.
+
+  After verification passes, this function:
+  1. Squash-merges (or regular merges) `deft/job-<job_id>` into the original branch
+  2. Deletes the job branch
+  3. Verifies no worktrees remain
+
+  ## Options
+
+  - `:job_id` - Required. Job identifier.
+  - `:original_branch` - Required. The branch to merge into (e.g., "main").
+  - `:squash` - Optional. Whether to squash-merge (defaults to true).
+  - `:git` - Optional. Git adapter module (defaults to Deft.Git).
+  - `:working_dir` - Optional. Repository root (defaults to File.cwd!()).
+
+  ## Returns
+
+  - `{:ok, :completed}` - Job completed successfully
+  - `{:error, reason}` - Git command failed
+
+  ## Examples
+
+      # Squash-merge (default)
+      Deft.Git.Job.complete_job(job_id: "abc123", original_branch: "main")
+      # => {:ok, :completed}
+
+      # Regular merge (keep history)
+      Deft.Git.Job.complete_job(job_id: "abc123", original_branch: "main", squash: false)
+      # => {:ok, :completed}
+
+      # Error - job branch doesn't exist
+      Deft.Git.Job.complete_job(job_id: "invalid", original_branch: "main")
+      # => {:error, {:checkout_failed, 128}}
+  """
+  @spec complete_job(keyword()) :: {:ok, :completed} | {:error, term()}
+  def complete_job(opts) do
+    job_id = Keyword.fetch!(opts, :job_id)
+    original_branch = Keyword.fetch!(opts, :original_branch)
+    squash = Keyword.get(opts, :squash, true)
+    git = Keyword.get(opts, :git, Deft.Git)
+    working_dir = Keyword.get(opts, :working_dir, File.cwd!())
+
+    job_branch = "deft/job-#{job_id}"
+
+    File.cd!(working_dir, fn ->
+      with {:ok, :checkout} <- checkout_branch(git, original_branch),
+           {:ok, :merged} <- merge_job_branch(git, job_branch, squash),
+           {:ok, :deleted} <- delete_job_branch(git, job_branch),
+           :ok <- verify_no_worktrees(git) do
+        Logger.info("Job #{job_id} completed successfully")
+        {:ok, :completed}
+      end
+    end)
+  end
+
+  # Merge the job branch into the current branch
+  defp merge_job_branch(git, job_branch, squash) do
+    merge_args =
+      if squash do
+        ["merge", "--squash", job_branch]
+      else
+        ["merge", "--no-ff", job_branch]
+      end
+
+    case git.cmd(merge_args) do
+      {_output, 0} ->
+        # If squash merge, we need to commit the squashed changes
+        if squash do
+          commit_squash_merge(git, job_branch)
+        else
+          Logger.info("Successfully merged #{job_branch} with history")
+          {:ok, :merged}
+        end
+
+      {error_output, exit_code} ->
+        Logger.error("Failed to merge #{job_branch}: #{error_output}")
+        {:error, {:merge_failed, exit_code}}
+    end
+  end
+
+  # Commit the squashed merge
+  defp commit_squash_merge(git, job_branch) do
+    commit_message = "Complete job: #{job_branch}\n\nSquash-merged all changes from #{job_branch}"
+
+    case git.cmd(["commit", "-m", commit_message]) do
+      {_output, 0} ->
+        Logger.info("Successfully squash-merged #{job_branch}")
+        {:ok, :merged}
+
+      {error_output, exit_code} ->
+        Logger.error("Failed to commit squash merge: #{error_output}")
+        {:error, {:commit_failed, exit_code}}
+    end
+  end
+
+  # Delete the job branch
+  defp delete_job_branch(git, job_branch) do
+    case git.cmd(["branch", "-d", job_branch]) do
+      {_output, 0} ->
+        Logger.info("Deleted job branch: #{job_branch}")
+        {:ok, :deleted}
+
+      {error_output, exit_code} ->
+        Logger.error("Failed to delete branch #{job_branch}: #{error_output}")
+        {:error, {:branch_deletion_failed, exit_code}}
+    end
+  end
+
+  # Verify no worktrees remain (only main working tree should exist)
+  defp verify_no_worktrees(git) do
+    case git.cmd(["worktree", "list", "--porcelain"]) do
+      {output, 0} ->
+        worktrees = count_worktrees(output)
+
+        if worktrees <= 1 do
+          Logger.debug("Verified only main working tree remains")
+          :ok
+        else
+          Logger.warning("#{worktrees} worktrees remain (expected 1)")
+          {:error, {:worktrees_remain, worktrees}}
+        end
+
+      {error_output, exit_code} ->
+        Logger.error("Failed to list worktrees: #{error_output}")
+        {:error, {:worktree_list_failed, exit_code}}
+    end
+  end
+
+  # Count number of worktrees from --porcelain output
+  defp count_worktrees(output) do
+    output
+    |> String.split("\n")
+    |> Enum.filter(&String.starts_with?(&1, "worktree "))
+    |> length()
+  end
 end
