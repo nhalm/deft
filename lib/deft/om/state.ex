@@ -1026,14 +1026,15 @@ defmodule Deft.OM.State do
 
       task_supervisor = Supervisor.task_supervisor_name(state.session_id)
 
-      # Spawn Observer Task with actual Observer.run/4 call
+      # Spawn Observer Task with retry wrapper (3 retries per spec section 6.3)
       task =
         Task.Supervisor.async_nolink(task_supervisor, fn ->
-          Observer.run(
+          run_observer_with_retry(
             state.config,
             unobserved_messages,
             state.active_observations,
-            state.calibration_factor
+            state.calibration_factor,
+            3
           )
         end)
 

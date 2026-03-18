@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **observational-memory v0.1 (2026-03-17):** Add retry wrapper to async Observer Task: `spawn_observer_task` calls `Observer.run/4` directly with no retries; must wrap in retry logic (3 retries with exponential backoff) matching the existing `run_observer_with_retry` pattern used by the sync path (spec section 6.3)
 - **observational-memory v0.1 (2026-03-18):** Pass calibration_factor from OM.State to Agent.Context: `get_om_context/1` hardcodes 4.0 (line 97 with TODO); must retrieve actual `calibration_factor` from State, which is updated via exponential moving average as LLM reports actual token counts (spec section 7)
 - **observational-memory v0.1 (2026-03-18):** Wire sync fallback calls from Agent.Context: `get_om_context/1` must check `pending_message_tokens` against 1.2x observation threshold (36,000) and call `OMState.force_observe/1`; check `observation_tokens` against 1.2x reflection threshold (48,000) and call `OMState.force_reflect/1`; currently no threshold check or sync fallback invocation exists (spec section 6.3)
 - **issues v0.2 (2026-03-17):** Fix `add_dependency/2` to return `:blocker_not_found` when blocker issue doesn't exist: currently both issue and blocker validation return `:not_found`; the `else` clause at line 359 collapses both failure modes (spec section 5.2 documents `:blocker_not_found` as a distinct error)

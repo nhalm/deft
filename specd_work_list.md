@@ -82,10 +82,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement `deft work --loop`: approve every plan by default (each issue gets plan approval checkpoint); --auto-approve-all flag skips all plan approvals for fully autonomous mode; stop when no ready issues remain, cumulative cost exceeds work.cost_ceiling, or user aborts; re-evaluate unblocked issues between jobs (blocked: Implement deft work...)
 - Implement SIGINT handling: catch Ctrl+C, send graceful shutdown to Foreman, wait for current issue status rollback to :open (5-second timeout), then exit; if timeout expires, issue left at :in_progress (detected as stale on next startup) (blocked: Implement deft work --loop...)
 
-## observational-memory v0.1
-
-- Add retry wrapper to async Observer Task: `spawn_observer_task` calls `Observer.run/4` directly with no retries; must wrap in retry logic (3 retries with exponential backoff) matching the existing `run_observer_with_retry` pattern used by the sync path (spec section 6.3)
-
 ## skills v0.2
 
 - Fix `tools = []` in `continue_after_tools` and queued prompt path: `continue_after_tools/1` (line 1300) and `handle_idle_transition` queued prompt path (line 941) both hardcode `tools = []`; must use `Map.get(compacted_data.config, :tools, [])` like the initial `:calling` entry (line 208); agent loses all tools (including `use_skill`) after first tool execution round (spec section 2.5)
