@@ -153,6 +153,6 @@ defmodule Deft.Issue do
       true
   """
   def timestamp do
-    DateTime.utc_now() |> DateTime.to_iso8601()
+    DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.to_iso8601()
   end
 end
