@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **evals v0.2 (2026-03-18):** Implement skills eval suite: suggestion (20 iters, 80%), invocation fidelity (20 iters, 85%)
 - **orchestration v0.3 (2026-03-18):** Add `{:rate_limiter, :cost_ceiling_reached, cost}` handler to Foreman: message from RateLimiter falls to catch-all and is silently dropped; Foreman must pause new Lead spawns when cost ceiling is reached (foreman.ex:569)
 - **evals v0.2 (2026-03-18):** Fix `mix eval.compare` load_run to distinguish corrupt JSONL data from missing run files: currently returns `{:error, :not_found, run_id}` for both cases (compare.ex:85-86); should return a distinct error when file exists but all lines fail JSON decode
 - **issues v0.2 (2026-03-18):** Fix compact_closed_issues timestamp comparison: cutoff uses `DateTime.to_iso8601()` without `DateTime.truncate(:second)` (issues.ex:483-485), producing fractional seconds like `.000000Z`; stored `closed_at` timestamps use truncated format; string comparison `<` gives wrong results when formats differ
