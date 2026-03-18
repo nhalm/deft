@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **orchestration v0.3 (2026-03-18):** Implement Lead→Foreman messaging: Lead sends messages via `send(foreman_pid, {:lead_message, type, content, metadata})` for types: :status, :decision, :artifact, :contract, :contract_revision, :plan_amendment, :complete, :blocker, :error, :critical_finding
 - **rate-limiter v0.1 (2026-03-18):** Implement cost tracking: read usage (input_tokens, output_tokens) from API responses, multiply by per-model pricing table; send {:rate_limiter, :cost, amount} to Foreman every $0.50 increment (not {:lead_message, ...})
 - **orchestration v0.3 (2026-03-18):** Implement decomposition phase: Foreman reads research findings, produces deliverables + dependency DAG + interface contracts + cost estimate, writes plan to Deft.Store site log instance, presents to user for approval; --auto-approve-all flag skips approval gate
 - **orchestration v0.3 (2026-03-18):** Implement site log Lead read access: Leads obtain site log ETS tid via Deft.Store.tid/1 GenServer.call; Foreman passes site log registered name to each Lead at startup; ETS :protected allows Lead reads without GenServer calls

@@ -27,7 +27,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.3
 
-- Implement Lead→Foreman messaging: Lead sends messages via `send(foreman_pid, {:lead_message, type, content, metadata})` for types: :status, :decision, :artifact, :contract, :contract_revision, :plan_amendment, :complete, :blocker, :error, :critical_finding
 - Implement Lead active steering: Lead reads Runner output after each task completion, evaluates progress against deliverable criteria, sends course corrections to Runner on next spawn; Lead decides when task is done or stuck and reports to Foreman
 - Implement Foreman→Lead steering: Foreman sends `send(lead_pid, {:foreman_steering, content})` for course correction; detect conflicting :decision messages from parallel Leads, pause affected Leads, resolve or escalate to user (blocked: Implement Foreman gen_statem...)
 - Implement partial dependency unblocking: Foreman watches for {:lead_message, :contract, content, metadata} messages matching dependency `needs`, creates worktree for unblocked Lead, starts Lead with contract details

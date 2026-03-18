@@ -661,6 +661,36 @@ defmodule Deft.Job.Foreman do
     data
   end
 
+  defp process_lead_message(:artifact, content, _metadata, data) do
+    Logger.info("Lead artifact: #{inspect(content)}")
+    # Log artifact creation/modification
+    # Don't auto-promote to site log - these are tracked via git
+    data
+  end
+
+  defp process_lead_message(:contract_revision, content, metadata, data) do
+    Logger.info("Lead contract revision")
+    # Auto-promote to site log and re-steer downstream Leads
+    write_to_site_log(:contract, content, Map.put(metadata, :revision, true), data)
+    # TODO: identify and re-steer Leads that depend on this contract
+    data
+  end
+
+  defp process_lead_message(:plan_amendment, content, _metadata, data) do
+    Logger.info("Lead plan amendment request: #{content}")
+    # Lead is requesting a change to the work plan
+    # Don't auto-promote - this is a coordination request
+    # TODO: evaluate amendment and decide whether to approve/adjust plan
+    data
+  end
+
+  defp process_lead_message(:error, content, _metadata, data) do
+    Logger.error("Lead error: #{content}")
+    # Log the error but don't auto-promote to site log
+    # Errors are handled in Lead crash recovery, not promoted as knowledge
+    data
+  end
+
   defp process_lead_message(type, content, _metadata, data) do
     Logger.debug("Lead message (#{type}): #{inspect(content)}")
     data
