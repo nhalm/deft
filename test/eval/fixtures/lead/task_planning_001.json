@@ -1,0 +1,33 @@
+{
+  "id": "lead-task-planning-001",
+  "spec_version": "0.2",
+  "description": "Simple feature implementation with clear dependencies",
+  "tags": ["lead", "task_planning"],
+  "deliverable": "Implement user authentication using Argon2 password hashing",
+  "research_findings": {
+    "contracts": [
+      {
+        "key": "user_schema",
+        "value": "User schema has :email and :password_hash fields"
+      }
+    ],
+    "research": [
+      {
+        "key": "auth_library",
+        "value": "Project uses comeonin library with Argon2 hasher"
+      }
+    ],
+    "decisions": [
+      {
+        "key": "password_policy",
+        "value": "Minimum 8 characters, must include letter and number"
+      }
+    ]
+  },
+  "expected_properties": {
+    "min_tasks": 4,
+    "max_tasks": 8,
+    "has_dependencies": true,
+    "has_done_states": true
+  }
+}
