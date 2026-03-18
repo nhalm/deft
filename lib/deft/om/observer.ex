@@ -17,7 +17,7 @@ defmodule Deft.OM.Observer do
   alias Deft.Message.{Text, ToolUse, ToolResult, Thinking, Image}
   alias Deft.OM.Tokens
   alias Deft.OM.Observer.{Parse, Prompt}
-  alias Deft.Provider.Event.{TextDelta, Done, Error}
+  alias Deft.Provider.Event.{TextDelta, Done, Error, Usage}
 
   @doc """
   Runs the Observer extraction task.
@@ -37,6 +37,7 @@ defmodule Deft.OM.Observer do
   - `:message_tokens` - Token count of the messages that were observed
   - `:current_task` - Current task description (if present)
   - `:continuation_hint` - Dynamic continuation hint (if present)
+  - `:usage` - Usage data from provider (%{input_tokens:, output_tokens:}) or nil
 
   ## Examples
 
@@ -52,7 +53,8 @@ defmodule Deft.OM.Observer do
             message_ids: [String.t()],
             message_tokens: integer(),
             current_task: String.t() | nil,
-            continuation_hint: String.t() | nil
+            continuation_hint: String.t() | nil,
+            usage: %{input_tokens: integer(), output_tokens: integer()} | nil
           }
   def run(config, messages, existing_observations, calibration_factor) do
     Logger.debug("Observer: Starting observation extraction for #{length(messages)} messages")
@@ -93,7 +95,7 @@ defmodule Deft.OM.Observer do
         }
 
         case call_llm_sync(provider_module, [system_message, user_message], llm_config) do
-          {:ok, response_text} ->
+          {:ok, response_text, usage} ->
             # Parse the Observer output
             case Parse.parse_output(response_text) do
               {:ok,
@@ -115,7 +117,8 @@ defmodule Deft.OM.Observer do
                   message_ids: message_ids,
                   message_tokens: message_tokens,
                   current_task: current_task,
-                  continuation_hint: continuation_hint
+                  continuation_hint: continuation_hint,
+                  usage: usage
                 }
 
               {:error, reason} ->
@@ -175,26 +178,30 @@ defmodule Deft.OM.Observer do
   end
 
   defp collect_stream_text(stream_ref, timeout) do
-    collect_stream_text_loop(stream_ref, "", :os.system_time(:millisecond), timeout)
+    collect_stream_text_loop(stream_ref, "", nil, :os.system_time(:millisecond), timeout)
   end
 
-  defp collect_stream_text_loop(stream_ref, acc, start_time, timeout) do
+  defp collect_stream_text_loop(stream_ref, acc, usage, start_time, timeout) do
     elapsed = :os.system_time(:millisecond) - start_time
     remaining_timeout = max(0, timeout - elapsed)
 
     receive do
       {:provider_event, %TextDelta{delta: delta}} ->
-        collect_stream_text_loop(stream_ref, acc <> delta, start_time, timeout)
+        collect_stream_text_loop(stream_ref, acc <> delta, usage, start_time, timeout)
+
+      {:provider_event, %Usage{input: input_tokens, output: output_tokens}} ->
+        usage_data = %{input_tokens: input_tokens, output_tokens: output_tokens}
+        collect_stream_text_loop(stream_ref, acc, usage_data, start_time, timeout)
 
       {:provider_event, %Done{}} ->
-        {:ok, acc}
+        {:ok, acc, usage}
 
       {:provider_event, %Error{message: msg}} ->
         {:error, msg}
 
       {:provider_event, _other} ->
-        # Ignore other events (tool calls, thinking, usage, etc.)
-        collect_stream_text_loop(stream_ref, acc, start_time, timeout)
+        # Ignore other events (tool calls, thinking, etc.)
+        collect_stream_text_loop(stream_ref, acc, usage, start_time, timeout)
     after
       remaining_timeout ->
         # Cancel stream on timeout
@@ -238,7 +245,8 @@ defmodule Deft.OM.Observer do
       message_ids: message_ids,
       message_tokens: message_tokens,
       current_task: nil,
-      continuation_hint: nil
+      continuation_hint: nil,
+      usage: nil
     }
   end
 end

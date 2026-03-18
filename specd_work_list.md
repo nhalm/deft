@@ -82,10 +82,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement `deft work --loop`: approve every plan by default (each issue gets plan approval checkpoint); --auto-approve-all flag skips all plan approvals for fully autonomous mode; stop when no ready issues remain, cumulative cost exceeds work.cost_ceiling, or user aborts; re-evaluate unblocked issues between jobs (blocked: Implement deft work...)
 - Implement SIGINT handling: catch Ctrl+C, send graceful shutdown to Foreman, wait for current issue status rollback to :open (5-second timeout), then exit; if timeout expires, issue left at :in_progress (detected as stale on next startup) (blocked: Implement deft work --loop...)
 
-## observational-memory v0.1
-
-- Implement token calibration from provider usage: wire usage events to `Tokens.calibrate/3` in OM.State; update calibration_factor via exponential moving average when actual token counts are available from provider responses (spec section 7)
-
 ## skills v0.2
 
 - Fix slash command skill injection: TUI `chat.ex` sends skills via `{:submit, full_text}` (user message) instead of injecting as a system instruction; spec section 2.4 requires skills to be system-level instructions, not user messages; commands correctly use user messages but the skill path must inject into the agent's system context

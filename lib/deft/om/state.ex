@@ -504,6 +504,9 @@ defmodule Deft.OM.State do
     # Demonitor the task
     Process.demonitor(ref, [:flush])
 
+    # Calibrate token estimation from usage data (spec section 7)
+    state = calibrate_from_usage(state, result.usage, result.observations)
+
     # Check if observations are empty (indicates failure)
     is_success = result.observations != ""
 
@@ -629,6 +632,9 @@ defmodule Deft.OM.State do
 
     # Demonitor the task
     Process.demonitor(ref, [:flush])
+
+    # Calibrate token estimation from usage data (spec section 7)
+    state = calibrate_from_usage(state, result.usage, result.compressed_observations)
 
     # Check if result indicates success
     is_success = result.compressed_observations != ""
@@ -1417,6 +1423,25 @@ defmodule Deft.OM.State do
   defp record_cycle_success(state) do
     # Reset consecutive failures on successful cycle
     %{state | consecutive_failures: 0}
+  end
+
+  defp calibrate_from_usage(state, usage, content_text) do
+    # Calibrate token estimation from provider usage data (spec section 7)
+    if usage && usage.output_tokens > 0 do
+      actual_chars = byte_size(content_text)
+      actual_tokens = usage.output_tokens
+      new_factor = Tokens.calibrate(state.calibration_factor, actual_chars, actual_tokens)
+
+      if abs(new_factor - state.calibration_factor) > 0.01 do
+        Logger.debug(
+          "OM: Calibrated token factor from #{Float.round(state.calibration_factor, 2)} to #{Float.round(new_factor, 2)} (#{actual_chars} chars / #{actual_tokens} tokens)"
+        )
+      end
+
+      %{state | calibration_factor: new_factor, snapshot_dirty: true}
+    else
+      state
+    end
   end
 
   defp record_cycle_failure(state, type, reason) do

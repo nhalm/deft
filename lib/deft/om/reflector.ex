@@ -16,7 +16,7 @@ defmodule Deft.OM.Reflector do
   alias Deft.{Config, Message, Provider}
   alias Deft.Message.Text
   alias Deft.OM.{Reflector.Prompt, Tokens}
-  alias Deft.Provider.Event.{TextDelta, Done, Error}
+  alias Deft.Provider.Event.{TextDelta, Done, Error, Usage}
 
   @doc """
   Runs the Reflector compression task.
@@ -36,6 +36,7 @@ defmodule Deft.OM.Reflector do
   - `:after_tokens` - Token count after compression
   - `:compression_level` - Final compression level used (0-3)
   - `:llm_calls` - Number of LLM calls made
+  - `:usage` - Usage data from the final LLM call (%{input_tokens:, output_tokens:}) or nil
 
   ## Examples
 
@@ -51,7 +52,8 @@ defmodule Deft.OM.Reflector do
             before_tokens: integer(),
             after_tokens: integer(),
             compression_level: integer(),
-            llm_calls: integer()
+            llm_calls: integer(),
+            usage: %{input_tokens: integer(), output_tokens: integer()} | nil
           }
   def run(config, active_observations, target_size \\ 20_000, calibration_factor) do
     Logger.debug("Reflector: Starting compression with target size #{target_size} tokens")
@@ -62,7 +64,7 @@ defmodule Deft.OM.Reflector do
     correction_markers = extract_correction_markers(active_observations)
 
     # Try compression with escalating levels (max 2 LLM calls)
-    {compressed, level, llm_calls} =
+    {compressed, level, llm_calls, usage} =
       compress_with_retry(
         config,
         active_observations,
@@ -82,7 +84,8 @@ defmodule Deft.OM.Reflector do
       before_tokens: before_tokens,
       after_tokens: after_tokens,
       compression_level: level,
-      llm_calls: llm_calls
+      llm_calls: llm_calls,
+      usage: usage
     }
   end
 
@@ -105,10 +108,10 @@ defmodule Deft.OM.Reflector do
            calibration_factor,
            correction_markers
          ) do
-      {:ok, compressed, level} ->
-        {compressed, level, 1}
+      {:ok, compressed, level, usage} ->
+        {compressed, level, 1, usage}
 
-      {:retry, _compressed, level} ->
+      {:retry, _compressed, level, _usage} ->
         # Second attempt: try next level (capped at 3)
         next_level = min(level + 1, 3)
 
@@ -120,16 +123,16 @@ defmodule Deft.OM.Reflector do
                calibration_factor,
                correction_markers
              ) do
-          {:ok, compressed, final_level} ->
-            {compressed, final_level, 2}
+          {:ok, compressed, final_level, usage2} ->
+            {compressed, final_level, 2, usage2}
 
-          {:retry, compressed, final_level} ->
+          {:retry, compressed, final_level, usage2} ->
             # Level 3 still exceeds target - accept the output from the second call
             Logger.warning(
               "Reflector: Level #{final_level} still exceeds target, accepting output"
             )
 
-            {compressed, final_level, 2}
+            {compressed, final_level, 2, usage2}
         end
     end
   end
@@ -144,7 +147,7 @@ defmodule Deft.OM.Reflector do
          correction_markers
        ) do
     case call_llm_for_compression(config, observations, target_size, level) do
-      {:ok, compressed} ->
+      {:ok, compressed, usage} ->
         # Validate CORRECTION markers survived
         validated = ensure_correction_markers(compressed, correction_markers)
 
@@ -152,19 +155,19 @@ defmodule Deft.OM.Reflector do
         token_count = Tokens.estimate(validated, calibration_factor)
 
         if token_count <= target_size do
-          {:ok, validated, level}
+          {:ok, validated, level, usage}
         else
           Logger.debug(
             "Reflector: Level #{level} output (#{token_count} tokens) exceeds target (#{target_size} tokens)"
           )
 
-          {:retry, validated, level}
+          {:retry, validated, level, usage}
         end
 
       {:error, reason} ->
         Logger.warning("Reflector: LLM call failed at level #{level}: #{inspect(reason)}")
         # On error, return original observations
-        {:ok, observations, level}
+        {:ok, observations, level, nil}
     end
   end
 
@@ -219,26 +222,30 @@ defmodule Deft.OM.Reflector do
   end
 
   defp collect_stream_text(stream_ref, timeout) do
-    collect_stream_text_loop(stream_ref, "", :os.system_time(:millisecond), timeout)
+    collect_stream_text_loop(stream_ref, "", nil, :os.system_time(:millisecond), timeout)
   end
 
-  defp collect_stream_text_loop(stream_ref, acc, start_time, timeout) do
+  defp collect_stream_text_loop(stream_ref, acc, usage, start_time, timeout) do
     elapsed = :os.system_time(:millisecond) - start_time
     remaining_timeout = max(0, timeout - elapsed)
 
     receive do
       {:provider_event, %TextDelta{delta: delta}} ->
-        collect_stream_text_loop(stream_ref, acc <> delta, start_time, timeout)
+        collect_stream_text_loop(stream_ref, acc <> delta, usage, start_time, timeout)
+
+      {:provider_event, %Usage{input: input_tokens, output: output_tokens}} ->
+        usage_data = %{input_tokens: input_tokens, output_tokens: output_tokens}
+        collect_stream_text_loop(stream_ref, acc, usage_data, start_time, timeout)
 
       {:provider_event, %Done{}} ->
-        {:ok, acc}
+        {:ok, acc, usage}
 
       {:provider_event, %Error{message: msg}} ->
         {:error, msg}
 
       {:provider_event, _other} ->
         # Ignore other events
-        collect_stream_text_loop(stream_ref, acc, start_time, timeout)
+        collect_stream_text_loop(stream_ref, acc, usage, start_time, timeout)
     after
       remaining_timeout ->
         # Cancel stream on timeout
