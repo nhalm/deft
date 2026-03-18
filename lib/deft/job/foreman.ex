@@ -749,9 +749,55 @@ defmodule Deft.Job.Foreman do
 
   defp process_lead_message(:contract_revision, content, metadata, data) do
     Logger.info("Lead contract revision")
-    # Auto-promote to site log and re-steer downstream Leads
+    # Auto-promote to site log with revision flag
     write_to_site_log(:contract, content, Map.put(metadata, :revision, true), data)
-    # TODO: identify and re-steer Leads that depend on this contract
+
+    # Extract which deliverable published this contract revision
+    publishing_deliverable = Map.get(metadata, :deliverable_name)
+
+    # Find started Leads that depend on this contract
+    dependent_leads =
+      data.leads
+      |> Enum.filter(fn {_lead_id, lead_info} ->
+        # Check if this Lead's deliverable depends on the publishing deliverable
+        lead_depends_on_contract?(lead_info.deliverable, publishing_deliverable, data.plan)
+      end)
+      |> Enum.map(fn {lead_id, _lead_info} -> lead_id end)
+
+    Logger.info(
+      "Contract revision from #{publishing_deliverable || "unknown"} affects #{length(dependent_leads)} active Lead(s)"
+    )
+
+    # Send steering messages to dependent Leads
+    Enum.each(dependent_leads, fn lead_id ->
+      case Map.get(data.leads, lead_id) do
+        nil ->
+          Logger.warning("Could not find Lead #{lead_id} to re-steer")
+
+        lead_info ->
+          steering_content = """
+          INTERFACE CONTRACT REVISION
+
+          The upstream deliverable "#{publishing_deliverable}" has revised its contract.
+
+          Updated contract:
+          #{content}
+
+          Please review this revision and adjust your implementation accordingly.
+          """
+
+          # Send steering message to Lead process
+          if lead_pid = Map.get(lead_info, :pid) do
+            send(lead_pid, {:foreman_steering, steering_content})
+            Logger.info("Sent contract revision steering to Lead #{lead_id}")
+          else
+            Logger.warning(
+              "Lead #{lead_id} has no PID stored, cannot send steering (Lead process not yet started)"
+            )
+          end
+      end
+    end)
+
     data
   end
 
@@ -1120,6 +1166,8 @@ defmodule Deft.Job.Foreman do
           deliverable: deliverable,
           worktree_path: worktree_path,
           status: :running,
+          pid: nil,
+          # In real implementation, would store Lead PID for sending steering messages
           monitor_ref: nil
           # In real implementation, would monitor the Lead process
         }
@@ -1144,5 +1192,34 @@ defmodule Deft.Job.Foreman do
     # and verify it satisfies the specific interface requirements
     # For now, any contract from the dependency deliverable unblocks the dependent
     true
+  end
+
+  # Check if a deliverable depends on a contract from another deliverable
+  defp lead_depends_on_contract?(_deliverable, nil, _plan), do: false
+  defp lead_depends_on_contract?(_deliverable, _publishing_deliverable, nil), do: false
+
+  defp lead_depends_on_contract?(deliverable, publishing_deliverable, plan) do
+    # Get the deliverable name (handle both struct and map)
+    deliverable_name =
+      case deliverable do
+        %{name: name} -> name
+        name when is_binary(name) -> name
+        _ -> nil
+      end
+
+    # Check if this deliverable has contracts from the publishing deliverable
+    contracts = Map.get(plan, :contracts, [])
+
+    # Look through contracts to see if this deliverable needs something from publishing_deliverable
+    Enum.any?(contracts, fn contract_spec ->
+      case parse_contract_spec(contract_spec) do
+        {:ok, dependent, dependency, _desc} ->
+          # Check if this deliverable is the dependent and the publishing deliverable is the dependency
+          deliverable_name == dependent and publishing_deliverable == dependency
+
+        :error ->
+          false
+      end
+    end)
   end
 end
