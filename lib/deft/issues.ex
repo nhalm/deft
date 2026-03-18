@@ -482,6 +482,7 @@ defmodule Deft.Issues do
     cutoff_date =
       DateTime.utc_now()
       |> DateTime.add(-compaction_days, :day)
+      |> DateTime.truncate(:second)
       |> DateTime.to_iso8601()
 
     {compacted, remaining} =

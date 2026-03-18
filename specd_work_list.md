@@ -57,7 +57,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 ## issues v0.2
 
 - Implement `deft issue update --edit` flag: reopen conversational elicitation flow with existing fields pre-populated (spec section 5.2); not declared in OptionParser (cli.ex:96-117) and not handled in execute_command
-- Fix compact_closed_issues timestamp comparison: cutoff uses `DateTime.to_iso8601()` without `DateTime.truncate(:second)` (issues.ex:483-485), producing fractional seconds like `.000000Z`; stored `closed_at` timestamps use truncated format; string comparison `<` gives wrong results when formats differ
 - Implement `deft work`: call ready/0, pick first, set status :in_progress, start Foreman job with issue structured JSON as prompt (context → research, acceptance_criteria → verification targets, constraints → Lead steering), on success set :closed + job_id, on failure set back to :open
 - Implement `deft work <id>`: same as `deft work` but for a specific issue ID, verify issue exists and is open (blocked: Implement deft work...)
 - Implement `deft work --loop`: approve every plan by default (each issue gets plan approval checkpoint); --auto-approve-all flag skips all plan approvals for fully autonomous mode; stop when no ready issues remain, cumulative cost exceeds work.cost_ceiling, or user aborts; re-evaluate unblocked issues between jobs (blocked: Implement deft work...)

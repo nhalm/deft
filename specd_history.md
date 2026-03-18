@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **issues v0.2 (2026-03-18):** Fix compact_closed_issues timestamp comparison: cutoff uses `DateTime.to_iso8601()` without `DateTime.truncate(:second)` (issues.ex:483-485), producing fractional seconds like `.000000Z`; stored `closed_at` timestamps use truncated format; string comparison `<` gives wrong results when formats differ
 - **rate-limiter v0.1 (2026-03-18):** Fix consecutive_429s reset: currently resets to 0 on every successful grant (rate_limiter.ex:372, 770), preventing exponential backoff from growing past 1s; should only reset after a sustained period without 429s, not on each individual success
 - **git-strategy v0.1 (2026-03-18):** Fix Lead :complete message to include lead_id in metadata
 - **evals v0.2 (2026-03-18):** Implement spilling eval suite: summary quality (20 iters, 85%), cache retrieval (20 iters, 85%), threshold calibration grid search
