@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **orchestration v0.3 (2026-03-18):** Implement contract_matches? to verify published contract matches needed dependency: currently returns true for all contracts (foreman.ex:1339-1345), unblocking all waiting Leads regardless of actual dependency
 - **orchestration v0.3 (2026-03-18):** Implement extract_plan_from_messages to parse deliverables, dependencies, and contracts from LLM plan output: currently returns empty lists (foreman.ex:1200-1208), making execution phase non-functional (no Leads started)
 - **rate-limiter v0.1 (2026-03-18):** Implement cost_warning config and TUI notification: spec section 7 defines `job.cost_warning` at $5.00 default to display warning in TUI when reached; entirely absent from code — no config field, no threshold check, no message to Foreman
 - **rate-limiter v0.1 (2026-03-18):** Fix capacity restore to use 10% of original capacity (linear) instead of 10% of current (compounding): rate_limiter.ex:176-177 uses `buckets.rpm.capacity * 1.1` which compounds; spec says "10% per minute" meaning fixed 10% of original limit

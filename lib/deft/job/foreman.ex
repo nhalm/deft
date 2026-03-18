@@ -1654,12 +1654,11 @@ defmodule Deft.Job.Foreman do
   end
 
   # Check if a published contract satisfies a dependency need
-  defp contract_matches?(_needed_contract, _publishing_deliverable, _contract_content) do
-    # Simple matching: check if the publishing deliverable name matches the needed dependency
-    # In a more sophisticated implementation, this would parse the contract content
-    # and verify it satisfies the specific interface requirements
-    # For now, any contract from the dependency deliverable unblocks the dependent
-    true
+  defp contract_matches?(needed_contract, publishing_deliverable, _contract_content) do
+    # Check if the publishing deliverable matches the needed dependency
+    # A contract from the required deliverable satisfies the dependency
+    # Future enhancement: parse contract_content to verify it meets specific interface requirements
+    publishing_deliverable != nil and publishing_deliverable == needed_contract
   end
 
   # Check if a deliverable depends on a contract from another deliverable
