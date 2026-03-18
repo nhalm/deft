@@ -533,6 +533,7 @@ defmodule Deft.Session.Store do
   defp extract_prompt_text(msg) do
     msg.content
     |> Enum.find_value(fn
+      %Deft.Message.Text{text: text} -> text
       %{type: "text", text: text} -> text
       _ -> nil
     end)
