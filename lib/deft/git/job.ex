@@ -522,7 +522,7 @@ defmodule Deft.Git.Job do
           Map.put(acc, :path, String.trim_leading(line, "worktree "))
 
         String.starts_with?(line, "branch ") ->
-          Map.put(acc, :branch, String.trim_leading(line, "branch refs/heads/"))
+          Map.put(acc, :branch, String.replace_prefix(line, "branch refs/heads/", ""))
 
         true ->
           acc

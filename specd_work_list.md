@@ -57,7 +57,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 ## git-strategy v0.1
 
 - Fix Lead :complete message to include lead_id in metadata: Lead sends metadata `%{deliverable: ..., tasks_completed: ...}` without lead_id (lead.ex:697-705); Foreman does `Map.get(metadata, :lead_id)` which returns nil, so `Map.get(data.leads, nil)` returns nil and merge is skipped (foreman.ex:813-814)
-- Fix parse_worktree_entry branch parsing: uses `String.trim_leading(line, "branch refs/heads/")` (job.ex:525) which strips individual characters, not the prefix; branch "deft/lead-abc" is mangled to "t/lead-abc" because 'd','e','f' are in the character set; use `String.replace_prefix/3` instead
 
 ## filesystem v0.2
 
