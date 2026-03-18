@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **observational-memory v0.1 (2026-03-17):** Implement `/observations` slash command: display `## Current State` + `## User Preferences` + today's entries; support `--full` for complete dump and `--search <term>` for filtering (spec section 11)
 - **observational-memory v0.1 (2026-03-18):** Fix `om_enabled` config bypass: `agent/context.ex:90` and `agent.ex:617` read `Application.get_env(:deft, :om_enabled, true)` but no code calls `Application.put_env`; must read from the config struct (`data.config.om_enabled`) instead, matching the pattern at `agent.ex:1450`
 - **observational-memory v0.1 (2026-03-17):** Fix sync fallback stale context: `get_om_context` in `agent/context.ex` calls `check_sync_fallback` after fetching OM data but returns the pre-sync observations; must re-fetch context from `OMState.get_context` after sync fallback triggers to include freshly observed/reflected data
 - **tui v0.1 (2026-03-17):** Fix `memorizing...` status indicator never visible: OM state.ex broadcasts `:sync_fallback` immediately followed by `:observation_started` (lines 312-314); TUI handles `:sync_fallback` by setting `om_sync_fallback: true` but the immediately subsequent `:observation_started` sets it to `false` before any render cycle; either delay the `:observation_started` broadcast or don't clear `om_sync_fallback` on `:observation_started`

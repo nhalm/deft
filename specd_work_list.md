@@ -84,7 +84,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## observational-memory v0.1
 
-- Implement `/observations` slash command: display `## Current State` + `## User Preferences` + today's entries; support `--full` for complete dump and `--search <term>` for filtering (spec section 11)
 - Implement `/forget <text>` slash command: search observations for matches, show matches, confirm, append CORRECTION marker; Reflector must preserve CORRECTION markers through compression (spec section 11)
 - Implement `/correct <old> → <new>` slash command: search observations for old text, show match, confirm, append CORRECTION marker with replacement (spec section 11)
 - Implement token calibration from provider usage: wire usage events to `Tokens.calibrate/3` in OM.State; update calibration_factor via exponential moving average when actual token counts are available from provider responses (spec section 7)
