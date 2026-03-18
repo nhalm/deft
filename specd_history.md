@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **evals v0.2 (2026-03-18):** Implement Observer anti-hallucination evals: 4 test cases from spec section 2.3 (hypothetical, exploring options, reading about, discussing alternatives); 20 iterations, 95% pass rate
 - **evals v0.2 (2026-03-18):** Implement Observer section routing evals: verify facts route to correct sections per spec section 2.2; 20 iterations, 85% pass rate
 - **evals v0.2 (2026-03-18):** Implement Observer extraction evals: 9 test cases from spec section 2.1 (explicit tech choice, preference, file read, file modify, error, command, architecture, dependency, deferred work); 20 iterations, 85% pass rate
 - **issues v0.2 (2026-03-18):** Implement `deft issue dep add <id> --blocked-by <blocker_id>` and `dep remove` CLI commands
