@@ -191,6 +191,9 @@ defmodule Deft.Eval.JudgeCalibration do
             {:ok, result}
           end
       end
+    else
+      {:error, :enoent} -> {:error, :not_found}
+      error -> error
     end
   end
 

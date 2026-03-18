@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **evals v0.2 (2026-03-18):** Fix `JudgeCalibration.load_latest_result/1`: when calibration directory doesn't exist, `File.ls/1` returns `{:error, :enoent}` which falls through the `with` clause; should return `{:error, :not_found}` per the docstring to match the "no calibration exists" semantic
 - **tui v0.1 (2026-03-18):** Fix `extract_prompt_text/1` in `Session.Store`: pattern matches `%{type: "text", text: text}` but `Deft.Message.Text` structs have no `:type` field; match always fails, returning `""` for `last_user_prompt` in session picker
 - **tui v0.1 (2026-03-17):** Fix OM event handling: OM state broadcasts `{:om_event, {:om, ...}}` but TUI `chat.ex` matches `{:om, ...}` directly; all OM events fall through to catch-all and are silently discarded; OM spinner, `memorizing...` indicator, and memory token counts never update
 - **evals v0.2 (2026-03-17):** Fix `make test.eval.holdout`: uses `mix test --only eval --only holdout` which is OR logic in ExUnit (runs ALL eval tests); should be `mix test --only holdout` to run only holdout-tagged tests
