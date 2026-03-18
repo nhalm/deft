@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **evals v0.2 (2026-03-18):** Implement Foreman constraint propagation evals: constraints from issue flow correctly to Lead steering instructions; 20 iterations, 85% pass rate
 - **evals v0.2 (2026-03-18):** Implement Foreman decomposition evals: 1-3 deliverables, valid DAG, specific contracts; 20 iterations, 75% pass rate
 - **git-strategy v0.1 (2026-03-18):** Implement job branch creation: verify working tree is clean (warn + ask to stash if uncommitted changes), create `deft/job-<job_id>` branch from current HEAD
 - **orchestration v0.3 (2026-03-18):** Implement Lead gen_statem: extends Agent with tuple states `{chunk_phase, agent_state}`, receives deliverable assignment, decomposes into task list, spawns Runners via Task.Supervisor.async_nolink, Lead must explicitly Process.monitor(task.pid) for async_nolink Runners, actively steers (reads output, evaluates, corrects), handles `{:foreman_steering, content}` in handle_info; restart: :temporary in child spec
