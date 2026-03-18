@@ -47,10 +47,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Fix capacity restore timing: runs every 1s (queue check interval at rate_limiter.ex:196) after 60s grace period instead of once per minute; should_restore_capacity? (rate_limiter.ex:649-655) returns true on every tick after grace period because last_429_at is never updated during restore
 - Fix capacity restore to use 10% of original capacity (linear) instead of 10% of current (compounding): rate_limiter.ex:176-177 uses `buckets.rpm.capacity * 1.1` which compounds; spec says "10% per minute" meaning fixed 10% of original limit
 
-## git-strategy v0.1
-
-- Fix Lead :complete message to include lead_id in metadata: Lead sends metadata `%{deliverable: ..., tasks_completed: ...}` without lead_id (lead.ex:697-705); Foreman does `Map.get(metadata, :lead_id)` which returns nil, so `Map.get(data.leads, nil)` returns nil and merge is skipped (foreman.ex:813-814)
-
 ## filesystem v0.2
 
 - Fix cache spill to use actual lead_id from context instead of hardcoded "main": tool_runner.ex:157 builds cache name as `{:cache, context.session_id, "main"}` regardless of which Lead is executing; breaks multi-Lead cache isolation

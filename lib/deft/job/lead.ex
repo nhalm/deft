@@ -699,6 +699,7 @@ defmodule Deft.Job.Lead do
         :complete,
         "Deliverable complete and verified",
         %{
+          lead_id: data.lead_id,
           deliverable: data.deliverable,
           tasks_completed: length(Enum.filter(data.task_list, &(&1.status == :done)))
         }

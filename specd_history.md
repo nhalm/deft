@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **git-strategy v0.1 (2026-03-18):** Fix Lead :complete message to include lead_id in metadata
 - **evals v0.2 (2026-03-18):** Implement spilling eval suite: summary quality (20 iters, 85%), cache retrieval (20 iters, 85%), threshold calibration grid search
 - **filesystem v0.2 (2026-03-18):** Fix resolve_git_root for normal (non-worktree) repos: `git rev-parse --git-common-dir` returns relative `.git`, `Path.dirname(".git")` returns `"."`, all normal repos map to same `~/.deft/projects/` directory (project.ex:131-138); must expand relative path against working dir before dirname
 - **evals v0.2 (2026-03-18):** Implement Actor eval suite: observation usage (20 iters, 85%), continuation (20 iters, 90%), tool selection (20 iters, 85%)
