@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **orchestration v0.3 (2026-03-18):** Fix Lead tool task handler to not consume runner completion messages: when in :executing_tools state, the tool handler at lead.ex:267 matches `{ref, results}` before the runner handler at lead.ex:297; if ref is a runner task, tool_tasks list is unchanged but message is consumed and runner result is lost
 - **filesystem v0.2 (2026-03-18):** Fix cache_read :expired error path: Store.read internally catches ArgumentError and returns :miss before cache_read.ex:75-79 rescue can trigger; :expired error message is unreachable; store.ex should propagate the ArgumentError for cleaned-up tables or cache_read should detect expired state differently
 - **filesystem v0.2 (2026-03-18):** Fix cache spill to use actual lead_id from context instead of hardcoded "main": tool_runner.ex:157 builds cache name as `{:cache, context.session_id, "main"}` regardless of which Lead is executing; breaks multi-Lead cache isolation
 - **orchestration v0.3 (2026-03-18):** Fix Foreman/Lead to look up ToolRunner Task.Supervisor via session Registry via-tuple instead of bare module atom: foreman.ex:182 and lead.ex:188 use `Task.Supervisor.async_nolink(ToolRunner, ...)` but no process is registered under that atom in job context

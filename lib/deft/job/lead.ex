@@ -267,28 +267,61 @@ defmodule Deft.Job.Lead do
         :info,
         {ref, results},
         {chunk_phase, :executing_tools},
-        %{tool_tasks: tasks} = data
+        %{tool_tasks: tasks, runner_tasks: runner_tasks} = data
       )
       when is_reference(ref) do
-    # A tool task completed
-    tasks = Enum.reject(tasks, fn task -> task.ref == ref end)
-    data = %{data | tool_tasks: tasks}
+    # Check if this ref belongs to a tool task or runner task
+    # This handler fires before the runner handler due to more specific state pattern,
+    # so we must explicitly check runner_tasks to avoid consuming runner completion messages
+    cond do
+      Enum.any?(tasks, fn task -> task.ref == ref end) ->
+        # A tool task completed
+        tasks = Enum.reject(tasks, fn task -> task.ref == ref end)
+        data = %{data | tool_tasks: tasks}
 
-    # Add tool results to messages
-    data = add_tool_results(results, data)
+        # Add tool results to messages
+        data = add_tool_results(results, data)
 
-    # If all tasks done, loop back to call LLM or check for continuation
-    if Enum.empty?(tasks) do
-      if should_continue_turn?(data) do
-        # Make another LLM call
-        {:ok, stream_ref, monitor_ref} = call_llm(data)
-        data = %{data | stream_ref: stream_ref, stream_monitor_ref: monitor_ref}
-        {:next_state, {chunk_phase, :calling}, data}
-      else
-        {:next_state, {chunk_phase, :idle}, data}
-      end
-    else
-      {:keep_state, data}
+        # If all tasks done, loop back to call LLM or check for continuation
+        if Enum.empty?(tasks) do
+          if should_continue_turn?(data) do
+            # Make another LLM call
+            {:ok, stream_ref, monitor_ref} = call_llm(data)
+            data = %{data | stream_ref: stream_ref, stream_monitor_ref: monitor_ref}
+            {:next_state, {chunk_phase, :calling}, data}
+          else
+            {:next_state, {chunk_phase, :idle}, data}
+          end
+        else
+          {:keep_state, data}
+        end
+
+      Map.has_key?(runner_tasks, ref) ->
+        # This is a runner task - handle it using the runner logic
+        runner_info = Map.get(runner_tasks, ref)
+        Logger.info("Lead #{data.lead_id} runner completed: #{runner_info.task_description}")
+
+        # Remove completed runner from tracking
+        runner_tasks = Map.delete(runner_tasks, ref)
+        data = %{data | runner_tasks: runner_tasks}
+
+        # Process runner result and decide next action
+        data = process_runner_result(results, runner_info, data)
+
+        # Send status update to Foreman
+        send_lead_message(
+          data.foreman_pid,
+          :status,
+          "Completed: #{runner_info.task_description}",
+          %{}
+        )
+
+        # Continue work since we're in executing_tools state (agent will return to idle later)
+        continue_work(chunk_phase, data)
+
+      true ->
+        # Neither tool nor runner task
+        :keep_state_and_data
     end
   end
 
