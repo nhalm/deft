@@ -88,15 +88,15 @@ defmodule Deft.Skills.Registry do
         nil ->
           {{:error, :not_found}, registry}
 
-        %Entry{loaded: true} = entry ->
-          # Already loaded - read from file (no caching in memory)
-          {read_definition(entry), registry}
+        %Entry{loaded: true, definition: definition} ->
+          # Already loaded - return cached definition
+          {{:ok, definition}, registry}
 
         entry ->
-          # First load - read and mark as loaded
+          # First load - read, cache, and mark as loaded
           case read_definition(entry) do
-            {:ok, _definition} = result ->
-              updated_entry = %{entry | loaded: true}
+            {:ok, definition} = result ->
+              updated_entry = %{entry | loaded: true, definition: definition}
               updated_registry = Map.put(registry, name, updated_entry)
               {result, updated_registry}
 

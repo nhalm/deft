@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## skills v0.2
 
-- Fix `load_definition/1` caching: store the definition text in the `Entry` struct when `loaded: true` is set, then return cached value on subsequent calls instead of re-reading from disk every time (spec section 4.3)
 - Fix `use_skill` tool registration: add `Deft.Tools.UseSkill` to the agent's config tools list so the LLM sees it in the system prompt and can emit tool calls for it; currently not included, making agent auto-invocation (spec section 2.4 type 3) non-functional
 - Fix `use_skill` result injection: add special handling in agent tool result processing to inject `use_skill` results as system-level instructions instead of user-role tool result blocks; spec sections 2.4, 2.5 require system-level injection for appropriate authority
 

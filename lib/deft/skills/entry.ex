@@ -20,7 +20,8 @@ defmodule Deft.Skills.Entry do
           level: level(),
           description: String.t() | nil,
           path: String.t(),
-          loaded: boolean()
+          loaded: boolean(),
+          definition: String.t() | nil
         }
 
   @enforce_keys [:name, :type, :level, :path]
@@ -31,6 +32,7 @@ defmodule Deft.Skills.Entry do
     :level,
     :description,
     :path,
+    :definition,
     loaded: false
   ]
 end
