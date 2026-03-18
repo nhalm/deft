@@ -28,6 +28,7 @@ defmodule Deft.SlashCommand do
           | {:ok, :skill, definition :: String.t()}
           | {:error, :not_found, name :: String.t()}
           | {:error, :no_definition, name :: String.t()}
+          | {:error, reason :: atom(), name :: String.t()}
 
   @doc """
   Parses user input to detect slash commands.
@@ -69,6 +70,7 @@ defmodule Deft.SlashCommand do
   - `{:ok, :skill, definition}` for skills (inject as system instruction)
   - `{:error, :not_found, name}` if no command/skill with that name exists
   - `{:error, :no_definition, name}` if skill exists but has no definition (manifest-only)
+  - `{:error, reason, name}` for file I/O or parse errors (e.g., `:eacces`, `:enoent`)
 
   ## Examples
 
@@ -95,8 +97,8 @@ defmodule Deft.SlashCommand do
           {:error, :no_definition} ->
             {:error, :no_definition, name}
 
-          {:error, _reason} ->
-            {:error, :not_found, name}
+          {:error, reason} ->
+            {:error, reason, name}
         end
     end
   end
