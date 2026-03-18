@@ -678,7 +678,8 @@ defmodule Deft.CLI do
       turn_limit: config.turn_limit,
       tool_timeout: config.tool_timeout,
       bash_timeout: config.bash_timeout,
-      max_turns: config.turn_limit
+      max_turns: config.turn_limit,
+      tools: [Deft.Tools.IssueCreate]
     }
 
     {:ok, agent_pid} =
