@@ -679,7 +679,7 @@ defmodule Deft.CLI do
       tool_timeout: config.tool_timeout,
       bash_timeout: config.bash_timeout,
       max_turns: config.turn_limit,
-      tools: [Deft.Tools.IssueCreate]
+      tools: [Deft.Tools.UseSkill, Deft.Tools.IssueCreate]
     }
 
     {:ok, agent_pid} =
@@ -1216,7 +1216,7 @@ defmodule Deft.CLI do
       tool_timeout: 30_000,
       bash_timeout: 30_000,
       max_turns: 10,
-      tools: [Deft.Tools.IssueDraft]
+      tools: [Deft.Tools.UseSkill, Deft.Tools.IssueDraft]
     }
 
     # Start the elicitation agent with the elicitation prompt as first message

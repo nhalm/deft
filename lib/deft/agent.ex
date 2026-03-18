@@ -204,8 +204,8 @@ defmodule Deft.Agent do
     # Get provider from config (default to nil for now)
     provider = Map.get(compacted_data.config, :provider)
 
-    # Get tools (empty for now, will be populated by future work items)
-    tools = []
+    # Get tools from config
+    tools = Map.get(compacted_data.config, :tools, [])
 
     # Call provider.stream/3
     case call_provider_stream(provider, context_messages, tools, compacted_data.config) do
@@ -373,7 +373,7 @@ defmodule Deft.Agent do
       )
 
     provider = Map.get(compacted_data.config, :provider)
-    tools = []
+    tools = Map.get(compacted_data.config, :tools, [])
 
     case call_provider_stream(provider, context_messages, tools, compacted_data.config) do
       {:ok, stream_ref} ->
