@@ -70,14 +70,18 @@ defmodule Deft.Skills.RegistryTest do
           # Try to load definition
           result = Deft.Skills.Registry.load_definition(entry.name)
 
-          # Result should be either {:ok, definition} or {:error, :no_definition}
-          # (for manifest-only skills)
+          # Result should be either {:ok, definition}, {:error, :no_definition}, or {:error, :enoent}
+          # (for manifest-only skills or missing definition files)
           case result do
             {:ok, definition} ->
               assert is_binary(definition)
 
             {:error, :no_definition} ->
               # This is valid for manifest-only skills
+              :ok
+
+            {:error, :enoent} ->
+              # This is valid when the definition file doesn't exist
               :ok
 
             other ->

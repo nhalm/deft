@@ -745,15 +745,31 @@ defmodule Deft.OM.State do
     # Emit activation event
     broadcast_event(state.session_id, {:om, :activation, %{type: :observation}})
 
-    # Section-aware merge all chunks into active_observations
+    # Filter out stale chunks (epoch < current activation_epoch) per spec section 6.1
+    # Stale chunks were computed against pre-reflection state
+    current_chunks =
+      Enum.filter(state.buffered_chunks, fn chunk ->
+        chunk.epoch >= state.activation_epoch
+      end)
+
+    # Log if any chunks were discarded
+    discarded_count = length(state.buffered_chunks) - length(current_chunks)
+
+    if discarded_count > 0 do
+      Logger.debug(
+        "Discarded #{discarded_count} stale chunks (epoch < #{state.activation_epoch}) for session #{state.session_id}"
+      )
+    end
+
+    # Section-aware merge all current (non-stale) chunks into active_observations
     merged_observations =
-      Enum.reduce(state.buffered_chunks, state.active_observations, fn chunk, acc ->
+      Enum.reduce(current_chunks, state.active_observations, fn chunk, acc ->
         Parse.merge_observations(acc, chunk.observations)
       end)
 
-    # Collect all message_ids from all chunks
+    # Collect all message_ids from current (non-stale) chunks
     all_message_ids =
-      Enum.flat_map(state.buffered_chunks, fn chunk -> chunk.message_ids end)
+      Enum.flat_map(current_chunks, fn chunk -> chunk.message_ids end)
 
     # Add chunk message_ids to observed_message_ids
     new_observed_message_ids = state.observed_message_ids ++ all_message_ids
@@ -763,7 +779,7 @@ defmodule Deft.OM.State do
 
     # Calculate how many tokens were observed (to subtract from pending)
     observed_tokens =
-      Enum.reduce(state.buffered_chunks, 0, fn chunk, acc -> acc + chunk.message_tokens end)
+      Enum.reduce(current_chunks, 0, fn chunk, acc -> acc + chunk.message_tokens end)
 
     # Subtract observed tokens from pending
     new_pending = max(0, state.pending_message_tokens - observed_tokens)

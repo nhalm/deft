@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **observational-memory v0.1 (2026-03-18):** Fix epoch staleness check in `activate_buffered_chunks/1`: filter out buffered chunks whose `epoch` < current `activation_epoch` before merging; stale chunks were computed against pre-reflection state
 - **evals v0.2 (2026-03-17):** Fix `calculate_cache_retrieval_rate/1` denominator in threshold calibration: store `spilled` flag in task result map from `run_task_with_threshold/3`, then count actual spilled results instead of using hardcoded `context_tokens < 1000` proxy which is unrelated to test thresholds (2000-24000)
 - **evals v0.2 (2026-03-18):** Fix `infrastructure_failure?/1` to use proportion instead of absolute count: replace `max_count >= 8` with `max_count / length(failures) >= 0.8`; current code incorrectly flags infrastructure failure when 8+ failures share a reason in any size set (e.g. 8/50 = 16% would be flagged)
 - **filesystem v0.2 (2026-03-17):** Fix ETS table access level: change `:public` to `:protected` in `Deft.Store` init; restructure async DETS→ETS load to work within owner process (or spawn load task before creating ETS so task IS the owner); spec section 3 and 5.5 require `:protected` to prevent Leads from writing directly

@@ -77,7 +77,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## observational-memory v0.1
 
-- Fix epoch staleness check in `activate_buffered_chunks/1`: filter out buffered chunks whose `epoch` < current `activation_epoch` before merging; stale chunks were computed against pre-reflection state (spec section 6.1)
 - Implement reflection buffering: spawn Reflector Task at 50% of reflection threshold (20,000 tokens); store result in `buffered_reflection`; on full threshold, check epoch and activate or discard+re-trigger (spec section 6.2)
 - Fix hard cap truncation: replace `Enum.reduce` with `Enum.reduce_while` in `truncate_session_history_to_target/4` so processing halts when budget is exceeded; current code can skip newer lines and keep older ones non-contiguously (spec section 4.6)
 - Implement sync reflection fallback: add `:force_reflect` GenServer.call handler with from-stashing pattern; trigger when observation_tokens >= 1.2x reflection threshold (48,000); 1 retry max (spec section 6.3)
