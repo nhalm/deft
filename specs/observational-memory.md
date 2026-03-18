@@ -2,11 +2,14 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.1 |
+| Version | 0.2 |
 | Status | Ready |
-| Last Updated | 2026-03-16 |
+| Last Updated | 2026-03-18 |
 
 ## Changelog
+
+### v0.2 (2026-03-18)
+- Fix spec/code divergence: OM state is persisted as a separate `<session_id>_om.jsonl` file, not entries in the session JSONL (spec section 9). This was a deliberate implementation choice to avoid JSONL write interleaving when session and OM systems write concurrently.
 
 ### v0.1 (2026-03-16)
 - Initial spec — observational memory system for Deft with sectioned observations, Task-based Observer/Reflector, async buffering with epoch-based staleness, user correction via /forget and /correct commands
@@ -405,7 +408,7 @@ All OM configuration lives under the `om` namespace in Deft's config:
 
 ### 9. Persistence
 
-OM state is persisted as `observation` entries in the session JSONL file (from harness spec).
+OM state is persisted as a snapshot in a separate `<session_id>_om.jsonl` file, not embedded in the session JSONL. This separate file avoids write contention when the session store and OM systems write concurrently.
 
 #### 9.1 When to Save
 
