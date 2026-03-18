@@ -52,6 +52,7 @@ defmodule Deft.MixProject do
       {:stream_data, "~> 1.0", only: [:test]},
       {:mox, "~> 1.1", only: [:test]},
       {:tribunal, "~> 1.3", only: [:test]},
+      {:req_llm, "~> 1.2", only: [:test]},
       {:ex_doc, "~> 0.34", only: [:dev], runtime: false}
     ]
   end

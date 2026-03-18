@@ -88,9 +88,47 @@ while [ $CYCLE -lt $MAX_CYCLES ]; do
         TIMESTAMP=$(date +%Y%m%d-%H%M%S)
         OUTPUT_FILE="/tmp/${PWD##*/}-impl-${TIMESTAMP}-${TASK_NUM}.txt"
 
-        echo "=== Cycle ${CYCLE} — Task ${TASK_NUM} ==="
+        # Pre-select next unblocked work item to avoid agent reading/scanning
+        NEXT_ITEM=$(grep -n '^- ' specd_work_list.md | grep -v '(blocked:' | head -1)
+        if [ -z "$NEXT_ITEM" ]; then
+            echo "=== All work items blocked or complete ==="
+            break
+        fi
 
-        cat .claude/commands/specd/implement.md | claude -p \
+        ITEM_LINE=$(echo "$NEXT_ITEM" | cut -d: -f1)
+        ITEM_TEXT=$(echo "$NEXT_ITEM" | cut -d: -f2- | sed 's/^- //')
+
+        # Walk backwards from the item line to find the spec header (## spec-name vX.Y)
+        SPEC_HEADER=$(head -n "$ITEM_LINE" specd_work_list.md | grep '^## ' | tail -1)
+        SPEC_NAME=$(echo "$SPEC_HEADER" | sed 's/^## //' | awk '{print $1}')
+
+        echo "=== Cycle ${CYCLE} — Task ${TASK_NUM}: ${SPEC_NAME} ==="
+        echo "  Item: ${ITEM_TEXT:0:100}..."
+
+        PROMPT=$(cat <<PROMPT_EOF
+Study AGENTS.md for guidelines.
+
+## Your work item
+
+Spec: ${SPEC_NAME}
+Item: ${ITEM_TEXT}
+
+## Steps
+
+1. Read the spec at specs/${SPEC_NAME}.md (or specs/ subdirectory if not found at top level). The spec is the source of truth.
+2. Implement this ONE work item. If code contradicts the spec, fix the code first.
+3. Validate: run the test suite and fix any lint/format errors.
+4. Record: log significant decisions to specd_decisions.jsonl (source: "implement", decision_by: "claude").
+5. Update tracking files and commit:
+   - Add a line at the TOP of specd_history.md: \`- **${SPEC_HEADER#"## "} ($(date +%Y-%m-%d)):** ${ITEM_TEXT}\`
+   - Remove the completed item from specd_work_list.md
+   - Check specd_work_list.md for items with \`(blocked: ...)\` annotations referencing your completed work — remove resolved blockers
+   - Commit ALL changes in a single commit
+   - Output \`TASK_COMPLETE: true\` when done
+PROMPT_EOF
+)
+
+        echo "$PROMPT" | claude -p \
             --model "$MODEL_IMPLEMENT" \
             --dangerously-skip-permissions \
             --output-format=stream-json \
@@ -100,11 +138,6 @@ while [ $CYCLE -lt $MAX_CYCLES ]; do
 
         if check_fatal_error "$OUTPUT_FILE" "implement task ${TASK_NUM}"; then
             exit 1
-        fi
-
-        if grep '"type":"result"' "$OUTPUT_FILE" | grep -q 'LOOP_COMPLETE: true'; then
-            echo "=== All work items complete ==="
-            break
         fi
 
         sleep 2

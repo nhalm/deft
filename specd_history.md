@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **evals v0.2 (2026-03-17):** Implement spilling summary quality evals: tool-specific summaries (grep match count + top N, read line count + first N lines, ls/find file count + top-level structure) preserve key information; 20 iterations, 85% pass rate
 - **filesystem v0.2 (2026-03-17):** Add summarize/2 callback to Deft.Tool behaviour: receives full result + cache key, returns summary string with cache://<key> reference; implement for grep (match count + top N), read (line count + first N lines), find/ls (file count + top-level structure)
 - **filesystem v0.2 (2026-03-17):** Implement tool result spilling protocol: in Deft.Agent.ToolRunner, after tool execution check if result byte_size/4 exceeds tool's cache.token_threshold; if so, call tool's summarize/2 callback, write full result to cache, replace context entry with summary + cache://<key> reference
 - **evals v0.2 (2026-03-17):** Implement skill invocation fidelity evals: agent auto-invokes via use_skill tool correctly; skill definition is loaded and followed; 20 iterations, 80% pass rate
