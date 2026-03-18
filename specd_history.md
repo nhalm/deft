@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **evals v0.2 (2026-03-17):** Fix `ResultStore.load/1` to return atom-keyed maps: add `keys: :atoms` option to `Jason.decode/1` call, or convert keys after decode; current string-keyed return doesn't match `@type result()` and will cause KeyError in any caller using atom access
 - **tui v0.1 (2026-03-17):** Fix `/quit` command: currently sends `{:stop, term}` via `send/2` which is swallowed by catch-all `handle_info`; should return `{:stop, term}` directly from the handler (spec section 6)
 - **tui v0.1 (2026-03-17):** Implement Ctrl+R toggle for raw output: add `raw_mode` assign, toggle on Ctrl+R, bypass `Markdown.render/1` when enabled (spec section 5)
 - **tui v0.1 (2026-03-17):** Implement Page Up/Down scroll handlers: update `scroll_offset` on key events; currently initialized to 0 and never modified, so conversation area has no working scrollback (spec sections 3, 5)

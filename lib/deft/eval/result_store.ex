@@ -95,7 +95,7 @@ defmodule Deft.Eval.ResultStore do
         # Parse the first line (should only be one line)
         content
         |> String.trim()
-        |> Jason.decode()
+        |> Jason.decode(keys: :atoms)
 
       {:error, :enoent} ->
         {:error, :not_found}

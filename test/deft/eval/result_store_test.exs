@@ -52,14 +52,14 @@ defmodule Deft.Eval.ResultStoreTest do
       assert :ok = ResultStore.store(result)
 
       assert {:ok, loaded} = ResultStore.load(result.run_id)
-      assert loaded["run_id"] == result.run_id
-      assert loaded["commit"] == result.commit
-      assert loaded["model"] == result.model
-      assert loaded["category"] == result.category
-      assert loaded["pass_rate"] == result.pass_rate
-      assert loaded["iterations"] == result.iterations
-      assert loaded["cost_usd"] == result.cost_usd
-      assert length(loaded["failures"]) == length(result.failures)
+      assert loaded.run_id == result.run_id
+      assert loaded.commit == result.commit
+      assert loaded.model == result.model
+      assert loaded.category == result.category
+      assert loaded.pass_rate == result.pass_rate
+      assert loaded.iterations == result.iterations
+      assert loaded.cost_usd == result.cost_usd
+      assert length(loaded.failures) == length(result.failures)
     end
 
     test "returns error for non-existent run" do
@@ -81,11 +81,11 @@ defmodule Deft.Eval.ResultStoreTest do
       assert :ok = ResultStore.store(result)
       assert {:ok, loaded} = ResultStore.load(result.run_id)
 
-      assert length(loaded["failures"]) == 1
-      [failure] = loaded["failures"]
-      assert failure["fixture"] == "observer-tech-choice-003"
-      assert failure["output"] == "some model output"
-      assert failure["reason"] == "Missing PostgreSQL in extraction"
+      assert length(loaded.failures) == 1
+      [failure] = loaded.failures
+      assert failure.fixture == "observer-tech-choice-003"
+      assert failure.output == "some model output"
+      assert failure.reason == "Missing PostgreSQL in extraction"
     end
   end
 
