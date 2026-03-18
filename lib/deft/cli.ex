@@ -669,7 +669,7 @@ defmodule Deft.CLI do
          working_dir,
          config,
          initial_messages \\ [],
-         initial_session_cost \\ 0.0
+         _initial_session_cost \\ 0.0
        ) do
     agent_config = %{
       model: config.model,
@@ -682,14 +682,16 @@ defmodule Deft.CLI do
       tools: [Deft.Tools.UseSkill, Deft.Tools.IssueCreate]
     }
 
-    {:ok, agent_pid} =
-      Deft.Agent.start_link(
+    {:ok, _worker_pid} =
+      Deft.Session.Supervisor.start_session(
         session_id: session_id,
         config: agent_config,
         messages: initial_messages,
-        session_cost: initial_session_cost
+        project_dir: working_dir
       )
 
+    # Look up the Agent PID from the registry
+    [{agent_pid, _}] = Registry.lookup(Deft.Registry, {:agent, session_id})
     agent_pid
   end
 
@@ -1220,12 +1222,16 @@ defmodule Deft.CLI do
     }
 
     # Start the elicitation agent with the elicitation prompt as first message
-    {:ok, agent_pid} =
-      Deft.Agent.start_link(
+    {:ok, _worker_pid} =
+      Deft.Session.Supervisor.start_session(
         session_id: session_id,
         config: agent_config,
-        messages: [system_message]
+        messages: [system_message],
+        project_dir: working_dir
       )
+
+    # Look up the Agent PID from the registry
+    [{agent_pid, _}] = Registry.lookup(Deft.Registry, {:agent, session_id})
 
     # Subscribe to agent events
     Registry.register(Deft.Registry, {:session, session_id}, [])

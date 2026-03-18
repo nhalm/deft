@@ -82,10 +82,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement `deft work --loop`: approve every plan by default (each issue gets plan approval checkpoint); --auto-approve-all flag skips all plan approvals for fully autonomous mode; stop when no ready issues remain, cumulative cost exceeds work.cost_ceiling, or user aborts; re-evaluate unblocked issues between jobs (blocked: Implement deft work...)
 - Implement SIGINT handling: catch Ctrl+C, send graceful shutdown to Foreman, wait for current issue status rollback to :open (5-second timeout), then exit; if timeout expires, issue left at :in_progress (detected as stale on next startup) (blocked: Implement deft work --loop...)
 
-## skills v0.2
-
-- Wire `Session.Supervisor.start_session/1` into CLI: `rescan_project/1` is only called from `start_session/1` but CLI calls `Agent.start_link/1` directly, bypassing it; project-level skills in `.deft/skills/` are never refreshed between sessions (spec section 5)
-
 ## tui v0.1
 
 - Fix streaming markdown rendering: `handle_text_delta/2` appends raw text to `current_text` but render/1 displays it as a raw `<box>` with no markdown processing; must call `Markdown.render_streaming/1` during streaming to buffer incomplete lines and render complete blocks (spec section 3)
