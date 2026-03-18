@@ -26,6 +26,7 @@ defmodule Deft.CLI do
   """
 
   alias Deft.Config
+  alias Deft.Issue.ElicitationPrompt
   alias Deft.Issues
   alias Deft.Session.Entry.SessionStart
   alias Deft.Session.Store
@@ -99,7 +100,8 @@ defmodule Deft.CLI do
           status: :string,
           priority: :integer,
           title: :string,
-          blocked_by: :string
+          blocked_by: :string,
+          quick: :boolean
         ],
         aliases: [
           h: :help,
@@ -150,6 +152,16 @@ defmodule Deft.CLI do
         {:resume_session, session_id}
 
       # Issue commands
+      match?(["issue", "create" | _], positional) ->
+        ["issue", "create" | title_parts] = positional
+
+        if Enum.empty?(title_parts) do
+          {:error, "Issue title is required"}
+        else
+          title = Enum.join(title_parts, " ")
+          {:issue_create, title}
+        end
+
       match?(["issue", "show", _], positional) ->
         [_cmd, _subcmd, issue_id] = positional
         {:issue_show, issue_id}
@@ -285,6 +297,20 @@ defmodule Deft.CLI do
     # Display in tabular format
     display_issue_list(issues)
     :ok
+  end
+
+  defp execute_command({:issue_create, title}, flags) do
+    # Ensure Issues GenServer is started
+    ensure_issues_started()
+
+    # Check for --quick flag
+    if flags[:quick] do
+      # Quick mode: create issue with title only
+      create_quick_issue(title, flags)
+    else
+      # Interactive mode: start elicitation session
+      create_interactive_issue(title, flags)
+    end
   end
 
   defp execute_command({:issue_update, issue_id}, flags) do
@@ -558,6 +584,11 @@ defmodule Deft.CLI do
       deft resume <session-id>            Resume a specific session
       deft config                         Show current configuration
       deft -p "prompt" [FLAGS]            Non-interactive mode
+      deft issue create <title> [FLAGS]   Create a new issue (interactive)
+      deft issue list [FLAGS]             List issues
+      deft issue show <id>                Show issue details
+      deft issue close <id>               Close an issue
+      deft issue ready                    List ready issues
       deft --help                         Show this help
       deft --version                      Show version
 
@@ -569,6 +600,9 @@ defmodule Deft.CLI do
       -p <prompt>               Non-interactive single-turn mode
       --output <file>           Write response to file (non-interactive)
       --auto-approve            Skip plan approval for orchestrated jobs
+      --priority <0-4>          Issue priority (for issue commands)
+      --quick                   Skip interactive elicitation (issue create only)
+      --blocked-by <ids>        Comma-separated issue IDs this depends on
       -h, --help                Show this help
       --version                 Show version
 
@@ -584,6 +618,15 @@ defmodule Deft.CLI do
 
       # Resume the last session
       deft resume
+
+      # Create an issue (interactive mode with AI elicitation)
+      deft issue create "Add JWT authentication"
+
+      # Create an issue quickly (title only)
+      deft issue create "Fix typo in README" --quick
+
+      # Create an issue with priority and dependencies
+      deft issue create "Implement user profiles" --priority 1 --blocked-by deft-a1b2
 
     Configuration:
       Configuration is loaded in priority order:
@@ -1108,5 +1151,333 @@ defmodule Deft.CLI do
     Enum.filter(issues, fn issue ->
       MapSet.member?(ready_ids, issue.id)
     end)
+  end
+
+  # Create an issue in quick mode (title only)
+  defp create_quick_issue(title, flags) do
+    attrs = %{
+      title: title,
+      source: :user,
+      priority: flags[:priority] || 2,
+      context: "",
+      acceptance_criteria: [],
+      constraints: [],
+      dependencies: parse_dependencies(flags[:blocked_by])
+    }
+
+    case Issues.create(attrs) do
+      {:ok, issue} ->
+        IO.puts("Issue #{issue.id} created successfully (quick mode).")
+        :ok
+
+      {:error, :cycle_detected} ->
+        IO.puts(:stderr, "Error: Adding these dependencies would create a cycle")
+        exit({:shutdown, 1})
+
+      {:error, reason} ->
+        IO.puts(:stderr, "Error: Failed to create issue: #{inspect(reason)}")
+        exit({:shutdown, 1})
+    end
+  end
+
+  # Create an issue in interactive mode with AI elicitation
+  defp create_interactive_issue(title, flags) do
+    working_dir = flags[:working_dir] || File.cwd!()
+
+    # Verify API key and register provider
+    verify_api_key()
+    :ok = Deft.Provider.Registry.register("anthropic", Deft.Provider.Anthropic)
+
+    # Get open issues for context
+    open_issues = Issues.list(status: :open)
+
+    # Build elicitation prompt as initial user message
+    priority = flags[:priority]
+    elicitation_prompt = ElicitationPrompt.build(title, priority, open_issues)
+
+    # Create system message with elicitation instructions
+    system_message = %Deft.Message{
+      id: "elicit_sys",
+      role: :system,
+      content: [%Deft.Message.Text{text: elicitation_prompt}],
+      timestamp: DateTime.utc_now()
+    }
+
+    # Create a temporary session for elicitation
+    session_id = generate_session_id()
+
+    # Build config for elicitation agent (lightweight, tools for issue_draft only)
+    agent_config = %{
+      model: flags[:model] || "claude-sonnet-4",
+      provider: Deft.Provider.Anthropic,
+      working_dir: working_dir,
+      turn_limit: 10,
+      tool_timeout: 30_000,
+      bash_timeout: 30_000,
+      max_turns: 10,
+      tools: [Deft.Tools.IssueDraft]
+    }
+
+    # Start the elicitation agent with the elicitation prompt as first message
+    {:ok, agent_pid} =
+      Deft.Agent.start_link(
+        session_id: session_id,
+        config: agent_config,
+        messages: [system_message]
+      )
+
+    # Subscribe to agent events
+    Registry.register(Deft.Registry, {:session, session_id}, [])
+
+    IO.puts("Let's create a structured issue for: #{title}")
+    IO.puts("")
+
+    # Start the interactive elicitation loop
+    case run_elicitation_loop(agent_pid, title, flags) do
+      {:ok, draft} ->
+        # Present the draft to the user
+        present_issue_draft(draft, title, flags)
+
+      {:error, reason} ->
+        IO.puts(:stderr, "Error during issue elicitation: #{reason}")
+        exit({:shutdown, 1})
+    end
+  end
+
+  # Run the interactive elicitation loop
+  defp run_elicitation_loop(agent_pid, title, flags) do
+    # Send initial prompt to start the conversation
+    Deft.Agent.prompt(agent_pid, "Please help me create this issue.")
+
+    # Wait for agent to respond and collect the draft
+    elicitation_response_loop(agent_pid, nil, title, flags)
+  end
+
+  # Loop to handle elicitation conversation
+  defp elicitation_response_loop(agent_pid, draft_acc, title, flags) do
+    receive do
+      {:agent_event, {:text_delta, delta}} ->
+        IO.write(delta)
+        elicitation_response_loop(agent_pid, draft_acc, title, flags)
+
+      {:agent_event, {:tool_call, tool_name, _tool_id, args}} when tool_name == "issue_draft" ->
+        elicitation_response_loop(agent_pid, args, title, flags)
+
+      {:agent_event, {:tool_result, _tool_id, result}} ->
+        handle_tool_result(result, agent_pid, draft_acc, title, flags)
+
+      {:agent_event, {:state_change, :idle}} ->
+        handle_idle_state(draft_acc, agent_pid, title, flags)
+
+      {:agent_event, {:error, message}} ->
+        {:error, message}
+
+      {:agent_event, _other_event} ->
+        elicitation_response_loop(agent_pid, draft_acc, title, flags)
+    after
+      300_000 ->
+        {:error, "Timeout waiting for response"}
+    end
+  end
+
+  # Handle tool result in elicitation loop
+  defp handle_tool_result(result, agent_pid, draft_acc, title, flags) do
+    case extract_draft_from_result(result) do
+      {:ok, draft} ->
+        IO.puts("")
+        {:ok, draft}
+
+      :not_draft ->
+        elicitation_response_loop(agent_pid, draft_acc, title, flags)
+    end
+  end
+
+  # Handle idle state in elicitation loop
+  defp handle_idle_state(draft_acc, agent_pid, title, flags) do
+    IO.puts("")
+
+    if draft_acc do
+      {:ok, draft_acc}
+    else
+      handle_user_continuation(agent_pid, title, flags)
+    end
+  end
+
+  # Handle user continuation input
+  defp handle_user_continuation(agent_pid, title, flags) do
+    IO.write("deft> ")
+
+    case IO.gets("") do
+      :eof ->
+        {:error, "Issue creation cancelled"}
+
+      {:error, reason} ->
+        {:error, inspect(reason)}
+
+      input ->
+        process_continuation_input(input, agent_pid, title, flags)
+    end
+  end
+
+  # Process continuation input from user
+  defp process_continuation_input(input, agent_pid, title, flags) do
+    prompt = String.trim(input)
+
+    cond do
+      prompt == "" ->
+        {:error, "Issue creation cancelled"}
+
+      prompt in ["done", "finish", "save"] ->
+        create_default_draft(title, flags)
+
+      true ->
+        Deft.Agent.prompt(agent_pid, prompt)
+        elicitation_response_loop(agent_pid, nil, title, flags)
+    end
+  end
+
+  # Create a default draft when user wants to finish without agent completion
+  defp create_default_draft(title, flags) do
+    {:ok,
+     %{
+       "title" => title,
+       "context" => "",
+       "acceptance_criteria" => [],
+       "constraints" => [],
+       "priority" => flags[:priority] || 2
+     }}
+  end
+
+  # Extract draft from tool result
+  defp extract_draft_from_result(result) do
+    case result do
+      {:ok, [%Deft.Message.Text{text: text}]} ->
+        if String.starts_with?(text, "ISSUE_DRAFT:") do
+          json_str = String.replace_prefix(text, "ISSUE_DRAFT:", "")
+
+          case Jason.decode(json_str) do
+            {:ok, draft} -> {:ok, draft}
+            {:error, _} -> :not_draft
+          end
+        else
+          :not_draft
+        end
+
+      _ ->
+        :not_draft
+    end
+  end
+
+  # Present the issue draft and ask for confirmation
+  defp present_issue_draft(draft, title, flags) do
+    print_draft_header()
+    print_draft_details(draft, title)
+    print_draft_footer()
+
+    handle_draft_confirmation(draft, title, flags)
+  end
+
+  # Print the draft header
+  defp print_draft_header do
+    IO.puts("\n" <> String.duplicate("=", 70))
+    IO.puts("Issue Draft")
+    IO.puts(String.duplicate("=", 70))
+    IO.puts("")
+  end
+
+  # Print the draft details
+  defp print_draft_details(draft, title) do
+    IO.puts("Title: #{draft["title"] || title}")
+    IO.puts("Priority: #{format_priority(draft["priority"] || 2)}")
+    IO.puts("")
+    IO.puts("Context:")
+    IO.puts("  #{draft["context"] || "(none)"}")
+    IO.puts("")
+
+    print_draft_list("Acceptance Criteria:", draft["acceptance_criteria"])
+    IO.puts("")
+    print_draft_list("Constraints:", draft["constraints"])
+  end
+
+  # Print a list field from the draft
+  defp print_draft_list(label, items) do
+    IO.puts(label)
+
+    case items do
+      items when is_list(items) and length(items) > 0 ->
+        Enum.each(items, fn item ->
+          IO.puts("  - #{item}")
+        end)
+
+      _ ->
+        IO.puts("  (none)")
+    end
+  end
+
+  # Print the draft footer
+  defp print_draft_footer do
+    IO.puts("")
+    IO.puts(String.duplicate("=", 70))
+    IO.puts("")
+  end
+
+  # Handle draft confirmation from user
+  defp handle_draft_confirmation(draft, title, flags) do
+    IO.puts("Save this issue? (yes/no/edit): ")
+
+    case IO.gets("") |> String.trim() |> String.downcase() do
+      answer when answer in ["y", "yes"] ->
+        save_issue_from_draft(draft, title, flags)
+
+      answer when answer in ["e", "edit"] ->
+        IO.puts("(Edit mode not yet implemented - please re-run the command)")
+        :ok
+
+      _ ->
+        IO.puts("Issue creation cancelled.")
+        :ok
+    end
+  end
+
+  # Save the issue from the draft
+  defp save_issue_from_draft(draft, title, flags) do
+    attrs = build_issue_attrs_from_draft(draft, title, flags)
+
+    case Issues.create(attrs) do
+      {:ok, issue} ->
+        IO.puts("\nIssue #{issue.id} created successfully!")
+        :ok
+
+      {:error, :cycle_detected} ->
+        IO.puts(:stderr, "Error: Adding these dependencies would create a cycle")
+        exit({:shutdown, 1})
+
+      {:error, reason} ->
+        IO.puts(:stderr, "Error: Failed to create issue: #{inspect(reason)}")
+        exit({:shutdown, 1})
+    end
+  end
+
+  # Build issue attributes from draft
+  defp build_issue_attrs_from_draft(draft, title, flags) do
+    %{
+      title: draft["title"] || title,
+      source: :user,
+      priority: draft["priority"] || flags[:priority] || 2,
+      context: draft["context"] || "",
+      acceptance_criteria: draft["acceptance_criteria"] || [],
+      constraints: draft["constraints"] || [],
+      dependencies: parse_dependencies(flags[:blocked_by])
+    }
+  end
+
+  # Parse dependencies from --blocked-by flag
+  defp parse_dependencies(nil), do: []
+
+  defp parse_dependencies(blocked_by_str) do
+    blocked_by_str
+    |> String.split(",")
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
   end
 end

@@ -78,8 +78,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## issues v0.2
 
-- Implement interactive issue creation session: `deft issue create <title>` starts lightweight Agent session (no OM) with elicitation system prompt; asks clarifying questions about context, acceptance criteria, constraints, dependencies; agent uses issue_draft tool call for structured output (JSON with title, context, acceptance_criteria, constraints, priority); CLI parses tool call result and presents for confirmation; saves to JSONL on confirm
-- Implement --quick flag for issue creation: skip interactive session, create issue with title only (empty context, acceptance_criteria, constraints) (blocked: Implement interactive issue creation session...)
 - Implement issue_create tool for agent-created issues: accessible during any session; source set to :agent; default priority 3 (low) but agent may assign higher priority for discovered bugs affecting current functionality; agent explains priority choice in issue context
 - Implement `deft issue dep add <id> --blocked-by <blocker_id>` and `dep remove` CLI commands (blocked: Implement dependency tracking...)
 - Implement `deft work`: call ready/0, pick first, set status :in_progress, start Foreman job with issue structured JSON as prompt (context → research, acceptance_criteria → verification targets, constraints → Lead steering), on success set :closed + job_id, on failure set back to :open (blocked: Implement Foreman gen_statem...)

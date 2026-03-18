@@ -1,6 +1,8 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **issues v0.2 (2026-03-17):** Implement --quick flag for issue creation: skip interactive session, create issue with title only (empty context, acceptance_criteria, constraints)
+- **issues v0.2 (2026-03-17):** Implement interactive issue creation session: `deft issue create <title>` starts lightweight Agent session (no OM) with elicitation system prompt; asks clarifying questions about context, acceptance criteria, constraints, dependencies; agent uses issue_draft tool call for structured output (JSON with title, context, acceptance_criteria, constraints, priority); CLI parses tool call result and presents for confirmation; saves to JSONL on confirm
 - **evals v0.2 (2026-03-17):** Implement spilling summary quality evals: tool-specific summaries (grep match count + top N, read line count + first N lines, ls/find file count + top-level structure) preserve key information; 20 iterations, 85% pass rate
 - **filesystem v0.2 (2026-03-17):** Add summarize/2 callback to Deft.Tool behaviour: receives full result + cache key, returns summary string with cache://<key> reference; implement for grep (match count + top N), read (line count + first N lines), find/ls (file count + top-level structure)
 - **filesystem v0.2 (2026-03-17):** Implement tool result spilling protocol: in Deft.Agent.ToolRunner, after tool execution check if result byte_size/4 exceeds tool's cache.token_threshold; if so, call tool's summarize/2 callback, write full result to cache, replace context entry with summary + cache://<key> reference
