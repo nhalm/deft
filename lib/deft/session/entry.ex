@@ -121,10 +121,15 @@ defmodule Deft.Session.Entry.Message do
       %Deft.Message.Thinking{text: text} ->
         %{type: "thinking", text: text}
 
-      %Deft.Message.Image{media_type: media_type, data: data} ->
+      %Deft.Message.Image{media_type: media_type, data: data, filename: filename} ->
         %{type: "image", media_type: media_type, data: data}
+        |> maybe_add_filename(filename)
     end)
   end
+
+  # Helper to conditionally add filename to image serialization
+  defp maybe_add_filename(map, nil), do: map
+  defp maybe_add_filename(map, filename), do: Map.put(map, :filename, filename)
 end
 
 defmodule Deft.Session.Entry.ToolResult do

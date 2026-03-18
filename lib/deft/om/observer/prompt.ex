@@ -265,8 +265,9 @@ defmodule Deft.OM.Observer.Prompt do
     ""
   end
 
-  defp format_content_block(%Message.Image{}, role, time) do
-    "**#{role} (#{time}):**\n[Image attachment]\n"
+  defp format_content_block(%Message.Image{filename: filename}, role, time) do
+    image_label = if filename, do: "[Image: #{filename}]", else: "[Image attachment]"
+    "**#{role} (#{time}):**\n#{image_label}\n"
   end
 
   defp format_tool_args(args) when is_map(args) do

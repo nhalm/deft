@@ -78,7 +78,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## observational-memory v0.1
 
-- Fix image formatting in Observer prompt: format images as `[Image: filename.png]` per spec section 3.3; currently outputs `[Image attachment]` with no filename; requires `Message.Image` struct to carry filename and `observer/prompt.ex:269` to use it
 - Fix buffered reflection serialization guard: `maybe_activate_buffered_chunks` in `state.ex:1052-1059` must also check `not state.is_buffering_reflection`; currently only checks `not state.is_reflecting`, allowing observation chunks to activate while a buffered Reflector is running (wastes an LLM call when the stale reflection is discarded by epoch check)
 
 ## skills v0.2

@@ -466,7 +466,12 @@ defmodule Deft.Provider.Anthropic do
     %{type: "thinking", thinking: text}
   end
 
-  defp content_block_to_wire(%Deft.Message.Image{media_type: media_type, data: data}) do
+  defp content_block_to_wire(%Deft.Message.Image{
+         media_type: media_type,
+         data: data,
+         filename: _filename
+       }) do
+    # Note: Anthropic API doesn't use filename, but we pattern match it to acknowledge the field exists
     %{
       type: "image",
       source: %{

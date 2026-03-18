@@ -105,9 +105,10 @@ defmodule Deft.Message.Image do
 
   @type t :: %__MODULE__{
           media_type: String.t(),
-          data: String.t()
+          data: String.t(),
+          filename: String.t() | nil
         }
 
   @enforce_keys [:media_type, :data]
-  defstruct [:media_type, :data]
+  defstruct [:media_type, :data, :filename]
 end

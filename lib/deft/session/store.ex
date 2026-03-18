@@ -270,8 +270,12 @@ defmodule Deft.Session.Store do
       %{type: "thinking", text: text} ->
         %Deft.Message.Thinking{text: text}
 
-      %{type: "image", media_type: media_type, data: data} ->
-        %Deft.Message.Image{media_type: media_type, data: data}
+      %{type: "image", media_type: media_type, data: data} = content ->
+        %Deft.Message.Image{
+          media_type: media_type,
+          data: data,
+          filename: Map.get(content, :filename)
+        }
 
       # Handle string keys as well (from JSON parsing)
       %{"type" => "text", "text" => text} ->
@@ -297,8 +301,12 @@ defmodule Deft.Session.Store do
       %{"type" => "thinking", "text" => text} ->
         %Deft.Message.Thinking{text: text}
 
-      %{"type" => "image", "media_type" => media_type, "data" => data} ->
-        %Deft.Message.Image{media_type: media_type, data: data}
+      %{"type" => "image", "media_type" => media_type, "data" => data} = content ->
+        %Deft.Message.Image{
+          media_type: media_type,
+          data: data,
+          filename: Map.get(content, "filename")
+        }
 
       _other ->
         # Unknown content type - skip
