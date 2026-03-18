@@ -69,6 +69,8 @@ defmodule Deft.TUI.Chat do
         om_sync_fallback: false,
         # Scroll state
         scroll_offset: 0,
+        # Raw mode (bypass markdown rendering)
+        raw_mode: false,
         # Job state (orchestration mode)
         job_active: false,
         job_phase: nil,
@@ -106,7 +108,7 @@ defmodule Deft.TUI.Chat do
 
       <box style="border height-20">
         <%= for message <- @messages do %>
-          <%= render_message(message) %>
+          <%= render_message(message, @raw_mode) %>
         <% end %>
         <%= if @streaming and @current_text != "" do %>
           <box><%= @current_text %></box>
@@ -364,6 +366,11 @@ defmodule Deft.TUI.Chat do
   def handle_event(_event, %{"key" => "ctrl-l"}, term) do
     # Clear screen - reset messages
     {:noreply, assign(term, messages: [], current_text: "")}
+  end
+
+  def handle_event(_event, %{"key" => "ctrl-r"}, term) do
+    # Ctrl+R: toggle raw output mode
+    {:noreply, assign(term, raw_mode: !term.assigns.raw_mode)}
   end
 
   def handle_event(_event, %{"key" => "up"}, term) do
@@ -778,7 +785,7 @@ defmodule Deft.TUI.Chat do
 
   # Rendering helpers
 
-  defp render_message(%{role: :user, content: content}) do
+  defp render_message(%{role: :user, content: content}, _raw_mode) do
     assigns = %{content: content}
 
     ~H"""
@@ -789,9 +796,9 @@ defmodule Deft.TUI.Chat do
     """
   end
 
-  defp render_message(%{role: :assistant, content: content}) do
-    # Render markdown for assistant messages
-    rendered = Markdown.render(content)
+  defp render_message(%{role: :assistant, content: content}, raw_mode) do
+    # Render markdown for assistant messages unless raw_mode is enabled
+    rendered = if raw_mode, do: content, else: Markdown.render(content)
     assigns = %{content: rendered}
 
     ~H"""
@@ -802,7 +809,7 @@ defmodule Deft.TUI.Chat do
     """
   end
 
-  defp render_message(%{role: :system, content: content}) do
+  defp render_message(%{role: :system, content: content}, _raw_mode) do
     assigns = %{content: content}
 
     ~H"""

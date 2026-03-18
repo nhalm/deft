@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## tui v0.1
 
-- Implement Ctrl+R toggle for raw output: add `raw_mode` assign, toggle on Ctrl+R, bypass `Markdown.render/1` when enabled (spec section 5)
 - Fix `/quit` command: currently sends `{:stop, term}` via `send/2` which is swallowed by catch-all `handle_info`; should return `{:stop, term}` directly from the handler (spec section 6)
 
 ## evals v0.2
