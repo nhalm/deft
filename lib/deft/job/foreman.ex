@@ -36,6 +36,7 @@ defmodule Deft.Job.Foreman do
   alias Deft.Store
   alias Deft.Project
   alias Deft.Git
+  alias Deft.Job.Runner
 
   require Logger
 
@@ -79,6 +80,8 @@ defmodule Deft.Job.Foreman do
       total_output_tokens: 0,
       session_cost: 0.0,
       research_tasks: [],
+      research_findings: [],
+      research_timeout_ref: nil,
       site_log_pid: nil
     }
 
@@ -142,6 +145,59 @@ defmodule Deft.Job.Foreman do
     # next_event is not allowed in state_enter handlers in newer OTP versions
     :gen_statem.cast(self(), {:prompt, data.prompt})
     :keep_state_and_data
+  end
+
+  def handle_event(:enter, _old_state, {:researching, :idle}, data) do
+    # Spawn research Runners in parallel
+    Logger.info("Foreman starting research phase")
+
+    # Determine research tasks (placeholder - real implementation would analyze prompt)
+    research_specs = determine_research_tasks(data.prompt)
+
+    # Get research timeout from config (default 120s)
+    research_timeout = Map.get(data.config, :research_timeout, 120_000)
+
+    # Spawn research Runners via Task.Supervisor.async_nolink
+    tasks =
+      Enum.map(research_specs, fn %{instructions: instructions, context: context} ->
+        task =
+          Task.Supervisor.async_nolink(ToolRunner, fn ->
+            # Get research runner model from config (defaults to same as lead model)
+            research_model =
+              Map.get(data.config, :research_runner_model, Map.get(data.config, :lead_model))
+
+            runner_config = %{
+              provider: get_provider(data),
+              model: research_model
+            }
+
+            # Call Runner with :research type (read-only tools)
+            Runner.run(
+              :research,
+              instructions,
+              context,
+              data.rate_limiter_pid,
+              runner_config,
+              data.working_dir
+            )
+          end)
+
+        # Monitor the task for timeout
+        Process.monitor(task.pid)
+        task
+      end)
+
+    # Set timeout timer
+    timeout_ref = Process.send_after(self(), :research_timeout, research_timeout)
+
+    data = %{
+      data
+      | research_tasks: tasks,
+        research_findings: [],
+        research_timeout_ref: timeout_ref
+    }
+
+    {:keep_state, data}
   end
 
   def handle_event(:enter, _old_state, {job_phase, :executing_tools}, data) do
@@ -303,6 +359,66 @@ defmodule Deft.Job.Foreman do
     end
   end
 
+  # Research task completion
+  def handle_event(
+        :info,
+        {ref, result},
+        {:researching, :idle},
+        %{research_tasks: tasks} = data
+      )
+      when is_reference(ref) do
+    # A research task completed
+    Logger.debug("Research task completed: #{inspect(result)}")
+
+    # Find and remove completed task
+    tasks = Enum.reject(tasks, fn task -> task.ref == ref end)
+
+    # Collect findings
+    findings =
+      case result do
+        {:ok, output} ->
+          data.research_findings ++ [output]
+
+        {:error, reason} ->
+          Logger.warning("Research task failed: #{reason}")
+          data.research_findings
+      end
+
+    data = %{data | research_tasks: tasks, research_findings: findings}
+
+    # If all research tasks done, transition to decomposing
+    if Enum.empty?(tasks) do
+      # Cancel timeout timer
+      if data.research_timeout_ref do
+        Process.cancel_timer(data.research_timeout_ref)
+      end
+
+      Logger.info("Research phase complete, collected #{length(findings)} findings")
+      {:next_state, {:decomposing, :idle}, data}
+    else
+      {:keep_state, data}
+    end
+  end
+
+  # Research timeout
+  def handle_event(:info, :research_timeout, {:researching, :idle}, data) do
+    Logger.warning(
+      "Research timeout reached, proceeding with #{length(data.research_findings)} findings"
+    )
+
+    # Kill any remaining research tasks
+    Enum.each(data.research_tasks, fn task ->
+      # Task is a struct with pid and ref fields
+      if Process.alive?(task.pid) do
+        Process.exit(task.pid, :kill)
+      end
+    end)
+
+    # Transition to decomposing with whatever findings we have
+    data = %{data | research_tasks: [], research_timeout_ref: nil}
+    {:next_state, {:decomposing, :idle}, data}
+  end
+
   # Tool task completion
   def handle_event(
         :info,
@@ -326,7 +442,9 @@ defmodule Deft.Job.Foreman do
         data = %{data | stream_ref: stream_ref, stream_monitor_ref: monitor_ref}
         {:next_state, {job_phase, :calling}, data}
       else
-        {:next_state, {job_phase, :idle}, data}
+        # Check if we need to transition to next phase
+        next_state = determine_next_phase(job_phase, data)
+        {:next_state, next_state, data}
       end
     else
       {:keep_state, data}
@@ -534,5 +652,57 @@ defmodule Deft.Job.Foreman do
           {:error, output}
       end
     end)
+  end
+
+  # Determine research tasks based on the prompt
+  # In real implementation, the Foreman would analyze the prompt to determine what research is needed
+  # For now, return a default set of research tasks
+  defp determine_research_tasks(prompt) do
+    [
+      %{
+        instructions: """
+        Analyze the codebase structure and identify key files and directories.
+        Focus on understanding the overall architecture.
+        """,
+        context: "User request: #{prompt}"
+      },
+      %{
+        instructions: """
+        Identify existing patterns, conventions, and technologies used in the codebase.
+        Look for configuration files, dependencies, and framework choices.
+        """,
+        context: "User request: #{prompt}"
+      }
+    ]
+  end
+
+  # Get provider module from config
+  defp get_provider(data) do
+    provider_name = Map.get(data.config, :provider, "anthropic")
+    # Default model for resolving provider
+    model_name = Map.get(data.config, :lead_model, "claude-sonnet-4")
+
+    case Deft.Provider.Registry.resolve(provider_name, model_name) do
+      {:ok, {provider_module, _model_config}} ->
+        provider_module
+
+      {:error, _} ->
+        # Fallback to anthropic
+        {:ok, {provider_module, _}} =
+          Deft.Provider.Registry.resolve("anthropic", "claude-sonnet-4")
+
+        provider_module
+    end
+  end
+
+  # Determine the next phase after completing current agent loop
+  defp determine_next_phase(:planning, _data) do
+    # After planning completes, transition to researching
+    {:researching, :idle}
+  end
+
+  defp determine_next_phase(job_phase, _data) do
+    # For other phases, stay in idle within the same phase
+    {job_phase, :idle}
   end
 end

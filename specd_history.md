@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **orchestration v0.3 (2026-03-18):** Implement research phase: Foreman spawns research Runners via Task.Supervisor.async_nolink in parallel (Sonnet model, read-only tools), collects findings from Task return values, configurable timeout (default 120s) via Process.send_after
 - **git-strategy v0.1 (2026-03-18):** Implement worktree cleanup on Lead crash: Foreman cleans up Lead's worktree immediately on crash; use `git worktree remove --force` if index.lock exists
 - **orchestration v0.3 (2026-03-18):** Implement Deft.Store site log instance: Foreman creates a Deft.Store instance for curated job knowledge; programmatic promotion via pattern matching — auto-promote contract, decision, correction, critical_finding; promote finding if tagged shared; never promote status or blocker; site log uses sync DETS write + :dets.sync/1
 - **git-strategy v0.1 (2026-03-18):** Add .deft-worktrees/ to .gitignore on first worktree creation if not already present
