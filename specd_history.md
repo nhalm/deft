@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **observational-memory v0.1 (2026-03-17):** Fix hard cap truncation: replace `Enum.reduce` with `Enum.reduce_while` in `truncate_session_history_to_target/4` so processing halts when budget is exceeded; current code can skip newer lines and keep older ones non-contiguously (spec section 4.6)
 - **filesystem v0.2 (2026-03-17):** Wire cache Store instance to agent: start a Deft.Store cache instance during session startup, set `cache_tid` in Tool.Context to the ETS tid; currently nil (TODO at agent.ex:1043), making all spilling and cache_read inoperative (spec section 6)
 - **observational-memory v0.1 (2026-03-18):** Fix epoch staleness check in `activate_buffered_chunks/1`: filter out buffered chunks whose `epoch` < current `activation_epoch` before merging; stale chunks were computed against pre-reflection state
 - **evals v0.2 (2026-03-17):** Fix `calculate_cache_retrieval_rate/1` denominator in threshold calibration: store `spilled` flag in task result map from `run_task_with_threshold/3`, then count actual spilled results instead of using hardcoded `context_tokens < 1000` proxy which is unrelated to test thresholds (2000-24000)

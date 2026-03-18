@@ -1078,15 +1078,15 @@ defmodule Deft.OM.State do
     {kept_lines, _accumulated_tokens} =
       regular_lines
       |> Enum.reverse()
-      |> Enum.reduce({[], 0}, fn line, {kept, tokens_so_far} ->
+      |> Enum.reduce_while({[], 0}, fn line, {kept, tokens_so_far} ->
         line_tokens = Tokens.estimate(line, calibration_factor)
 
         if tokens_so_far + line_tokens <= available_for_regular do
           # Can keep this line
-          {[line | kept], tokens_so_far + line_tokens}
+          {:cont, {[line | kept], tokens_so_far + line_tokens}}
         else
-          # Exceeded budget, stop accumulating
-          {kept, tokens_so_far}
+          # Exceeded budget, halt processing
+          {:halt, {kept, tokens_so_far}}
         end
       end)
 
