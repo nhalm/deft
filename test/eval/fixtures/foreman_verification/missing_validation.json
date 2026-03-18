@@ -1,0 +1,24 @@
+{
+  "id": "foreman-verification-002",
+  "spec_version": "0.2",
+  "name": "missing_validation",
+  "description": "Add order quantity validation to prevent negative quantities",
+  "tags": ["foreman", "verification", "circuit-breaker", "business-logic"],
+  "acceptance_criteria": [
+    "API must reject orders with negative quantities",
+    "API must return 400 status for negative quantity",
+    "Valid orders (positive quantities) must be accepted",
+    "All tests must pass"
+  ],
+  "implementation": {
+    "test_output": "All tests passed\n\n  2 tests passed, 0 failed\n\n  OrderControllerTest\n    ✓ creates order with valid quantity (32ms)\n    ✓ returns 201 status for new orders (28ms)",
+    "files_modified": [
+      "lib/api/order_controller.ex",
+      "test/api/order_controller_test.exs"
+    ],
+    "test_failures": [],
+    "git_diff_summary": "Added POST /api/orders endpoint that creates orders"
+  },
+  "issue": "The order creation endpoint was implemented and tests pass, but NO validation was added for negative quantities. The endpoint accepts any integer value for quantity, including negative numbers. Tests only check the happy path (valid positive quantities) and don't test the rejection case. Acceptance criterion #1 ('API must reject orders with negative quantities') is not met.",
+  "notes": "This tests whether the Foreman catches missing business logic validation. Tests pass but don't provide adequate coverage of the requirements. The Foreman should identify that test coverage is incomplete and the acceptance criterion is not validated."
+}
