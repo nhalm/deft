@@ -29,7 +29,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement Lead task planning evals: 4-8 tasks, dependency-ordered, clear done states; 20 iterations, 75% pass rate (blocked: Implement Lead gen_statem...)
 - Implement Lead steering evals: identifies errors, provides specific corrections; 20 iterations, 75% pass rate (blocked: Implement Lead active steering...)
 - Implement spilling cache retrieval evals: agent correctly uses cache_read tool when details not in summary; filter and lines parameters work; 20 iterations, 85% pass rate (blocked: Implement cache_read tool...)
-- Implement spilling threshold calibration grid search: test each tool's threshold across a range of values, measure summary quality vs context savings tradeoff; use to validate per-tool threshold defaults
 - Implement issue elicitation quality evals: interactive session produces structured issue with meaningful context, concrete acceptance_criteria, and actionable constraints; issue_draft tool call produces valid JSON; 20 iterations, 80% pass rate
 - Implement issue→plan diagnostic eval: verify that structured issue fields (context, acceptance_criteria, constraints) flow correctly into Foreman research/planning/verification phases; 20 iterations, 75% pass rate (blocked: Implement Foreman gen_statem...)
 - Implement agent-created issue quality evals: agent creates issues for discovered bugs/refactors with appropriate priority and context; does not create trivial issues; 20 iterations, 80% pass rate
