@@ -23,7 +23,10 @@ defmodule Deft.Tools.ObservationsTest do
       cache_token_threshold_grep: 8_000,
       cache_token_threshold_ls: 4_000,
       cache_token_threshold_find: 4_000,
-      issues_compaction_days: 90
+      issues_compaction_days: 90,
+      job_test_command: "mix test",
+      job_keep_failed_branches: false,
+      job_squash_on_complete: true
     }
 
     # Start OM supervisor and state

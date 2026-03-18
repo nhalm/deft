@@ -823,63 +823,116 @@ defmodule Deft.Job.Foreman do
       Logger.warning("Lead #{lead_id} not found in tracking map, cannot merge")
       data
     else
-      # Merge Lead branch into job branch
-      case GitJob.merge_lead_branch(
-             lead_id: lead_id,
-             job_id: data.session_id,
-             working_dir: data.working_dir
-           ) do
-        {:ok, :merged} ->
-          Logger.info("Successfully merged Lead #{lead_id} into job branch")
-
-          # Clean up the Lead's worktree
-          cleanup_worktree(lead_info.worktree_path, data.working_dir)
-
-          # Remove Lead from tracking
-          leads = Map.delete(data.leads, lead_id)
-          data = %{data | leads: leads}
-
-          # Check if all Leads are done
-          if all_leads_complete?(data) do
-            Logger.info("All Leads complete, ready to transition to verification")
-            # Note: The actual phase transition happens in check_phase_transition/3
-          end
-
-          data
-
-        {:ok, :conflict, conflicted_files} ->
-          Logger.error("Merge conflict for Lead #{lead_id}: #{inspect(conflicted_files)}")
-
-          # Send critical finding to notify about conflict
-          send_to_self =
-            {:lead_message, :critical_finding,
-             "Merge conflict detected for Lead #{lead_id}: #{Enum.join(conflicted_files, ", ")}. Manual intervention required.",
-             %{lead_id: lead_id, conflicted_files: conflicted_files}}
-
-          send(self(), send_to_self)
-
-          # TODO: Spawn merge-resolution Runner to resolve conflicts
-          # For now, mark as blocker and keep Lead in tracking
-          data
-
-        {:error, reason} ->
-          Logger.error("Failed to merge Lead #{lead_id}: #{inspect(reason)}")
-
-          # Send error message to self
-          send_to_self =
-            {:lead_message, :error, "Failed to merge Lead #{lead_id}: #{inspect(reason)}",
-             %{lead_id: lead_id}}
-
-          send(self(), send_to_self)
-
-          data
-      end
+      handle_lead_merge(lead_id, lead_info, data)
     end
   end
 
   defp process_lead_message(type, content, _metadata, data) do
     Logger.debug("Lead message (#{type}): #{inspect(content)}")
     data
+  end
+
+  # Handle merging a completed Lead's branch into the job branch
+  defp handle_lead_merge(lead_id, lead_info, data) do
+    case GitJob.merge_lead_branch(
+           lead_id: lead_id,
+           job_id: data.session_id,
+           working_dir: data.working_dir
+         ) do
+      {:ok, :merged} ->
+        Logger.info("Successfully merged Lead #{lead_id} into job branch")
+        handle_successful_merge(lead_id, lead_info, data)
+
+      {:ok, :conflict, conflicted_files} ->
+        handle_merge_conflict(lead_id, conflicted_files)
+        data
+
+      {:error, reason} ->
+        handle_merge_error(lead_id, reason)
+        data
+    end
+  end
+
+  # Handle successful merge by running post-merge tests
+  defp handle_successful_merge(lead_id, lead_info, data) do
+    case run_post_merge_tests(data) do
+      {:ok, :passed} ->
+        handle_test_success(lead_id, lead_info, data)
+
+      {:error, :test_failed, test_output} ->
+        handle_test_failure(lead_id, test_output)
+        data
+
+      {:error, reason} ->
+        handle_test_error(lead_id, reason)
+        data
+    end
+  end
+
+  # Handle successful post-merge tests
+  defp handle_test_success(lead_id, lead_info, data) do
+    Logger.info("Post-merge tests passed for Lead #{lead_id}")
+
+    # Clean up the Lead's worktree
+    cleanup_worktree(lead_info.worktree_path, data.working_dir)
+
+    # Remove Lead from tracking
+    leads = Map.delete(data.leads, lead_id)
+    data = %{data | leads: leads}
+
+    # Check if all Leads are done
+    if all_leads_complete?(data) do
+      Logger.info("All Leads complete, ready to transition to verification")
+    end
+
+    data
+  end
+
+  # Handle post-merge test failure
+  defp handle_test_failure(lead_id, test_output) do
+    Logger.error("Post-merge tests failed for Lead #{lead_id}. Manual intervention required.")
+
+    send_to_self =
+      {:lead_message, :critical_finding,
+       "Post-merge tests failed for Lead #{lead_id}. The merge was successful but tests now fail. Manual intervention or fix-up Runner needed.\n\nTest output:\n#{String.slice(test_output, 0, 1000)}",
+       %{lead_id: lead_id, test_failed: true}}
+
+    send(self(), send_to_self)
+  end
+
+  # Handle post-merge test execution error
+  defp handle_test_error(lead_id, reason) do
+    Logger.error("Failed to run post-merge tests for Lead #{lead_id}: #{inspect(reason)}")
+
+    send_to_self =
+      {:lead_message, :error,
+       "Failed to run post-merge tests for Lead #{lead_id}: #{inspect(reason)}",
+       %{lead_id: lead_id}}
+
+    send(self(), send_to_self)
+  end
+
+  # Handle merge conflict
+  defp handle_merge_conflict(lead_id, conflicted_files) do
+    Logger.error("Merge conflict for Lead #{lead_id}: #{inspect(conflicted_files)}")
+
+    send_to_self =
+      {:lead_message, :critical_finding,
+       "Merge conflict detected for Lead #{lead_id}: #{Enum.join(conflicted_files, ", ")}. Manual intervention required.",
+       %{lead_id: lead_id, conflicted_files: conflicted_files}}
+
+    send(self(), send_to_self)
+  end
+
+  # Handle merge error
+  defp handle_merge_error(lead_id, reason) do
+    Logger.error("Failed to merge Lead #{lead_id}: #{inspect(reason)}")
+
+    send_to_self =
+      {:lead_message, :error, "Failed to merge Lead #{lead_id}: #{inspect(reason)}",
+       %{lead_id: lead_id}}
+
+    send(self(), send_to_self)
   end
 
   defp write_to_site_log(category, content, metadata, data) do
@@ -950,6 +1003,19 @@ defmodule Deft.Job.Foreman do
 
   defp generate_message_id do
     "msg_#{:crypto.strong_rand_bytes(16) |> Base.url_encode64(padding: false)}"
+  end
+
+  # Runs post-merge tests on the job branch using the configured test command.
+  # This catches semantic conflicts that may not show up as merge conflicts.
+  defp run_post_merge_tests(data) do
+    # Get test command from config (defaults to "mix test")
+    test_command = Map.get(data.config, :job_test_command, "mix test")
+
+    GitJob.run_post_merge_tests(
+      job_id: data.session_id,
+      test_command: test_command,
+      working_dir: data.working_dir
+    )
   end
 
   # Cleans up a Lead's worktree when the Lead crashes.

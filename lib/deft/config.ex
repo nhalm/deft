@@ -23,7 +23,10 @@ defmodule Deft.Config do
           cache_token_threshold_grep: pos_integer(),
           cache_token_threshold_ls: pos_integer(),
           cache_token_threshold_find: pos_integer(),
-          issues_compaction_days: pos_integer()
+          issues_compaction_days: pos_integer(),
+          job_test_command: String.t(),
+          job_keep_failed_branches: boolean(),
+          job_squash_on_complete: boolean()
         }
 
   @enforce_keys [
@@ -40,7 +43,10 @@ defmodule Deft.Config do
     :cache_token_threshold_grep,
     :cache_token_threshold_ls,
     :cache_token_threshold_find,
-    :issues_compaction_days
+    :issues_compaction_days,
+    :job_test_command,
+    :job_keep_failed_branches,
+    :job_squash_on_complete
   ]
 
   defstruct [
@@ -57,7 +63,10 @@ defmodule Deft.Config do
     :cache_token_threshold_grep,
     :cache_token_threshold_ls,
     :cache_token_threshold_find,
-    :issues_compaction_days
+    :issues_compaction_days,
+    :job_test_command,
+    :job_keep_failed_branches,
+    :job_squash_on_complete
   ]
 
   @doc """
@@ -119,6 +128,11 @@ defmodule Deft.Config do
       },
       issues: %{
         compaction_days: 90
+      },
+      job: %{
+        test_command: "mix test",
+        keep_failed_branches: false,
+        squash_on_complete: true
       }
     }
   end
@@ -253,6 +267,7 @@ defmodule Deft.Config do
     om_config = Map.get(config, :om, %{})
     cache_config = Map.get(config, :cache, %{})
     issues_config = Map.get(config, :issues, %{})
+    job_config = Map.get(config, :job, %{})
 
     %__MODULE__{
       model: Map.fetch!(config, :model),
@@ -268,7 +283,10 @@ defmodule Deft.Config do
       cache_token_threshold_grep: Map.get(cache_config, :token_threshold_grep, 8_000),
       cache_token_threshold_ls: Map.get(cache_config, :token_threshold_ls, 4_000),
       cache_token_threshold_find: Map.get(cache_config, :token_threshold_find, 4_000),
-      issues_compaction_days: Map.get(issues_config, :compaction_days, 90)
+      issues_compaction_days: Map.get(issues_config, :compaction_days, 90),
+      job_test_command: Map.get(job_config, :test_command, "mix test"),
+      job_keep_failed_branches: Map.get(job_config, :keep_failed_branches, false),
+      job_squash_on_complete: Map.get(job_config, :squash_on_complete, true)
     }
   end
 end

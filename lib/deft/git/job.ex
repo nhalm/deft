@@ -367,6 +367,78 @@ defmodule Deft.Git.Job do
   end
 
   @doc """
+  Runs the configured test command on the job branch after a successful merge.
+
+  This catches semantic conflicts early — tests may fail even when the merge
+  succeeds without conflicts. Should be called after each Lead merge.
+
+  ## Options
+
+  - `:job_id` - Required. Job identifier (for job branch name).
+  - `:test_command` - Required. Test command to run (e.g., "mix test").
+  - `:working_dir` - Optional. Repository root (defaults to File.cwd!()).
+  - `:timeout` - Optional. Test timeout in milliseconds (defaults to 300_000 / 5 minutes).
+
+  ## Returns
+
+  - `{:ok, :passed}` - Tests passed
+  - `{:error, :test_failed, output}` - Tests failed with output
+  - `{:error, :timeout}` - Tests timed out
+  - `{:error, reason}` - Command execution failed
+
+  ## Examples
+
+      # Tests pass
+      Deft.Git.Job.run_post_merge_tests(job_id: "abc123", test_command: "mix test")
+      # => {:ok, :passed}
+
+      # Tests fail
+      Deft.Git.Job.run_post_merge_tests(job_id: "abc123", test_command: "mix test")
+      # => {:error, :test_failed, "** (ExUnit.Error) ..."}
+  """
+  @spec run_post_merge_tests(keyword()) ::
+          {:ok, :passed} | {:error, :test_failed, String.t()} | {:error, term()}
+  def run_post_merge_tests(opts) do
+    job_id = Keyword.fetch!(opts, :job_id)
+    test_command = Keyword.fetch!(opts, :test_command)
+    working_dir = Keyword.get(opts, :working_dir, File.cwd!())
+    timeout = Keyword.get(opts, :timeout, 300_000)
+
+    job_branch = "deft/job-#{job_id}"
+
+    Logger.info("Running post-merge tests on #{job_branch}: #{test_command}")
+
+    try do
+      # Change to working directory to ensure tests run in correct location
+      File.cd!(working_dir, fn ->
+        # Parse the test command (may include arguments)
+        [cmd | args] = String.split(test_command, " ", trim: true)
+
+        # Run the test command
+        case System.cmd(cmd, args, stderr_to_stdout: true, timeout: timeout) do
+          {_output, 0} ->
+            Logger.info("Post-merge tests passed on #{job_branch}")
+            {:ok, :passed}
+
+          {output, exit_code} ->
+            Logger.error("Post-merge tests failed on #{job_branch} (exit code: #{exit_code})")
+            {:error, :test_failed, output}
+        end
+      end)
+    rescue
+      e in ErlangError ->
+        # Handle timeout or other system errors
+        if e.original == :timeout do
+          Logger.error("Post-merge tests timed out on #{job_branch}")
+          {:error, :timeout}
+        else
+          Logger.error("Failed to run post-merge tests: #{inspect(e)}")
+          {:error, {:test_execution_failed, e.original}}
+        end
+    end
+  end
+
+  @doc """
   Scans for and cleans up orphaned git artifacts from crashed jobs.
 
   Orphans include:
