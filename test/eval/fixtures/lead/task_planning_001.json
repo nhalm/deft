@@ -1,6 +1,6 @@
 {
   "id": "lead-task-planning-001",
-  "spec_version": "0.2",
+  "spec_version": "0.3",
   "description": "Simple feature implementation with clear dependencies",
   "tags": ["lead", "task_planning"],
   "deliverable": "Implement user authentication using Argon2 password hashing",

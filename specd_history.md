@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **evals v0.2 (2026-03-18):** Implement Lead steering evals: identifies errors, provides specific corrections; 20 iterations, 75% pass rate
 - **evals v0.2 (2026-03-18):** Implement Lead task planning evals: 4-8 tasks, dependency-ordered, clear done states; 20 iterations, 75% pass rate
 - **git-strategy v0.1 (2026-03-18):** Implement merge in dependency order: when Lead sends {:lead_message, :complete, ...}, Foreman merges Lead branch into deft/job-<job_id>; on conflict, spawn merge-resolution Runner; independent Leads merged in completion order
 - **orchestration v0.3 (2026-03-18):** Implement contract versioning: :contract_revision Lead message type, Foreman re-steers downstream Leads on revision

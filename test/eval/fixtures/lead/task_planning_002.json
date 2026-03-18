@@ -1,6 +1,6 @@
 {
   "id": "lead-task-planning-002",
-  "spec_version": "0.2",
+  "spec_version": "0.3",
   "description": "API endpoint with validation and tests",
   "tags": ["lead", "task_planning"],
   "deliverable": "Add POST /api/posts endpoint with title and body validation",

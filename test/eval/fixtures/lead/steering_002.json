@@ -1,0 +1,21 @@
+{
+  "id": "lead-steering-002",
+  "spec_version": "0.3",
+  "description": "Runner used incorrect validation approach",
+  "tags": ["lead", "steering"],
+  "task_description": "Add email validation to user registration that checks format using Regex",
+  "runner_output": "defmodule MyApp.User do\n  use Ecto.Schema\n  import Ecto.Changeset\n\n  schema \"users\" do\n    field :email, :string\n    field :password_hash, :string\n  end\n\n  def changeset(user, attrs) do\n    user\n    |> cast(attrs, [:email, :password_hash])\n    |> validate_required([:email])\n    |> validate_format(:email, ~r/@/)\n  end\nend",
+  "has_error": true,
+  "required_error_mentions": [
+    "regex",
+    "simple",
+    "insufficient",
+    "format"
+  ],
+  "required_correction_mentions": [
+    "email",
+    "proper",
+    "valid",
+    "rfc"
+  ]
+}
