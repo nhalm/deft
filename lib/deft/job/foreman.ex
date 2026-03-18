@@ -1231,16 +1231,269 @@ defmodule Deft.Job.Foreman do
           |> Enum.map(& &1.text)
           |> Enum.join("\n")
 
-        # For now, return the raw text as the plan
-        # In a real implementation, this would parse structured JSON or markdown
+        # Try to parse as JSON first, then fall back to markdown
+        case parse_json_plan(text_content) do
+          {:ok, plan} ->
+            Map.put(plan, :raw_plan, text_content)
+
+          :error ->
+            case parse_markdown_plan(text_content) do
+              {:ok, plan} ->
+                Map.put(plan, :raw_plan, text_content)
+
+              :error ->
+                Logger.warning("Failed to parse plan from response")
+                nil
+            end
+        end
+    end
+  end
+
+  # Parse plan from JSON format
+  # Expects {"deliverables": [...], "dependencies": [...], "contracts": [...], "estimates": {...}}
+  defp parse_json_plan(text) do
+    # Extract JSON from code blocks if present
+    json_text =
+      case Regex.run(~r/```(?:json)?\s*\n(.*?)\n```/s, text) do
+        [_, json] -> json
+        nil -> text
+      end
+
+    case Jason.decode(json_text) do
+      {:ok, data} ->
+        deliverables = parse_deliverables(data["deliverables"] || [])
+        dependencies = parse_dependencies(data["dependencies"] || [])
+        contracts = parse_contracts(data["contracts"] || [])
+        estimates = parse_estimates(data["estimates"] || %{})
+
+        {:ok,
+         %{
+           deliverables: deliverables,
+           dependencies: dependencies,
+           contracts: contracts,
+           estimates: estimates
+         }}
+
+      {:error, _} ->
+        :error
+    end
+  end
+
+  # Parse plan from markdown format
+  # Looks for ## Deliverables, ## Dependencies, ## Contracts, ## Estimates sections
+  defp parse_markdown_plan(text) do
+    deliverables = extract_markdown_deliverables(text)
+    dependencies = extract_markdown_dependencies(text)
+    contracts = extract_markdown_contracts(text)
+    estimates = extract_markdown_estimates(text)
+
+    # Consider valid if we found at least some deliverables
+    if Enum.empty?(deliverables) do
+      :error
+    else
+      {:ok,
+       %{
+         deliverables: deliverables,
+         dependencies: dependencies,
+         contracts: contracts,
+         estimates: estimates
+       }}
+    end
+  end
+
+  # Parse deliverables from JSON data
+  defp parse_deliverables(deliverables) when is_list(deliverables) do
+    Enum.map(deliverables, fn d ->
+      %{
+        name: d["name"] || "Unnamed",
+        description: d["description"] || "",
+        files: d["files"] || [],
+        complexity: d["complexity"] || "medium"
+      }
+    end)
+  end
+
+  defp parse_deliverables(_), do: []
+
+  # Parse dependencies from JSON data
+  defp parse_dependencies(dependencies) when is_list(dependencies) do
+    dependencies
+  end
+
+  defp parse_dependencies(_), do: []
+
+  # Parse contracts from JSON data
+  defp parse_contracts(contracts) when is_list(contracts) do
+    contracts
+  end
+
+  defp parse_contracts(_), do: []
+
+  # Parse estimates from JSON data
+  defp parse_estimates(estimates) when is_map(estimates) do
+    %{
+      duration: estimates["duration"] || "unknown",
+      cost: estimates["cost"] || "unknown"
+    }
+  end
+
+  defp parse_estimates(_), do: %{duration: "unknown", cost: "unknown"}
+
+  # Extract deliverables from markdown sections
+  defp extract_markdown_deliverables(text) do
+    # Look for ## Deliverables or ## 1. Deliverables section
+    case Regex.run(~r/##\s*(?:\d+\.)?\s*Deliverables?\s*\n(.*?)(?=\n##|\z)/s, text) do
+      [_, section] ->
+        # Parse each deliverable (looking for **Name:** or ### Name patterns)
+        section
+        |> String.split(~r/\n(?=[-*]\s+\*\*|\n###)/)
+        |> Enum.map(&parse_markdown_deliverable/1)
+        |> Enum.reject(&is_nil/1)
+
+      nil ->
+        []
+    end
+  end
+
+  # Parse a single deliverable from markdown
+  defp parse_markdown_deliverable(text) do
+    case extract_deliverable_name(text) do
+      nil ->
+        nil
+
+      name ->
         %{
-          raw_plan: text_content,
-          deliverables: [],
-          dependencies: [],
-          contracts: [],
-          estimates: %{duration: "unknown", cost: "unknown"}
+          name: name,
+          description: extract_deliverable_description(text),
+          files: extract_deliverable_files(text),
+          complexity: extract_deliverable_complexity(text)
         }
     end
+  end
+
+  # Extract deliverable name from various markdown patterns
+  defp extract_deliverable_name(text) do
+    Regex.run(~r/\*\*Name:\*\*\s*(.+?)(?:\n|$)/, text) ||
+      Regex.run(~r/###\s+(.+?)(?:\n|$)/, text) ||
+      Regex.run(~r/[-*]\s+\*\*(.+?)\*\*/, text)
+      |> case do
+        [_, n] -> String.trim(n)
+        nil -> nil
+      end
+  end
+
+  # Extract deliverable description
+  defp extract_deliverable_description(text) do
+    case Regex.run(~r/\*\*Description:\*\*\s*(.+?)(?=\n\*\*|\z)/s, text) do
+      [_, desc] ->
+        String.trim(desc)
+
+      nil ->
+        text
+        |> String.replace(~r/\*\*[^*]+:\*\*/, "")
+        |> String.trim()
+    end
+  end
+
+  # Extract deliverable files
+  defp extract_deliverable_files(text) do
+    case Regex.run(~r/\*\*Files:\*\*\s*(.+?)(?=\n\*\*|\n##|\z)/s, text) do
+      [_, files_text] ->
+        files_text
+        |> String.split(~r/[,\n]/)
+        |> Enum.map(&String.trim/1)
+        |> Enum.reject(&(&1 == ""))
+
+      nil ->
+        []
+    end
+  end
+
+  # Extract deliverable complexity
+  defp extract_deliverable_complexity(text) do
+    case Regex.run(~r/\*\*Complexity:\*\*\s*(\w+)/, text) do
+      [_, c] -> String.downcase(c)
+      nil -> "medium"
+    end
+  end
+
+  # Extract dependencies from markdown
+  defp extract_markdown_dependencies(text) do
+    case Regex.run(
+           ~r/##\s*(?:\d+\.)?\s*Dependenc(?:y|ies)\s*(?:DAG)?\s*\n(.*?)(?=\n##|\z)/s,
+           text
+         ) do
+      [_, section] ->
+        section
+        |> String.split("\n")
+        |> Enum.map(&String.trim/1)
+        |> Enum.filter(&String.contains?(&1, "depends_on"))
+        |> Enum.map(&extract_dependency_spec/1)
+        |> Enum.reject(&is_nil/1)
+
+      nil ->
+        []
+    end
+  end
+
+  # Extract a dependency spec from a line
+  defp extract_dependency_spec(line) do
+    # Match patterns like "A depends_on B" or "- A depends_on B"
+    case Regex.run(~r/[-*]?\s*(.+?)\s+depends_on\s+(.+?)(?:\s|$)/, line) do
+      [_, dependent, dependency] ->
+        "#{String.trim(dependent)} depends_on #{String.trim(dependency)}"
+
+      nil ->
+        nil
+    end
+  end
+
+  # Extract contracts from markdown
+  defp extract_markdown_contracts(text) do
+    case Regex.run(
+           ~r/##\s*(?:\d+\.)?\s*(?:Interface\s+)?Contracts?\s*\n(.*?)(?=\n##|\z)/s,
+           text
+         ) do
+      [_, section] ->
+        section
+        |> String.split("\n")
+        |> Enum.map(&String.trim/1)
+        |> Enum.filter(&String.contains?(&1, "needs from"))
+        |> Enum.map(&extract_contract_spec/1)
+        |> Enum.reject(&is_nil/1)
+
+      nil ->
+        []
+    end
+  end
+
+  # Extract a contract spec from a line
+  defp extract_contract_spec(line) do
+    # Match patterns like "A needs from B: description" or "- A needs from B: description"
+    case Regex.run(~r/[-*]?\s*(.+?)\s+needs from\s+(.+?):\s*(.+?)(?:\s|$)/s, line) do
+      [_, dependent, dependency, desc] ->
+        "#{String.trim(dependent)} needs from #{String.trim(dependency)}: #{String.trim(desc)}"
+
+      nil ->
+        nil
+    end
+  end
+
+  # Extract estimates from markdown
+  defp extract_markdown_estimates(text) do
+    duration =
+      case Regex.run(~r/\*\*(?:Duration|Time):\*\*\s*(.+?)(?:\n|$)/, text) do
+        [_, d] -> String.trim(d)
+        nil -> "unknown"
+      end
+
+    cost =
+      case Regex.run(~r/\*\*Cost:\*\*\s*(.+?)(?:\n|$)/, text) do
+        [_, c] -> String.trim(c)
+        nil -> "unknown"
+      end
+
+    %{duration: duration, cost: cost}
   end
 
   # Write plan to site log
