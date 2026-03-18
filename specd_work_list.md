@@ -76,7 +76,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## issues v0.2
 
-- Fix `detect_and_fix_cycles` to persist fixes to disk: currently clears cyclic dependencies in memory during init/1 but never writes the corrected issues back to the JSONL file; cycles reappear on every restart with repeated warnings
 - Fix `Deft.Issue.timestamp/0` fractional seconds: `DateTime.utc_now() |> DateTime.to_iso8601()` produces microsecond precision (e.g. `.123456Z`); doctest regex expects no fractional seconds; use `DateTime.truncate(:second)` before `to_iso8601/1` to match spec format contract
 - Implement `deft issue dep add <id> --blocked-by <blocker_id>` and `dep remove` CLI commands (blocked: Implement dependency tracking...)
 - Implement `deft work`: call ready/0, pick first, set status :in_progress, start Foreman job with issue structured JSON as prompt (context → research, acceptance_criteria → verification targets, constraints → Lead steering), on success set :closed + job_id, on failure set back to :open (blocked: Implement Foreman gen_statem...)

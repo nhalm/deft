@@ -204,7 +204,7 @@ defmodule Deft.Issues do
     issues = compact_closed_issues(issues, compaction_days, file_path)
 
     # Detect and fix cycles
-    issues = detect_and_fix_cycles(issues)
+    issues = detect_and_fix_cycles(issues, file_path)
 
     {:ok, %{issues: issues, file_path: file_path}}
   end
@@ -536,18 +536,33 @@ defmodule Deft.Issues do
   end
 
   # Detects cycles in dependency graph and clears dependencies with warnings
-  defp detect_and_fix_cycles(issues) do
-    Enum.map(issues, fn issue ->
-      if has_cycle?(issue, issues, MapSet.new([issue.id])) do
-        Logger.warning(
-          "Cycle detected in dependencies for issue #{issue.id}. Clearing dependencies."
-        )
+  defp detect_and_fix_cycles(issues, file_path) do
+    {corrected_issues, cycles_found} =
+      Enum.map_reduce(issues, false, fn issue, acc ->
+        if has_cycle?(issue, issues, MapSet.new([issue.id])) do
+          Logger.warning(
+            "Cycle detected in dependencies for issue #{issue.id}. Clearing dependencies."
+          )
 
-        %{issue | dependencies: []}
-      else
-        issue
+          {%{issue | dependencies: []}, true}
+        else
+          {issue, acc}
+        end
+      end)
+
+    # Persist corrected issues to disk if cycles were found
+    if cycles_found do
+      case write_issues_during_init(corrected_issues, file_path) do
+        :ok ->
+          corrected_issues
+
+        {:error, reason} ->
+          Logger.warning("Failed to persist cycle fixes: #{inspect(reason)}")
+          corrected_issues
       end
-    end)
+    else
+      corrected_issues
+    end
   end
 
   # Checks if an issue has a cycle in its dependency graph
