@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **filesystem v0.2 (2026-03-18):** Fix Deft.Store `handle_call({:delete, ...})` to use sync flush for sitelog type: currently all deletes use `maybe_flush_buffer` (buffered); must check `state.type == :sitelog` and call `flush_buffer(new_state, sync: true)` like `do_write` does for writes (spec requires all site log writes to be synchronous with `:dets.sync/1`)
 - **evals v0.2 (2026-03-17):** Fix `ResultStore.load/1` single-line parsing: `String.trim() |> Jason.decode()` fails on multi-line JSONL; must split on newlines and decode each line, returning a list of results (spec section 2.1)
 - **evals v0.2 (2026-03-17):** Fix `ResultStore.store/1` truncation: uses `File.write/2` which overwrites the file on each call; must use `File.write/3` with `[:append]` flag so multiple category results accumulate in a single `<run_id>.jsonl` file (spec section 2.1)
 - **observational-memory v0.1 (2026-03-18):** Implement dynamic continuation hint: extend Observer prompt to return `<continuation-hint>` with current task, last tool call, and user's last request paraphrase; parse in Observer output; pass through to Context injection; fall back to static hint when absent (spec section 5.3)

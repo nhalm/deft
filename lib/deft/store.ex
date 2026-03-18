@@ -208,8 +208,14 @@ defmodule Deft.Store do
     new_buffer = [{:delete, key} | state.write_buffer]
     new_state = %{state | write_buffer: new_buffer}
 
-    # Flush if buffer is full
-    new_state = maybe_flush_buffer(new_state)
+    # For sitelog: flush immediately and sync
+    # For cache: flush if buffer is full
+    new_state =
+      if state.type == :sitelog do
+        flush_buffer(new_state, sync: true)
+      else
+        maybe_flush_buffer(new_state)
+      end
 
     {:reply, :ok, new_state}
   end
