@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **orchestration v0.3 (2026-03-18):** Implement Lead gen_statem: extends Agent with tuple states `{chunk_phase, agent_state}`, receives deliverable assignment, decomposes into task list, spawns Runners via Task.Supervisor.async_nolink, Lead must explicitly Process.monitor(task.pid) for async_nolink Runners, actively steers (reads output, evaluates, corrects), handles `{:foreman_steering, content}` in handle_info; restart: :temporary in child spec
 - **orchestration v0.3 (2026-03-18):** Implement Foreman gen_statem: extends Agent with tuple states `{job_phase, agent_state}` using handle_event mode; phases: :planning, :researching, :decomposing, :executing, :verifying, :complete; single-agent fallback detection during :planning; Foreman handles `{:lead_message, type, content, metadata}` in handle_info for any state
 - **rate-limiter v0.1 (2026-03-18):** Implement 429 handling: parse Retry-After header, reduce bucket capacity by 20% for affected provider, apply exponential backoff (1s, 2s, 4s, 8s... capped at 60s), restore capacity gradually after 60s without 429s (10% per minute up to configured limit)
 - **evals v0.2 (2026-03-18):** Implement spilling cache retrieval evals: agent correctly uses cache_read tool when details not in summary; filter and lines parameters work; 20 iterations, 85% pass rate
