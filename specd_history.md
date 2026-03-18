@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **observational-memory v0.1 (2026-03-18):** Fix buffered reflection serialization guard: `maybe_activate_buffered_chunks` in `state.ex:1052-1059` must also check `not state.is_buffering_reflection`; currently only checks `not state.is_reflecting`, allowing observation chunks to activate while a buffered Reflector is running (wastes an LLM call when the stale reflection is discarded by epoch check)
 - **observational-memory v0.1 (2026-03-18):** Fix image formatting in Observer prompt: format images as `[Image: filename.png]` per spec section 3.3; currently outputs `[Image attachment]` with no filename; requires `Message.Image` struct to carry filename and `observer/prompt.ex:269` to use it
 - **observational-memory v0.2 (2026-03-18):** Verify OM persistence implementation uses separate `<session_id>_om.jsonl` snapshot file per spec section 9; ensure code at `lib/deft/om/state.ex:1737-1741` aligns with updated spec describing file-based (not session JSONL) persistence
 - **evals v0.2 (2026-03-18):** Add `test.eval.e2e` and `test.eval.benchmark` Makefile targets per spec section 3.1; `test.eval.e2e` runs Tier 2 end-to-end harness, `test.eval.benchmark` runs Tier 3 full benchmark suite

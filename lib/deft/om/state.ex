@@ -1052,7 +1052,8 @@ defmodule Deft.OM.State do
   defp maybe_activate_buffered_chunks(state) do
     if state.pending_message_tokens >= @default_message_threshold and
          not Enum.empty?(state.buffered_chunks) and
-         not state.is_reflecting do
+         not state.is_reflecting and
+         not state.is_buffering_reflection do
       activate_buffered_chunks(state)
     else
       state

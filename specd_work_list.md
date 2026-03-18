@@ -76,10 +76,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement per-Lead cache isolation: start one Deft.Store instance per Lead with DETS at cache/<session_id>/lead-<lead_id>.dets; Lead cleanup deletes its own cache instance (blocked: Implement Lead gen_statem...)
 - Implement session-end cache cleanup: on session termination, delete all files under cache/<session_id>/ (blocked: Implement per-Lead cache isolation...)
 
-## observational-memory v0.1
-
-- Fix buffered reflection serialization guard: `maybe_activate_buffered_chunks` in `state.ex:1052-1059` must also check `not state.is_buffering_reflection`; currently only checks `not state.is_reflecting`, allowing observation chunks to activate while a buffered Reflector is running (wastes an LLM call when the stale reflection is discarded by epoch check)
-
 ## skills v0.2
 
 - Exclude `use_skill` tool results from cache spilling: `tool_runner.ex:108-132` runs `maybe_spill_to_cache` on all tool results including `use_skill`; if a skill definition exceeds the spilling threshold, the agent receives a cache stub instead of the actual definition in the system injection at `agent.ex:1405-1413`; add a guard to skip spilling for `use_skill` results
