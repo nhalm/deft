@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **tui v0.1 (2026-03-17):** Fix OM event handling: OM state broadcasts `{:om_event, {:om, ...}}` but TUI `chat.ex` matches `{:om, ...}` directly; all OM events fall through to catch-all and are silently discarded; OM spinner, `memorizing...` indicator, and memory token counts never update
 - **evals v0.2 (2026-03-17):** Fix `make test.eval.holdout`: uses `mix test --only eval --only holdout` which is OR logic in ExUnit (runs ALL eval tests); should be `mix test --only holdout` to run only holdout-tagged tests
 - **observational-memory v0.1 (2026-03-17):** Implement `/observations` slash command: display `## Current State` + `## User Preferences` + today's entries; support `--full` for complete dump and `--search <term>` for filtering (spec section 11)
 - **observational-memory v0.1 (2026-03-18):** Fix `om_enabled` config bypass: `agent/context.ex:90` and `agent.ex:617` read `Application.get_env(:deft, :om_enabled, true)` but no code calls `Application.put_env`; must read from the config struct (`data.config.om_enabled`) instead, matching the pattern at `agent.ex:1450`

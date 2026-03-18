@@ -90,7 +90,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## tui v0.1
 
-- Fix OM event handling: OM state broadcasts `{:om_event, {:om, ...}}` but TUI `chat.ex` matches `{:om, ...}` directly; all OM events fall through to catch-all and are silently discarded; OM spinner, `memorizing...` indicator, and memory token counts never update
 - Fix `extract_prompt_text/1` in `Session.Store`: pattern matches `%{type: "text", text: text}` but `Deft.Message.Text` structs have no `:type` field; match always fails, returning `""` for `last_user_prompt` in session picker
 
 ## evals v0.2

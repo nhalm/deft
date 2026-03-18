@@ -194,11 +194,11 @@ defmodule Deft.TUI.Chat do
   end
 
   # OM (Observational Memory) events
-  def handle_info({:om, :observation_started}, term) do
+  def handle_info({:om_event, {:om, :observation_started}}, term) do
     {:noreply, assign(term, om_active: true)}
   end
 
-  def handle_info({:om, :observation_complete, metadata}, term) do
+  def handle_info({:om_event, {:om, :observation_complete, metadata}}, term) do
     # Extract tokens_produced from metadata and update memory_tokens
     memory_tokens =
       case metadata do
@@ -210,11 +210,11 @@ defmodule Deft.TUI.Chat do
      assign(term, om_active: false, om_sync_fallback: false, memory_tokens: memory_tokens)}
   end
 
-  def handle_info({:om, :reflection_started, _metadata}, term) do
+  def handle_info({:om_event, {:om, :reflection_started, _metadata}}, term) do
     {:noreply, assign(term, om_active: true)}
   end
 
-  def handle_info({:om, :reflection_complete, metadata}, term) do
+  def handle_info({:om_event, {:om, :reflection_complete, metadata}}, term) do
     # Extract after_tokens from metadata and update memory_tokens
     memory_tokens =
       case metadata do
@@ -226,19 +226,19 @@ defmodule Deft.TUI.Chat do
      assign(term, om_active: false, om_sync_fallback: false, memory_tokens: memory_tokens)}
   end
 
-  def handle_info({:om, :buffering_started, _metadata}, term) do
+  def handle_info({:om_event, {:om, :buffering_started, _metadata}}, term) do
     {:noreply, assign(term, om_active: true)}
   end
 
-  def handle_info({:om, :buffering_complete, _metadata}, term) do
+  def handle_info({:om_event, {:om, :buffering_complete, _metadata}}, term) do
     {:noreply, assign(term, om_active: false)}
   end
 
-  def handle_info({:om, :sync_fallback, _metadata}, term) do
+  def handle_info({:om_event, {:om, :sync_fallback, _metadata}}, term) do
     {:noreply, assign(term, om_active: true, om_sync_fallback: true)}
   end
 
-  def handle_info({:om, :activation, _metadata}, term) do
+  def handle_info({:om_event, {:om, :activation, _metadata}}, term) do
     # Activation is instant, no spinner needed
     {:noreply, term}
   end
@@ -276,7 +276,7 @@ defmodule Deft.TUI.Chat do
   def handle_info({:agent_event, {:thinking_delta, _delta}}, term), do: {:noreply, term}
   def handle_info({:agent_event, {:tool_call_delta, _}}, term), do: {:noreply, term}
   def handle_info({:agent_event, _event}, term), do: {:noreply, term}
-  def handle_info({:om, _event}, term), do: {:noreply, term}
+  def handle_info({:om_event, _event}, term), do: {:noreply, term}
   def handle_info({:job_event, _event}, term), do: {:noreply, term}
 
   def handle_info(_msg, term) do
