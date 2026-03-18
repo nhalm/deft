@@ -35,6 +35,7 @@ defmodule Deft.Job.Foreman do
   alias Deft.Agent.ToolRunner
   alias Deft.Store
   alias Deft.Project
+  alias Deft.Git
 
   require Logger
 
@@ -222,6 +223,43 @@ defmodule Deft.Job.Foreman do
         {:next_state, {new_phase, agent_state}, data}
 
       :no_transition ->
+        {:keep_state, data}
+    end
+  end
+
+  # Lead crash handling (DOWN message)
+  def handle_event(
+        :info,
+        {:DOWN, monitor_ref, :process, _pid, reason},
+        _state,
+        %{leads: leads} = data
+      ) do
+    # Find crashed Lead by monitor ref
+    crashed_lead =
+      Enum.find(leads, fn {_lead_id, info} ->
+        info.monitor_ref == monitor_ref
+      end)
+
+    case crashed_lead do
+      nil ->
+        # Not a Lead monitor, ignore
+        :keep_state_and_data
+
+      {lead_id, lead_info} ->
+        Logger.error(
+          "Lead #{lead_id} crashed, cleaning up worktree: #{lead_info.worktree_path}, reason: #{inspect(reason)}"
+        )
+
+        # Clean up the Lead's worktree
+        cleanup_worktree(lead_info.worktree_path, data.working_dir)
+
+        # Remove crashed Lead from tracking
+        leads = Map.delete(leads, lead_id)
+        data = %{data | leads: leads}
+
+        # TODO: Decide whether to retry or mark deliverable as failed
+        # For now, just clean up and continue
+
         {:keep_state, data}
     end
   end
@@ -476,5 +514,25 @@ defmodule Deft.Job.Foreman do
 
   defp generate_message_id do
     "msg_#{:crypto.strong_rand_bytes(16) |> Base.url_encode64(padding: false)}"
+  end
+
+  # Cleans up a Lead's worktree when the Lead crashes.
+  # Uses `git worktree remove --force` to handle cases where index.lock exists.
+  defp cleanup_worktree(worktree_path, working_dir) do
+    # Change to working directory to ensure git command operates in correct repo
+    File.cd!(working_dir, fn ->
+      # Use --force to remove worktree even if index.lock exists
+      {output, exit_code} = Git.cmd(["worktree", "remove", "--force", worktree_path])
+
+      case exit_code do
+        0 ->
+          Logger.info("Successfully removed worktree: #{worktree_path}")
+          :ok
+
+        _ ->
+          Logger.error("Failed to remove worktree #{worktree_path}: #{output}")
+          {:error, output}
+      end
+    end)
   end
 end

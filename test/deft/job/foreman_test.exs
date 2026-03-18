@@ -352,4 +352,124 @@ defmodule Deft.Job.ForemanTest do
       Process.sleep(50)
     end
   end
+
+  describe "Lead crash cleanup" do
+    test "cleans up worktree when Lead crashes", %{tmp_dir: tmp_dir} do
+      session_id = "test-job-#{:erlang.unique_integer([:positive])}"
+      lead_id = "lead-1"
+      worktree_path = "/tmp/test-worktree"
+
+      # Configure git mock to succeed on worktree remove
+      Application.put_env(:deft, :git_adapter, Deft.GitMock)
+
+      Application.put_env(:deft, :git_mock_responses, %{
+        ["worktree", "remove", "--force", worktree_path] => {"", 0}
+      })
+
+      {:ok, foreman_pid} =
+        Foreman.start_link(
+          session_id: session_id,
+          config: %{},
+          prompt: "test prompt",
+          rate_limiter_pid: self(),
+          working_dir: tmp_dir
+        )
+
+      # Get initial state and manually add a Lead to the leads map
+      {_state, data} = :sys.get_state(foreman_pid)
+      monitor_ref = make_ref()
+
+      lead_info = %{
+        pid: self(),
+        monitor_ref: monitor_ref,
+        worktree_path: worktree_path,
+        deliverable: "test deliverable"
+      }
+
+      leads = Map.put(data.leads, lead_id, lead_info)
+      data = %{data | leads: leads}
+      :sys.replace_state(foreman_pid, fn {s, _d} -> {s, data} end)
+
+      # Simulate Lead crash by sending DOWN message
+      send(foreman_pid, {:DOWN, monitor_ref, :process, self(), :crash_reason})
+
+      # Wait for processing
+      Process.sleep(100)
+
+      # Verify Lead was removed from tracking
+      {_state, updated_data} = :sys.get_state(foreman_pid)
+      refute Map.has_key?(updated_data.leads, lead_id)
+
+      # Cleanup - stop Foreman and clean up site log
+      {_state, data} = :sys.get_state(foreman_pid)
+      Store.cleanup(data.site_log_pid)
+      :gen_statem.stop(foreman_pid)
+
+      # Clean up git mock config
+      Application.delete_env(:deft, :git_mock_responses)
+      Application.put_env(:deft, :git_adapter, Deft.Git.System)
+
+      # Give processes time to fully terminate
+      Process.sleep(50)
+    end
+
+    test "handles worktree removal failure gracefully", %{tmp_dir: tmp_dir} do
+      session_id = "test-job-#{:erlang.unique_integer([:positive])}"
+      lead_id = "lead-2"
+      worktree_path = "/tmp/test-worktree-fail"
+
+      # Configure git mock to fail on worktree remove
+      Application.put_env(:deft, :git_adapter, Deft.GitMock)
+
+      Application.put_env(:deft, :git_mock_responses, %{
+        ["worktree", "remove", "--force", worktree_path] => {"fatal: worktree removal failed", 1}
+      })
+
+      {:ok, foreman_pid} =
+        Foreman.start_link(
+          session_id: session_id,
+          config: %{},
+          prompt: "test prompt",
+          rate_limiter_pid: self(),
+          working_dir: tmp_dir
+        )
+
+      # Get initial state and manually add a Lead to the leads map
+      {_state, data} = :sys.get_state(foreman_pid)
+      monitor_ref = make_ref()
+
+      lead_info = %{
+        pid: self(),
+        monitor_ref: monitor_ref,
+        worktree_path: worktree_path,
+        deliverable: "test deliverable"
+      }
+
+      leads = Map.put(data.leads, lead_id, lead_info)
+      data = %{data | leads: leads}
+      :sys.replace_state(foreman_pid, fn {s, _d} -> {s, data} end)
+
+      # Simulate Lead crash by sending DOWN message
+      send(foreman_pid, {:DOWN, monitor_ref, :process, self(), :crash_reason})
+
+      # Wait for processing
+      Process.sleep(100)
+
+      # Verify Lead was still removed from tracking even though cleanup failed
+      {_state, updated_data} = :sys.get_state(foreman_pid)
+      refute Map.has_key?(updated_data.leads, lead_id)
+
+      # Cleanup - stop Foreman and clean up site log
+      {_state, data} = :sys.get_state(foreman_pid)
+      Store.cleanup(data.site_log_pid)
+      :gen_statem.stop(foreman_pid)
+
+      # Clean up git mock config
+      Application.delete_env(:deft, :git_mock_responses)
+      Application.put_env(:deft, :git_adapter, Deft.Git.System)
+
+      # Give processes time to fully terminate
+      Process.sleep(50)
+    end
+  end
 end
