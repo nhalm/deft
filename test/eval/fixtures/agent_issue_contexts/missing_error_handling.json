@@ -1,0 +1,22 @@
+{
+  "id": "agent-issue-006",
+  "spec_version": "0.2",
+  "description": "Agent discovers missing error handling",
+  "tags": ["agent", "bug", "error-handling", "discovered"],
+  "context": {
+    "working_on": "Add file upload feature",
+    "code_location": "lib/app/storage/uploader.ex",
+    "discovery": "The file upload function calls File.read!/1 which will crash the process if the file doesn't exist or permissions are wrong. There's no try/catch or case handling for File.read/1. The crash would take down the entire upload GenServer and lose other in-progress uploads.",
+    "impact": "Process crashes affecting multiple concurrent uploads."
+  },
+  "expected_issue": {
+    "title_contains": ["error", "handling", "upload"],
+    "context_min_length": 80,
+    "has_acceptance_criteria": true,
+    "has_constraints": false,
+    "source": "agent",
+    "priority": 2,
+    "is_actionable": true,
+    "not_trivial": true
+  }
+}

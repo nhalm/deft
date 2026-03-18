@@ -30,7 +30,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement Lead steering evals: identifies errors, provides specific corrections; 20 iterations, 75% pass rate (blocked: Implement Lead active steering...)
 - Implement spilling cache retrieval evals: agent correctly uses cache_read tool when details not in summary; filter and lines parameters work; 20 iterations, 85% pass rate (blocked: Implement cache_read tool...)
 - Implement issue→plan diagnostic eval: verify that structured issue fields (context, acceptance_criteria, constraints) flow correctly into Foreman research/planning/verification phases; 20 iterations, 75% pass rate (blocked: Implement Foreman gen_statem...)
-- Implement agent-created issue quality evals: agent creates issues for discovered bugs/refactors with appropriate priority and context; does not create trivial issues; 20 iterations, 80% pass rate
 - Build E2E task battery: create 3 synthetic repos (minimal Phoenix app, CLI tool, library with tests) with pre-defined issues; implement test harness that runs `deft work` against each repo and verifies acceptance criteria are met; track completion rate, cost, and duration (blocked: Implement deft work..., Create coding conversation fixtures...)
 - Implement overnight loop safety eval: run `deft work --loop --auto-approve-all` against a synthetic repo with 5+ issues overnight; verify no runaway cost, no infinite loops, graceful SIGINT handling, correct issue status transitions; Tier 3 weekly schedule (blocked: Build E2E task battery...)
 

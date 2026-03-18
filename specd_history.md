@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **evals v0.2 (2026-03-17):** Implement agent-created issue quality evals: agent creates issues for discovered bugs/refactors with appropriate priority and context; does not create trivial issues; 20 iterations, 80% pass rate
 - **evals v0.2 (2026-03-17):** Implement issue elicitation quality evals: interactive session produces structured issue with meaningful context, concrete acceptance_criteria, and actionable constraints; issue_draft tool call produces valid JSON; 20 iterations, 80% pass rate
 - **evals v0.2 (2026-03-17):** Implement spilling threshold calibration grid search: test each tool's threshold across a range of values, measure summary quality vs context savings tradeoff; use to validate per-tool threshold defaults
 - **issues v0.2 (2026-03-17):** Implement issue_create tool for agent-created issues: accessible during any session; source set to :agent; default priority 3 (low) but agent may assign higher priority for discovered bugs affecting current functionality; agent explains priority choice in issue context

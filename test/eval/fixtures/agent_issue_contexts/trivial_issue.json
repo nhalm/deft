@@ -1,0 +1,16 @@
+{
+  "id": "agent-issue-004",
+  "spec_version": "0.2",
+  "description": "Trivial issue that should NOT be created (typo in comment)",
+  "tags": ["agent", "trivial", "should-skip"],
+  "context": {
+    "working_on": "Add user search functionality",
+    "code_location": "lib/app/search.ex",
+    "discovery": "Found a typo in a comment: 'retrun' instead of 'return' on line 42.",
+    "impact": "None - just a cosmetic issue in a comment that doesn't affect functionality."
+  },
+  "expected_issue": {
+    "should_create": false,
+    "reason": "Trivial comment typo not worth tracking as an issue"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "id": "agent-issue-003",
+  "spec_version": "0.2",
+  "description": "Agent discovers a security vulnerability",
+  "tags": ["agent", "security", "bug", "discovered"],
+  "context": {
+    "working_on": "Add admin dashboard filtering",
+    "code_location": "lib/app_web/controllers/admin/dashboard_controller.ex",
+    "discovery": "The dashboard SQL query uses string interpolation for the filter parameter instead of parameterized queries: `Repo.query!(\"SELECT * FROM users WHERE role = '#{role}'\")`. This is vulnerable to SQL injection if the role parameter is user-controlled.",
+    "impact": "Potential SQL injection vulnerability allowing unauthorized data access or modification."
+  },
+  "expected_issue": {
+    "title_contains": ["sql", "injection"],
+    "context_min_length": 80,
+    "has_acceptance_criteria": true,
+    "has_constraints": false,
+    "source": "agent",
+    "priority": 1,
+    "is_actionable": true,
+    "not_trivial": true
+  }
+}
