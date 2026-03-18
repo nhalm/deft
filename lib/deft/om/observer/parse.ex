@@ -57,20 +57,15 @@ defmodule Deft.OM.Observer.Parse do
     # Try XML parsing first
     case extract_xml_blocks(output) do
       {:ok, observations, current_task, continuation_hint} ->
-        # Validate section headers
-        case validate_sections(observations) do
-          :ok ->
-            {:ok,
-             %{
-               observations: observations,
-               current_task: current_task,
-               continuation_hint: continuation_hint
-             }}
+        # Strip unknown sections per spec section 3.5
+        cleaned_observations = strip_unknown_sections(observations)
 
-          {:error, _reason} = error ->
-            # Validation failed, try fallback
-            fallback_parse(output, error)
-        end
+        {:ok,
+         %{
+           observations: cleaned_observations,
+           current_task: current_task,
+           continuation_hint: continuation_hint
+         }}
 
       :error ->
         # XML extraction failed, try fallback
@@ -216,18 +211,21 @@ defmodule Deft.OM.Observer.Parse do
     end
   end
 
-  # Validate that sections are from the allowed set
-  defp validate_sections(observations) do
-    section_headers = Regex.scan(~r/^## (.+)$/m, observations, capture: :all_but_first)
-    section_names = Enum.map(section_headers, fn [name] -> String.trim(name) end)
+  # Strip unknown sections from observations per spec section 3.5
+  # Unknown sections are ignored, not treated as errors
+  defp strip_unknown_sections(observations) do
+    sections = parse_sections(observations)
 
-    invalid_sections = Enum.reject(section_names, fn name -> name in @section_order end)
-
-    if Enum.empty?(invalid_sections) do
-      :ok
-    else
-      {:error, "Invalid sections: #{Enum.join(invalid_sections, ", ")}"}
-    end
+    # Keep only standard sections, in canonical order
+    @section_order
+    |> Enum.map(fn section_name ->
+      case Map.get(sections, section_name) do
+        nil -> nil
+        content -> "## #{section_name}\n#{content}"
+      end
+    end)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join("\n\n")
   end
 
   # Fallback to raw bullet-list extraction when XML parsing fails
