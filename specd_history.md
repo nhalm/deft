@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **filesystem v0.2 (2026-03-18):** Implement per-Lead cache isolation: start one Deft.Store instance per Lead with DETS at cache/<session_id>/lead-<lead_id>.dets; Lead cleanup deletes its own cache instance
 - **filesystem v0.2 (2026-03-18):** Implement site log programmatic promotion: pattern match on Lead messages — auto-promote contract, decision, correction, critical_finding; promote finding if tagged shared; never promote status or blocker
 - **issues v0.2 (2026-03-18):** Implement `deft issue update --edit` flag: reopen conversational elicitation flow with existing fields pre-populated (spec section 5.2); not declared in OptionParser (cli.ex:96-117) and not handled in execute_command
 - **orchestration v0.3 (2026-03-18):** Fix Lead tool task handler to not consume runner completion messages: when in :executing_tools state, the tool handler at lead.ex:267 matches `{ref, results}` before the runner handler at lead.ex:297; if ref is a runner task, tool_tasks list is unchanged but message is consumed and runner result is lost

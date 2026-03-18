@@ -41,6 +41,7 @@ defmodule Deft.Job.Lead do
   alias Deft.Message
   alias Deft.Job.Runner
   alias Deft.Store
+  alias Deft.Project
 
   require Logger
 
@@ -59,6 +60,7 @@ defmodule Deft.Job.Lead do
   - `:site_log_name` — Required. Registered name of Deft.Store site log instance.
   - `:rate_limiter_pid` — Required. PID of Deft.Job.RateLimiter.
   - `:worktree_path` — Required. Path to Lead's git worktree.
+  - `:working_dir` — Required. Project working directory for cache path resolution.
   - `:runner_supervisor` — Required. Name of the Lead's Task.Supervisor for Runners.
   - `:name` — Optional. Name for the gen_statem process.
   """
@@ -71,6 +73,7 @@ defmodule Deft.Job.Lead do
     site_log_name = Keyword.fetch!(opts, :site_log_name)
     rate_limiter_pid = Keyword.fetch!(opts, :rate_limiter_pid)
     worktree_path = Keyword.fetch!(opts, :worktree_path)
+    working_dir = Keyword.fetch!(opts, :working_dir)
     runner_supervisor = Keyword.fetch!(opts, :runner_supervisor)
     name = Keyword.get(opts, :name)
 
@@ -84,7 +87,10 @@ defmodule Deft.Job.Lead do
       site_log_tid: nil,
       rate_limiter_pid: rate_limiter_pid,
       worktree_path: worktree_path,
+      working_dir: working_dir,
       runner_supervisor: runner_supervisor,
+      cache_pid: nil,
+      cache_tid: nil,
       messages: [],
       task_list: [],
       runner_tasks: %{},
@@ -132,6 +138,24 @@ defmodule Deft.Job.Lead do
   end
 
   @impl :gen_statem
+  def terminate(_reason, _state, data) do
+    # Clean up the cache instance if it exists
+    if data.cache_pid do
+      Logger.info("Lead #{data.lead_id}: cleaning up cache instance")
+
+      case Store.cleanup(data.cache_pid) do
+        :ok ->
+          Logger.info("Lead #{data.lead_id}: cache cleanup successful")
+
+        {:error, reason} ->
+          Logger.warning("Lead #{data.lead_id}: cache cleanup failed: #{inspect(reason)}")
+      end
+    end
+
+    :ok
+  end
+
+  @impl :gen_statem
   def init(initial_data) do
     # Obtain site log ETS tid for direct reads
     # The Foreman passes the site log registered name; we resolve it to get the PID,
@@ -146,11 +170,37 @@ defmodule Deft.Job.Lead do
           nil
       end
 
-    initial_data = %{initial_data | site_log_tid: site_log_tid}
+    # Start cache instance for this Lead
+    # Cache path: ~/.deft/projects/<path-encoded-repo>/cache/<session_id>/lead-<lead_id>.dets
+    cache_dir = Project.cache_dir(initial_data.working_dir)
+    cache_session_dir = Path.join(cache_dir, initial_data.session_id)
+    cache_path = Path.join(cache_session_dir, "lead-#{initial_data.lead_id}.dets")
 
-    # Start in planning phase, idle agent state
-    initial_state = {:planning, :idle}
-    {:ok, initial_state, initial_data}
+    cache_name = {:cache, initial_data.session_id, initial_data.lead_id}
+
+    case Store.start_link(
+           name: cache_name,
+           type: :cache,
+           dets_path: cache_path
+         ) do
+      {:ok, cache_pid} ->
+        cache_tid = Store.tid(cache_pid)
+        Logger.info("Lead #{initial_data.lead_id}: started cache instance at #{cache_path}")
+
+        initial_data =
+          %{initial_data | site_log_tid: site_log_tid, cache_pid: cache_pid, cache_tid: cache_tid}
+
+        # Start in planning phase, idle agent state
+        initial_state = {:planning, :idle}
+        {:ok, initial_state, initial_data}
+
+      {:error, reason} ->
+        Logger.error("Lead #{initial_data.lead_id}: failed to start cache: #{inspect(reason)}")
+        # Continue without cache
+        initial_data = %{initial_data | site_log_tid: site_log_tid}
+        initial_state = {:planning, :idle}
+        {:ok, initial_state, initial_data}
+    end
   end
 
   @impl :gen_statem

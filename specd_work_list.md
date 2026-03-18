@@ -35,8 +35,7 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## filesystem v0.2
 
-- Implement per-Lead cache isolation: start one Deft.Store instance per Lead with DETS at cache/<session_id>/lead-<lead_id>.dets; Lead cleanup deletes its own cache instance
-- Implement session-end cache cleanup: on session termination, delete all files under cache/<session_id>/ (blocked: Implement per-Lead cache isolation...)
+- Implement session-end cache cleanup: on session termination, delete all files under cache/<session_id>/
 
 ## issues v0.2
 

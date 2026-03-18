@@ -1622,6 +1622,7 @@ defmodule Deft.Job.Foreman do
           site_log_name: site_log_name,
           rate_limiter_pid: data.rate_limiter_pid,
           worktree_path: worktree_path,
+          working_dir: data.working_dir,
           runner_supervisor: runner_supervisor_name
         ]
 
