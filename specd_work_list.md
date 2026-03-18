@@ -84,9 +84,7 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## observational-memory v0.1
 
-- Wire sync fallback calls from Agent.Context: `get_om_context/1` must check `pending_message_tokens` against 1.2x observation threshold (36,000) and call `OMState.force_observe/1`; check `observation_tokens` against 1.2x reflection threshold (48,000) and call `OMState.force_reflect/1`; currently no threshold check or sync fallback invocation exists (spec section 6.3)
 - Add retry wrapper to async Observer Task: `spawn_observer_task` calls `Observer.run/4` directly with no retries; must wrap in retry logic (3 retries with exponential backoff) matching the existing `run_observer_with_retry` pattern used by the sync path (spec section 6.3)
-- Pass calibration_factor from OM.State to Agent.Context: `get_om_context/1` hardcodes 4.0 (line 97 with TODO); must retrieve actual `calibration_factor` from State, which is updated via exponential moving average as LLM reports actual token counts (spec section 7)
 
 ## skills v0.2
 

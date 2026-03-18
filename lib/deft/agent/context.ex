@@ -81,6 +81,10 @@ defmodule Deft.Agent.Context do
 
   # Gets OM context from State process
   # Returns {observations, observed_ids, continuation_hint, calibration_factor}
+  #
+  # Per spec section 6.3, implements sync fallback:
+  # - If pending_message_tokens >= 36,000 (1.2x observation threshold), force observe
+  # - If observation_tokens >= 48,000 (1.2x reflection threshold), force reflect
   defp get_om_context(session_id) do
     # Check if OM is enabled in config
     om_enabled = Application.get_env(:deft, :om_enabled, true)
@@ -92,9 +96,14 @@ defmodule Deft.Agent.Context do
           # Process exists, safe to call
           try do
             case OMState.get_context(session_id) do
-              {observations, observed_ids, continuation_hint} ->
-                # TODO: Get calibration_factor from OM.State as well
-                {observations, observed_ids, continuation_hint, 4.0}
+              {observations, observed_ids, continuation_hint, calibration_factor,
+               pending_message_tokens, observation_tokens} ->
+                # Sync fallback: check hard thresholds per spec section 6.3
+                # Observation hard threshold: 1.2x * 30,000 = 36,000
+                # Reflection hard threshold: 1.2x * 40,000 = 48,000
+                check_sync_fallback(session_id, pending_message_tokens, observation_tokens)
+
+                {observations, observed_ids, continuation_hint, calibration_factor}
 
               _ ->
                 {"", [], nil, 4.0}
@@ -110,6 +119,38 @@ defmodule Deft.Agent.Context do
     else
       {"", [], nil, 4.0}
     end
+  end
+
+  # Checks if sync fallback is needed and calls force_observe/force_reflect
+  # Per spec section 6.3, this ensures observation/reflection happens even if async buffering fails
+  defp check_sync_fallback(session_id, pending_message_tokens, observation_tokens) do
+    # Hard threshold for observation: 1.2x * 30,000 = 36,000 tokens
+    if pending_message_tokens >= 36_000 do
+      case OMState.force_observe(session_id, 60_000) do
+        {:ok, _} ->
+          :ok
+
+        {:error, reason} ->
+          require Logger
+          Logger.warning("Sync observe failed: #{inspect(reason)}")
+          :ok
+      end
+    end
+
+    # Hard threshold for reflection: 1.2x * 40,000 = 48,000 tokens
+    if observation_tokens >= 48_000 do
+      case OMState.force_reflect(session_id, 60_000) do
+        {:ok, _} ->
+          :ok
+
+        {:error, reason} ->
+          require Logger
+          Logger.warning("Sync reflect failed: #{inspect(reason)}")
+          :ok
+      end
+    end
+
+    :ok
   end
 
   # Builds the project context message by reading DEFT.md, CLAUDE.md, or AGENTS.md

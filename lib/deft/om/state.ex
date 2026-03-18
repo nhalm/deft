@@ -115,9 +115,10 @@ defmodule Deft.OM.State do
   @doc """
   Returns the current observation context for injection into the Agent's context.
 
-  Returns `{observations_text, observed_message_ids}`.
+  Returns `{observations_text, observed_message_ids, continuation_hint, calibration_factor, pending_message_tokens, observation_tokens}`.
   """
-  @spec get_context(String.t()) :: {String.t(), [String.t()], String.t() | nil}
+  @spec get_context(String.t()) ::
+          {String.t(), [String.t()], String.t() | nil, float(), integer(), integer()}
   def get_context(session_id) do
     GenServer.call(via_tuple(session_id), :get_context)
   end
@@ -131,6 +132,34 @@ defmodule Deft.OM.State do
   @spec messages_added(String.t(), [Message.t()]) :: :ok
   def messages_added(session_id, messages) do
     GenServer.cast(via_tuple(session_id), {:messages_added, messages})
+  end
+
+  @doc """
+  Forces a synchronous observation cycle (sync fallback).
+
+  Used when pending_message_tokens exceeds the hard threshold (1.2x observation threshold).
+  Blocks until the Observer Task completes or times out (default 60 seconds).
+
+  Returns `{:ok, :no_messages}` if no unobserved messages exist,
+  `{:ok, result}` on success, or `{:error, reason}` on failure/timeout.
+  """
+  @spec force_observe(String.t(), timeout()) :: {:ok, term()} | {:error, term()}
+  def force_observe(session_id, timeout \\ 60_000) do
+    GenServer.call(via_tuple(session_id), :force_observe, timeout)
+  end
+
+  @doc """
+  Forces a synchronous reflection cycle (sync fallback).
+
+  Used when observation_tokens exceeds the hard threshold (1.2x reflection threshold).
+  Blocks until the Reflector Task completes or times out (default 60 seconds).
+
+  Returns `{:ok, :below_threshold}` if observations are below threshold,
+  `{:ok, result}` on success, or `{:error, reason}` on failure/timeout.
+  """
+  @spec force_reflect(String.t(), timeout()) :: {:ok, term()} | {:error, term()}
+  def force_reflect(session_id, timeout \\ 60_000) do
+    GenServer.call(via_tuple(session_id), :force_reflect, timeout)
   end
 
   @doc """
@@ -259,8 +288,9 @@ defmodule Deft.OM.State do
 
   @impl true
   def handle_call(:get_context, _from, state) do
-    {:reply, {state.active_observations, state.observed_message_ids, state.continuation_hint},
-     state}
+    {:reply,
+     {state.active_observations, state.observed_message_ids, state.continuation_hint,
+      state.calibration_factor, state.pending_message_tokens, state.observation_tokens}, state}
   end
 
   @impl true

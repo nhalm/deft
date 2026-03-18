@@ -85,7 +85,8 @@ defmodule Deft.OM.StateResumeTest do
         )
 
       # Get context - should have restored observations
-      {observations, observed_ids, _continuation_hint} = State.get_context(session_id)
+      {observations, observed_ids, _continuation_hint, _calibration_factor, _pending_tokens,
+       _observation_tokens} = State.get_context(session_id)
 
       # Verify observations were restored
       assert observations == snapshot.active_observations
@@ -172,7 +173,8 @@ defmodule Deft.OM.StateResumeTest do
         )
 
       # Get context - should be empty
-      {observations, observed_ids, _continuation_hint} = State.get_context(session_id)
+      {observations, observed_ids, _continuation_hint, _calibration_factor, _pending_tokens,
+       _observation_tokens} = State.get_context(session_id)
 
       assert observations == ""
       assert observed_ids == []
