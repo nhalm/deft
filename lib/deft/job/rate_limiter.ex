@@ -139,10 +139,15 @@ defmodule Deft.Job.RateLimiter do
   # Client API
 
   @doc """
-  Starts the RateLimiter GenServer.
+  Starts the RateLimiter GenServer for a specific job.
+
+  ## Parameters
+  - opts: Keyword list with required :job_id and optional configuration
   """
-  def start_link(opts \\ []) do
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+  def start_link(opts) do
+    job_id = Keyword.fetch!(opts, :job_id)
+    name = via_tuple(job_id)
+    GenServer.start_link(__MODULE__, opts, name: name)
   end
 
   @doc """
@@ -152,6 +157,7 @@ defmodule Deft.Job.RateLimiter do
   Blocks until both buckets have capacity (or timeout).
 
   ## Parameters
+  - job_id: The job identifier for the RateLimiter instance
   - provider: Provider name (e.g., "anthropic")
   - messages: List of messages (used for token estimation)
   - caller_type: One of :foreman, :runner, or :lead (determines priority)
@@ -161,10 +167,10 @@ defmodule Deft.Job.RateLimiter do
   - {:ok, estimated_tokens} - Permission granted, tokens deducted
   - {:error, reason} - Failed to get permission
   """
-  def request(provider, messages, caller_type \\ :lead, _config \\ %{}) do
+  def request(job_id, provider, messages, caller_type \\ :lead, _config \\ %{}) do
     estimated_tokens = estimate_tokens(messages)
     priority = priority_for_caller(caller_type)
-    GenServer.call(__MODULE__, {:request, provider, estimated_tokens, priority}, :infinity)
+    GenServer.call(via_tuple(job_id), {:request, provider, estimated_tokens, priority}, :infinity)
   end
 
   @doc """
@@ -174,12 +180,18 @@ defmodule Deft.Job.RateLimiter do
   capped at bucket capacity to prevent over-crediting.
 
   ## Parameters
+  - job_id: The job identifier for the RateLimiter instance
   - provider: Provider name
   - estimated_tokens: Tokens that were estimated/deducted
   - actual_usage: Map with :input and :output token counts from API response
   """
-  def reconcile(provider, estimated_tokens, actual_usage) do
-    GenServer.cast(__MODULE__, {:reconcile, provider, estimated_tokens, actual_usage})
+  def reconcile(job_id, provider, estimated_tokens, actual_usage) do
+    GenServer.cast(via_tuple(job_id), {:reconcile, provider, estimated_tokens, actual_usage})
+  end
+
+  # Private helper for Registry via tuple
+  defp via_tuple(job_id) do
+    {:via, Registry, {Deft.ProcessRegistry, {:rate_limiter, job_id}}}
   end
 
   # Server callbacks

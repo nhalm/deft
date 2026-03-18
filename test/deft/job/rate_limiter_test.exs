@@ -4,84 +4,85 @@ defmodule Deft.Job.RateLimiterTest do
   alias Deft.Job.RateLimiter
 
   setup do
-    # Start a fresh RateLimiter for each test
-    {:ok, pid} = start_supervised(RateLimiter)
-    {:ok, rate_limiter: pid}
+    # Start a fresh RateLimiter for each test with unique job_id
+    job_id = "test-job-#{System.unique_integer([:positive])}"
+    {:ok, pid} = start_supervised({RateLimiter, [job_id: job_id]})
+    {:ok, rate_limiter: pid, job_id: job_id}
   end
 
   describe "dual token-bucket algorithm" do
-    test "allows request when both buckets have capacity" do
+    test "allows request when both buckets have capacity", %{job_id: job_id} do
       messages = [%{content: "Hello world"}]
 
-      assert {:ok, estimated_tokens} = RateLimiter.request("anthropic", messages, :lead)
+      assert {:ok, estimated_tokens} = RateLimiter.request(job_id, "anthropic", messages, :lead)
       assert estimated_tokens > 0
     end
 
-    test "estimates tokens using chars/4 heuristic" do
+    test "estimates tokens using chars/4 heuristic", %{job_id: job_id} do
       # "Hello world" = 11 chars, div(11, 4) = 2 tokens
       messages = [%{content: "Hello world"}]
 
-      assert {:ok, 2} = RateLimiter.request("anthropic", messages, :lead)
+      assert {:ok, 2} = RateLimiter.request(job_id, "anthropic", messages, :lead)
     end
 
-    test "deducts 1 from RPM bucket per request" do
+    test "deducts 1 from RPM bucket per request", %{job_id: job_id} do
       messages = [%{content: "test"}]
 
       # Make a request - should succeed
-      assert {:ok, _} = RateLimiter.request("anthropic", messages, :lead)
+      assert {:ok, _} = RateLimiter.request(job_id, "anthropic", messages, :lead)
     end
 
-    test "deducts estimated tokens from TPM bucket" do
+    test "deducts estimated tokens from TPM bucket", %{job_id: job_id} do
       # Large message to test TPM deduction
       large_message = String.duplicate("x", 400)
       messages = [%{content: large_message}]
 
       # Should deduct 100 tokens (400 chars / 4)
-      assert {:ok, 100} = RateLimiter.request("anthropic", messages, :lead)
+      assert {:ok, 100} = RateLimiter.request(job_id, "anthropic", messages, :lead)
     end
 
-    test "reconciles actual usage and credits back difference" do
+    test "reconciles actual usage and credits back difference", %{job_id: job_id} do
       messages = [%{content: "Hello world"}]
 
       # Request with estimated tokens
-      {:ok, estimated} = RateLimiter.request("anthropic", messages, :lead)
+      {:ok, estimated} = RateLimiter.request(job_id, "anthropic", messages, :lead)
       assert estimated == 2
 
       # Reconcile with lower actual usage
       actual_usage = %{input: 1, output: 5}
-      :ok = RateLimiter.reconcile("anthropic", estimated, actual_usage)
+      :ok = RateLimiter.reconcile(job_id, "anthropic", estimated, actual_usage)
 
       # Credit back should have been applied (2 - 1 = 1 token credited)
       # Next request should still work (buckets refilled by credit)
-      assert {:ok, _} = RateLimiter.request("anthropic", messages, :lead)
+      assert {:ok, _} = RateLimiter.request(job_id, "anthropic", messages, :lead)
     end
 
-    test "caps credit-back at bucket capacity" do
+    test "caps credit-back at bucket capacity", %{job_id: job_id} do
       messages = [%{content: "test"}]
 
       # Make request with high estimate
-      {:ok, estimated} = RateLimiter.request("anthropic", messages, :lead)
+      {:ok, estimated} = RateLimiter.request(job_id, "anthropic", messages, :lead)
 
       # Reconcile with zero actual usage (full credit-back)
       actual_usage = %{input: 0, output: 0}
-      :ok = RateLimiter.reconcile("anthropic", estimated, actual_usage)
+      :ok = RateLimiter.reconcile(job_id, "anthropic", estimated, actual_usage)
 
       # Should not over-credit beyond capacity
       # Verify by making many requests - should eventually be limited
-      assert {:ok, _} = RateLimiter.request("anthropic", messages, :lead)
+      assert {:ok, _} = RateLimiter.request(job_id, "anthropic", messages, :lead)
     end
 
-    test "handles multiple providers independently" do
+    test "handles multiple providers independently", %{job_id: job_id} do
       messages = [%{content: "test"}]
 
       # Request for provider 1
-      assert {:ok, _} = RateLimiter.request("anthropic", messages, :lead)
+      assert {:ok, _} = RateLimiter.request(job_id, "anthropic", messages, :lead)
 
       # Request for provider 2 - should have independent buckets
-      assert {:ok, _} = RateLimiter.request("openai", messages, :lead)
+      assert {:ok, _} = RateLimiter.request(job_id, "openai", messages, :lead)
     end
 
-    test "handles messages with content arrays" do
+    test "handles messages with content arrays", %{job_id: job_id} do
       messages = [
         %{
           content: [
@@ -92,10 +93,10 @@ defmodule Deft.Job.RateLimiterTest do
       ]
 
       # Should estimate both text blocks: "Hello" (5 chars) + "World" (5 chars) = 10 chars = 2 tokens
-      assert {:ok, 2} = RateLimiter.request("anthropic", messages, :lead)
+      assert {:ok, 2} = RateLimiter.request(job_id, "anthropic", messages, :lead)
     end
 
-    test "handles tool use content blocks" do
+    test "handles tool use content blocks", %{job_id: job_id} do
       messages = [
         %{
           content: [
@@ -105,52 +106,56 @@ defmodule Deft.Job.RateLimiterTest do
       ]
 
       # Should estimate based on JSON encoding of input
-      {:ok, estimated} = RateLimiter.request("anthropic", messages, :lead)
+      {:ok, estimated} = RateLimiter.request(job_id, "anthropic", messages, :lead)
       assert estimated > 0
     end
   end
 
   describe "bucket refill" do
-    test "buckets refill over time" do
+    test "buckets refill over time", %{job_id: job_id} do
       # This test would require mocking time or waiting
       # For now, just verify the mechanism doesn't crash
       messages = [%{content: "test"}]
 
-      assert {:ok, _} = RateLimiter.request("anthropic", messages, :lead)
+      assert {:ok, _} = RateLimiter.request(job_id, "anthropic", messages, :lead)
 
       # Small sleep to allow refill
       Process.sleep(100)
 
-      assert {:ok, _} = RateLimiter.request("anthropic", messages, :lead)
+      assert {:ok, _} = RateLimiter.request(job_id, "anthropic", messages, :lead)
     end
   end
 
   describe "priority queue" do
-    test "queues and processes requests when capacity becomes available" do
+    test "queues and processes requests when capacity becomes available", %{job_id: job_id} do
       messages = [%{content: "test"}]
 
       # Make requests that should succeed
-      assert {:ok, _} = RateLimiter.request("anthropic", messages, :lead)
+      assert {:ok, _} = RateLimiter.request(job_id, "anthropic", messages, :lead)
 
       # Even when capacity is low, requests should eventually complete
       # because of refill and queue processing
-      assert {:ok, _} = RateLimiter.request("anthropic", messages, :runner)
-      assert {:ok, _} = RateLimiter.request("anthropic", messages, :foreman)
+      assert {:ok, _} = RateLimiter.request(job_id, "anthropic", messages, :runner)
+      assert {:ok, _} = RateLimiter.request(job_id, "anthropic", messages, :foreman)
     end
 
-    test "processes higher priority requests first" do
+    test "processes higher priority requests first", %{job_id: job_id} do
       # This test verifies priority ordering Foreman > Runner > Lead
       messages = [%{content: "x"}]
 
       # Fill capacity with lead requests
       for _ <- 1..40 do
-        RateLimiter.request("anthropic", messages, :lead)
+        RateLimiter.request(job_id, "anthropic", messages, :lead)
       end
 
       # Now capacity should be low - enqueue requests with different priorities
-      lead_task = Task.async(fn -> RateLimiter.request("anthropic", messages, :lead) end)
-      runner_task = Task.async(fn -> RateLimiter.request("anthropic", messages, :runner) end)
-      foreman_task = Task.async(fn -> RateLimiter.request("anthropic", messages, :foreman) end)
+      lead_task = Task.async(fn -> RateLimiter.request(job_id, "anthropic", messages, :lead) end)
+
+      runner_task =
+        Task.async(fn -> RateLimiter.request(job_id, "anthropic", messages, :runner) end)
+
+      foreman_task =
+        Task.async(fn -> RateLimiter.request(job_id, "anthropic", messages, :foreman) end)
 
       # Wait a bit for requests to be queued
       Process.sleep(100)
@@ -159,6 +164,36 @@ defmodule Deft.Job.RateLimiterTest do
       assert {:ok, _} = Task.await(foreman_task, 5_000)
       assert {:ok, _} = Task.await(runner_task, 5_000)
       assert {:ok, _} = Task.await(lead_task, 5_000)
+    end
+  end
+
+  describe "per-job instances" do
+    test "supports multiple concurrent job rate limiters" do
+      # Start two RateLimiters for different jobs
+      job_id_1 = "job-1"
+      job_id_2 = "job-2"
+
+      {:ok, _pid1} = start_supervised({RateLimiter, [job_id: job_id_1]}, id: :limiter_1)
+      {:ok, _pid2} = start_supervised({RateLimiter, [job_id: job_id_2]}, id: :limiter_2)
+
+      messages = [%{content: "test"}]
+
+      # Both should work independently without interference
+      assert {:ok, _} = RateLimiter.request(job_id_1, "anthropic", messages, :lead)
+      assert {:ok, _} = RateLimiter.request(job_id_2, "anthropic", messages, :lead)
+
+      # Make multiple requests to each
+      for _ <- 1..5 do
+        assert {:ok, _} = RateLimiter.request(job_id_1, "anthropic", messages, :lead)
+        assert {:ok, _} = RateLimiter.request(job_id_2, "anthropic", messages, :lead)
+      end
+    end
+
+    test "requires job_id in start_link options" do
+      # Should raise when job_id is missing
+      assert_raise KeyError, fn ->
+        RateLimiter.start_link([])
+      end
     end
   end
 
@@ -172,18 +207,24 @@ defmodule Deft.Job.RateLimiterTest do
         :atomics.get(current_time, 1)
       end
 
-      # Start RateLimiter with injectable time source
+      # Start RateLimiter with injectable time source and unique job_id
+      job_id = "starvation-test-#{System.unique_integer([:positive])}"
       stop_supervised(RateLimiter)
-      {:ok, pid} = start_supervised({RateLimiter, [time_source: time_source]})
+      {:ok, pid} = start_supervised({RateLimiter, [job_id: job_id, time_source: time_source]})
 
-      {:ok, rate_limiter: pid, time_source: time_source, current_time: current_time}
+      {:ok,
+       rate_limiter: pid, job_id: job_id, time_source: time_source, current_time: current_time}
     end
 
-    test "promotes low-priority requests after 10 seconds", %{current_time: current_time} do
+    test "promotes low-priority requests after 10 seconds", %{
+      job_id: job_id,
+      current_time: current_time,
+      rate_limiter: rate_limiter
+    } do
       messages = [%{content: String.duplicate("x", 4000)}]
 
       # Exhaust buckets with a large request
-      assert {:ok, _} = RateLimiter.request("anthropic", messages, :lead)
+      assert {:ok, _} = RateLimiter.request(job_id, "anthropic", messages, :lead)
 
       # Now enqueue requests at different priorities that will block
       # Lead request enqueued at t=1000
@@ -191,7 +232,7 @@ defmodule Deft.Job.RateLimiterTest do
 
       lead_task =
         Task.async(fn ->
-          RateLimiter.request("anthropic", [%{content: "lead"}], :lead)
+          RateLimiter.request(job_id, "anthropic", [%{content: "lead"}], :lead)
         end)
 
       # Give it time to be enqueued
@@ -202,7 +243,7 @@ defmodule Deft.Job.RateLimiterTest do
 
       foreman_task =
         Task.async(fn ->
-          RateLimiter.request("anthropic", [%{content: "foreman"}], :foreman)
+          RateLimiter.request(job_id, "anthropic", [%{content: "foreman"}], :foreman)
         end)
 
       Process.sleep(50)
@@ -212,7 +253,7 @@ defmodule Deft.Job.RateLimiterTest do
       :atomics.put(current_time, 1, 11_500)
 
       # Trigger queue check (normally happens every 1s via scheduled message)
-      send(Process.whereis(RateLimiter), :check_queue)
+      send(rate_limiter, :check_queue)
 
       # Allow some time for processing
       Process.sleep(100)
@@ -223,25 +264,29 @@ defmodule Deft.Job.RateLimiterTest do
 
       # Advance time further to allow bucket refill
       :atomics.put(current_time, 1, 60_000)
-      send(Process.whereis(RateLimiter), :check_queue)
+      send(rate_limiter, :check_queue)
 
       # Both should complete (lead promoted first due to enqueue time)
       assert {:ok, _} = Task.await(lead_task, 5_000)
       assert {:ok, _} = Task.await(foreman_task, 5_000)
     end
 
-    test "promotes multiple starved requests in enqueue order", %{current_time: current_time} do
+    test "promotes multiple starved requests in enqueue order", %{
+      job_id: job_id,
+      current_time: current_time,
+      rate_limiter: rate_limiter
+    } do
       messages = [%{content: String.duplicate("x", 4000)}]
 
       # Exhaust buckets
-      assert {:ok, _} = RateLimiter.request("anthropic", messages, :lead)
+      assert {:ok, _} = RateLimiter.request(job_id, "anthropic", messages, :lead)
 
       # Enqueue three lead requests at t=1000, t=2000, t=3000
       :atomics.put(current_time, 1, 1000)
 
       task1 =
         Task.async(fn ->
-          RateLimiter.request("anthropic", [%{content: "1"}], :lead)
+          RateLimiter.request(job_id, "anthropic", [%{content: "1"}], :lead)
         end)
 
       Process.sleep(50)
@@ -250,7 +295,7 @@ defmodule Deft.Job.RateLimiterTest do
 
       task2 =
         Task.async(fn ->
-          RateLimiter.request("anthropic", [%{content: "2"}], :lead)
+          RateLimiter.request(job_id, "anthropic", [%{content: "2"}], :lead)
         end)
 
       Process.sleep(50)
@@ -259,21 +304,21 @@ defmodule Deft.Job.RateLimiterTest do
 
       task3 =
         Task.async(fn ->
-          RateLimiter.request("anthropic", [%{content: "3"}], :lead)
+          RateLimiter.request(job_id, "anthropic", [%{content: "3"}], :lead)
         end)
 
       Process.sleep(50)
 
       # Advance time to t=13000 (all three have been waiting >10s)
       :atomics.put(current_time, 1, 13_000)
-      send(Process.whereis(RateLimiter), :check_queue)
+      send(rate_limiter, :check_queue)
 
       Process.sleep(100)
 
       # All three should be promoted, maintaining their enqueue order
       # Allow refill
       :atomics.put(current_time, 1, 60_000)
-      send(Process.whereis(RateLimiter), :check_queue)
+      send(rate_limiter, :check_queue)
 
       # All should complete
       assert {:ok, _} = Task.await(task1, 5_000)
@@ -282,26 +327,28 @@ defmodule Deft.Job.RateLimiterTest do
     end
 
     test "does not promote requests that haven't waited long enough", %{
-      current_time: current_time
+      job_id: job_id,
+      current_time: current_time,
+      rate_limiter: rate_limiter
     } do
       messages = [%{content: String.duplicate("x", 4000)}]
 
       # Exhaust buckets
-      assert {:ok, _} = RateLimiter.request("anthropic", messages, :lead)
+      assert {:ok, _} = RateLimiter.request(job_id, "anthropic", messages, :lead)
 
       # Enqueue lead request at t=1000
       :atomics.put(current_time, 1, 1000)
 
       task =
         Task.async(fn ->
-          RateLimiter.request("anthropic", [%{content: "lead"}], :lead)
+          RateLimiter.request(job_id, "anthropic", [%{content: "lead"}], :lead)
         end)
 
       Process.sleep(50)
 
       # Advance time to t=9000 (only 8 seconds elapsed, < 10s threshold)
       :atomics.put(current_time, 1, 9000)
-      send(Process.whereis(RateLimiter), :check_queue)
+      send(rate_limiter, :check_queue)
 
       Process.sleep(100)
 
@@ -311,7 +358,7 @@ defmodule Deft.Job.RateLimiterTest do
 
       # Allow refill to complete the request
       :atomics.put(current_time, 1, 60_000)
-      send(Process.whereis(RateLimiter), :check_queue)
+      send(rate_limiter, :check_queue)
 
       assert {:ok, _} = Task.await(task, 5_000)
     end

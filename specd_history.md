@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **rate-limiter v0.1 (2026-03-18):** Fix `RateLimiter.start_link/1` to support per-job instances: currently registers with `name: __MODULE__` (global singleton); second concurrent job's RateLimiter will crash with `{:error, {:already_started, pid}}`; should use `{:via, Registry, ...}` registration keyed by job_id
 - **observational-memory v0.1 (2026-03-18):** Fix continuation hint injection condition in `context.ex`: `build_continuation_hint` injects the hint whenever `observed_message_ids` is non-empty, but spec section 5.3 requires injection only when observed messages have actually been trimmed from context
 - **observational-memory v0.1 (2026-03-18):** Fix `validate_sections` in `parse.ex` to ignore unknown sections per spec section 3.5: currently returns `{:error, ...}` on unknown sections, triggering `fallback_parse` which loses `current_task` and `continuation_hint` data; should strip unknown sections from observations and continue normal parsing
 - **observational-memory v0.1 (2026-03-18):** Fix `should_activate_reflection?` to check `not state.is_buffering_reflection`: when a buffered reflector is in-flight and observations reach full threshold, `activate_or_spawn_reflection` spawns an immediate reflector that overwrites `reflector_ref`; the buffered task's completion is silently dropped, leaving `is_buffering_reflection` permanently stuck as `true` and disabling all future reflection buffering
