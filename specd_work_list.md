@@ -82,10 +82,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement `deft work --loop`: approve every plan by default (each issue gets plan approval checkpoint); --auto-approve-all flag skips all plan approvals for fully autonomous mode; stop when no ready issues remain, cumulative cost exceeds work.cost_ceiling, or user aborts; re-evaluate unblocked issues between jobs (blocked: Implement deft work...)
 - Implement SIGINT handling: catch Ctrl+C, send graceful shutdown to Foreman, wait for current issue status rollback to :open (5-second timeout), then exit; if timeout expires, issue left at :in_progress (detected as stale on next startup) (blocked: Implement deft work --loop...)
 
-## observational-memory v0.1
-
-- Fix Reflector `compress_with_retry` exceeding max 2 LLM calls: when both level 0 and level 1 attempts return `{:retry, level}`, the code makes a 3rd `call_llm_for_compression` call (reflector.ex:132-141); spec section 4.3 caps at 2 calls; remove the 3rd call and accept the level 1 output directly
-
 ## tui v0.1
 
 - Fix user messages not displayed in chat view: when user submits prompt via Enter (chat.ex:316-331), code calls `Deft.Agent.prompt/2` and clears input but never adds a `%{role: :user, content: text}` message to `assigns.messages`; the `render_message` function for `:user` role exists (line 834) but is never reached

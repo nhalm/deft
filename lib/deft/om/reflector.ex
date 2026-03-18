@@ -108,7 +108,7 @@ defmodule Deft.OM.Reflector do
       {:ok, compressed, level} ->
         {compressed, level, 1}
 
-      {:retry, level} ->
+      {:retry, _compressed, level} ->
         # Second attempt: try next level (capped at 3)
         next_level = min(level + 1, 3)
 
@@ -123,27 +123,13 @@ defmodule Deft.OM.Reflector do
           {:ok, compressed, final_level} ->
             {compressed, final_level, 2}
 
-          {:retry, final_level} ->
-            # Level 3 still exceeds target - accept and move on
+          {:retry, compressed, final_level} ->
+            # Level 3 still exceeds target - accept the output from the second call
             Logger.warning(
               "Reflector: Level #{final_level} still exceeds target, accepting output"
             )
 
-            # Make one final call at level 3 to get the output
-            case call_llm_for_compression(
-                   config,
-                   observations,
-                   target_size,
-                   final_level
-                 ) do
-              {:ok, result} ->
-                validated = ensure_correction_markers(result, correction_markers)
-                {validated, final_level, 2}
-
-              {:error, _reason} ->
-                # LLM failed, return original
-                {observations, final_level, 2}
-            end
+            {compressed, final_level, 2}
         end
     end
   end
@@ -172,7 +158,7 @@ defmodule Deft.OM.Reflector do
             "Reflector: Level #{level} output (#{token_count} tokens) exceeds target (#{target_size} tokens)"
           )
 
-          {:retry, level}
+          {:retry, validated, level}
         end
 
       {:error, reason} ->
