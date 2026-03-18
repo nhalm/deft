@@ -17,6 +17,14 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
+## tui v0.1
+
+- Fix Ctrl+C to abort current operation instead of always exiting: check `agent_state`; if agent is streaming/executing, send abort signal and stay in session; only exit if idle (spec section 5)
+- Implement Esc key handler: cancel current input or abort current operation; currently falls through to catch-all character handler and appends raw escape to input buffer (spec section 5)
+- Implement Page Up/Down scroll handlers: update `scroll_offset` on key events; currently initialized to 0 and never modified, so conversation area has no working scrollback (spec sections 3, 5)
+- Implement Ctrl+R toggle for raw output: add `raw_mode` assign, toggle on Ctrl+R, bypass `Markdown.render/1` when enabled (spec section 5)
+- Fix `/quit` command: currently sends `{:stop, term}` via `send/2` which is swallowed by catch-all `handle_info`; should return `{:stop, term}` directly from the handler (spec section 6)
+
 ## evals v0.2
 
 - Implement Observer extraction evals: 9 test cases from spec section 2.1 (explicit tech choice, preference, file read, file modify, error, command, architecture, dependency, deferred work); 20 iterations, 85% pass rate (blocked: Implement Observer Task execution...)
