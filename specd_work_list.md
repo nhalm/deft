@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## evals v0.2
 
-- Implement Actor eval suite: observation usage (20 iters, 85%), continuation (20 iters, 90%), tool selection (20 iters, 85%)
 - Implement spilling eval suite: summary quality (20 iters, 85%), cache retrieval (20 iters, 85%), threshold calibration grid search
 - Implement skills eval suite: suggestion (20 iters, 80%), invocation fidelity (20 iters, 80%)
 - Implement issues eval suite: elicitation quality (20 iters, 80%), agent-created quality (20 iters, 80%)
