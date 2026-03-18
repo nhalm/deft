@@ -76,10 +76,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement per-Lead cache isolation: start one Deft.Store instance per Lead with DETS at cache/<session_id>/lead-<lead_id>.dets; Lead cleanup deletes its own cache instance (blocked: Implement Lead gen_statem...)
 - Implement session-end cache cleanup: on session termination, delete all files under cache/<session_id>/ (blocked: Implement per-Lead cache isolation...)
 
-## observational-memory v0.2
-
-- Verify OM persistence implementation uses separate `<session_id>_om.jsonl` snapshot file per spec section 9; ensure code at `lib/deft/om/state.ex:1737-1741` aligns with updated spec describing file-based (not session JSONL) persistence
-
 ## observational-memory v0.1
 
 - Fix image formatting in Observer prompt: format images as `[Image: filename.png]` per spec section 3.3; currently outputs `[Image attachment]` with no filename; requires `Message.Image` struct to carry filename and `observer/prompt.ex:269` to use it
