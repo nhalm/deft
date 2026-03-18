@@ -70,14 +70,31 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## filesystem v0.2
 
+- Fix Deft.Store async DETS loading regression: init/1 uses `handle_continue(:load_dets, ...)` which blocks the GenServer until load completes; spec requires `Task.async` linked to GenServer so it is ready immediately and returns `:miss` for not-yet-loaded entries; must restore Task.async pattern with `handle_info` for `{ref, :loaded}` / `{:DOWN, ref, ...}` and `Task.shutdown(task, :brutal_kill)` in cleanup
 - Implement site log programmatic promotion: pattern match on Lead messages — auto-promote contract, decision, correction, critical_finding; promote finding if tagged shared; never promote status or blocker (blocked: Implement Deft.Store site log instance..., Implement Foreman gen_statem...)
 - Implement per-Lead cache isolation: start one Deft.Store instance per Lead with DETS at cache/<session_id>/lead-<lead_id>.dets; Lead cleanup deletes its own cache instance (blocked: Implement Lead gen_statem...)
 - Implement session-end cache cleanup: on session termination, delete all files under cache/<session_id>/ (blocked: Implement per-Lead cache isolation...)
 
 ## issues v0.2
 
+- Fix `detect_and_fix_cycles` to persist fixes to disk: currently clears cyclic dependencies in memory during init/1 but never writes the corrected issues back to the JSONL file; cycles reappear on every restart with repeated warnings
+- Fix `Deft.Issue.timestamp/0` fractional seconds: `DateTime.utc_now() |> DateTime.to_iso8601()` produces microsecond precision (e.g. `.123456Z`); doctest regex expects no fractional seconds; use `DateTime.truncate(:second)` before `to_iso8601/1` to match spec format contract
 - Implement `deft issue dep add <id> --blocked-by <blocker_id>` and `dep remove` CLI commands (blocked: Implement dependency tracking...)
 - Implement `deft work`: call ready/0, pick first, set status :in_progress, start Foreman job with issue structured JSON as prompt (context → research, acceptance_criteria → verification targets, constraints → Lead steering), on success set :closed + job_id, on failure set back to :open (blocked: Implement Foreman gen_statem...)
 - Implement `deft work <id>`: same as `deft work` but for a specific issue ID, verify issue exists and is open (blocked: Implement deft work...)
 - Implement `deft work --loop`: approve every plan by default (each issue gets plan approval checkpoint); --auto-approve-all flag skips all plan approvals for fully autonomous mode; stop when no ready issues remain, cumulative cost exceeds work.cost_ceiling, or user aborts; re-evaluate unblocked issues between jobs (blocked: Implement deft work...)
 - Implement SIGINT handling: catch Ctrl+C, send graceful shutdown to Foreman, wait for current issue status rollback to :open (5-second timeout), then exit; if timeout expires, issue left at :in_progress (detected as stale on next startup) (blocked: Implement deft work --loop...)
+
+## skills v0.2
+
+- Fix missing `tool_result` for successful `use_skill` calls: `build_tool_result_blocks` is only called for `regular_results`, not `use_skill_success_results`; the assistant message contains a `tool_use` block for `use_skill` but no matching `tool_result` in the following user message; Anthropic API returns 400 on next call; must generate a `tool_result` block (e.g. "Skill loaded") for each successful `use_skill` alongside the system message injection
+
+## observational-memory v0.1
+
+- Fix `keep_tail/3` non-contiguous window in context.ex: `Enum.reduce` skips oversized messages but continues iterating, allowing older smaller messages to be included after a gap; replace with `Enum.reduce_while` and halt on first message that exceeds budget (same pattern as the fix applied to `truncate_session_history_to_target/4`)
+- Fix Reflector `compress_with_retry` exceeding max 2 LLM calls: when both level 0 and level 1 attempts return `{:retry, level}`, the code makes a 3rd `call_llm_for_compression` call (reflector.ex:132-141); spec section 4.3 caps at 2 calls; remove the 3rd call and accept the level 1 output directly
+
+## tui v0.1
+
+- Fix user messages not displayed in chat view: when user submits prompt via Enter (chat.ex:316-331), code calls `Deft.Agent.prompt/2` and clears input but never adds a `%{role: :user, content: text}` message to `assigns.messages`; the `render_message` function for `:user` role exists (line 834) but is never reached
+- Fix `memorizing...` status indicator never visible: OM state.ex broadcasts `:sync_fallback` immediately followed by `:observation_started` (lines 312-314); TUI handles `:sync_fallback` by setting `om_sync_fallback: true` but the immediately subsequent `:observation_started` sets it to `false` before any render cycle; either delay the `:observation_started` broadcast or don't clear `om_sync_fallback` on `:observation_started`
