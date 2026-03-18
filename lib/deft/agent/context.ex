@@ -96,14 +96,21 @@ defmodule Deft.Agent.Context do
           # Process exists, safe to call
           try do
             case OMState.get_context(session_id) do
-              {observations, observed_ids, continuation_hint, calibration_factor,
+              {_observations, _observed_ids, _continuation_hint, _calibration_factor,
                pending_message_tokens, observation_tokens} ->
                 # Sync fallback: check hard thresholds per spec section 6.3
                 # Observation hard threshold: 1.2x * 30,000 = 36,000
                 # Reflection hard threshold: 1.2x * 40,000 = 48,000
                 check_sync_fallback(session_id, pending_message_tokens, observation_tokens)
 
-                {observations, observed_ids, continuation_hint, calibration_factor}
+                # Re-fetch context after sync fallback to get freshly observed/reflected data
+                case OMState.get_context(session_id) do
+                  {observations, observed_ids, continuation_hint, calibration_factor, _, _} ->
+                    {observations, observed_ids, continuation_hint, calibration_factor}
+
+                  _ ->
+                    {"", [], nil, 4.0}
+                end
 
               _ ->
                 {"", [], nil, 4.0}
