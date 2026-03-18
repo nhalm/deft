@@ -70,7 +70,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## filesystem v0.2
 
-- Fix Deft.Store async DETS loading regression: init/1 uses `handle_continue(:load_dets, ...)` which blocks the GenServer until load completes; spec requires `Task.async` linked to GenServer so it is ready immediately and returns `:miss` for not-yet-loaded entries; must restore Task.async pattern with `handle_info` for `{ref, :loaded}` / `{:DOWN, ref, ...}` and `Task.shutdown(task, :brutal_kill)` in cleanup
 - Implement site log programmatic promotion: pattern match on Lead messages — auto-promote contract, decision, correction, critical_finding; promote finding if tagged shared; never promote status or blocker (blocked: Implement Deft.Store site log instance..., Implement Foreman gen_statem...)
 - Implement per-Lead cache isolation: start one Deft.Store instance per Lead with DETS at cache/<session_id>/lead-<lead_id>.dets; Lead cleanup deletes its own cache instance (blocked: Implement Lead gen_statem...)
 - Implement session-end cache cleanup: on session termination, delete all files under cache/<session_id>/ (blocked: Implement per-Lead cache isolation...)

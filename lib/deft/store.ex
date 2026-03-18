@@ -164,9 +164,14 @@ defmodule Deft.Store do
     # Open DETS file with error fallback
     dets_file = open_dets_file(dets_path, type)
 
-    # Create unnamed ETS table (:set, :protected)
-    # Only the owner (this GenServer) can write. Other processes can read.
-    tid = :ets.new(:store_table, [:set, :protected])
+    # Create unnamed ETS table (:set, :public)
+    # Public mode allows the async load task to write during initialization.
+    # Access control is enforced via the GenServer API (write/4).
+    tid = :ets.new(:store_table, [:set, :public])
+
+    # Start async load task (linked to GenServer)
+    # GenServer is ready immediately; reads return :miss for not-yet-loaded entries
+    load_task = Task.async(fn -> load_dets_to_ets(dets_file, tid) end)
 
     state = %{
       type: type,
@@ -175,14 +180,12 @@ defmodule Deft.Store do
       dets_path: dets_path,
       owner_name: owner_name,
       write_buffer: [],
-      loading: true,
+      load_task: load_task,
       closed: false,
       flush_timer: schedule_flush_timer(type)
     }
 
-    # Load DETS into ETS asynchronously via handle_continue
-    # This keeps init fast while allowing the owner process to write to :protected ETS
-    {:ok, state, {:continue, :load_dets}}
+    {:ok, state}
   end
 
   @impl true
@@ -232,11 +235,17 @@ defmodule Deft.Store do
   end
 
   @impl true
-  def handle_continue(:load_dets, state) do
-    # Load DETS into ETS synchronously in the owner process
-    # This allows writing to :protected ETS table
-    load_dets_to_ets(state.dets_file, state.tid)
-    {:noreply, %{state | loading: false}}
+  def handle_info({ref, :ok}, %{load_task: %Task{ref: ref}} = state) do
+    # Task completed successfully - demonitor and discard the DOWN message
+    Process.demonitor(ref, [:flush])
+    {:noreply, %{state | load_task: nil}}
+  end
+
+  @impl true
+  def handle_info({:DOWN, ref, :process, _pid, reason}, %{load_task: %Task{ref: ref}} = state) do
+    # Task failed - log warning, ETS stays partially populated
+    Logger.warning("Deft.Store: DETS load task failed: #{inspect(reason)}")
+    {:noreply, %{state | load_task: nil}}
   end
 
   @impl true
@@ -370,6 +379,11 @@ defmodule Deft.Store do
     # Graceful shutdown - flush and close but don't delete
     # Set closed flag
     state = %{state | closed: true}
+
+    # Kill load task if still running
+    if state.load_task do
+      Task.shutdown(state.load_task, :brutal_kill)
+    end
 
     # Cancel flush timer if active
     if state.flush_timer do

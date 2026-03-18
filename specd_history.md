@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **filesystem v0.2 (2026-03-17):** Fix Deft.Store async DETS loading regression: init/1 uses `handle_continue(:load_dets, ...)` which blocks the GenServer until load completes; spec requires `Task.async` linked to GenServer so it is ready immediately and returns `:miss` for not-yet-loaded entries; must restore Task.async pattern with `handle_info` for `{ref, :loaded}` / `{:DOWN, ref, ...}` and `Task.shutdown(task, :brutal_kill)` in cleanup
 - **tui v0.1 (2026-03-17):** Fix scroll_offset not applied to render: Page Up/Down handlers update `scroll_offset` assign but `render/1` iterates all messages with no offset or slicing applied; scrollback is non-functional (spec section 3)
 - **tui v0.1 (2026-03-17):** Fix streaming markdown rendering: `handle_text_delta/2` appends raw text to `current_text` but render/1 displays it as a raw `<box>` with no markdown processing; must call `Markdown.render_streaming/1` during streaming to buffer incomplete lines and render complete blocks
 - **skills v0.2 (2026-03-18):** Wire `Session.Supervisor.start_session/1` into CLI: `rescan_project/1` is only called from `start_session/1` but CLI calls `Agent.start_link/1` directly, bypassing it; project-level skills in `.deft/skills/` are never refreshed between sessions (spec section 5)
