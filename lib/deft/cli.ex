@@ -94,7 +94,7 @@ defmodule Deft.CLI do
           working_dir: :string,
           prompt: :string,
           output: :string,
-          auto_approve: :boolean,
+          auto_approve_all: :boolean,
           help: :boolean,
           version: :boolean,
           status: :string,

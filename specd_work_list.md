@@ -78,7 +78,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## issues v0.2
 
-- Fix `--auto-approve-all` CLI flag: `cli.ex:97` registers `auto_approve: :boolean` which maps to `--auto-approve`; spec section 8 requires `--auto-approve-all`; rename to `auto_approve_all: :boolean`
 - Fix `issues_compaction_days` config passthrough: `cli.ex:76` calls `Issues.start_link()` with no arguments; configured `issues.compaction_days` value from `Deft.Config` is never passed to the GenServer; always defaults to 90 days regardless of user config
 - Implement `deft issue dep add <id> --blocked-by <blocker_id>` and `dep remove` CLI commands (blocked: Implement dependency tracking...)
 - Implement `deft work`: call ready/0, pick first, set status :in_progress, start Foreman job with issue structured JSON as prompt (context → research, acceptance_criteria → verification targets, constraints → Lead steering), on success set :closed + job_id, on failure set back to :open (blocked: Implement Foreman gen_statem...)
