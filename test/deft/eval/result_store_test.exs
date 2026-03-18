@@ -51,7 +51,10 @@ defmodule Deft.Eval.ResultStoreTest do
 
       assert :ok = ResultStore.store(result)
 
-      assert {:ok, loaded} = ResultStore.load(result.run_id)
+      assert {:ok, results} = ResultStore.load(result.run_id)
+      assert length(results) == 1
+
+      [loaded] = results
       assert loaded.run_id == result.run_id
       assert loaded.commit == result.commit
       assert loaded.model == result.model
@@ -79,7 +82,10 @@ defmodule Deft.Eval.ResultStoreTest do
       }
 
       assert :ok = ResultStore.store(result)
-      assert {:ok, loaded} = ResultStore.load(result.run_id)
+      assert {:ok, results} = ResultStore.load(result.run_id)
+
+      assert length(results) == 1
+      [loaded] = results
 
       assert length(loaded.failures) == 1
       [failure] = loaded.failures
@@ -98,21 +104,21 @@ defmodule Deft.Eval.ResultStoreTest do
       assert :ok = ResultStore.store(result1)
       assert :ok = ResultStore.store(result2)
 
-      # Verify both results are in the file
+      # Load should return both results
+      assert {:ok, results} = ResultStore.load(run_id)
+      assert length(results) == 2
+
+      # Verify both categories are present
+      categories = Enum.map(results, & &1.category)
+      assert "observer.extraction" in categories
+      assert "observer.priority" in categories
+
+      # Verify the file format is correct JSONL
       file_path = Path.join(@results_dir, "#{run_id}.jsonl")
       assert {:ok, content} = File.read(file_path)
 
       lines = String.split(content, "\n", trim: true)
       assert length(lines) == 2
-
-      # Verify both categories are present
-      [line1, line2] = lines
-      assert {:ok, decoded1} = Jason.decode(line1, keys: :atoms)
-      assert {:ok, decoded2} = Jason.decode(line2, keys: :atoms)
-
-      categories = [decoded1.category, decoded2.category]
-      assert "observer.extraction" in categories
-      assert "observer.priority" in categories
     end
   end
 

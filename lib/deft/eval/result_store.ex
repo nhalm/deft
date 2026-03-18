@@ -82,20 +82,32 @@ defmodule Deft.Eval.ResultStore do
   end
 
   @doc """
-  Loads a specific eval result by run ID.
+  Loads all eval results for a specific run ID.
 
-  Returns the result map or {:error, :not_found} if the run doesn't exist.
+  Returns a list of result maps (one per category) or {:error, :not_found} if the run doesn't exist.
   """
-  @spec load(String.t()) :: {:ok, result()} | {:error, :not_found | term()}
+  @spec load(String.t()) :: {:ok, [result()]} | {:error, :not_found | term()}
   def load(run_id) do
     file_path = Path.join(@results_dir, "#{run_id}.jsonl")
 
     case File.read(file_path) do
       {:ok, content} ->
-        # Parse the first line (should only be one line)
-        content
-        |> String.trim()
-        |> Jason.decode(keys: :atoms)
+        # Split on newlines and decode each line separately
+        results =
+          content
+          |> String.split("\n", trim: true)
+          |> Enum.map(fn line ->
+            case Jason.decode(line, keys: :atoms) do
+              {:ok, result} -> result
+              {:error, reason} -> {:error, reason}
+            end
+          end)
+
+        # Check if any line failed to decode
+        case Enum.find(results, fn r -> match?({:error, _}, r) end) do
+          nil -> {:ok, results}
+          {:error, reason} -> {:error, reason}
+        end
 
       {:error, :enoent} ->
         {:error, :not_found}
@@ -154,7 +166,7 @@ defmodule Deft.Eval.ResultStore do
   def export(output_path) do
     runs = list_runs()
 
-    # Load all results
+    # Load all results (each run can have multiple categories)
     results =
       runs
       |> Enum.map(&load/1)
@@ -162,7 +174,7 @@ defmodule Deft.Eval.ResultStore do
         {:ok, _} -> true
         _ -> false
       end)
-      |> Enum.map(fn {:ok, result} -> result end)
+      |> Enum.flat_map(fn {:ok, results} -> results end)
 
     # Write all results as JSONL
     jsonl_content =
