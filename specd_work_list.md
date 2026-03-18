@@ -34,6 +34,7 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement issue→plan diagnostic eval: verify that structured issue fields (context, acceptance_criteria, constraints) flow correctly into Foreman research/planning/verification phases; 20 iterations, 75% pass rate (blocked: Implement Foreman gen_statem...)
 - Build E2E task battery: create 3 synthetic repos (minimal Phoenix app, CLI tool, library with tests) with pre-defined issues; implement test harness that runs `deft work` against each repo and verifies acceptance criteria are met; track completion rate, cost, and duration (blocked: Implement deft work..., Create coding conversation fixtures...)
 - Implement overnight loop safety eval: run `deft work --loop --auto-approve-all` against a synthetic repo with 5+ issues overnight; verify no runaway cost, no infinite loops, graceful SIGINT handling, correct issue status transitions; Tier 3 weekly schedule (blocked: Build E2E task battery...)
+- Fix `ResultStore.load/1` partial corruption handling: a single corrupt JSONL line causes the entire run to return `{:error, reason}`, and `export/1` silently filters out failed loads; should skip corrupt lines and preserve valid results per-run, or at minimum log a warning when lines are skipped
 
 ## orchestration v0.3
 
