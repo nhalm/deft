@@ -13,6 +13,8 @@ defmodule Deft.Session.Worker do
 
   use Supervisor
 
+  alias Deft.Project
+
   @doc """
   Starts the session worker supervisor.
 
@@ -35,8 +37,23 @@ defmodule Deft.Session.Worker do
     messages = Keyword.get(opts, :messages, [])
     om_snapshot = Keyword.get(opts, :om_snapshot)
 
+    # Build cache DETS path
+    working_dir = Map.get(config, :working_dir, File.cwd!())
+    cache_dir = Project.cache_dir(working_dir)
+    # Default lead_id for single-agent sessions
+    lead_id = "main"
+    cache_dets_path = Path.join([cache_dir, session_id, "lead-#{lead_id}.dets"])
+
     children = [
-      # 1. Agent — the core agent loop
+      # 1. Cache Store — tool result spilling (must start before Agent)
+      {Deft.Store,
+       [
+         name: {:cache, session_id, lead_id},
+         type: :cache,
+         dets_path: cache_dets_path
+       ]},
+
+      # 2. Agent — the core agent loop
       {Deft.Agent,
        [
          session_id: session_id,
@@ -45,10 +62,10 @@ defmodule Deft.Session.Worker do
          name: agent_via_tuple(session_id)
        ]},
 
-      # 2. ToolRunner — Task.Supervisor for tool execution
+      # 3. ToolRunner — Task.Supervisor for tool execution
       {Deft.Agent.ToolRunner, [name: tool_runner_via_tuple(session_id)]},
 
-      # 3. OM.Supervisor — Observational memory processes
+      # 4. OM.Supervisor — Observational memory processes
       {Deft.OM.Supervisor,
        [session_id: session_id, config: config, messages: messages, snapshot: om_snapshot]}
     ]
@@ -75,5 +92,12 @@ defmodule Deft.Session.Worker do
   """
   def tool_runner_via_tuple(session_id) do
     {:via, Registry, {Deft.Registry, {:tool_runner, session_id}}}
+  end
+
+  @doc """
+  Returns the Registry via tuple for the cache store.
+  """
+  def cache_via_tuple(session_id, lead_id \\ "main") do
+    {:via, Registry, {Deft.ProcessRegistry, {:cache, session_id, lead_id}}}
   end
 end

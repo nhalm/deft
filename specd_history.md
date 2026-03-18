@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **filesystem v0.2 (2026-03-17):** Wire cache Store instance to agent: start a Deft.Store cache instance during session startup, set `cache_tid` in Tool.Context to the ETS tid; currently nil (TODO at agent.ex:1043), making all spilling and cache_read inoperative (spec section 6)
 - **observational-memory v0.1 (2026-03-18):** Fix epoch staleness check in `activate_buffered_chunks/1`: filter out buffered chunks whose `epoch` < current `activation_epoch` before merging; stale chunks were computed against pre-reflection state
 - **evals v0.2 (2026-03-17):** Fix `calculate_cache_retrieval_rate/1` denominator in threshold calibration: store `spilled` flag in task result map from `run_task_with_threshold/3`, then count actual spilled results instead of using hardcoded `context_tokens < 1000` proxy which is unrelated to test thresholds (2000-24000)
 - **evals v0.2 (2026-03-18):** Fix `infrastructure_failure?/1` to use proportion instead of absolute count: replace `max_count >= 8` with `max_count / length(failures) >= 0.8`; current code incorrectly flags infrastructure failure when 8+ failures share a reason in any size set (e.g. 8/50 = 16% would be flagged)
