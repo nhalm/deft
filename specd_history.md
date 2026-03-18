@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **observational-memory v0.1 (2026-03-18):** Fix `keep_tail/3` non-contiguous window in context.ex: `Enum.reduce` skips oversized messages but continues iterating, allowing older smaller messages to be included after a gap; replace with `Enum.reduce_while` and halt on first message that exceeds budget (same pattern as the fix applied to `truncate_session_history_to_target/4`)
 - **skills v0.2 (2026-03-18):** Fix missing `tool_result` for successful `use_skill` calls: `build_tool_result_blocks` is only called for `regular_results`, not `use_skill_success_results`; the assistant message contains a `tool_use` block for `use_skill` but no matching `tool_result` in the following user message; Anthropic API returns 400 on next call; must generate a `tool_result` block (e.g. "Skill loaded") for each successful `use_skill` alongside the system message injection
 - **issues v0.2 (2026-03-17):** Fix `Deft.Issue.timestamp/0` fractional seconds: `DateTime.utc_now() |> DateTime.to_iso8601()` produces microsecond precision (e.g. `.123456Z`); doctest regex expects no fractional seconds; use `DateTime.truncate(:second)` before `to_iso8601/1` to match spec format contract
 - **issues v0.2 (2026-03-17):** Fix `detect_and_fix_cycles` to persist fixes to disk: currently clears cyclic dependencies in memory during init/1 but never writes the corrected issues back to the JSONL file; cycles reappear on every restart with repeated warnings

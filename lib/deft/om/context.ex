@@ -105,15 +105,15 @@ defmodule Deft.OM.Context do
     {kept, _tokens} =
       messages
       |> Enum.reverse()
-      |> Enum.reduce({[], 0}, fn msg, {kept_msgs, tokens_so_far} ->
+      |> Enum.reduce_while({[], 0}, fn msg, {kept_msgs, tokens_so_far} ->
         msg_tokens = estimate_message_tokens(msg, calibration_factor)
 
         if tokens_so_far + msg_tokens <= token_limit do
           # Can keep this message
-          {[msg | kept_msgs], tokens_so_far + msg_tokens}
+          {:cont, {[msg | kept_msgs], tokens_so_far + msg_tokens}}
         else
-          # Exceeded budget, stop
-          {kept_msgs, tokens_so_far}
+          # Exceeded budget, halt processing
+          {:halt, {kept_msgs, tokens_so_far}}
         end
       end)
 

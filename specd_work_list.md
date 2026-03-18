@@ -84,7 +84,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## observational-memory v0.1
 
-- Fix `keep_tail/3` non-contiguous window in context.ex: `Enum.reduce` skips oversized messages but continues iterating, allowing older smaller messages to be included after a gap; replace with `Enum.reduce_while` and halt on first message that exceeds budget (same pattern as the fix applied to `truncate_session_history_to_target/4`)
 - Fix Reflector `compress_with_retry` exceeding max 2 LLM calls: when both level 0 and level 1 attempts return `{:retry, level}`, the code makes a 3rd `call_llm_for_compression` call (reflector.ex:132-141); spec section 4.3 caps at 2 calls; remove the 3rd call and accept the level 1 output directly
 
 ## tui v0.1
