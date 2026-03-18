@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **rate-limiter v0.1 (2026-03-18):** Fix token estimation to use `String.length` instead of `byte_size`: `estimate_message_tokens` and `estimate_content_block_tokens` at rate_limiter.ex:280,292,299 use `byte_size/1` which overcounts multi-byte UTF-8 characters; over-deducts from TPM bucket, reducing effective throughput below configured limit for non-ASCII content
 - **rate-limiter v0.1 (2026-03-18):** Fix `RateLimiter.start_link/1` to support per-job instances: currently registers with `name: __MODULE__` (global singleton); second concurrent job's RateLimiter will crash with `{:error, {:already_started, pid}}`; should use `{:via, Registry, ...}` registration keyed by job_id
 - **observational-memory v0.1 (2026-03-18):** Fix continuation hint injection condition in `context.ex`: `build_continuation_hint` injects the hint whenever `observed_message_ids` is non-empty, but spec section 5.3 requires injection only when observed messages have actually been trimmed from context
 - **observational-memory v0.1 (2026-03-18):** Fix `validate_sections` in `parse.ex` to ignore unknown sections per spec section 3.5: currently returns `{:error, ...}` on unknown sections, triggering `fallback_parse` which loses `current_task` and `continuation_hint` data; should strip unknown sections from observations and continue normal parsing

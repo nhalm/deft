@@ -289,7 +289,7 @@ defmodule Deft.Job.RateLimiter do
   end
 
   defp estimate_message_tokens(%{content: content}) when is_binary(content) do
-    div(byte_size(content), @chars_per_token)
+    div(String.length(content), @chars_per_token)
   end
 
   defp estimate_message_tokens(%{content: content}) when is_list(content) do
@@ -301,7 +301,7 @@ defmodule Deft.Job.RateLimiter do
   defp estimate_message_tokens(_), do: 0
 
   defp estimate_content_block_tokens(%{text: text}) when is_binary(text) do
-    div(byte_size(text), @chars_per_token)
+    div(String.length(text), @chars_per_token)
   end
 
   defp estimate_content_block_tokens(%{tool_use: %{input: input}}) when is_map(input) do
