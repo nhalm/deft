@@ -72,6 +72,7 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## filesystem v0.2
 
+- Fix Deft.Store `handle_call({:delete, ...})` to use sync flush for sitelog type: currently all deletes use `maybe_flush_buffer` (buffered); must check `state.type == :sitelog` and call `flush_buffer(new_state, sync: true)` like `do_write` does for writes (spec requires all site log writes to be synchronous with `:dets.sync/1`)
 - Implement site log programmatic promotion: pattern match on Lead messages — auto-promote contract, decision, correction, critical_finding; promote finding if tagged shared; never promote status or blocker (blocked: Implement Deft.Store site log instance..., Implement Foreman gen_statem...)
 - Implement per-Lead cache isolation: start one Deft.Store instance per Lead with DETS at cache/<session_id>/lead-<lead_id>.dets; Lead cleanup deletes its own cache instance (blocked: Implement Lead gen_statem...)
 - Implement session-end cache cleanup: on session termination, delete all files under cache/<session_id>/ (blocked: Implement per-Lead cache isolation...)
