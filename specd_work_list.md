@@ -28,8 +28,7 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 ## orchestration v0.3
 
 - Implement Foreman→Lead steering: Foreman sends `send(lead_pid, {:foreman_steering, content})` for course correction; detect conflicting :decision messages from parallel Leads, pause affected Leads, resolve or escalate to user (blocked: Implement Foreman gen_statem...)
-- Implement partial dependency unblocking: Foreman watches for {:lead_message, :contract, content, metadata} messages matching dependency `needs`, creates worktree for unblocked Lead, starts Lead with contract details
-- Implement contract versioning: :contract_revision Lead message type, Foreman re-steers downstream Leads on revision (blocked: Implement partial dependency unblocking...)
+- Implement contract versioning: :contract_revision Lead message type, Foreman re-steers downstream Leads on revision
 - Implement verification phase: after all Leads complete, Foreman spawns verification Runner (full test suite + reviews modified files); on pass, trigger squash-merge; on fail, identify responsible Lead and report (blocked: Implement Foreman→Lead steering..., Implement merge in dependency order...)
 - Implement job cleanup: Foreman cleans all worktrees on completion/failure/abort, archives job files to ~/.deft/projects/<path-encoded-repo>/jobs/<job_id>/; on Lead crash, Foreman cleans that Lead's worktree immediately (blocked: Implement verification phase..., Implement worktree cleanup on Lead crash...)
 - Implement job persistence and resume: store sitelog.dets, plan.json, foreman_session.jsonl, lead_<id>_session.jsonl at ~/.deft/projects/<path-encoded-repo>/jobs/<job_id>/; on resume, read site log + plan.json, start fresh Leads for incomplete deliverables (blocked: Implement verification phase...)

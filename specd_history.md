@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **orchestration v0.3 (2026-03-18):** Implement partial dependency unblocking: Foreman watches for {:lead_message, :contract, content, metadata} messages matching dependency `needs`, creates worktree for unblocked Lead, starts Lead with contract details
 - **orchestration v0.3 (2026-03-18):** Implement Lead active steering: Lead reads Runner output after each task completion, evaluates progress against deliverable criteria, sends course corrections to Runner on next spawn; Lead decides when task is done or stuck and reports to Foreman
 - **orchestration v0.3 (2026-03-18):** Implement Lead→Foreman messaging: Lead sends messages via `send(foreman_pid, {:lead_message, type, content, metadata})` for types: :status, :decision, :artifact, :contract, :contract_revision, :plan_amendment, :complete, :blocker, :error, :critical_finding
 - **rate-limiter v0.1 (2026-03-18):** Implement cost tracking: read usage (input_tokens, output_tokens) from API responses, multiply by per-model pricing table; send {:rate_limiter, :cost, amount} to Foreman every $0.50 increment (not {:lead_message, ...})

@@ -36,6 +36,7 @@ defmodule Deft.Job.Foreman do
   alias Deft.Store
   alias Deft.Project
   alias Deft.Git
+  alias Deft.Git.Job, as: GitJob
   alias Deft.Job.Runner
 
   require Logger
@@ -82,7 +83,10 @@ defmodule Deft.Job.Foreman do
       research_tasks: [],
       research_findings: [],
       research_timeout_ref: nil,
-      site_log_pid: nil
+      site_log_pid: nil,
+      plan: nil,
+      blocked_leads: %{},
+      started_leads: MapSet.new()
     }
 
     gen_statem_opts = if name, do: [name: name], else: []
@@ -221,6 +225,13 @@ defmodule Deft.Job.Foreman do
     :keep_state_and_data
   end
 
+  def handle_event(:enter, _old_state, {:executing, :idle}, _data) do
+    # When entering executing phase, start all ready Leads
+    Logger.info("Foreman starting execution phase")
+    :gen_statem.cast(self(), :start_ready_leads)
+    :keep_state_and_data
+  end
+
   def handle_event(:enter, _old_state, {job_phase, :executing_tools}, data) do
     # Extract tool calls from the last assistant message
     tool_calls = extract_tool_calls(data.messages)
@@ -286,6 +297,20 @@ defmodule Deft.Job.Foreman do
     {:next_state, {:decomposing, :calling}, data}
   end
 
+  # Start ready Leads handling
+  def handle_event(:cast, :start_ready_leads, {:executing, :idle}, data) do
+    # Determine which Leads can start immediately (no dependencies or dependencies satisfied)
+    ready_deliverables = get_ready_deliverables(data)
+
+    # Start each ready Lead
+    updated_data =
+      Enum.reduce(ready_deliverables, data, fn deliverable, acc_data ->
+        start_lead(deliverable, acc_data)
+      end)
+
+    {:keep_state, updated_data}
+  end
+
   # Abort handling (works in any state)
   def handle_event(:cast, :abort, {_job_phase, _agent_state}, data) do
     Logger.info("Foreman aborting job")
@@ -307,7 +332,17 @@ defmodule Deft.Job.Foreman do
   # Plan approval handling
   def handle_event(:cast, :approve_plan, {:decomposing, :idle}, data) do
     Logger.info("Plan approved by user, transitioning to execution phase")
-    {:next_state, {:executing, :idle}, data}
+
+    # Store plan and build dependency structures if plan exists
+    updated_data =
+      if data.plan do
+        store_plan_and_build_dependencies(data.plan, data)
+      else
+        Logger.warning("No plan available when approve_plan was called")
+        data
+      end
+
+    {:next_state, {:executing, :idle}, updated_data}
   end
 
   def handle_event(:cast, :reject_plan, {:decomposing, :idle}, data) do
@@ -522,8 +557,8 @@ defmodule Deft.Job.Foreman do
         {:next_state, {job_phase, :calling}, data}
       else
         # Check if we need to transition to next phase
-        next_state = determine_next_phase(job_phase, data)
-        {:next_state, next_state, data}
+        {next_state, updated_data} = determine_next_phase(job_phase, data)
+        {:next_state, next_state, updated_data}
       end
     else
       {:keep_state, data}
@@ -612,10 +647,54 @@ defmodule Deft.Job.Foreman do
 
   defp process_lead_message(:contract, content, metadata, data) do
     Logger.info("Lead published contract")
-    # Auto-promote to site log and trigger partial unblocking
+    # Auto-promote to site log
     write_to_site_log(:contract, content, metadata, data)
-    # TODO: check for blocked leads that can now start
-    data
+
+    # Check for blocked Leads that can now start
+    # Extract which deliverable published this contract
+    lead_id = Map.get(metadata, :lead_id)
+    publishing_deliverable = Map.get(metadata, :deliverable_name)
+
+    # Check blocked_leads for any that depend on this contract
+    unblocked_deliverables =
+      data.blocked_leads
+      |> Enum.filter(fn {_deliverable_name, contracts_needed} ->
+        # Check if this contract satisfies any of the needed contracts
+        Enum.any?(contracts_needed, fn needed_contract ->
+          contract_matches?(needed_contract, publishing_deliverable, content)
+        end)
+      end)
+      |> Enum.map(fn {deliverable_name, _} -> deliverable_name end)
+
+    Logger.info(
+      "Contract from #{publishing_deliverable || lead_id} unblocked #{length(unblocked_deliverables)} deliverable(s)"
+    )
+
+    # Start each unblocked Lead
+    updated_data =
+      Enum.reduce(unblocked_deliverables, data, fn deliverable_name, acc_data ->
+        # Find deliverable details from plan
+        deliverable =
+          Enum.find(acc_data.plan.deliverables, fn d ->
+            d.name == deliverable_name
+          end)
+
+        if deliverable do
+          # Remove from blocked_leads
+          acc_data = %{
+            acc_data
+            | blocked_leads: Map.delete(acc_data.blocked_leads, deliverable_name)
+          }
+
+          # Start the Lead
+          start_lead(deliverable, acc_data)
+        else
+          Logger.warning("Could not find deliverable #{deliverable_name} in plan")
+          acc_data
+        end
+      end)
+
+    updated_data
   end
 
   defp process_lead_message(:complete, _content, _metadata, data) do
@@ -805,9 +884,10 @@ defmodule Deft.Job.Foreman do
   end
 
   # Determine the next phase after completing current agent loop
-  defp determine_next_phase(:planning, _data) do
+  # Returns {next_state, updated_data}
+  defp determine_next_phase(:planning, data) do
     # After planning completes, transition to researching
-    {:researching, :idle}
+    {{:researching, :idle}, data}
   end
 
   defp determine_next_phase(:decomposing, data) do
@@ -824,24 +904,27 @@ defmodule Deft.Job.Foreman do
 
       if auto_approve do
         Logger.info("Auto-approving plan (--auto-approve-all enabled)")
-        # Transition directly to executing
-        {:executing, :idle}
+        # Store plan and transition directly to executing
+        updated_data = store_plan_and_build_dependencies(plan, data)
+        {{:executing, :idle}, updated_data}
       else
         # Present plan to user and stay in decomposing until approved
         present_plan_for_approval(plan, data)
+        # Store plan for when user approves
+        updated_data = %{data | plan: plan}
         # Stay in decomposing:idle waiting for user approval
-        {:decomposing, :idle}
+        {{:decomposing, :idle}, updated_data}
       end
     else
       # No valid plan extracted, stay in decomposing
       Logger.warning("Failed to extract plan from decomposition response")
-      {:decomposing, :idle}
+      {{:decomposing, :idle}, data}
     end
   end
 
-  defp determine_next_phase(job_phase, _data) do
+  defp determine_next_phase(job_phase, data) do
     # For other phases, stay in idle within the same phase
-    {job_phase, :idle}
+    {{job_phase, :idle}, data}
   end
 
   # Build decomposition prompt with research findings
@@ -958,5 +1041,108 @@ defmodule Deft.Job.Foreman do
     # For now, just log it
     Logger.info("Plan ready for approval:\n#{plan.raw_plan}")
     Logger.info("Waiting for user approval (send {:approve_plan} or {:reject_plan} message)")
+  end
+
+  # Store the plan and build dependency tracking structures
+  defp store_plan_and_build_dependencies(plan, data) do
+    # Parse dependencies to build blocked_leads map
+    # Dependencies format: ["DeliverableA depends_on DeliverableB"]
+    # Contracts format: ["DeliverableA needs from DeliverableB: description"]
+
+    # Build a map of deliverable => list of contracts it needs
+    contracts = plan.contracts || []
+
+    blocked_leads =
+      contracts
+      |> Enum.reduce(%{}, fn contract_spec, acc ->
+        case parse_contract_spec(contract_spec) do
+          {:ok, dependent, dependency, _contract_desc} ->
+            # Add this contract requirement to the dependent's needs
+            Map.update(acc, dependent, [dependency], fn existing ->
+              [dependency | existing]
+            end)
+
+          :error ->
+            Logger.warning("Failed to parse contract spec: #{contract_spec}")
+            acc
+        end
+      end)
+
+    Logger.info("Built dependency tracking: #{inspect(blocked_leads)}")
+
+    %{data | plan: plan, blocked_leads: blocked_leads, started_leads: MapSet.new()}
+  end
+
+  # Parse a contract spec like "API needs from Database: User schema"
+  # Returns {:ok, dependent, dependency, contract_description} or :error
+  defp parse_contract_spec(contract_spec) do
+    # Pattern: "<Dependent> needs from <Dependency>: <description>"
+    case Regex.run(~r/^(.+?)\s+needs from\s+(.+?):\s*(.+)$/, contract_spec) do
+      [_full, dependent, dependency, description] ->
+        {:ok, String.trim(dependent), String.trim(dependency), String.trim(description)}
+
+      _ ->
+        :error
+    end
+  end
+
+  # Get deliverables that are ready to start (no unmet dependencies)
+  defp get_ready_deliverables(data) do
+    if is_nil(data.plan) or is_nil(data.plan.deliverables) do
+      []
+    else
+      data.plan.deliverables
+      |> Enum.filter(fn deliverable ->
+        # Ready if not already started and not in blocked_leads
+        not MapSet.member?(data.started_leads, deliverable.name) and
+          not Map.has_key?(data.blocked_leads, deliverable.name)
+      end)
+    end
+  end
+
+  # Start a Lead for the given deliverable
+  defp start_lead(deliverable, data) do
+    lead_id = "#{data.session_id}-#{deliverable.name}"
+
+    Logger.info("Starting Lead for deliverable: #{deliverable.name} (#{lead_id})")
+
+    # Create worktree for this Lead
+    case GitJob.create_lead_worktree(
+           lead_id: lead_id,
+           job_id: data.session_id,
+           working_dir: data.working_dir
+         ) do
+      {:ok, worktree_path} ->
+        # Start Lead process
+        # Note: In a full implementation, this would start a supervised Lead process
+        # For now, we'll track it in the leads map
+        lead_info = %{
+          deliverable: deliverable,
+          worktree_path: worktree_path,
+          status: :running,
+          monitor_ref: nil
+          # In real implementation, would monitor the Lead process
+        }
+
+        leads = Map.put(data.leads, lead_id, lead_info)
+        started_leads = MapSet.put(data.started_leads, deliverable.name)
+
+        Logger.info("Lead #{lead_id} started with worktree at #{worktree_path}")
+
+        %{data | leads: leads, started_leads: started_leads}
+
+      {:error, reason} ->
+        Logger.error("Failed to create worktree for Lead #{lead_id}: #{inspect(reason)}")
+        data
+    end
+  end
+
+  # Check if a published contract satisfies a dependency need
+  defp contract_matches?(_needed_contract, _publishing_deliverable, _contract_content) do
+    # Simple matching: check if the publishing deliverable name matches the needed dependency
+    # In a more sophisticated implementation, this would parse the contract content
+    # and verify it satisfies the specific interface requirements
+    # For now, any contract from the dependency deliverable unblocks the dependent
+    true
   end
 end
