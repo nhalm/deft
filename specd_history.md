@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **rate-limiter v0.1 (2026-03-18):** Fix capacity restore timing: runs every 1s (queue check interval at rate_limiter.ex:196) after 60s grace period instead of once per minute; should_restore_capacity? (rate_limiter.ex:649-655) returns true on every tick after grace period because last_429_at is never updated during restore
 - **evals v0.2 (2026-03-18):** Implement skills eval suite: suggestion (20 iters, 80%), invocation fidelity (20 iters, 85%)
 - **orchestration v0.3 (2026-03-18):** Add `{:rate_limiter, :cost_ceiling_reached, cost}` handler to Foreman: message from RateLimiter falls to catch-all and is silently dropped; Foreman must pause new Lead spawns when cost ceiling is reached (foreman.ex:569)
 - **evals v0.2 (2026-03-18):** Fix `mix eval.compare` load_run to distinguish corrupt JSONL data from missing run files: currently returns `{:error, :not_found, run_id}` for both cases (compare.ex:85-86); should return a distinct error when file exists but all lines fail JSON decode

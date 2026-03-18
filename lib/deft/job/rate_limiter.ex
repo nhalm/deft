@@ -111,6 +111,7 @@ defmodule Deft.Job.RateLimiter do
             rpm_original_capacity: float(),
             tpm_original_capacity: float(),
             last_429_at: integer() | nil,
+            last_restore_at: integer() | nil,
             consecutive_429s: integer(),
             backoff_until: integer() | nil
           }
@@ -121,6 +122,7 @@ defmodule Deft.Job.RateLimiter do
       :rpm_original_capacity,
       :tpm_original_capacity,
       :last_429_at,
+      :last_restore_at,
       consecutive_429s: 0,
       backoff_until: nil
     ]
@@ -631,13 +633,13 @@ defmodule Deft.Job.RateLimiter do
 
           # Reset consecutive 429s counter after grace period (60s without any 429s)
           # This allows exponential backoff to work properly
-          restored_buckets = %{restored_buckets | consecutive_429s: 0}
+          restored_buckets = %{restored_buckets | consecutive_429s: 0, last_restore_at: now}
 
           # Check if we've fully restored to original capacity
           if restored_buckets.rpm.capacity >= buckets.rpm_original_capacity and
                restored_buckets.tpm.capacity >= buckets.tpm_original_capacity do
-            # Fully restored, clear last_429_at
-            Map.put(acc, provider, %{restored_buckets | last_429_at: nil})
+            # Fully restored, clear last_429_at and last_restore_at
+            Map.put(acc, provider, %{restored_buckets | last_429_at: nil, last_restore_at: nil})
           else
             Map.put(acc, provider, restored_buckets)
           end
@@ -650,9 +652,12 @@ defmodule Deft.Job.RateLimiter do
   end
 
   defp should_restore_capacity?(buckets, now) do
-    # Only restore if we had a 429 and it's been at least 60s
+    # Only restore if we had a 429, it's been at least 60s since the 429,
+    # and it's been at least 60s (1 minute) since the last restore
     buckets.last_429_at != nil and
       now - buckets.last_429_at >= @capacity_restore_grace_period_ms and
+      (buckets.last_restore_at == nil or
+         now - buckets.last_restore_at >= @capacity_restore_grace_period_ms) and
       (buckets.rpm.capacity < buckets.rpm_original_capacity or
          buckets.tpm.capacity < buckets.tpm_original_capacity)
   end
