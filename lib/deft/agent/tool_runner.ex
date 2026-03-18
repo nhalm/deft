@@ -148,7 +148,7 @@ defmodule Deft.Agent.ToolRunner do
 
     :ok =
       Store.write(
-        {:via, Registry, {Deft.ProcessRegistry, {:cache, context.session_id, "default"}}},
+        {:via, Registry, {Deft.ProcessRegistry, {:cache, context.session_id, "main"}}},
         cache_key,
         cached_value,
         %{tool: tool_name, created: System.monotonic_time()}

@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **filesystem v0.2 (2026-03-17):** Fix cache Store registry name mismatch: `Session.Worker` registers cache as `{:cache, session_id, "main"}` (worker.ex:51) but `ToolRunner.spill_to_cache` writes to `{:cache, session_id, "default"}` (tool_runner.ex:151); all cache spills silently fail via rescue; change tool_runner to use `"main"` or parameterize lead_id (spec section 6)
 - **filesystem v0.2 (2026-03-18):** Fix Deft.Store `handle_call({:delete, ...})` to use sync flush for sitelog type: currently all deletes use `maybe_flush_buffer` (buffered); must check `state.type == :sitelog` and call `flush_buffer(new_state, sync: true)` like `do_write` does for writes (spec requires all site log writes to be synchronous with `:dets.sync/1`)
 - **evals v0.2 (2026-03-17):** Fix `ResultStore.load/1` single-line parsing: `String.trim() |> Jason.decode()` fails on multi-line JSONL; must split on newlines and decode each line, returning a list of results (spec section 2.1)
 - **evals v0.2 (2026-03-17):** Fix `ResultStore.store/1` truncation: uses `File.write/2` which overwrites the file on each call; must use `File.write/3` with `[:append]` flag so multiple category results accumulate in a single `<run_id>.jsonl` file (spec section 2.1)
