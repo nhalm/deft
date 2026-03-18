@@ -689,4 +689,183 @@ defmodule Deft.Job.RateLimiterTest do
       refute_receive {:rate_limiter, :cost, _}, 100
     end
   end
+
+  describe "cost ceiling" do
+    setup _context do
+      # Stop the default RateLimiter from the main setup
+      stop_supervised(RateLimiter)
+
+      # Start a process to capture messages sent to "Foreman"
+      foreman_pid = self()
+
+      job_id = "cost-ceiling-test-#{System.unique_integer([:positive])}"
+
+      # Set low cost ceiling for testing ($2.00)
+      {:ok, _pid} =
+        start_supervised(
+          {RateLimiter,
+           [
+             job_id: job_id,
+             foreman_pid: foreman_pid,
+             model: "claude-sonnet-4",
+             cost_ceiling: 2.0
+           ]},
+          id: {RateLimiter, job_id}
+        )
+
+      {:ok, job_id: job_id, foreman_pid: foreman_pid}
+    end
+
+    test "pauses job when approaching cost ceiling ($1.00 buffer)", %{job_id: job_id} do
+      messages = [%{content: "test"}]
+
+      # Make a request with cost that exceeds ceiling - $1.00
+      # Cost ceiling: $2.00, buffer: $1.00, so pause at $1.00
+      # 100,000 input tokens = $0.30, 100,000 output tokens = $1.50
+      # Total = $1.80 (exceeds $1.00 threshold)
+      {:ok, estimated} = RateLimiter.request(job_id, "anthropic", messages, :lead)
+      actual_usage = %{input: 100_000, output: 100_000}
+      :ok = RateLimiter.reconcile(job_id, "anthropic", estimated, actual_usage)
+
+      # Should receive cost ceiling reached message
+      assert_receive {:rate_limiter, :cost_ceiling_reached, cost}, 500
+      assert cost >= 1.0
+    end
+
+    test "blocks new requests when cost ceiling is reached", %{job_id: job_id} do
+      messages = [%{content: "test"}]
+
+      # Exhaust cost ceiling
+      {:ok, estimated} = RateLimiter.request(job_id, "anthropic", messages, :lead)
+      actual_usage = %{input: 100_000, output: 100_000}
+      :ok = RateLimiter.reconcile(job_id, "anthropic", estimated, actual_usage)
+
+      # Wait for cost ceiling message
+      assert_receive {:rate_limiter, :cost_ceiling_reached, _}, 500
+
+      # New request should be queued (not immediately granted)
+      # Start a new request - it should block
+      task =
+        Task.async(fn ->
+          RateLimiter.request(job_id, "anthropic", messages, :lead)
+        end)
+
+      # Give it time to be enqueued
+      Process.sleep(100)
+
+      # Request should still be pending (not completed)
+      refute Process.alive?(task.pid) == false
+    end
+
+    test "allows in-flight calls to complete after ceiling reached", %{job_id: job_id} do
+      messages = [%{content: "test"}]
+
+      # Make first request (will push us to ceiling)
+      {:ok, estimated1} = RateLimiter.request(job_id, "anthropic", messages, :lead)
+
+      # Make second request (in-flight before ceiling reached)
+      {:ok, estimated2} = RateLimiter.request(job_id, "anthropic", messages, :lead)
+
+      # Reconcile first - this will trigger ceiling
+      actual_usage1 = %{input: 100_000, output: 100_000}
+      :ok = RateLimiter.reconcile(job_id, "anthropic", estimated1, actual_usage1)
+
+      assert_receive {:rate_limiter, :cost_ceiling_reached, _}, 500
+
+      # Second request already got permission, so it can be reconciled
+      actual_usage2 = %{input: 1000, output: 1000}
+      :ok = RateLimiter.reconcile(job_id, "anthropic", estimated2, actual_usage2)
+
+      # No crash, in-flight call completed
+      assert :ok = :ok
+    end
+
+    test "resumes after approval", %{job_id: job_id} do
+      messages = [%{content: "test"}]
+
+      # Exhaust cost ceiling
+      {:ok, estimated} = RateLimiter.request(job_id, "anthropic", messages, :lead)
+      actual_usage = %{input: 100_000, output: 100_000}
+      :ok = RateLimiter.reconcile(job_id, "anthropic", estimated, actual_usage)
+
+      assert_receive {:rate_limiter, :cost_ceiling_reached, _}, 500
+
+      # Approve continued spending
+      :ok = RateLimiter.approve_continued_spending(job_id)
+
+      # New requests should now succeed
+      {:ok, _} = RateLimiter.request(job_id, "anthropic", messages, :lead)
+    end
+
+    test "processes queued requests after approval", %{job_id: job_id} do
+      messages = [%{content: "test"}]
+
+      # Exhaust cost ceiling
+      {:ok, estimated} = RateLimiter.request(job_id, "anthropic", messages, :lead)
+      actual_usage = %{input: 100_000, output: 100_000}
+      :ok = RateLimiter.reconcile(job_id, "anthropic", estimated, actual_usage)
+
+      assert_receive {:rate_limiter, :cost_ceiling_reached, _}, 500
+
+      # Queue a new request (will be blocked)
+      task =
+        Task.async(fn ->
+          RateLimiter.request(job_id, "anthropic", messages, :lead)
+        end)
+
+      # Give it time to be enqueued
+      Process.sleep(100)
+
+      # Approve continued spending
+      :ok = RateLimiter.approve_continued_spending(job_id)
+
+      # Queued request should now complete
+      assert {:ok, _} = Task.await(task, 5_000)
+    end
+
+    test "does not send ceiling message when foreman_pid is nil" do
+      job_id = "cost-ceiling-no-foreman-#{System.unique_integer([:positive])}"
+
+      # Start without foreman_pid, with low ceiling
+      {:ok, _pid} =
+        start_supervised(
+          {RateLimiter, [job_id: job_id, cost_ceiling: 2.0]},
+          id: {RateLimiter, job_id}
+        )
+
+      messages = [%{content: "test"}]
+
+      # Exceed cost ceiling
+      {:ok, estimated} = RateLimiter.request(job_id, "anthropic", messages, :lead)
+      actual_usage = %{input: 100_000, output: 100_000}
+      :ok = RateLimiter.reconcile(job_id, "anthropic", estimated, actual_usage)
+
+      # Should not crash and should not send message
+      refute_receive {:rate_limiter, :cost_ceiling_reached, _}, 100
+    end
+
+    test "only triggers ceiling once", %{job_id: job_id} do
+      messages = [%{content: "test"}]
+
+      # Make a request that exceeds the buffer ($1.00)
+      # 100,000 input tokens = $0.30, 100,000 output tokens = $1.50, total = $1.80
+      {:ok, estimated1} = RateLimiter.request(job_id, "anthropic", messages, :lead)
+      actual_usage1 = %{input: 100_000, output: 100_000}
+      :ok = RateLimiter.reconcile(job_id, "anthropic", estimated1, actual_usage1)
+
+      # First should trigger ceiling
+      assert_receive {:rate_limiter, :cost_ceiling_reached, _}, 500
+
+      # Approve to continue
+      :ok = RateLimiter.approve_continued_spending(job_id)
+
+      # Make another request with low cost
+      {:ok, estimated2} = RateLimiter.request(job_id, "anthropic", messages, :lead)
+      actual_usage2 = %{input: 1000, output: 1000}
+      :ok = RateLimiter.reconcile(job_id, "anthropic", estimated2, actual_usage2)
+
+      # Should not trigger ceiling again (still under ceiling)
+      refute_receive {:rate_limiter, :cost_ceiling_reached, _}, 100
+    end
+  end
 end

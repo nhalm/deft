@@ -218,6 +218,7 @@ defmodule Deft.Job.RateLimiter do
     - :time_source - Optional time source function for testing
     - :initial_concurrency - Starting number of concurrent Leads (default: 2)
     - :max_concurrency - Maximum number of concurrent Leads (default: 10)
+    - :cost_ceiling - Maximum cost before pausing (default: 10.0)
   """
   def start_link(opts) do
     job_id = Keyword.fetch!(opts, :job_id)
@@ -279,6 +280,18 @@ defmodule Deft.Job.RateLimiter do
     GenServer.cast(via_tuple(job_id), {:report_429, provider, retry_after})
   end
 
+  @doc """
+  Approves continued spending after cost ceiling is reached.
+
+  Resets the cost_ceiling_reached flag and allows new requests to proceed.
+
+  ## Parameters
+  - job_id: The job identifier for the RateLimiter instance
+  """
+  def approve_continued_spending(job_id) do
+    GenServer.call(via_tuple(job_id), :approve_continued_spending)
+  end
+
   # Private helper for Registry via tuple
   defp via_tuple(job_id) do
     {:via, Registry, {Deft.ProcessRegistry, {:rate_limiter, job_id}}}
@@ -293,6 +306,7 @@ defmodule Deft.Job.RateLimiter do
     model = Keyword.get(opts, :model, "claude-sonnet-4")
     initial_concurrency = Keyword.get(opts, :initial_concurrency, 2)
     max_concurrency = Keyword.get(opts, :max_concurrency, 10)
+    cost_ceiling = Keyword.get(opts, :cost_ceiling, 10.0)
 
     state = %{
       providers: %{},
@@ -303,6 +317,8 @@ defmodule Deft.Job.RateLimiter do
       model: model,
       cumulative_cost: 0.0,
       last_cost_report: 0.0,
+      cost_ceiling: cost_ceiling,
+      cost_ceiling_reached: false,
       # Adaptive concurrency tracking
       current_concurrency: initial_concurrency,
       max_concurrency: max_concurrency,
@@ -318,48 +334,66 @@ defmodule Deft.Job.RateLimiter do
 
   @impl true
   def handle_call({:request, provider, estimated_tokens, priority}, from, state) do
-    state = ensure_provider(state, provider)
-    buckets = state.providers[provider]
-    now = state.time_source.(:millisecond)
-
-    # Check if provider is in backoff period
-    if buckets.backoff_until != nil and now < buckets.backoff_until do
-      # In backoff - enqueue the request
+    # Check if cost ceiling has been reached
+    if state.cost_ceiling_reached do
+      # Cost ceiling reached - enqueue the request until approval
       new_state = enqueue_request(state, provider, estimated_tokens, priority, from)
       {:noreply, new_state}
     else
-      # Clear backoff if we've passed the backoff period
-      buckets =
-        if buckets.backoff_until != nil and now >= buckets.backoff_until do
-          %{buckets | backoff_until: nil}
-        else
-          buckets
-        end
+      state = ensure_provider(state, provider)
+      buckets = state.providers[provider]
+      now = state.time_source.(:millisecond)
 
-      state = put_in(state, [:providers, provider], buckets)
-
-      # Try to deduct from both buckets
-      with {:ok, rpm_bucket} <- Bucket.deduct(buckets.rpm, 1),
-           {:ok, tpm_bucket} <- Bucket.deduct(buckets.tpm, estimated_tokens) do
-        # Both buckets have capacity - update state and grant permission
-        # Reset consecutive 429s on successful grant
-        new_buckets = %{
-          buckets
-          | rpm: rpm_bucket,
-            tpm: tpm_bucket,
-            consecutive_429s: 0
-        }
-
-        new_state = put_in(state, [:providers, provider], new_buckets)
-
-        {:reply, {:ok, estimated_tokens}, new_state}
+      # Check if provider is in backoff period
+      if buckets.backoff_until != nil and now < buckets.backoff_until do
+        # In backoff - enqueue the request
+        new_state = enqueue_request(state, provider, estimated_tokens, priority, from)
+        {:noreply, new_state}
       else
-        {:error, :insufficient} ->
-          # Not enough capacity - enqueue the request
-          new_state = enqueue_request(state, provider, estimated_tokens, priority, from)
-          {:noreply, new_state}
+        # Clear backoff if we've passed the backoff period
+        buckets =
+          if buckets.backoff_until != nil and now >= buckets.backoff_until do
+            %{buckets | backoff_until: nil}
+          else
+            buckets
+          end
+
+        state = put_in(state, [:providers, provider], buckets)
+
+        # Try to deduct from both buckets
+        with {:ok, rpm_bucket} <- Bucket.deduct(buckets.rpm, 1),
+             {:ok, tpm_bucket} <- Bucket.deduct(buckets.tpm, estimated_tokens) do
+          # Both buckets have capacity - update state and grant permission
+          # Reset consecutive 429s on successful grant
+          new_buckets = %{
+            buckets
+            | rpm: rpm_bucket,
+              tpm: tpm_bucket,
+              consecutive_429s: 0
+          }
+
+          new_state = put_in(state, [:providers, provider], new_buckets)
+
+          {:reply, {:ok, estimated_tokens}, new_state}
+        else
+          {:error, :insufficient} ->
+            # Not enough capacity - enqueue the request
+            new_state = enqueue_request(state, provider, estimated_tokens, priority, from)
+            {:noreply, new_state}
+        end
       end
     end
+  end
+
+  @impl true
+  def handle_call(:approve_continued_spending, _from, state) do
+    # Reset cost ceiling flag and process any queued requests
+    new_state = %{state | cost_ceiling_reached: false}
+    new_state = process_queue(new_state)
+
+    Logger.info("Continued spending approved, resuming job")
+
+    {:reply, :ok, new_state}
   end
 
   @impl true
@@ -458,6 +492,8 @@ defmodule Deft.Job.RateLimiter do
 
   # Cost tracking threshold ($0.50 increments)
   @cost_report_threshold 0.50
+  # Cost ceiling buffer ($1.00 before ceiling)
+  @cost_ceiling_buffer 1.0
 
   defp track_cost(state, actual_usage) do
     input_tokens = Map.get(actual_usage, :input, 0)
@@ -466,15 +502,35 @@ defmodule Deft.Job.RateLimiter do
     # Calculate cost for this request
     cost = calculate_cost(state.model, input_tokens, output_tokens)
 
+    # Previous cumulative cost (before this request)
+    prev_cumulative = state.cumulative_cost
+
     # Update cumulative cost
     new_cumulative = state.cumulative_cost + cost
 
     # Check if we should report to Foreman (every $0.50 increment)
     new_state = %{state | cumulative_cost: new_cumulative}
 
-    if should_report_cost?(state.last_cost_report, new_cumulative) do
-      report_cost_to_foreman(new_state, new_cumulative)
-      %{new_state | last_cost_report: new_cumulative}
+    new_state =
+      if should_report_cost?(state.last_cost_report, new_cumulative) do
+        report_cost_to_foreman(new_state, new_cumulative)
+        %{new_state | last_cost_report: new_cumulative}
+      else
+        new_state
+      end
+
+    # Check if we've JUST crossed the cost ceiling threshold (with $1.00 buffer)
+    # Only trigger if we weren't already at the ceiling and we just crossed it
+    threshold = new_state.cost_ceiling - @cost_ceiling_buffer
+
+    if !new_state.cost_ceiling_reached and prev_cumulative < threshold and
+         new_cumulative >= threshold do
+      Logger.warning(
+        "Cost ceiling reached: $#{Float.round(new_cumulative, 2)} (ceiling: $#{new_state.cost_ceiling}), pausing job"
+      )
+
+      report_cost_ceiling_reached(new_state, new_cumulative)
+      %{new_state | cost_ceiling_reached: true}
     else
       new_state
     end
@@ -503,6 +559,13 @@ defmodule Deft.Job.RateLimiter do
 
   defp report_cost_to_foreman(%{foreman_pid: foreman_pid}, cost) do
     send(foreman_pid, {:rate_limiter, :cost, cost})
+    :ok
+  end
+
+  defp report_cost_ceiling_reached(%{foreman_pid: nil}, _cost), do: :ok
+
+  defp report_cost_ceiling_reached(%{foreman_pid: foreman_pid}, cost) do
+    send(foreman_pid, {:rate_limiter, :cost_ceiling_reached, cost})
     :ok
   end
 
