@@ -84,7 +84,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## skills v0.2
 
-- Fix `tools = []` in `continue_after_tools` and queued prompt path: `continue_after_tools/1` (line 1300) and `handle_idle_transition` queued prompt path (line 941) both hardcode `tools = []`; must use `Map.get(compacted_data.config, :tools, [])` like the initial `:calling` entry (line 208); agent loses all tools (including `use_skill`) after first tool execution round (spec section 2.5)
 - Wire `Session.Supervisor.start_session/1` into CLI: `rescan_project/1` is only called from `start_session/1` but CLI calls `Agent.start_link/1` directly, bypassing it; project-level skills in `.deft/skills/` are never refreshed between sessions (spec section 5)
 
 ## tui v0.1

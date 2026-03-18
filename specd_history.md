@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **skills v0.2 (2026-03-17):** Fix `tools = []` in `continue_after_tools` and queued prompt path: `continue_after_tools/1` (line 1300) and `handle_idle_transition` queued prompt path (line 941) both hardcode `tools = []`; must use `Map.get(compacted_data.config, :tools, [])` like the initial `:calling` entry (line 208); agent loses all tools (including `use_skill`) after first tool execution round (spec section 2.5)
 - **observational-memory v0.1 (2026-03-17):** Add retry wrapper to async Observer Task: `spawn_observer_task` calls `Observer.run/4` directly with no retries; must wrap in retry logic (3 retries with exponential backoff) matching the existing `run_observer_with_retry` pattern used by the sync path (spec section 6.3)
 - **observational-memory v0.1 (2026-03-18):** Pass calibration_factor from OM.State to Agent.Context: `get_om_context/1` hardcodes 4.0 (line 97 with TODO); must retrieve actual `calibration_factor` from State, which is updated via exponential moving average as LLM reports actual token counts (spec section 7)
 - **observational-memory v0.1 (2026-03-18):** Wire sync fallback calls from Agent.Context: `get_om_context/1` must check `pending_message_tokens` against 1.2x observation threshold (36,000) and call `OMState.force_observe/1`; check `observation_tokens` against 1.2x reflection threshold (48,000) and call `OMState.force_reflect/1`; currently no threshold check or sync fallback invocation exists (spec section 6.3)
