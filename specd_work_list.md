@@ -42,7 +42,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## rate-limiter v0.1
 
-- Fix consecutive_429s reset: currently resets to 0 on every successful grant (rate_limiter.ex:372, 770), preventing exponential backoff from growing past 1s; should only reset after a sustained period without 429s, not on each individual success
 - Implement cost_warning config and TUI notification: spec section 7 defines `job.cost_warning` at $5.00 default to display warning in TUI when reached; entirely absent from code — no config field, no threshold check, no message to Foreman
 - Fix capacity restore timing: runs every 1s (queue check interval at rate_limiter.ex:196) after 60s grace period instead of once per minute; should_restore_capacity? (rate_limiter.ex:649-655) returns true on every tick after grace period because last_429_at is never updated during restore
 - Fix capacity restore to use 10% of original capacity (linear) instead of 10% of current (compounding): rate_limiter.ex:176-177 uses `buckets.rpm.capacity * 1.1` which compounds; spec says "10% per minute" meaning fixed 10% of original limit

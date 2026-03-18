@@ -364,12 +364,11 @@ defmodule Deft.Job.RateLimiter do
         with {:ok, rpm_bucket} <- Bucket.deduct(buckets.rpm, 1),
              {:ok, tpm_bucket} <- Bucket.deduct(buckets.tpm, estimated_tokens) do
           # Both buckets have capacity - update state and grant permission
-          # Reset consecutive 429s on successful grant
+          # Note: consecutive_429s is NOT reset here - only after 60s grace period
           new_buckets = %{
             buckets
             | rpm: rpm_bucket,
-              tpm: tpm_bucket,
-              consecutive_429s: 0
+              tpm: tpm_bucket
           }
 
           new_state = put_in(state, [:providers, provider], new_buckets)
@@ -630,6 +629,10 @@ defmodule Deft.Job.RateLimiter do
         if should_restore_capacity?(buckets, now) do
           restored_buckets = ProviderBuckets.restore_capacity(buckets)
 
+          # Reset consecutive 429s counter after grace period (60s without any 429s)
+          # This allows exponential backoff to work properly
+          restored_buckets = %{restored_buckets | consecutive_429s: 0}
+
           # Check if we've fully restored to original capacity
           if restored_buckets.rpm.capacity >= buckets.rpm_original_capacity and
                restored_buckets.tpm.capacity >= buckets.tpm_original_capacity do
@@ -763,11 +766,11 @@ defmodule Deft.Job.RateLimiter do
   end
 
   defp grant_request_permission(state, request, rpm_bucket, tpm_bucket, buckets) do
+    # Note: consecutive_429s is NOT reset here - only after 60s grace period
     new_buckets = %{
       buckets
       | rpm: rpm_bucket,
-        tpm: tpm_bucket,
-        consecutive_429s: 0
+        tpm: tpm_bucket
     }
 
     new_state = put_in(state, [:providers, request.provider], new_buckets)
