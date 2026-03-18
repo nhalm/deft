@@ -174,9 +174,18 @@ defmodule Deft.Job.RateLimiter do
     Returns updated buckets with increased capacity (capped at original).
     """
     def restore_capacity(%__MODULE__{} = buckets) do
-      # Increase by 10% of current capacity
-      new_rpm_capacity = min(buckets.rpm.capacity * 1.1, buckets.rpm_original_capacity)
-      new_tpm_capacity = min(buckets.tpm.capacity * 1.1, buckets.tpm_original_capacity)
+      # Increase by 10% of original capacity (linear restoration)
+      new_rpm_capacity =
+        min(
+          buckets.rpm.capacity + buckets.rpm_original_capacity * 0.1,
+          buckets.rpm_original_capacity
+        )
+
+      new_tpm_capacity =
+        min(
+          buckets.tpm.capacity + buckets.tpm_original_capacity * 0.1,
+          buckets.tpm_original_capacity
+        )
 
       %{
         buckets
