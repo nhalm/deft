@@ -1,4 +1,4 @@
-.PHONY: setup deps compile format format.check lint dialyzer test test.eval test.eval.holdout test.eval.validate_fixtures test.eval.calibrate test.integration test.all check ci clean
+.PHONY: setup deps compile format format.check lint dialyzer test test.eval test.eval.e2e test.eval.benchmark test.eval.holdout test.eval.validate_fixtures test.eval.calibrate test.integration test.all check ci clean
 
 setup: deps
 	lefthook install
@@ -26,6 +26,12 @@ test:
 
 test.eval:
 	mix test --only eval --exclude holdout
+
+test.eval.e2e:
+	mix test --only e2e
+
+test.eval.benchmark:
+	mix test --only benchmark --include e2e
 
 test.eval.holdout:
 	mix test --only holdout

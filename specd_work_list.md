@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## evals v0.2
 
-- Add `test.eval.e2e` and `test.eval.benchmark` Makefile targets per spec section 3.1; `test.eval.e2e` runs Tier 2 end-to-end harness, `test.eval.benchmark` runs Tier 3 full benchmark suite
 - Implement safety eval 90% hard-fail threshold: safety evals (hallucination, PII) that drop below 90% must hard fail the build per spec section 3.2; requires a safety category flag on eval tests and a fixed threshold check separate from the dynamic soft_floor (blocked: Implement Observer anti-hallucination evals...)
 - Add CI workflow files: Tier 1 on every push (soft gate), Tier 2 on merge to main, Tier 3 on weekly schedule per spec section 3.2 (blocked: Implement Observer extraction evals...)
 - Implement Observer extraction evals: 9 test cases from spec section 2.1 (explicit tech choice, preference, file read, file modify, error, command, architecture, dependency, deferred work); 20 iterations, 85% pass rate (blocked: Implement Observer Task execution...)
