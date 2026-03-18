@@ -673,7 +673,7 @@ defmodule Deft.IssuesTest do
       {:ok, issue} = Issues.create(%{title: "Issue", source: :user})
 
       # Try to add non-existent blocker
-      assert {:error, :not_found} = Issues.add_dependency(issue.id, "deft-nonexistent")
+      assert {:error, :blocker_not_found} = Issues.add_dependency(issue.id, "deft-nonexistent")
     end
 
     test "allows adding multiple dependencies", %{file_path: file_path} do

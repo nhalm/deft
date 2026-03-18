@@ -335,7 +335,7 @@ defmodule Deft.Issues do
   @impl true
   def handle_call({:add_dependency, issue_id, blocker_id}, _from, state) do
     with {:ok, _} <- validate_issue_exists(state.issues, issue_id),
-         {:ok, _} <- validate_issue_exists(state.issues, blocker_id),
+         {:ok, _} <- validate_blocker_exists(state.issues, blocker_id),
          index when not is_nil(index) <- find_issue_index(state.issues, issue_id) do
       issue = Enum.at(state.issues, index)
       updated_deps = Enum.uniq([blocker_id | issue.dependencies])
@@ -357,6 +357,7 @@ defmodule Deft.Issues do
       end
     else
       {:error, :not_found} -> {:reply, {:error, :not_found}, state}
+      {:error, :blocker_not_found} -> {:reply, {:error, :blocker_not_found}, state}
       nil -> {:reply, {:error, :not_found}, state}
     end
   end
@@ -607,6 +608,14 @@ defmodule Deft.Issues do
   defp validate_issue_exists(issues, id) do
     case Enum.find(issues, &(&1.id == id)) do
       nil -> {:error, :not_found}
+      issue -> {:ok, issue}
+    end
+  end
+
+  # Validates that a blocker issue exists
+  defp validate_blocker_exists(issues, id) do
+    case Enum.find(issues, &(&1.id == id)) do
+      nil -> {:error, :blocker_not_found}
       issue -> {:ok, issue}
     end
   end

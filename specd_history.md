@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **issues v0.2 (2026-03-17):** Fix `add_dependency/2` to return `:blocker_not_found` when blocker issue doesn't exist: currently both issue and blocker validation return `:not_found`; the `else` clause at line 359 collapses both failure modes (spec section 5.2 documents `:blocker_not_found` as a distinct error)
 - **filesystem v0.2 (2026-03-17):** Wire dynamic cache_read activation: `cache_active` config flag defaults to `false` and is never set to `true`; CacheRead tool is never added to agent tool list; must check Store for active entries after spilling and toggle `cache_active` + add CacheRead to tools (spec section 6.3, 6.4)
 - **filesystem v0.2 (2026-03-17):** Fix cache Store registry name mismatch: `Session.Worker` registers cache as `{:cache, session_id, "main"}` (worker.ex:51) but `ToolRunner.spill_to_cache` writes to `{:cache, session_id, "default"}` (tool_runner.ex:151); all cache spills silently fail via rescue; change tool_runner to use `"main"` or parameterize lead_id (spec section 6)
 - **filesystem v0.2 (2026-03-18):** Fix Deft.Store `handle_call({:delete, ...})` to use sync flush for sitelog type: currently all deletes use `maybe_flush_buffer` (buffered); must check `state.type == :sitelog` and call `flush_buffer(new_state, sync: true)` like `do_write` does for writes (spec requires all site log writes to be synchronous with `:dets.sync/1`)
