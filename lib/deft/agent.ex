@@ -1063,6 +1063,49 @@ defmodule Deft.Agent do
     }
   end
 
+  defp maybe_activate_cache_read(data) do
+    # Check if cache_active is already true
+    cache_active = Map.get(data.config, :cache_active, false)
+
+    # Already active, no changes needed
+    if cache_active, do: data, else: activate_cache_read_if_needed(data)
+  end
+
+  defp activate_cache_read_if_needed(data) do
+    # Check if cache has entries
+    cache_tid = get_cache_tid(data.session_id)
+
+    # No cache available
+    if is_nil(cache_tid), do: data, else: check_cache_and_activate(data, cache_tid)
+  end
+
+  defp check_cache_and_activate(data, cache_tid) do
+    keys = Deft.Store.keys(cache_tid)
+
+    # No cache entries yet
+    if length(keys) == 0 do
+      data
+    else
+      # Cache has entries - activate cache_read
+      tools = Map.get(data.config, :tools, [])
+
+      # Add CacheRead if not already present
+      updated_tools =
+        if Deft.Tools.CacheRead in tools do
+          tools
+        else
+          [Deft.Tools.CacheRead | tools]
+        end
+
+      updated_config =
+        data.config
+        |> Map.put(:cache_active, true)
+        |> Map.put(:tools, updated_tools)
+
+      %{data | config: updated_config}
+    end
+  end
+
   defp start_tool_execution(tool_calls, data) do
     # Execute tools concurrently via ToolRunner
     # Get the ToolRunner supervisor from the session worker
@@ -1205,8 +1248,11 @@ defmodule Deft.Agent do
 
     new_data = %{data | messages: new_messages, tool_tasks: [], tool_execution_times: %{}}
 
+    # Activate cache_read tool if cache has entries
+    new_data_with_cache = maybe_activate_cache_read(new_data)
+
     # Continue the conversation by calling the provider again
-    continue_after_tools(new_data)
+    continue_after_tools(new_data_with_cache)
   end
 
   defp build_tool_result_blocks(results, tool_calls) do
@@ -1297,7 +1343,7 @@ defmodule Deft.Agent do
         )
 
       provider = Map.get(compacted_data.config, :provider)
-      tools = []
+      tools = Map.get(compacted_data.config, :tools, [])
 
       case call_provider_stream(provider, context_messages, tools, compacted_data.config) do
         {:ok, stream_ref} ->
