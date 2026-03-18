@@ -81,3 +81,8 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement `deft work <id>`: same as `deft work` but for a specific issue ID, verify issue exists and is open (blocked: Implement deft work...)
 - Implement `deft work --loop`: approve every plan by default (each issue gets plan approval checkpoint); --auto-approve-all flag skips all plan approvals for fully autonomous mode; stop when no ready issues remain, cumulative cost exceeds work.cost_ceiling, or user aborts; re-evaluate unblocked issues between jobs (blocked: Implement deft work...)
 - Implement SIGINT handling: catch Ctrl+C, send graceful shutdown to Foreman, wait for current issue status rollback to :open (5-second timeout), then exit; if timeout expires, issue left at :in_progress (detected as stale on next startup) (blocked: Implement deft work --loop...)
+
+## tui v0.1
+
+- Fix streaming markdown rendering: `handle_text_delta/2` appends raw text to `current_text` but render/1 displays it as a raw `<box>` with no markdown processing; must call `Markdown.render_streaming/1` during streaming to buffer incomplete lines and render complete blocks (spec section 3)
+- Fix scroll_offset not applied to render: Page Up/Down handlers update `scroll_offset` assign but `render/1` iterates all messages with no offset or slicing applied; scrollback is non-functional (spec section 3)
