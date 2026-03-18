@@ -45,7 +45,7 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## git-strategy v0.1
 
-- Implement job branch creation: verify working tree is clean (warn + ask to stash if uncommitted changes), create `deft/job-<job_id>` branch from current HEAD - Implement per-Lead worktree creation: `git worktree add <repo>/.deft-worktrees/lead-<lead_id> -b deft/lead-<lead_id>` branched from job branch plus already-merged Lead work; Runners operate in Lead's worktree directory; Leads commit work per-task or per-milestone (blocked: Implement job branch creation...)
+- Implement per-Lead worktree creation: `git worktree add <repo>/.deft-worktrees/lead-<lead_id> -b deft/lead-<lead_id>` branched from job branch plus already-merged Lead work; Runners operate in Lead's worktree directory; Leads commit work per-task or per-milestone
 - Implement merge in dependency order: when Lead sends {:lead_message, :complete, ...}, Foreman merges Lead branch into deft/job-<job_id>; on conflict, spawn merge-resolution Runner; independent Leads merged in completion order (blocked: Implement per-Lead worktree creation...)
 - Implement post-merge test command: run configurable test command (not hardcoded `mix test`) on merged job branch after each Lead merge to catch semantic conflicts early; on failure, spawn fix-up Runner or flag for user intervention (blocked: Implement merge in dependency order...)
 - Implement squash-merge on job complete: after verification passes, squash-merge deft/job-<job_id> into original branch (configurable: job.squash_on_complete, default true); delete job branch; verify no worktrees remain via `git worktree list` (blocked: Implement post-merge test command...)
