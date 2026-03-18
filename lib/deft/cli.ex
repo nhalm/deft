@@ -70,10 +70,15 @@ defmodule Deft.CLI do
   end
 
   # Ensure the Issues GenServer is started
-  defp ensure_issues_started do
+  defp ensure_issues_started(flags) do
     case Process.whereis(Issues) do
       nil ->
-        case Issues.start_link() do
+        # Load config to get compaction_days setting
+        working_dir = flags[:working_dir] || File.cwd!()
+        cli_flags = build_cli_flags(flags)
+        config = Config.load(cli_flags, working_dir)
+
+        case Issues.start_link(compaction_days: config.issues_compaction_days) do
           {:ok, _pid} -> :ok
           {:error, {:already_started, _pid}} -> :ok
         end
@@ -220,9 +225,9 @@ defmodule Deft.CLI do
     :ok
   end
 
-  defp execute_command({:issue_show, issue_id}, _flags) do
+  defp execute_command({:issue_show, issue_id}, flags) do
     # Ensure Issues GenServer is started
-    ensure_issues_started()
+    ensure_issues_started(flags)
 
     case Issues.get(issue_id) do
       {:ok, issue} ->
@@ -235,9 +240,9 @@ defmodule Deft.CLI do
     end
   end
 
-  defp execute_command({:issue_close, issue_id}, _flags) do
+  defp execute_command({:issue_close, issue_id}, flags) do
     # Ensure Issues GenServer is started
-    ensure_issues_started()
+    ensure_issues_started(flags)
 
     # Get all issues to find which ones were blocked by this issue
     all_issues = Issues.list(status: [:open, :in_progress])
@@ -274,7 +279,7 @@ defmodule Deft.CLI do
 
   defp execute_command(:issue_list, flags) do
     # Ensure Issues GenServer is started
-    ensure_issues_started()
+    ensure_issues_started(flags)
 
     # Build filter options from flags
     opts = build_issue_list_opts(flags)
@@ -287,9 +292,9 @@ defmodule Deft.CLI do
     :ok
   end
 
-  defp execute_command(:issue_ready, _flags) do
+  defp execute_command(:issue_ready, flags) do
     # Ensure Issues GenServer is started
-    ensure_issues_started()
+    ensure_issues_started(flags)
 
     # Get ready issues (sorted by priority, then created_at)
     issues = Issues.ready()
@@ -301,7 +306,7 @@ defmodule Deft.CLI do
 
   defp execute_command({:issue_create, title}, flags) do
     # Ensure Issues GenServer is started
-    ensure_issues_started()
+    ensure_issues_started(flags)
 
     # Check for --quick flag
     if flags[:quick] do
@@ -315,7 +320,7 @@ defmodule Deft.CLI do
 
   defp execute_command({:issue_update, issue_id}, flags) do
     # Ensure Issues GenServer is started
-    ensure_issues_started()
+    ensure_issues_started(flags)
 
     # Build attrs map from flags
     attrs = build_issue_update_attrs(flags)
