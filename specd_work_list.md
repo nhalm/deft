@@ -20,11 +20,10 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 ## evals v0.2
 
 - Implement safety eval 90% hard-fail threshold: safety evals (hallucination, PII) that drop below 90% must hard fail the build per spec section 3.2; requires a safety category flag on eval tests and a fixed threshold check separate from the dynamic soft_floor (blocked: Implement Observer anti-hallucination evals...)
-- Add CI workflow files: Tier 1 on every push (soft gate), Tier 2 on merge to main, Tier 3 on weekly schedule per spec section 3.2 (blocked: Implement Observer extraction evals...)
-- Implement Observer extraction evals: 9 test cases from spec section 2.1 (explicit tech choice, preference, file read, file modify, error, command, architecture, dependency, deferred work); 20 iterations, 85% pass rate
-- Implement Observer section routing evals: verify facts route to correct sections per spec section 2.2; 20 iterations, 85% pass rate (blocked: Implement Observer extraction evals...)
-- Implement Observer anti-hallucination evals: 4 test cases from spec section 2.3 (hypothetical, exploring options, reading about, discussing alternatives); 20 iterations, 95% pass rate (blocked: Implement Observer extraction evals...)
-- Implement Observer dedup evals: verify no re-extraction of existing observations; 20 iterations, 80% pass rate (blocked: Implement Observer extraction evals...)
+- Add CI workflow files: Tier 1 on every push (soft gate), Tier 2 on merge to main, Tier 3 on weekly schedule per spec section 3.2
+- Implement Observer section routing evals: verify facts route to correct sections per spec section 2.2; 20 iterations, 85% pass rate
+- Implement Observer anti-hallucination evals: 4 test cases from spec section 2.3 (hypothetical, exploring options, reading about, discussing alternatives); 20 iterations, 95% pass rate
+- Implement Observer dedup evals: verify no re-extraction of existing observations; 20 iterations, 80% pass rate
 - Implement Foreman decomposition evals: 1-3 deliverables, valid DAG, specific contracts; 20 iterations, 75% pass rate (blocked: Implement Foreman gen_statem...)
 - Implement Foreman constraint propagation evals: constraints from issue flow correctly to Lead steering instructions; 20 iterations, 75% pass rate (blocked: Implement Foreman gen_statem...)
 - Implement Foreman verification circuit breaker evals: verify Foreman correctly identifies broken work and does not mark it done; highest-priority eval — validates the safety net; 20 iterations, 90% pass rate (blocked: Implement Foreman gen_statem...)
