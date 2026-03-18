@@ -79,7 +79,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement reflection buffering: spawn Reflector Task at 50% of reflection threshold (20,000 tokens); store result in `buffered_reflection`; on full threshold, check epoch and activate or discard+re-trigger (spec section 6.2)
 - Implement sync reflection fallback: add `:force_reflect` GenServer.call handler with from-stashing pattern; trigger when observation_tokens >= 1.2x reflection threshold (48,000); 1 retry max (spec section 6.3)
 - Implement dynamic continuation hint: extend Observer prompt to return `<continuation-hint>` with current task, last tool call, and user's last request paraphrase; parse in Observer output; pass through to Context injection; fall back to static hint when absent (spec section 5.3)
-- Fix sync fallback state update: when `sync_from` is set in observer task completion handler, merge observations into `active_observations`, update `observed_message_ids`, and decrement `pending_message_tokens` before replying — currently replies but discards observation data (spec section 6.3)
 
 ## issues v0.2
 

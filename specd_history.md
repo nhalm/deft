@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **observational-memory v0.1 (2026-03-18):** Fix sync fallback state update: when `sync_from` is set in observer task completion handler, merge observations into `active_observations`, update `observed_message_ids`, and decrement `pending_message_tokens` before replying — currently replies but discards observation data (spec section 6.3)
 - **issues v0.2 (2026-03-17):** Fix `Deft.Tools.IssueCreate` to ensure Issues GenServer is running: call `Deft.Issues.start_link/0` or equivalent before `Issues.create/1`; currently crashes if agent invokes tool in a session where Issues wasn't started via CLI (spec section 4, 6.2)
 - **issues v0.2 (2026-03-17):** Fix `is_ready?/2` to treat missing dependencies as satisfied: when a dependency ID is not found in `all_issues` (e.g., compacted away), return `true` instead of `false`; currently issues blocked by compacted issues are permanently stuck (spec section 3)
 - **observational-memory v0.1 (2026-03-17):** Fix hard cap truncation: replace `Enum.reduce` with `Enum.reduce_while` in `truncate_session_history_to_target/4` so processing halts when budget is exceeded; current code can skip newer lines and keep older ones non-contiguously (spec section 4.6)

@@ -374,18 +374,7 @@ defmodule Deft.OM.State do
 
     # Check if this is a sync fallback call
     if state.sync_from do
-      # Reply to the stashed caller with the result
-      GenServer.reply(state.sync_from, {:ok, result})
-
-      # Clear sync_from and flags
-      state = %{
-        state
-        | sync_from: nil,
-          is_observing: false,
-          observer_ref: nil
-      }
-
-      {:noreply, state}
+      handle_sync_observer_completion(state, result, is_success)
     else
       # Normal async buffering path - only store the chunk if successful
       state =
@@ -598,6 +587,72 @@ defmodule Deft.OM.State do
   end
 
   ## Private Functions
+
+  # Handle sync observer completion (spec section 6.3)
+  # Per spec: merge observations into active_observations, update observed_message_ids,
+  # and decrement pending_message_tokens BEFORE replying
+  defp handle_sync_observer_completion(state, result, is_success) do
+    # Merge observations if successful
+    state =
+      if is_success do
+        # Section-aware merge observations into active_observations
+        merged_observations =
+          Parse.merge_observations(state.active_observations, result.observations)
+
+        # Update observed_message_ids
+        new_observed_message_ids = state.observed_message_ids ++ result.message_ids
+
+        # Calculate new observation tokens
+        new_observation_tokens = Tokens.estimate(merged_observations, state.calibration_factor)
+
+        # Decrement pending_message_tokens by the observed message tokens
+        new_pending = max(0, state.pending_message_tokens - result.message_tokens)
+
+        %{
+          state
+          | active_observations: merged_observations,
+            observation_tokens: new_observation_tokens,
+            observed_message_ids: new_observed_message_ids,
+            pending_message_tokens: new_pending,
+            activation_epoch: state.activation_epoch + 1,
+            snapshot_dirty: true,
+            last_observed_at: DateTime.utc_now()
+        }
+      else
+        # Keep state unchanged on failure
+        state
+      end
+
+    # Reply to the stashed caller with the result
+    GenServer.reply(state.sync_from, {:ok, result})
+
+    # Clear sync_from and flags
+    state = %{
+      state
+      | sync_from: nil,
+        is_observing: false,
+        observer_ref: nil
+    }
+
+    # Write snapshot after sync observation if state was updated (spec section 9.1)
+    state =
+      if is_success do
+        case write_snapshot(state) do
+          :ok ->
+            state = %{state | snapshot_dirty: false}
+            # Check if reflection should be triggered
+            check_and_spawn_reflector(state)
+
+          {:error, _reason} ->
+            # Log already happened in write_snapshot, continue with dirty flag set
+            check_and_spawn_reflector(state)
+        end
+      else
+        state
+      end
+
+    {:noreply, state}
+  end
 
   defp via_tuple(session_id) do
     {:via, Registry, {Deft.ProcessRegistry, {:om_state, session_id}}}
