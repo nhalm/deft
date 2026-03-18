@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **orchestration v0.3 (2026-03-18):** Implement decomposition phase: Foreman reads research findings, produces deliverables + dependency DAG + interface contracts + cost estimate, writes plan to Deft.Store site log instance, presents to user for approval; --auto-approve-all flag skips approval gate
 - **orchestration v0.3 (2026-03-18):** Implement site log Lead read access: Leads obtain site log ETS tid via Deft.Store.tid/1 GenServer.call; Foreman passes site log registered name to each Lead at startup; ETS :protected allows Lead reads without GenServer calls
 - **git-strategy v0.1 (2026-03-18):** Implement startup orphan cleanup: scan for orphaned deft/job-* branches and deft/lead-* worktrees with no running Deft job; interactive mode: user confirmation; non-interactive with --auto-approve: clean automatically; cleanup: worktree remove, branch -D, worktree prune
 - **orchestration v0.3 (2026-03-18):** Implement research phase: Foreman spawns research Runners via Task.Supervisor.async_nolink in parallel (Sonnet model, read-only tools), collects findings from Task return values, configurable timeout (default 120s) via Process.send_after

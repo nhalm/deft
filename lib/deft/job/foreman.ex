@@ -103,6 +103,20 @@ defmodule Deft.Job.Foreman do
     :gen_statem.cast(foreman, :abort)
   end
 
+  @doc """
+  Approves the current work plan during decomposition phase.
+  """
+  def approve_plan(foreman) do
+    :gen_statem.cast(foreman, :approve_plan)
+  end
+
+  @doc """
+  Rejects the current work plan and requests a revision.
+  """
+  def reject_plan(foreman) do
+    :gen_statem.cast(foreman, :reject_plan)
+  end
+
   # gen_statem callbacks
 
   @impl :gen_statem
@@ -200,6 +214,13 @@ defmodule Deft.Job.Foreman do
     {:keep_state, data}
   end
 
+  def handle_event(:enter, _old_state, {:decomposing, :idle}, _data) do
+    # When entering decomposing phase, prompt the Foreman to create a work plan
+    Logger.info("Foreman starting decomposition phase")
+    :gen_statem.cast(self(), :start_decomposition)
+    :keep_state_and_data
+  end
+
   def handle_event(:enter, _old_state, {job_phase, :executing_tools}, data) do
     # Extract tool calls from the last assistant message
     tool_calls = extract_tool_calls(data.messages)
@@ -243,6 +264,28 @@ defmodule Deft.Job.Foreman do
     {:next_state, {job_phase, :calling}, data}
   end
 
+  # Decomposition handling
+  def handle_event(:cast, :start_decomposition, {:decomposing, :idle}, data) do
+    # Build decomposition prompt with research findings
+    decomposition_prompt = build_decomposition_prompt(data)
+
+    # Add user message with decomposition request
+    user_message = %Message{
+      id: generate_message_id(),
+      role: :user,
+      content: [%Deft.Message.Text{text: decomposition_prompt}],
+      timestamp: DateTime.utc_now()
+    }
+
+    messages = data.messages ++ [user_message]
+
+    # Start LLM call
+    data = %{data | messages: messages, turn_count: data.turn_count + 1}
+    {:ok, stream_ref, monitor_ref} = call_llm(data)
+    data = %{data | stream_ref: stream_ref, stream_monitor_ref: monitor_ref}
+    {:next_state, {:decomposing, :calling}, data}
+  end
+
   # Abort handling (works in any state)
   def handle_event(:cast, :abort, {_job_phase, _agent_state}, data) do
     Logger.info("Foreman aborting job")
@@ -259,6 +302,42 @@ defmodule Deft.Job.Foreman do
     # Transition to complete phase
     {:next_state, {:complete, :idle},
      %{data | stream_ref: nil, stream_monitor_ref: nil, tool_tasks: []}}
+  end
+
+  # Plan approval handling
+  def handle_event(:cast, :approve_plan, {:decomposing, :idle}, data) do
+    Logger.info("Plan approved by user, transitioning to execution phase")
+    {:next_state, {:executing, :idle}, data}
+  end
+
+  def handle_event(:cast, :reject_plan, {:decomposing, :idle}, data) do
+    Logger.info("Plan rejected by user, requesting revision")
+
+    # Prompt the Foreman to revise the plan
+    revision_prompt = """
+    The user has rejected the proposed plan. Please revise the plan based on their feedback.
+
+    Consider:
+    - Are there better decomposition boundaries?
+    - Should the work be split differently?
+    - Are the dependencies correct?
+    - Should this be executed as a single-agent task instead?
+    """
+
+    user_message = %Message{
+      id: generate_message_id(),
+      role: :user,
+      content: [%Deft.Message.Text{text: revision_prompt}],
+      timestamp: DateTime.utc_now()
+    }
+
+    messages = data.messages ++ [user_message]
+    data = %{data | messages: messages, turn_count: data.turn_count + 1}
+
+    # Start LLM call for revision
+    {:ok, stream_ref, monitor_ref} = call_llm(data)
+    data = %{data | stream_ref: stream_ref, stream_monitor_ref: monitor_ref}
+    {:next_state, {:decomposing, :calling}, data}
   end
 
   # Lead message handling (available in any state)
@@ -701,8 +780,153 @@ defmodule Deft.Job.Foreman do
     {:researching, :idle}
   end
 
+  defp determine_next_phase(:decomposing, data) do
+    # After decomposition completes, extract plan and wait for approval
+    # The plan should be in the last assistant message
+    plan = extract_plan_from_messages(data.messages)
+
+    if plan do
+      # Write plan to site log
+      write_plan_to_site_log(plan, data)
+
+      # Check if auto-approve is enabled
+      auto_approve = Map.get(data.config, :auto_approve_all, false)
+
+      if auto_approve do
+        Logger.info("Auto-approving plan (--auto-approve-all enabled)")
+        # Transition directly to executing
+        {:executing, :idle}
+      else
+        # Present plan to user and stay in decomposing until approved
+        present_plan_for_approval(plan, data)
+        # Stay in decomposing:idle waiting for user approval
+        {:decomposing, :idle}
+      end
+    else
+      # No valid plan extracted, stay in decomposing
+      Logger.warning("Failed to extract plan from decomposition response")
+      {:decomposing, :idle}
+    end
+  end
+
   defp determine_next_phase(job_phase, _data) do
     # For other phases, stay in idle within the same phase
     {job_phase, :idle}
+  end
+
+  # Build decomposition prompt with research findings
+  defp build_decomposition_prompt(data) do
+    # Format research findings
+    findings_text =
+      if Enum.empty?(data.research_findings) do
+        "No research findings available."
+      else
+        data.research_findings
+        |> Enum.with_index(1)
+        |> Enum.map_join("\n\n", fn {finding, idx} ->
+          "## Research Finding #{idx}\n\n#{inspect(finding)}"
+        end)
+      end
+
+    """
+    You are the Foreman for a software development job. Based on the user request and research findings,
+    decompose this work into deliverables.
+
+    # Original User Request
+
+    #{data.prompt}
+
+    # Research Findings
+
+    #{findings_text}
+
+    # Your Task
+
+    Produce a structured work plan with:
+
+    1. **Deliverables** (typically 1-3, rarely >5): Each deliverable is a coherent chunk of work that a Lead can own end-to-end.
+       For each deliverable, provide:
+       - Name (short, descriptive)
+       - Description (what needs to be built)
+       - Files likely to be modified/created
+       - Estimated complexity (low/medium/high)
+
+    2. **Dependency DAG**: Define dependencies between deliverables using their names.
+       Format as: "DeliverableA depends_on DeliverableB"
+
+    3. **Interface Contracts**: For each dependency edge, define what the upstream deliverable must provide.
+       This allows partial unblocking - the downstream deliverable can start as soon as the contract is satisfied.
+       Format as: "DeliverableA needs from DeliverableB: <specific interface details>"
+
+    4. **Cost & Duration Estimate**: Rough estimate of total implementation time and API cost.
+
+    Format your response as a structured JSON plan or use clear markdown sections.
+
+    Think carefully about:
+    - Natural decomposition boundaries (avoid artificial splits)
+    - Minimal dependencies (more parallelism = faster)
+    - Clear interfaces (enables partial unblocking)
+    - Single-agent fallback (if task is simple enough, recommend executing directly)
+    """
+  end
+
+  # Extract plan from the last assistant message
+  # Returns a map with deliverables, dag, contracts, and estimates
+  # Returns nil if no valid plan found
+  defp extract_plan_from_messages(messages) do
+    # Get the last assistant message
+    case Enum.reverse(messages) |> Enum.find(&(&1.role == :assistant)) do
+      nil ->
+        nil
+
+      message ->
+        # Extract text content from message
+        text_content =
+          message.content
+          |> Enum.filter(&match?(%Deft.Message.Text{}, &1))
+          |> Enum.map(& &1.text)
+          |> Enum.join("\n")
+
+        # For now, return the raw text as the plan
+        # In a real implementation, this would parse structured JSON or markdown
+        %{
+          raw_plan: text_content,
+          deliverables: [],
+          dependencies: [],
+          contracts: [],
+          estimates: %{duration: "unknown", cost: "unknown"}
+        }
+    end
+  end
+
+  # Write plan to site log
+  defp write_plan_to_site_log(plan, data) do
+    # Write the plan as a JSON file in the job directory
+    jobs_dir = Project.jobs_dir(data.working_dir)
+    plan_path = Path.join([jobs_dir, data.session_id, "plan.json"])
+
+    # Ensure directory exists
+    File.mkdir_p!(Path.dirname(plan_path))
+
+    # Write plan to file
+    case Jason.encode(plan, pretty: true) do
+      {:ok, json} ->
+        File.write!(plan_path, json)
+        Logger.info("Wrote plan to #{plan_path}")
+
+        # Also write to site log
+        write_to_site_log(:plan, Jason.encode!(plan), %{key: "work-plan"}, data)
+
+      {:error, reason} ->
+        Logger.error("Failed to encode plan as JSON: #{inspect(reason)}")
+    end
+  end
+
+  # Present plan to user for approval
+  defp present_plan_for_approval(plan, _data) do
+    # In a real implementation, this would send the plan to the TUI for display
+    # For now, just log it
+    Logger.info("Plan ready for approval:\n#{plan.raw_plan}")
+    Logger.info("Waiting for user approval (send {:approve_plan} or {:reject_plan} message)")
   end
 end
