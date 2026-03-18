@@ -197,6 +197,19 @@ defmodule Deft.OM.State do
     end
   end
 
+  @doc """
+  Appends a CORRECTION marker to observations.
+
+  Per spec section 11, CORRECTION markers are high-priority (🔴) observations
+  that tell the Reflector to preserve or remove information through compression.
+
+  The marker is appended to the User Preferences section (which uses append merge strategy).
+  """
+  @spec append_correction(String.t(), String.t()) :: :ok
+  def append_correction(session_id, correction_text) do
+    GenServer.call(via_tuple(session_id), {:append_correction, correction_text})
+  end
+
   ## Server Callbacks
 
   @impl true
@@ -383,6 +396,65 @@ defmodule Deft.OM.State do
 
       {:noreply, state}
     end
+  end
+
+  def handle_call({:append_correction, correction_text}, _from, state) do
+    # Format the CORRECTION marker with current time
+    now = DateTime.utc_now()
+    time_str = Calendar.strftime(now, "%H:%M")
+    correction_line = "- (#{time_str}) 🔴 CORRECTION: #{correction_text}"
+
+    # Parse existing sections
+    sections = Parse.parse_sections(state.active_observations)
+
+    # Append to User Preferences section (which uses append merge strategy)
+    user_prefs = Map.get(sections, "User Preferences", "")
+
+    updated_prefs =
+      if user_prefs == "" do
+        correction_line
+      else
+        user_prefs <> "\n" <> correction_line
+      end
+
+    # Rebuild observations with updated User Preferences
+    updated_sections = Map.put(sections, "User Preferences", updated_prefs)
+
+    # Reconstruct observations in canonical order
+    section_order = [
+      "Current State",
+      "User Preferences",
+      "Files & Architecture",
+      "Decisions",
+      "Session History"
+    ]
+
+    updated_observations =
+      section_order
+      |> Enum.map(fn section_name ->
+        case Map.get(updated_sections, section_name) do
+          nil -> nil
+          "" -> nil
+          content -> "## #{section_name}\n#{content}"
+        end
+      end)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.join("\n\n")
+
+    # Update state
+    new_observation_tokens = Tokens.estimate(updated_observations, state.calibration_factor)
+
+    updated_state = %{
+      state
+      | active_observations: updated_observations,
+        observation_tokens: new_observation_tokens,
+        snapshot_dirty: true
+    }
+
+    # Trigger snapshot write
+    write_snapshot(updated_state)
+
+    {:reply, :ok, updated_state}
   end
 
   @impl true
