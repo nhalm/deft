@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **evals v0.2 (2026-03-18):** Implement Reflector eval suite: compression (20 iters, 80%), preservation (20 iters, 95%), section structure (hard assertion), CORRECTION survival (hard assertion)
 - **orchestration v0.3 (2026-03-18):** Wire Foreman start_lead to actually start Lead gen_statem process and Process.monitor the PID: currently stores pid: nil and monitor_ref: nil (foreman.ex:1315-1323); blocks steering, crash detection, and merge
 - **evals v0.2 (2026-03-18):** Implement Observer eval suite: extraction (9 test cases from spec section 2.1), priority, section routing, anti-hallucination (4 test cases from spec section 2.3), dedup; 20 iterations, 85%/95% pass rates per spec section 1.5
 - **orchestration v0.3 (2026-03-18):** Fix Foreman session_cost tracking: RateLimiter sends cumulative cost in `{:rate_limiter, :cost, cumulative}` but Foreman adds it to session_cost at foreman.ex:440; should replace instead of add to avoid double-counting
