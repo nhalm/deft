@@ -108,7 +108,8 @@ defmodule Deft.CLI do
           priority: :integer,
           title: :string,
           blocked_by: :string,
-          quick: :boolean
+          quick: :boolean,
+          edit: :boolean
         ],
         aliases: [
           h: :help,
@@ -332,38 +333,45 @@ defmodule Deft.CLI do
     # Ensure Issues GenServer is started
     ensure_issues_started(flags)
 
-    # Build attrs map from flags
-    attrs = build_issue_update_attrs(flags)
+    # Check for --edit flag
+    if flags[:edit] do
+      # Interactive mode: start elicitation session with existing issue
+      update_interactive_issue(issue_id, flags)
+    else
+      # Direct update mode: use flags to update specific fields
+      # Build attrs map from flags
+      attrs = build_issue_update_attrs(flags)
 
-    # Validate that at least one update flag was provided
-    if map_size(attrs) == 0 do
-      IO.puts(
-        :stderr,
-        "Error: No update flags provided. Use --title, --priority, --status, or --blocked-by"
-      )
+      # Validate that at least one update flag was provided
+      if map_size(attrs) == 0 do
+        IO.puts(
+          :stderr,
+          "Error: No update flags provided. Use --title, --priority, --status, or --blocked-by"
+        )
 
-      exit({:shutdown, 1})
-    end
-
-    # Update the issue
-    case Issues.update(issue_id, attrs) do
-      {:ok, issue} ->
-        IO.puts("Issue #{issue_id} updated successfully.")
-        IO.puts("")
-        display_issue(issue)
-        :ok
-
-      {:error, :not_found} ->
-        IO.puts(:stderr, "Error: Issue not found: #{issue_id}")
         exit({:shutdown, 1})
+      end
 
-      {:error, :cycle_detected} ->
-        IO.puts(:stderr, "Error: Adding these dependencies would create a cycle")
-        exit({:shutdown, 1})
+      # Update the issue
+      case Issues.update(issue_id, attrs) do
+        {:ok, issue} ->
+          IO.puts("Issue #{issue_id} updated successfully.")
+          IO.puts("")
+          display_issue(issue)
+          :ok
 
-      {:error, reason} ->
-        IO.puts(:stderr, "Error: Failed to update issue: #{inspect(reason)}")
-        exit({:shutdown, 1})
+        {:error, :not_found} ->
+          IO.puts(:stderr, "Error: Issue not found: #{issue_id}")
+          exit({:shutdown, 1})
+
+        {:error, :cycle_detected} ->
+          IO.puts(:stderr, "Error: Adding these dependencies would create a cycle")
+          exit({:shutdown, 1})
+
+        {:error, reason} ->
+          IO.puts(:stderr, "Error: Failed to update issue: #{inspect(reason)}")
+          exit({:shutdown, 1})
+      end
     end
   end
 
@@ -1363,6 +1371,89 @@ defmodule Deft.CLI do
     end
   end
 
+  defp update_interactive_issue(issue_id, flags) do
+    working_dir = flags[:working_dir] || File.cwd!()
+
+    # Get the existing issue
+    case Issues.get(issue_id) do
+      {:error, :not_found} ->
+        IO.puts(:stderr, "Error: Issue not found: #{issue_id}")
+        exit({:shutdown, 1})
+
+      {:ok, issue} ->
+        # Verify API key and register provider
+        verify_api_key()
+        :ok = Deft.Provider.Registry.register("anthropic", Deft.Provider.Anthropic)
+
+        # Get open issues for context
+        open_issues = Issues.list(status: :open)
+
+        # Build elicitation prompt for editing with existing issue fields
+        elicitation_prompt = ElicitationPrompt.build_for_edit(issue, open_issues)
+
+        # Create system message with elicitation instructions
+        system_message = %Deft.Message{
+          id: "elicit_sys",
+          role: :system,
+          content: [%Deft.Message.Text{text: elicitation_prompt}],
+          timestamp: DateTime.utc_now()
+        }
+
+        # Create a temporary session for elicitation
+        session_id = generate_session_id()
+
+        # Build config for elicitation agent (lightweight, tools for issue_draft only)
+        agent_config = %{
+          model: flags[:model] || "claude-sonnet-4",
+          provider: Deft.Provider.Anthropic,
+          working_dir: working_dir,
+          turn_limit: 10,
+          tool_timeout: 30_000,
+          bash_timeout: 30_000,
+          max_turns: 10,
+          tools: [Deft.Tools.UseSkill, Deft.Tools.IssueDraft]
+        }
+
+        # Start the elicitation agent with the elicitation prompt as first message
+        {:ok, _worker_pid} =
+          Deft.Session.Supervisor.start_session(
+            session_id: session_id,
+            config: agent_config,
+            messages: [system_message],
+            project_dir: working_dir
+          )
+
+        # Look up the Agent PID from the registry
+        [{agent_pid, _}] = Registry.lookup(Deft.Registry, {:agent, session_id})
+
+        # Subscribe to agent events
+        Registry.register(Deft.Registry, {:session, session_id}, [])
+
+        IO.puts("Let's refine issue #{issue_id}: #{issue.title}")
+        IO.puts("")
+
+        # Start the interactive elicitation loop for updating
+        case run_update_elicitation_loop(agent_pid, issue) do
+          {:ok, draft} ->
+            # Present the draft to the user
+            present_issue_update_draft(draft, issue, flags)
+
+          {:error, reason} ->
+            IO.puts(:stderr, "Error during issue elicitation: #{reason}")
+            exit({:shutdown, 1})
+        end
+    end
+  end
+
+  # Run the interactive elicitation loop for updating
+  defp run_update_elicitation_loop(agent_pid, issue) do
+    # Send initial prompt to start the conversation
+    Deft.Agent.prompt(agent_pid, "Please help me refine this issue.")
+
+    # Wait for agent to respond and collect the draft
+    elicitation_response_loop(agent_pid, nil, issue.title, %{})
+  end
+
   # Run the interactive elicitation loop
   defp run_elicitation_loop(agent_pid, title, flags) do
     # Send initial prompt to start the conversation
@@ -1598,5 +1689,64 @@ defmodule Deft.CLI do
     |> String.split(",")
     |> Enum.map(&String.trim/1)
     |> Enum.reject(&(&1 == ""))
+  end
+
+  # Present the issue update draft to the user
+  defp present_issue_update_draft(draft, issue, flags) do
+    print_draft_header()
+    print_draft_details(draft, issue.title)
+    print_draft_footer()
+
+    handle_update_draft_confirmation(draft, issue, flags)
+  end
+
+  # Handle draft confirmation for update
+  defp handle_update_draft_confirmation(draft, issue, flags) do
+    IO.puts("Save these changes? (yes/no): ")
+
+    case IO.gets("") |> String.trim() |> String.downcase() do
+      answer when answer in ["y", "yes"] ->
+        save_issue_from_update_draft(draft, issue, flags)
+
+      _ ->
+        IO.puts("Issue update cancelled.")
+        :ok
+    end
+  end
+
+  # Save the issue from the update draft
+  defp save_issue_from_update_draft(draft, issue, _flags) do
+    attrs = build_issue_attrs_from_update_draft(draft, issue)
+
+    case Issues.update(issue.id, attrs) do
+      {:ok, updated_issue} ->
+        IO.puts("\nIssue #{issue.id} updated successfully!")
+        IO.puts("")
+        display_issue(updated_issue)
+        :ok
+
+      {:error, :not_found} ->
+        IO.puts(:stderr, "Error: Issue not found: #{issue.id}")
+        exit({:shutdown, 1})
+
+      {:error, :cycle_detected} ->
+        IO.puts(:stderr, "Error: Adding these dependencies would create a cycle")
+        exit({:shutdown, 1})
+
+      {:error, reason} ->
+        IO.puts(:stderr, "Error: Failed to update issue: #{inspect(reason)}")
+        exit({:shutdown, 1})
+    end
+  end
+
+  # Build issue attributes from update draft
+  defp build_issue_attrs_from_update_draft(draft, issue) do
+    %{
+      title: draft["title"] || issue.title,
+      priority: draft["priority"] || issue.priority,
+      context: draft["context"] || issue.context,
+      acceptance_criteria: draft["acceptance_criteria"] || issue.acceptance_criteria,
+      constraints: draft["constraints"] || issue.constraints
+    }
   end
 end
