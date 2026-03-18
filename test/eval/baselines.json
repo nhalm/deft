@@ -1,0 +1,8 @@
+{
+  "comment": "Historical baseline tracking for eval pass rates. Updated after prompt improvements.",
+  "foreman.decomposition": {
+    "baseline": null,
+    "soft_floor": null,
+    "history": []
+  }
+}
