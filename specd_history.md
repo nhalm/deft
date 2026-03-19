@@ -1,4 +1,5 @@
 # History
+- **evals v0.2 (2026-03-18):** Build E2E task battery: create 3 synthetic repos (minimal Phoenix app, CLI tool, library with tests) with pre-defined issues; implement test harness that runs `deft work` against each repo and verifies acceptance criteria are met; track completion rate, cost, and duration
 - **evals v0.2 (2026-03-18):** Implement issue→plan diagnostic eval: verify that structured issue fields (context, acceptance_criteria, constraints) flow correctly into Foreman research/planning/verification phases; 20 iterations, 75% pass rate
 - **evals v0.2 (2026-03-19):** Implement Lead eval suite: task planning, steering
 - **evals v0.2 (2026-03-18):** Implement Foreman eval suite: decomposition (20 iters, 75%), dependency, contract, constraint propagation, verification accuracy
