@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.3
 
-- Pass `work_cost_ceiling` config to RateLimiter in `Job.Supervisor.init/1` (supervisor.ex:79): RateLimiter is started with only `[job_id, foreman_pid]`; its `init/1` defaults `cost_ceiling` to `10.0` (rate_limiter.ex:336) while `Deft.Config` defaults `work.cost_ceiling` to `50.0` (config.ex:163); jobs pause at $10 regardless of user config
 - Add `check_phase_transition` call after merge-resolution completion in Foreman (foreman.ex:831-832): merge-resolution handler returns `{:keep_state, new_data}` without checking if all Leads are complete; if the last Lead required conflict resolution, the job permanently stalls in `:executing` and never enters `:verifying`
 - Derive `publishing_deliverable` from Foreman's Lead tracking map instead of metadata in `process_lead_message(:contract, ...)` (foreman.ex:1343-1344): code reads `Map.get(metadata, :deliverable_name)` but Lead's `send_lead_message/4` never populates this key; `contract_matches?` always returns `false` (line 2514 guards `publishing_deliverable != nil`); contract-based dependency unblocking never fires
 
