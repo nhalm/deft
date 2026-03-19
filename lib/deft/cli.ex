@@ -1976,12 +1976,24 @@ defmodule Deft.CLI do
 
   # Run a Foreman job for an issue and return the cost
   defp run_work_on_issue_with_cost(issue, flags) do
-    # For now, we'll use a placeholder cost of 0.0
-    # In a real implementation, this would track actual API costs from the rate limiter
-    case run_work_on_issue(issue, flags) do
-      :ok -> {:ok, 0.0}
-      {:error, reason} -> {:error, reason}
+    # Run the issue and get the actual cost from the RateLimiter
+    run_work_on_issue(issue, flags)
+  end
+
+  # Get cumulative cost from rate limiter and clean it up
+  defp get_cost_and_cleanup_rate_limiter(rate_limiter_pid, job_id) do
+    cost =
+      if Process.alive?(rate_limiter_pid) do
+        RateLimiter.get_cumulative_cost(job_id)
+      else
+        0.0
+      end
+
+    if Process.alive?(rate_limiter_pid) do
+      GenServer.stop(rate_limiter_pid)
     end
+
+    cost
   end
 
   # Run a Foreman job for an issue
@@ -2049,23 +2061,23 @@ defmodule Deft.CLI do
         # Wait for job completion
         result = wait_for_job_completion(foreman_pid, ref)
 
-        # Clean up rate limiter
-        if Process.alive?(rate_limiter_pid) do
-          GenServer.stop(rate_limiter_pid)
-        end
+        # Get cost and clean up rate limiter
+        cost = get_cost_and_cleanup_rate_limiter(rate_limiter_pid, job_id)
 
         # Handle job result
-        handle_job_result(result, issue, job_id)
+        case handle_job_result(result, issue, job_id) do
+          :ok -> {:ok, cost}
+          other -> other
+        end
 
       {:error, reason} ->
-        # Clean up rate limiter on failure
-        if Process.alive?(rate_limiter_pid) do
-          GenServer.stop(rate_limiter_pid)
-        end
+        # Get cost and clean up rate limiter
+        cost = get_cost_and_cleanup_rate_limiter(rate_limiter_pid, job_id)
 
         # Revert issue status
         Issues.update(issue.id, %{status: :open})
         IO.puts(:stderr, "Error: Failed to start Foreman: #{inspect(reason)}")
+        IO.puts("Job cost: $#{Float.round(cost, 2)}")
         exit({:shutdown, 1})
     end
   end

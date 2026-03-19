@@ -304,6 +304,21 @@ defmodule Deft.Job.RateLimiter do
     GenServer.call(via_tuple(job_id), :approve_continued_spending)
   end
 
+  @doc """
+  Gets the cumulative cost for a job.
+
+  Returns the total cost accumulated so far for the job.
+
+  ## Parameters
+  - job_id: The job identifier for the RateLimiter instance
+
+  ## Returns
+  - float: The cumulative cost in dollars
+  """
+  def get_cumulative_cost(job_id) do
+    GenServer.call(via_tuple(job_id), :get_cumulative_cost)
+  end
+
   # Private helper for Registry via tuple
   defp via_tuple(job_id) do
     {:via, Registry, {Deft.ProcessRegistry, {:rate_limiter, job_id}}}
@@ -408,6 +423,11 @@ defmodule Deft.Job.RateLimiter do
     Logger.info("Continued spending approved, resuming job")
 
     {:reply, :ok, new_state}
+  end
+
+  @impl true
+  def handle_call(:get_cumulative_cost, _from, state) do
+    {:reply, state.cumulative_cost, state}
   end
 
   @impl true

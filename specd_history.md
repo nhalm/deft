@@ -1,4 +1,5 @@
 # History
+- **issues v0.2 (2026-03-18):** Wire cost tracking in deft work loop: run_work_on_issue_with_cost always returns {:ok, 0.0} (cli.ex:1912-1918); cost ceiling check at cli.ex:1875 never triggers; must read actual cost from RateLimiter after job completes
 - **orchestration v0.3 (2026-03-18):** Implement job persistence and resume: store sitelog.dets, plan.json, foreman_session.jsonl, lead_<id>_session.jsonl at ~/.deft/projects/<path-encoded-repo>/jobs/<job_id>/; on resume, read site log + plan.json, start fresh Leads for incomplete deliverables
 - **orchestration v0.3 (2026-03-18):** Implement job cleanup: Foreman cleans all worktrees on completion/failure/abort, archives job files to ~/.deft/projects/<path-encoded-repo>/jobs/<job_id>/; on Lead crash, Foreman cleans that Lead's worktree immediately
 - **issues v0.2 (2026-03-18):** Implement Edit option in draft confirmation: currently prints "Edit mode not yet implemented" and returns :ok (cli.ex:1729-1731); spec section 5.1 requires reopening conversational flow with existing fields pre-populated
