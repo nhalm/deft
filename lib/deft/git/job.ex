@@ -463,15 +463,52 @@ defmodule Deft.Git.Job do
     test_command = Keyword.fetch!(opts, :test_command)
     working_dir = Keyword.get(opts, :working_dir, File.cwd!())
     timeout = Keyword.get(opts, :timeout, 300_000)
+    git = Keyword.get(opts, :git, Deft.Git)
 
     job_branch = "deft/job-#{job_id}"
+    worktree_path = Path.join(working_dir, ".deft-worktrees/job-#{job_id}-test")
 
     Logger.info("Running post-merge tests on #{job_branch}: #{test_command}")
 
+    # Create a temporary worktree for the job branch to run tests in
+    with :ok <- create_test_worktree(git, working_dir, worktree_path, job_branch) do
+      # Run tests in the worktree
+      result = run_tests_in_worktree(worktree_path, test_command, timeout, job_branch)
+
+      # Always clean up the worktree, even if tests failed
+      cleanup_test_worktree(git, working_dir, worktree_path)
+
+      result
+    else
+      {:error, _reason} = error ->
+        # Cleanup attempt even if worktree creation failed
+        cleanup_test_worktree(git, working_dir, worktree_path)
+        error
+    end
+  end
+
+  # Create a temporary worktree for running post-merge tests
+  defp create_test_worktree(git, working_dir, worktree_path, job_branch) do
+    File.cd!(working_dir, fn ->
+      # git worktree add <path> <job_branch>
+      case git.cmd(["worktree", "add", worktree_path, job_branch]) do
+        {_output, 0} ->
+          Logger.debug("Created test worktree at #{worktree_path}")
+          :ok
+
+        {error_output, exit_code} ->
+          Logger.error("Failed to create test worktree: #{error_output}")
+          {:error, {:test_worktree_creation_failed, exit_code}}
+      end
+    end)
+  end
+
+  # Run tests in the specified worktree with timeout enforcement
+  defp run_tests_in_worktree(worktree_path, test_command, timeout, job_branch) do
     # Run the test command in a task with timeout enforcement
     task =
       Task.async(fn ->
-        File.cd!(working_dir, fn ->
+        File.cd!(worktree_path, fn ->
           # Parse the test command (may include arguments)
           [cmd | args] = String.split(test_command, " ", trim: true)
 
@@ -500,6 +537,22 @@ defmodule Deft.Git.Job do
         Logger.error("Post-merge tests timed out on #{job_branch} after #{timeout}ms")
         {:error, :timeout}
     end
+  end
+
+  # Clean up the temporary test worktree
+  defp cleanup_test_worktree(git, working_dir, worktree_path) do
+    File.cd!(working_dir, fn ->
+      case git.cmd(["worktree", "remove", "--force", worktree_path]) do
+        {_output, 0} ->
+          Logger.debug("Cleaned up test worktree at #{worktree_path}")
+          :ok
+
+        {error_output, _exit_code} ->
+          # Log warning but don't fail - cleanup failure is non-fatal
+          Logger.warning("Failed to remove test worktree (non-fatal): #{error_output}")
+          :ok
+      end
+    end)
   end
 
   @doc """

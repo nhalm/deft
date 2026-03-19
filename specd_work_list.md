@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## git-strategy v0.1
 
-- Fix `run_post_merge_tests` to run tests on the job branch: currently runs tests via `File.cd!(working_dir, ...)` where `working_dir` is the main repo root, not a worktree checked out to `deft/job-<job_id>` (job.ex:474-481); merged code on the job branch is never tested, defeating post-merge test purpose
 - Fix abort and verification-failure paths to delete job branch: abort handler (foreman.ex:485-506) and verification failure handler (foreman.ex:823-850) clean up worktrees but never delete `deft/job-<job_id>` branch; `job_keep_failed_branches` config field exists in Deft.Config but is never read anywhere; orphaned job branches accumulate
 
 ## filesystem v0.3
