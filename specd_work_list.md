@@ -17,7 +17,3 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## orchestration v0.4
-
-- Fix `config.work_cost_ceiling` KeyError in `Job.Supervisor.init/1` (supervisor.ex:83): the `.` accessor on the plain `agent_config` map raises KeyError because the CLI (cli.ex:2058-2078) does not include a `work_cost_ceiling` key. Either add `work_cost_ceiling` to the CLI config map from `config.work_cost_ceiling`, or use `Map.get(config, :work_cost_ceiling, 10.0)` in the supervisor.
-

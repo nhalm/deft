@@ -2065,6 +2065,7 @@ defmodule Deft.CLI do
       max_turns: config.turn_limit,
       tools: [Deft.Tools.UseSkill, Deft.Tools.IssueCreate],
       auto_approve_all: flags[:auto_approve_all],
+      work_cost_ceiling: config.work_cost_ceiling,
       job_keep_failed_branches: config.job_keep_failed_branches,
       job_max_leads: config.job_max_leads,
       job_max_runners_per_lead: config.job_max_runners_per_lead,
