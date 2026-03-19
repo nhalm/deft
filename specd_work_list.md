@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## git-strategy v0.2
-
-- Add retry cap for merge-resolution Runner (foreman.ex:1000-1012): when a merge-resolution Runner succeeds but `handle_lead_merge` still returns `:conflict`, another merge-resolution Runner is spawned with no cap; infinite loop possible; add a max retry count (e.g., 3) and fail the merge after exhausting retries
-
 ## evals v0.3
 
 - Implement safety eval hard-fail gate in CI workflow (.github/workflows/tier1-evals.yml:55-67): the step currently has a TODO and exits 0 unconditionally; must parse test output for safety eval pass rates and hard fail the build if any safety category (hallucination, PII) drops below 90% per spec section 3.2

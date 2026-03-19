@@ -1009,25 +1009,27 @@ defmodule Deft.Job.Foreman do
           merge_worktree_path: merge_worktree_path
         } = task_context
 
+        # Get retry_count with default 0 for backward compatibility
+        retry_count = Map.get(task_context, :retry_count, 0)
+
         data = %{data | merge_resolution_tasks: remaining_tasks}
 
         # Clean up the merge worktree (where conflicts were resolved)
         cleanup_worktree(merge_worktree_path, data.working_dir)
 
+        # Max retry attempts for merge-resolution (per spec section 3)
+        max_retries = 3
+
         case result do
           {:ok, _output} ->
-            Logger.info("Merge-resolution Runner succeeded for Lead #{lead_id}, retrying merge")
-            # Retry the merge now that conflicts are resolved
-            new_data = handle_lead_merge(lead_id, lead_info, data)
-
-            # Check if all Leads are complete after merge
-            case check_phase_transition(:complete, :executing, new_data) do
-              {:transition, new_phase} ->
-                {:next_state, {new_phase, :idle}, new_data}
-
-              :no_transition ->
-                {:keep_state, new_data}
-            end
+            handle_merge_resolution_success(
+              lead_id,
+              lead_info,
+              conflicted_files,
+              retry_count,
+              max_retries,
+              data
+            )
 
           {:error, reason} ->
             Logger.error("Merge-resolution Runner failed for Lead #{lead_id}: #{inspect(reason)}")
@@ -2057,6 +2059,10 @@ defmodule Deft.Job.Foreman do
 
   # Handle merging a completed Lead's branch into the job branch
   defp handle_lead_merge(lead_id, lead_info, data) do
+    handle_lead_merge_with_retry(lead_id, lead_info, data, 0)
+  end
+
+  defp handle_lead_merge_with_retry(lead_id, lead_info, data, retry_count) do
     case GitJob.merge_lead_branch(
            lead_id: lead_id,
            job_id: data.session_id,
@@ -2067,7 +2073,14 @@ defmodule Deft.Job.Foreman do
         handle_successful_merge(lead_id, lead_info, data)
 
       {:ok, :conflict, conflicted_files, merge_worktree_path} ->
-        handle_merge_conflict(lead_id, conflicted_files, merge_worktree_path, lead_info, data)
+        handle_merge_conflict(
+          lead_id,
+          conflicted_files,
+          merge_worktree_path,
+          lead_info,
+          data,
+          retry_count
+        )
 
       {:error, reason} ->
         handle_merge_error(lead_id, reason, lead_info, data)
@@ -2206,8 +2219,17 @@ defmodule Deft.Job.Foreman do
   end
 
   # Handle merge conflict
-  defp handle_merge_conflict(lead_id, conflicted_files, merge_worktree_path, lead_info, data) do
-    Logger.info("Merge conflict for Lead #{lead_id}, spawning merge-resolution Runner")
+  defp handle_merge_conflict(
+         lead_id,
+         conflicted_files,
+         merge_worktree_path,
+         lead_info,
+         data,
+         retry_count
+       ) do
+    Logger.info(
+      "Merge conflict for Lead #{lead_id}, spawning merge-resolution Runner (attempt #{retry_count + 1})"
+    )
 
     # Get runner model from config
     runner_model = Map.get(data.config, :job_runner_model, Map.get(data.config, :job_lead_model))
@@ -2263,10 +2285,91 @@ defmodule Deft.Job.Foreman do
         lead_id: lead_id,
         lead_info: lead_info,
         conflicted_files: conflicted_files,
-        merge_worktree_path: merge_worktree_path
+        merge_worktree_path: merge_worktree_path,
+        retry_count: retry_count
       })
 
     %{data | merge_resolution_tasks: merge_resolution_tasks}
+  end
+
+  # Handle successful merge-resolution Runner completion
+  defp handle_merge_resolution_success(
+         lead_id,
+         lead_info,
+         conflicted_files,
+         retry_count,
+         max_retries,
+         data
+       ) do
+    cond do
+      retry_count >= max_retries ->
+        handle_merge_retry_exhausted(lead_id, lead_info, conflicted_files, max_retries, data)
+
+      true ->
+        handle_merge_retry_attempt(lead_id, lead_info, retry_count, max_retries, data)
+    end
+  end
+
+  # Handle merge retry exhaustion
+  defp handle_merge_retry_exhausted(lead_id, lead_info, conflicted_files, max_retries, data) do
+    Logger.error(
+      "Merge-resolution Runner exhausted max retries (#{max_retries}) for Lead #{lead_id}. Manual intervention required."
+    )
+
+    send_to_self =
+      {:lead_message, :critical_finding,
+       "Merge conflict for Lead #{lead_id} could not be automatically resolved after #{max_retries} attempts: #{Enum.join(conflicted_files, ", ")}. Manual intervention required.",
+       %{lead_id: lead_id, conflicted_files: conflicted_files}}
+
+    send(self(), send_to_self)
+
+    # Extract deliverable name from lead_id (format: "#{session_id}-#{deliverable_name}")
+    deliverable_name = String.replace_prefix(lead_id, "#{data.session_id}-", "")
+
+    # Write failure marker to site log to allow completion check to be satisfied
+    write_failure_marker(
+      lead_id,
+      deliverable_name,
+      "Merge conflict unresolved after #{max_retries} attempts",
+      data
+    )
+
+    # Clean up the Lead's worktree
+    cleanup_worktree(lead_info.worktree_path, data.working_dir)
+
+    # Delete the Lead's branch
+    delete_lead_branch(lead_id, data.working_dir)
+
+    # Remove Lead from tracking to prevent job hang
+    leads = Map.delete(data.leads, lead_id)
+    new_data = %{data | leads: leads}
+
+    # Check if all Leads are complete after removing this one
+    transition_or_keep_state(new_data, :complete, :executing)
+  end
+
+  # Handle merge retry attempt
+  defp handle_merge_retry_attempt(lead_id, lead_info, retry_count, max_retries, data) do
+    Logger.info(
+      "Merge-resolution Runner succeeded for Lead #{lead_id}, retrying merge (attempt #{retry_count + 1}/#{max_retries})"
+    )
+
+    # Retry the merge now that conflicts are resolved
+    new_data = handle_lead_merge_with_retry(lead_id, lead_info, data, retry_count)
+
+    # Check if all Leads are complete after merge
+    transition_or_keep_state(new_data, :complete, :executing)
+  end
+
+  # Helper to check phase transition and return appropriate state
+  defp transition_or_keep_state(data, completion_status, current_phase) do
+    case check_phase_transition(completion_status, current_phase, data) do
+      {:transition, new_phase} ->
+        {:next_state, {new_phase, :idle}, data}
+
+      :no_transition ->
+        {:keep_state, data}
+    end
   end
 
   # Handle merge error
