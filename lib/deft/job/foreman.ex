@@ -1615,9 +1615,6 @@ defmodule Deft.Job.Foreman do
 
     Logger.info("Lead #{lead_id} completed deliverable: #{deliverable_name}")
 
-    # Write completion marker to site log for resume tracking
-    write_to_site_log(:complete, "Deliverable #{deliverable_name} completed", metadata, data)
-
     # Get Lead info for worktree cleanup
     lead_info = Map.get(data.leads, lead_id)
 
@@ -1670,6 +1667,14 @@ defmodule Deft.Job.Foreman do
   # Handle successful post-merge tests
   defp handle_test_success(lead_id, lead_info, data) do
     Logger.info("Post-merge tests passed for Lead #{lead_id}")
+
+    # Extract deliverable name from lead_id (format: "#{session_id}-#{deliverable_name}")
+    deliverable_name = String.replace_prefix(lead_id, "#{data.session_id}-", "")
+
+    # Write completion marker to site log for resume tracking
+    # ONLY write after successful merge+test to prevent stale markers on failure
+    metadata = %{lead_id: lead_id, deliverable: deliverable_name}
+    write_to_site_log(:complete, "Deliverable #{deliverable_name} completed", metadata, data)
 
     # Clean up the Lead's worktree
     cleanup_worktree(lead_info.worktree_path, data.working_dir)
