@@ -32,6 +32,10 @@ defmodule Deft.Job.LeadSupervisor do
 
   Returns `{:ok, pid}` or `{:error, reason}`.
 
+  The returned PID is the Lead.Supervisor (which contains both the Lead
+  gen_statem and RunnerSupervisor). To get the Lead gen_statem PID, use
+  `Deft.Job.Lead.Supervisor.lead_pid/1`.
+
   ## Options
 
   - See `Deft.Job.Lead.start_link/1` for required options.
@@ -41,11 +45,20 @@ defmodule Deft.Job.LeadSupervisor do
 
     child_spec = %{
       id: {:lead, Keyword.fetch!(opts, :lead_id)},
-      start: {Deft.Job.Lead, :start_link, [opts]},
-      restart: :temporary
+      start: {Deft.Job.Lead.Supervisor, :start_link, [opts]},
+      restart: :temporary,
+      type: :supervisor
     }
 
-    DynamicSupervisor.start_child(supervisor, child_spec)
+    case DynamicSupervisor.start_child(supervisor, child_spec) do
+      {:ok, _lead_supervisor_pid} ->
+        # Return the Lead gen_statem PID, not the Lead.Supervisor PID
+        lead_pid = Deft.Job.Lead.Supervisor.lead_pid(Keyword.fetch!(opts, :lead_id))
+        {:ok, lead_pid}
+
+      error ->
+        error
+    end
   end
 
   defp via_tuple(job_id) do

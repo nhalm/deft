@@ -2029,16 +2029,15 @@ defmodule Deft.Job.Foreman do
            working_dir: data.working_dir
          ) do
       {:ok, worktree_path} ->
-        # Start RunnerSupervisor (Task.Supervisor) for this Lead
-        runner_supervisor_name =
-          {:via, Registry, {Deft.ProcessRegistry, {:runner_supervisor, lead_id}}}
-
-        {:ok, _runner_supervisor_pid} = Task.Supervisor.start_link(name: runner_supervisor_name)
-
         # Get site log name
         site_log_name = {:sitelog, data.session_id}
 
-        # Start Lead gen_statem process
+        # RunnerSupervisor name for reference (created by Lead.Supervisor)
+        runner_supervisor_name =
+          {:via, Registry, {Deft.ProcessRegistry, {:runner_supervisor, lead_id}}}
+
+        # Start Lead.Supervisor which will manage both the Lead gen_statem
+        # and its RunnerSupervisor as siblings
         lead_opts = [
           lead_id: lead_id,
           session_id: data.session_id,
@@ -2048,8 +2047,7 @@ defmodule Deft.Job.Foreman do
           site_log_name: site_log_name,
           rate_limiter_pid: data.rate_limiter_pid,
           worktree_path: worktree_path,
-          working_dir: data.working_dir,
-          runner_supervisor: runner_supervisor_name
+          working_dir: data.working_dir
         ]
 
         case LeadSupervisor.start_lead(data.session_id, lead_opts) do
