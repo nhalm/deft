@@ -40,8 +40,10 @@ defmodule Deft.Job.Lead do
 
   alias Deft.Message
   alias Deft.Job.Runner
+  alias Deft.Job.RateLimiter
   alias Deft.Store
   alias Deft.Project
+  alias Deft.Provider.Anthropic
 
   require Logger
 
@@ -619,10 +621,38 @@ defmodule Deft.Job.Lead do
     {:ok, "Tool result placeholder"}
   end
 
-  defp call_llm(_data) do
-    # Placeholder for LLM call
-    Logger.debug("Lead calling LLM")
-    {:ok, make_ref(), make_ref()}
+  defp call_llm(data) do
+    # Extract parameters from data
+    job_id = data.session_id
+    messages = data.messages
+    config = data.config
+    provider_name = Map.get(config, :provider_name, "anthropic")
+
+    # Request permission from rate limiter
+    case RateLimiter.request(job_id, provider_name, messages, :lead) do
+      {:ok, _estimated_tokens} ->
+        # Lead uses empty tools list - it delegates actual work to Runners
+        tools = []
+
+        # Start streaming from the provider
+        case Anthropic.stream(messages, tools, config) do
+          {:ok, stream_ref} ->
+            # Monitor the stream process
+            monitor_ref = Process.monitor(stream_ref)
+            {:ok, stream_ref, monitor_ref}
+
+          {:error, reason} ->
+            Logger.error("Lead #{data.lead_id} failed to start LLM stream: #{inspect(reason)}")
+            {:error, reason}
+        end
+
+      {:error, reason} ->
+        Logger.error(
+          "Lead #{data.lead_id} failed to get rate limiter permission: #{inspect(reason)}"
+        )
+
+        {:error, reason}
+    end
   end
 
   defp process_provider_event(_event, data) do
