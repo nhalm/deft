@@ -1,0 +1,73 @@
+[
+  {
+    "id": "eval-001",
+    "title": "Fix failing UserTest",
+    "description": "The test `test valid user with name and email` is failing. Fix the validation in the User schema.",
+    "acceptance_criteria": [
+      "UserTest passes",
+      "No other tests break"
+    ],
+    "status": "ready",
+    "priority": "high",
+    "created_at": "2026-03-18T00:00:00Z"
+  },
+  {
+    "id": "eval-002",
+    "title": "Add phone field to User schema",
+    "description": "Add a phone field to the User schema with proper migration and validation.",
+    "acceptance_criteria": [
+      "Migration file created",
+      "User schema has phone field",
+      "Phone field is optional",
+      "All tests pass"
+    ],
+    "status": "ready",
+    "priority": "medium",
+    "created_at": "2026-03-18T00:01:00Z"
+  },
+  {
+    "id": "eval-003",
+    "title": "Add show action to UserController",
+    "description": "Add a show action to UserController that returns a single user by ID.",
+    "acceptance_criteria": [
+      "GET /users/:id route exists",
+      "Controller action renders user JSON",
+      "Integration test passes"
+    ],
+    "status": "ready",
+    "priority": "medium",
+    "created_at": "2026-03-18T00:02:00Z"
+  },
+  {
+    "id": "eval-004",
+    "title": "Refactor validation logic into separate module",
+    "description": "Extract user validation logic from User schema into a separate UserValidator module.",
+    "acceptance_criteria": [
+      "UserValidator module created",
+      "User schema uses UserValidator",
+      "All existing tests pass",
+      "No change to public API"
+    ],
+    "status": "ready",
+    "priority": "low",
+    "created_at": "2026-03-18T00:03:00Z"
+  },
+  {
+    "id": "eval-005",
+    "title": "Fix email uniqueness bug",
+    "description": "Users can currently register with duplicate emails. Add a unique constraint and handle the error properly.",
+    "acceptance_criteria": [
+      "Migration adds unique index on email",
+      "Changeset handles unique_constraint error",
+      "Error message is user-friendly",
+      "Test verifies duplicate emails are rejected"
+    ],
+    "status": "ready",
+    "priority": "high",
+    "created_at": "2026-03-18T00:04:00Z",
+    "constraints": [
+      "Must not change the User schema's public API",
+      "Must preserve existing validation behavior"
+    ]
+  }
+]
