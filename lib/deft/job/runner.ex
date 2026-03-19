@@ -157,7 +157,7 @@ defmodule Deft.Job.Runner do
     with {:ok, estimated_tokens} <- request_llm_call(job_id, messages, tools, provider, config),
          {:ok, assistant_message, usage} <- call_provider(messages, tools, provider, config) do
       # Reconcile estimated vs actual token usage
-      provider_name = Map.get(config, :provider, "anthropic")
+      provider_name = Map.get(config, :provider_name, "anthropic")
       RateLimiter.reconcile(job_id, provider_name, estimated_tokens, usage)
 
       handle_assistant_message(

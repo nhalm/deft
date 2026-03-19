@@ -16,7 +16,3 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
-
-## orchestration v0.4
-
-- Fix `Runner.reconcile` provider key mismatch (runner.ex:160): uses `Map.get(config, :provider, "anthropic")` which returns the module atom `Deft.Provider.Anthropic`, but `request_llm_call` (runner.ex:232) uses `Map.get(config, :provider_name, "anthropic")` which returns the string `"anthropic"`. RateLimiter debits the `"anthropic"` bucket on request but reconcile credits the `Deft.Provider.Anthropic` atom key — mismatched keys mean tokens are never credited back. Fix: change line 160 to use `:provider_name` instead of `:provider`.
