@@ -521,7 +521,7 @@ defmodule Deft.Job.Lead do
         data = %{data | runner_tasks: runner_tasks}
 
         # Send error to Foreman
-        timeout_ms = Map.get(data.config, :runner_timeout, 300_000)
+        timeout_ms = Map.get(data.config, :job_runner_timeout, 300_000)
 
         send_lead_message(
           data.foreman_pid,
@@ -1061,7 +1061,7 @@ defmodule Deft.Job.Lead do
     monitor_ref = Process.monitor(task.pid)
 
     # Enforce runner timeout (default 300_000ms = 5 minutes)
-    timeout = Map.get(data.config, :runner_timeout, 300_000)
+    timeout = Map.get(data.config, :job_runner_timeout, 300_000)
     timeout_ref = Process.send_after(self(), {:runner_timeout, task.ref}, timeout)
 
     # Store runner info for tracking
@@ -1240,7 +1240,7 @@ defmodule Deft.Job.Lead do
         end
 
       # Check if we're at max concurrent runners
-      length(data.runner_tasks) >= Map.get(data.config, :max_runners_per_lead, 3) ->
+      length(data.runner_tasks) >= Map.get(data.config, :job_max_runners_per_lead, 3) ->
         Logger.debug("Lead #{data.lead_id} at max concurrent runners, waiting")
         {:keep_state, data}
 
