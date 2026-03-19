@@ -130,13 +130,11 @@ defmodule Deft.Eval.Scoring do
 
       :statistical ->
         soft_floor = Keyword.get(opts, :soft_floor, threshold - 0.10)
-        baseline = Keyword.get(opts, :baseline)
 
         cond do
           rate >= threshold -> :pass
           rate >= soft_floor -> :warn
-          baseline && rate < baseline - 0.10 -> :fail
-          true -> :warn
+          true -> :fail
         end
     end
   end
