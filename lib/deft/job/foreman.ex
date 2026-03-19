@@ -353,23 +353,30 @@ defmodule Deft.Job.Foreman do
   end
 
   def handle_event(:enter, _old_state, {:executing, :idle}, data) do
-    # When entering executing phase, create job branch first, then start all ready Leads
+    # When entering executing phase, create job branch first (unless resuming), then start all ready Leads
     Logger.info("Foreman starting execution phase")
 
-    # Create job branch for Lead worktrees to branch from
-    case GitJob.create_job_branch(job_id: data.session_id, auto_approve: true) do
-      {:ok, branch_name, original_branch} ->
-        Logger.info("Created job branch: #{branch_name} from #{original_branch}")
-        # Store original branch in config for later squash-merge
-        updated_config = Map.put(data.config, :original_branch, original_branch)
-        updated_data = %{data | config: updated_config}
-        :gen_statem.cast(self(), :start_ready_leads)
-        {:keep_state, updated_data}
+    # Check if we're resuming - if so, skip branch creation (branch already exists)
+    if Map.get(data.config, :resume) do
+      Logger.info("Resuming - skipping job branch creation")
+      :gen_statem.cast(self(), :start_ready_leads)
+      :keep_state_and_data
+    else
+      # Create job branch for Lead worktrees to branch from
+      case GitJob.create_job_branch(job_id: data.session_id, auto_approve: true) do
+        {:ok, branch_name, original_branch} ->
+          Logger.info("Created job branch: #{branch_name} from #{original_branch}")
+          # Store original branch in config for later squash-merge
+          updated_config = Map.put(data.config, :original_branch, original_branch)
+          updated_data = %{data | config: updated_config}
+          :gen_statem.cast(self(), :start_ready_leads)
+          {:keep_state, updated_data}
 
-      {:error, reason} ->
-        Logger.error("Failed to create job branch: #{inspect(reason)}")
-        # Transition to complete with error
-        {:next_state, {:complete, :idle}, data}
+        {:error, reason} ->
+          Logger.error("Failed to create job branch: #{inspect(reason)}")
+          # Transition to complete with error
+          {:next_state, {:complete, :idle}, data}
+      end
     end
   end
 
