@@ -16,7 +16,3 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
-
-## orchestration v0.4
-
-- Add `job.max_duration` enforcement in Foreman — set a job-level timer on init using `job_max_duration` config (default 1_800_000ms), handle timeout by aborting the job with cleanup

@@ -107,6 +107,7 @@ defmodule Deft.Job.Foreman do
       research_findings: [],
       research_timeout_ref: nil,
       verification_timeout_ref: nil,
+      job_timeout_ref: nil,
       site_log_pid: nil,
       plan: resumed_plan,
       blocked_leads: %{},
@@ -253,6 +254,11 @@ defmodule Deft.Job.Foreman do
 
     data = %{initial_data | site_log_pid: site_log_pid}
 
+    # Set up job-level timeout
+    job_max_duration = Map.get(initial_data.config, :job_max_duration, 1_800_000)
+    job_timeout_ref = Process.send_after(self(), :job_timeout, job_max_duration)
+    data = %{data | job_timeout_ref: job_timeout_ref}
+
     # Check if we're resuming
     if Map.get(initial_data.config, :resume) && initial_data.plan do
       Logger.info("Resuming job #{initial_data.session_id}")
@@ -379,6 +385,10 @@ defmodule Deft.Job.Foreman do
 
         {:error, reason} ->
           Logger.error("Failed to create job branch: #{inspect(reason)}")
+
+          # Cancel job timeout timer
+          data = cancel_job_timeout(data)
+
           # Transition to complete with error
           {:next_state, {:complete, :idle}, data}
       end
@@ -594,9 +604,12 @@ defmodule Deft.Job.Foreman do
     # Archive job files for debugging
     archive_job_files(data.session_id, data.working_dir, :aborted)
 
+    # Cancel job timeout timer and clear state
+    data = cancel_job_timeout(data)
+    data = %{data | stream_ref: nil, stream_monitor_ref: nil, tool_tasks: []}
+
     # Transition to complete phase
-    {:next_state, {:complete, :idle},
-     %{data | stream_ref: nil, stream_monitor_ref: nil, tool_tasks: []}}
+    {:next_state, {:complete, :idle}, data}
   end
 
   # Plan approval handling
@@ -866,6 +879,55 @@ defmodule Deft.Job.Foreman do
     {:next_state, {:complete, :idle}, data}
   end
 
+  # Job-level timeout
+  def handle_event(:info, :job_timeout, {_job_phase, _agent_state}, data) do
+    Logger.error(
+      "Job timeout reached - aborting job after #{Map.get(data.config, :job_max_duration, 1_800_000)}ms"
+    )
+
+    # Cancel any in-flight streams
+    if data.stream_ref do
+      cancel_stream(data)
+    end
+
+    # Kill all running Leads
+    Enum.each(data.leads, fn {lead_id, lead_info} ->
+      if Process.alive?(lead_info.pid) do
+        Logger.info("Killing Lead #{lead_id} due to job timeout")
+        Process.exit(lead_info.pid, :kill)
+      end
+    end)
+
+    # Terminate any in-flight tasks
+    Enum.each(data.tool_tasks, fn task ->
+      if Process.alive?(task.pid) do
+        Process.exit(task.pid, :kill)
+      end
+    end)
+
+    # Clean up all Lead worktrees
+    cleanup_all_lead_worktrees(data)
+
+    # Delete job branch unless configured to keep it
+    unless Map.get(data.config, :job_keep_failed_branches, false) do
+      delete_job_branch_on_failure(data.session_id, data.working_dir)
+    end
+
+    # Archive job files for debugging
+    archive_job_files(data.session_id, data.working_dir, :job_timeout)
+
+    # Transition to complete phase
+    data = %{
+      data
+      | stream_ref: nil,
+        stream_monitor_ref: nil,
+        tool_tasks: [],
+        job_timeout_ref: nil
+    }
+
+    {:next_state, {:complete, :idle}, data}
+  end
+
   # Merge-resolution task completion
   def handle_event(
         :info,
@@ -1008,6 +1070,9 @@ defmodule Deft.Job.Foreman do
           # Archive job files for debugging
           archive_job_files(data.session_id, data.working_dir, :completed)
 
+          # Cancel job timeout timer
+          data = cancel_job_timeout(data)
+
           {:next_state, {:complete, :idle}, data}
 
         {:error, reason} ->
@@ -1027,6 +1092,10 @@ defmodule Deft.Job.Foreman do
           """
 
           send_user_message(error_message, data)
+
+          # Cancel job timeout timer
+          data = cancel_job_timeout(data)
+
           {:next_state, {:complete, :idle}, data}
       end
     else
@@ -1068,6 +1137,10 @@ defmodule Deft.Job.Foreman do
       """
 
       send_user_message(failure_message, data)
+
+      # Cancel job timeout timer
+      data = cancel_job_timeout(data)
+
       {:next_state, {:complete, :idle}, data}
     end
   end
@@ -1148,6 +1221,9 @@ defmodule Deft.Job.Foreman do
     end
 
     archive_job_files(data.session_id, data.working_dir, :verification_crash)
+
+    # Cancel job timeout timer
+    data = cancel_job_timeout(data)
 
     {:next_state, {:complete, :idle}, data}
   end
@@ -1260,6 +1336,14 @@ defmodule Deft.Job.Foreman do
     # Placeholder for stream cancellation
     Logger.debug("Cancelling stream")
     :ok
+  end
+
+  defp cancel_job_timeout(data) do
+    if data.job_timeout_ref do
+      Process.cancel_timer(data.job_timeout_ref)
+    end
+
+    %{data | job_timeout_ref: nil}
   end
 
   defp process_provider_event(event, data) do
