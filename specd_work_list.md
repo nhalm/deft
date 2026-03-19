@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## git-strategy v0.1
-
-- Fix orphan cleanup to parse job_id from lead branch names: `branch_belongs_to_running_job?` (git/job.ex:700-703) preserves ALL `deft/lead-*` branches when any job is running; lead branch names contain the job_id (`deft/lead-<job_id>-<deliverable>`); should extract job_id prefix and check against `running_job_ids` so orphaned lead branches from prior crashed jobs are cleaned up
-
 ## issues v0.3
 
 - Fix `elicitation_response_loop` tool event pattern mismatch: cli.ex:1574 listens for `{:tool_call, tool_name, _tool_id, args}` and cli.ex:1577 for `{:tool_result, _tool_id, result}`; agent broadcasts `{:tool_call_done, %{id: id, args: parsed_args}}` (agent.ex:808) and `{:tool_execution_complete, ...}` (agent.ex:1285); patterns never match; `draft_acc` stays nil; `handle_idle_state` always calls `handle_user_continuation` instead of presenting the draft; interactive issue creation is broken

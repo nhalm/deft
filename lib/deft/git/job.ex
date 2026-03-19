@@ -697,10 +697,12 @@ defmodule Deft.Git.Job do
       "deft/job-" <> job_id ->
         job_id in running_job_ids
 
-      # Lead branches: filter out ALL lead branches if ANY job is running
-      # (conservative approach since we can't determine which job a lead belongs to from the branch name)
-      "deft/lead-" <> _lead_id ->
-        not Enum.empty?(running_job_ids)
+      # Lead branches: deft/lead-<job_id>-<deliverable>
+      # Extract job_id prefix and check if it's in running_job_ids
+      "deft/lead-" <> lead_id ->
+        Enum.any?(running_job_ids, fn job_id ->
+          String.starts_with?(lead_id, job_id <> "-")
+        end)
 
       _ ->
         false
