@@ -192,8 +192,8 @@ defmodule Deft.OM.Reflector do
       timestamp: DateTime.utc_now()
     }
 
-    # Get provider module
-    case Provider.Registry.resolve(config.provider, config.om_reflector_model) do
+    # Get provider module (use configured om.reflector_provider)
+    case Provider.Registry.resolve(config.om_reflector_provider, config.om_reflector_model) do
       {:ok, {provider_module, _model_config}} ->
         # Call LLM with Reflector prompt
         llm_config = %{

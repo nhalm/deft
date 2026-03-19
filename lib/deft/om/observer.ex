@@ -84,9 +84,8 @@ defmodule Deft.OM.Observer do
       timestamp: DateTime.utc_now()
     }
 
-    # Get provider module (use same provider as main agent for now)
-    # TODO: Support separate om.observer_provider when config is extended
-    case Provider.Registry.resolve(config.provider, config.om_observer_model) do
+    # Get provider module (use configured om.observer_provider)
+    case Provider.Registry.resolve(config.om_observer_provider, config.om_observer_model) do
       {:ok, {provider_module, _model_config}} ->
         # Call LLM with Observer prompt
         llm_config = %{

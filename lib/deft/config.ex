@@ -18,6 +18,8 @@ defmodule Deft.Config do
           om_enabled: boolean(),
           om_observer_model: String.t(),
           om_reflector_model: String.t(),
+          om_observer_provider: String.t(),
+          om_reflector_provider: String.t(),
           om_message_token_threshold: pos_integer(),
           om_observation_token_threshold: pos_integer(),
           om_buffer_interval: float(),
@@ -54,6 +56,8 @@ defmodule Deft.Config do
     :om_enabled,
     :om_observer_model,
     :om_reflector_model,
+    :om_observer_provider,
+    :om_reflector_provider,
     :om_message_token_threshold,
     :om_observation_token_threshold,
     :om_buffer_interval,
@@ -90,6 +94,8 @@ defmodule Deft.Config do
     :om_enabled,
     :om_observer_model,
     :om_reflector_model,
+    :om_observer_provider,
+    :om_reflector_provider,
     :om_message_token_threshold,
     :om_observation_token_threshold,
     :om_buffer_interval,
@@ -166,6 +172,8 @@ defmodule Deft.Config do
         enabled: true,
         observer_model: "claude-haiku-4.5",
         reflector_model: "claude-haiku-4.5",
+        observer_provider: "anthropic",
+        reflector_provider: "anthropic",
         message_token_threshold: 30_000,
         observation_token_threshold: 40_000,
         buffer_interval: 0.2,
@@ -249,6 +257,18 @@ defmodule Deft.Config do
   defp normalize_flag({:om_reflector_model, value}, acc) do
     Map.update(acc, :om, %{reflector_model: value}, fn om ->
       Map.put(om, :reflector_model, value)
+    end)
+  end
+
+  defp normalize_flag({:om_observer_provider, value}, acc) do
+    Map.update(acc, :om, %{observer_provider: value}, fn om ->
+      Map.put(om, :observer_provider, value)
+    end)
+  end
+
+  defp normalize_flag({:om_reflector_provider, value}, acc) do
+    Map.update(acc, :om, %{reflector_provider: value}, fn om ->
+      Map.put(om, :reflector_provider, value)
     end)
   end
 
@@ -345,6 +365,8 @@ defmodule Deft.Config do
       om_enabled: Map.get(om_config, :enabled, true),
       om_observer_model: Map.get(om_config, :observer_model, "claude-haiku-4.5"),
       om_reflector_model: Map.get(om_config, :reflector_model, "claude-haiku-4.5"),
+      om_observer_provider: Map.get(om_config, :observer_provider, "anthropic"),
+      om_reflector_provider: Map.get(om_config, :reflector_provider, "anthropic"),
       om_message_token_threshold: Map.get(om_config, :message_token_threshold, 30_000),
       om_observation_token_threshold: Map.get(om_config, :observation_token_threshold, 40_000),
       om_buffer_interval: Map.get(om_config, :buffer_interval, 0.2),

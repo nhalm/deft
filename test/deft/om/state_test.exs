@@ -17,6 +17,8 @@ defmodule Deft.OM.StateTest do
       om_enabled: true,
       om_observer_model: "claude-haiku-4.5",
       om_reflector_model: "claude-haiku-4.5",
+      om_observer_provider: "anthropic",
+      om_reflector_provider: "anthropic",
       om_message_token_threshold: 30_000,
       om_observation_token_threshold: 40_000,
       om_buffer_interval: 0.2,
