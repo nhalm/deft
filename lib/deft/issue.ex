@@ -9,6 +9,8 @@ defmodule Deft.Issue do
   All timestamps use ISO 8601 UTC format via `DateTime.utc_now() |> DateTime.to_iso8601()`.
   """
 
+  require Logger
+
   @derive Jason.Encoder
   @type status :: :open | :in_progress | :closed
   @type priority :: 0..4
@@ -136,10 +138,20 @@ defmodule Deft.Issue do
   defp normalize_status("in_progress"), do: :in_progress
   defp normalize_status("closed"), do: :closed
 
+  defp normalize_status(invalid) do
+    Logger.warning("Unrecognized status value: #{inspect(invalid)}, defaulting to :open")
+    :open
+  end
+
   # Normalize source field to atom if it's a string
   defp normalize_source(source) when is_atom(source), do: source
   defp normalize_source("user"), do: :user
   defp normalize_source("agent"), do: :agent
+
+  defp normalize_source(invalid) do
+    Logger.warning("Unrecognized source value: #{inspect(invalid)}, defaulting to :user")
+    :user
+  end
 
   @doc """
   Returns a timestamp string in ISO 8601 UTC format.

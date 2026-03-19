@@ -19,5 +19,4 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## issues v0.4
 
-- Add fallback clauses to `normalize_status/1` and `normalize_source/1` in Issue (issue.ex:134-142): unrecognized string values (e.g., from a bad git merge) raise `FunctionClauseError` which propagates through `decode/1` and crashes `Issues.init/1`; add `defp normalize_status(_), do: :open` and `defp normalize_source(_), do: :user` with a Logger.warning
 - Wire CLI plan approval flow for `deft work`: `wait_for_job_completion/2` (cli.ex:2136-2180) has no mechanism to detect when the Foreman is waiting for plan approval in `{:decomposing, :idle}` state; add a message-based protocol (e.g., Foreman sends `{:plan_approval_needed, plan}` to a registered CLI process) so the CLI can display the plan and call `Foreman.approve_plan/1`; without `--auto-approve-all`, the Foreman hangs in decomposing indefinitely
