@@ -386,14 +386,20 @@ defmodule Deft.Job.Foreman do
 
         {:error, reason} ->
           Logger.error("Failed to create job branch: #{inspect(reason)}")
-
-          # Cancel job timeout timer
-          data = cancel_job_timeout(data)
-
-          # Transition to complete with error
-          {:next_state, {:complete, :idle}, data}
+          :gen_statem.cast(self(), {:job_failed, reason})
+          :keep_state_and_data
       end
     end
+  end
+
+  def handle_event(:cast, {:job_failed, reason}, _state, data) do
+    Logger.error("Job failed: #{inspect(reason)}")
+    data = cancel_job_timeout(data)
+    {:next_state, {:complete, :idle}, data}
+  end
+
+  def handle_event(:cast, {:no_tools_return_idle, job_phase}, _state, data) do
+    {:next_state, {job_phase, :idle}, data}
   end
 
   def handle_event(:enter, _old_state, {:verifying, :idle}, _data) do
@@ -409,7 +415,9 @@ defmodule Deft.Job.Foreman do
 
     if Enum.empty?(tool_calls) do
       # No tool calls - return to idle in current job phase
-      {:next_state, {job_phase, :idle}, data}
+      # Can't use {:next_state, ...} from state_enter, so cast to self
+      :gen_statem.cast(self(), {:no_tools_return_idle, job_phase})
+      :keep_state_and_data
     else
       # Execute tools
       tasks =
@@ -447,9 +455,15 @@ defmodule Deft.Job.Foreman do
     data = save_unsaved_messages(data)
 
     # Start LLM call
-    {:ok, stream_ref, monitor_ref} = call_llm(data)
-    data = %{data | stream_ref: stream_ref, stream_monitor_ref: monitor_ref}
-    {:next_state, {job_phase, :calling}, data}
+    case call_llm(data) do
+      {:ok, stream_ref, monitor_ref} ->
+        data = %{data | stream_ref: stream_ref, stream_monitor_ref: monitor_ref}
+        {:next_state, {job_phase, :calling}, data}
+
+      {:error, reason} ->
+        Logger.error("Foreman LLM call failed in #{job_phase}: #{inspect(reason)}")
+        {:next_state, {:complete, :idle}, data}
+    end
   end
 
   # Decomposition handling
@@ -469,9 +483,16 @@ defmodule Deft.Job.Foreman do
 
     # Start LLM call
     data = %{data | messages: messages, turn_count: data.turn_count + 1}
-    {:ok, stream_ref, monitor_ref} = call_llm(data)
-    data = %{data | stream_ref: stream_ref, stream_monitor_ref: monitor_ref}
-    {:next_state, {:decomposing, :calling}, data}
+
+    case call_llm(data) do
+      {:ok, stream_ref, monitor_ref} ->
+        data = %{data | stream_ref: stream_ref, stream_monitor_ref: monitor_ref}
+        {:next_state, {:decomposing, :calling}, data}
+
+      {:error, reason} ->
+        Logger.error("Foreman LLM call failed in decomposition: #{inspect(reason)}")
+        {:next_state, {:complete, :idle}, data}
+    end
   end
 
   # Start ready Leads handling
@@ -654,9 +675,15 @@ defmodule Deft.Job.Foreman do
     data = %{data | messages: messages, turn_count: data.turn_count + 1}
 
     # Start LLM call for revision
-    {:ok, stream_ref, monitor_ref} = call_llm(data)
-    data = %{data | stream_ref: stream_ref, stream_monitor_ref: monitor_ref}
-    {:next_state, {:decomposing, :calling}, data}
+    case call_llm(data) do
+      {:ok, stream_ref, monitor_ref} ->
+        data = %{data | stream_ref: stream_ref, stream_monitor_ref: monitor_ref}
+        {:next_state, {:decomposing, :calling}, data}
+
+      {:error, reason} ->
+        Logger.error("Foreman LLM call failed in plan revision: #{inspect(reason)}")
+        {:next_state, {:complete, :idle}, data}
+    end
   end
 
   # Lead message handling (available in any state)
@@ -1068,9 +1095,15 @@ defmodule Deft.Job.Foreman do
     if Enum.empty?(tasks) do
       if should_continue_turn?(data) do
         # Make another LLM call
-        {:ok, stream_ref, monitor_ref} = call_llm(data)
-        data = %{data | stream_ref: stream_ref, stream_monitor_ref: monitor_ref}
-        {:next_state, {job_phase, :calling}, data}
+        case call_llm(data) do
+          {:ok, stream_ref, monitor_ref} ->
+            data = %{data | stream_ref: stream_ref, stream_monitor_ref: monitor_ref}
+            {:next_state, {job_phase, :calling}, data}
+
+          {:error, reason} ->
+            Logger.error("Foreman LLM call failed in #{job_phase}: #{inspect(reason)}")
+            {:next_state, {:complete, :idle}, data}
+        end
       else
         # Check if we need to transition to next phase
         {next_state, updated_data} = determine_next_phase(job_phase, data)

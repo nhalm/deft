@@ -261,7 +261,9 @@ defmodule Deft.Job.Lead do
 
     if Enum.empty?(tool_calls) do
       # No tool calls - return to idle in current chunk phase
-      {:next_state, {chunk_phase, :idle}, data}
+      # Can't use {:next_state, ...} from state_enter, so cast to self
+      :gen_statem.cast(self(), {:no_tools_return_idle, chunk_phase})
+      :keep_state_and_data
     else
       # Execute tools
       tasks =
@@ -277,6 +279,10 @@ defmodule Deft.Job.Lead do
 
   def handle_event(:enter, _old_state, _state, _data) do
     :keep_state_and_data
+  end
+
+  def handle_event(:cast, {:no_tools_return_idle, chunk_phase}, _state, data) do
+    {:next_state, {chunk_phase, :idle}, data}
   end
 
   # Prompt handling
@@ -296,9 +302,21 @@ defmodule Deft.Job.Lead do
     data = save_unsaved_messages(data)
 
     # Start LLM call
-    {:ok, stream_ref, monitor_ref} = call_llm(data)
-    data = %{data | stream_ref: stream_ref, stream_monitor_ref: monitor_ref}
-    {:next_state, {chunk_phase, :calling}, data}
+    case call_llm(data) do
+      {:ok, stream_ref, monitor_ref} ->
+        data = %{data | stream_ref: stream_ref, stream_monitor_ref: monitor_ref}
+        {:next_state, {chunk_phase, :calling}, data}
+
+      {:error, reason} ->
+        Logger.error("Lead #{data.lead_id} LLM call failed: #{inspect(reason)}")
+
+        send(
+          data.foreman_pid,
+          {:lead_message, :error, "LLM call failed: #{inspect(reason)}", %{lead_id: data.lead_id}}
+        )
+
+        {:next_state, {:complete, :idle}, data}
+    end
   end
 
   # Foreman steering (works in any state)
@@ -318,9 +336,15 @@ defmodule Deft.Job.Lead do
 
     # If idle, start processing the steering
     if agent_state == :idle do
-      {:ok, stream_ref, monitor_ref} = call_llm(data)
-      data = %{data | stream_ref: stream_ref, stream_monitor_ref: monitor_ref}
-      {:next_state, {chunk_phase, :calling}, data}
+      case call_llm(data) do
+        {:ok, stream_ref, monitor_ref} ->
+          data = %{data | stream_ref: stream_ref, stream_monitor_ref: monitor_ref}
+          {:next_state, {chunk_phase, :calling}, data}
+
+        {:error, reason} ->
+          Logger.error("Lead #{data.lead_id} LLM call failed during steering: #{inspect(reason)}")
+          {:keep_state, data}
+      end
     else
       # Not idle - queue the steering for next idle state
       {:keep_state, data}
@@ -369,14 +393,7 @@ defmodule Deft.Job.Lead do
 
         # If all tasks done, loop back to call LLM or check for continuation
         if Enum.empty?(tasks) do
-          if should_continue_turn?(data) do
-            # Make another LLM call
-            {:ok, stream_ref, monitor_ref} = call_llm(data)
-            data = %{data | stream_ref: stream_ref, stream_monitor_ref: monitor_ref}
-            {:next_state, {chunk_phase, :calling}, data}
-          else
-            {:next_state, {chunk_phase, :idle}, data}
-          end
+          maybe_continue_llm(chunk_phase, data)
         else
           {:keep_state, data}
         end
@@ -782,6 +799,29 @@ defmodule Deft.Job.Lead do
       cache_tid: data.cache_tid,
       cache_config: cache_config
     }
+  end
+
+  defp maybe_continue_llm(chunk_phase, data) do
+    if should_continue_turn?(data) do
+      case call_llm(data) do
+        {:ok, stream_ref, monitor_ref} ->
+          data = %{data | stream_ref: stream_ref, stream_monitor_ref: monitor_ref}
+          {:next_state, {chunk_phase, :calling}, data}
+
+        {:error, reason} ->
+          Logger.error("Lead #{data.lead_id} LLM call failed: #{inspect(reason)}")
+
+          send(
+            data.foreman_pid,
+            {:lead_message, :error, "LLM call failed: #{inspect(reason)}",
+             %{lead_id: data.lead_id}}
+          )
+
+          {:next_state, {:complete, :idle}, data}
+      end
+    else
+      {:next_state, {chunk_phase, :idle}, data}
+    end
   end
 
   defp call_llm(data) do
