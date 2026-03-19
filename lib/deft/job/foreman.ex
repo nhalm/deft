@@ -791,10 +791,17 @@ defmodule Deft.Job.Foreman do
         :keep_state_and_data
 
       {task_context, remaining_tasks} ->
-        %{lead_id: lead_id, lead_info: lead_info, conflicted_files: conflicted_files} =
-          task_context
+        %{
+          lead_id: lead_id,
+          lead_info: lead_info,
+          conflicted_files: conflicted_files,
+          merge_worktree_path: merge_worktree_path
+        } = task_context
 
         data = %{data | merge_resolution_tasks: remaining_tasks}
+
+        # Clean up the merge worktree (where conflicts were resolved)
+        cleanup_worktree(merge_worktree_path, data.working_dir)
 
         case result do
           {:ok, _output} ->
@@ -1309,8 +1316,8 @@ defmodule Deft.Job.Foreman do
         Logger.info("Successfully merged Lead #{lead_id} into job branch")
         handle_successful_merge(lead_id, lead_info, data)
 
-      {:ok, :conflict, conflicted_files} ->
-        handle_merge_conflict(lead_id, conflicted_files, lead_info, data)
+      {:ok, :conflict, conflicted_files, merge_worktree_path} ->
+        handle_merge_conflict(lead_id, conflicted_files, merge_worktree_path, lead_info, data)
 
       {:error, reason} ->
         handle_merge_error(lead_id, reason, lead_info, data)
@@ -1404,7 +1411,7 @@ defmodule Deft.Job.Foreman do
   end
 
   # Handle merge conflict
-  defp handle_merge_conflict(lead_id, conflicted_files, lead_info, data) do
+  defp handle_merge_conflict(lead_id, conflicted_files, merge_worktree_path, lead_info, data) do
     Logger.info("Merge conflict for Lead #{lead_id}, spawning merge-resolution Runner")
 
     # Get runner model from config
@@ -1429,11 +1436,11 @@ defmodule Deft.Job.Foreman do
 
     context = """
     Lead #{lead_id} completed its deliverable: #{lead_info.deliverable.name}
-    Worktree path: #{lead_info.worktree_path}
+    Merge worktree path: #{merge_worktree_path}
     Conflicted files: #{Enum.join(conflicted_files, ", ")}
     """
 
-    # Spawn merge-resolution Runner
+    # Spawn merge-resolution Runner in the merge worktree (where conflict markers exist)
     task =
       Task.Supervisor.async_nolink(
         data.runner_supervisor,
@@ -1444,7 +1451,7 @@ defmodule Deft.Job.Foreman do
             context,
             data.session_id,
             runner_config,
-            lead_info.worktree_path
+            merge_worktree_path
           )
         end
       )
@@ -1457,7 +1464,8 @@ defmodule Deft.Job.Foreman do
       Map.put(data.merge_resolution_tasks, task.ref, %{
         lead_id: lead_id,
         lead_info: lead_info,
-        conflicted_files: conflicted_files
+        conflicted_files: conflicted_files,
+        merge_worktree_path: merge_worktree_path
       })
 
     %{data | merge_resolution_tasks: merge_resolution_tasks}

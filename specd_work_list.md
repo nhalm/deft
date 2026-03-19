@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## git-strategy v0.1
 
-- Preserve merge-conflict temp worktree until merge-resolution Runner completes (git/job.ex:334): `cleanup_merge_worktree` runs unconditionally before `merge_lead_branch` returns `{:ok, :conflict, ...}`; the Foreman spawns a merge-resolution Runner pointing at `lead_info.worktree_path` which has no conflict markers; conflicts can never be resolved
 - Add running-job check to `find_orphaned_branches` in orphan cleanup (git/job.ex:651-667): returns all `deft/*` branches unconditionally; if `cleanup_orphans` runs during an active job, it deletes branches belonging to the live job
 
 ## issues v0.3

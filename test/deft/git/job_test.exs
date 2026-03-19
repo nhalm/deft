@@ -451,7 +451,7 @@ defmodule Deft.Git.JobTest do
       Process.put(:mock_diff_response, {"lib/app.ex\ntest/app_test.exs\n", 0})
       Process.put(:mock_worktree_remove_response, {"", 0})
 
-      assert {:ok, :conflict, conflicted_files} =
+      assert {:ok, :conflict, conflicted_files, merge_worktree_path} =
                Job.merge_lead_branch(
                  lead_id: "lead-1",
                  job_id: "job123",
@@ -461,12 +461,16 @@ defmodule Deft.Git.JobTest do
 
       assert "lib/app.ex" in conflicted_files
       assert "test/app_test.exs" in conflicted_files
+      assert is_binary(merge_worktree_path)
+      assert String.contains?(merge_worktree_path, "deft-merge")
 
       # Verify git commands were called
       assert_received {:git_cmd, ["worktree", "add", _temp_dir, "deft/job-job123"]}
       assert_received {:git_cmd, ["merge", "--no-ff", "deft/lead-lead-1"]}
       assert_received {:git_cmd, ["diff", "--name-only", "--diff-filter=U"]}
-      assert_received {:git_cmd, ["worktree", "remove", _temp_dir, "--force"]}
+
+      # Worktree should NOT be removed when there's a conflict (preserved for merge-resolution Runner)
+      refute_received {:git_cmd, ["worktree", "remove", _temp_dir, "--force"]}
     end
 
     test "handles merge conflict when diff command fails", %{tmp_dir: tmp_dir} do
@@ -476,7 +480,7 @@ defmodule Deft.Git.JobTest do
       Process.put(:mock_diff_response, {"error\n", 1})
       Process.put(:mock_worktree_remove_response, {"", 0})
 
-      assert {:ok, :conflict, conflicted_files} =
+      assert {:ok, :conflict, conflicted_files, merge_worktree_path} =
                Job.merge_lead_branch(
                  lead_id: "lead-1",
                  job_id: "job123",
@@ -486,6 +490,7 @@ defmodule Deft.Git.JobTest do
 
       # Should return empty list if diff fails
       assert conflicted_files == []
+      assert is_binary(merge_worktree_path)
     end
 
     test "handles checkout failure", %{tmp_dir: tmp_dir} do

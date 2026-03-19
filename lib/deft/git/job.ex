@@ -331,8 +331,17 @@ defmodule Deft.Git.Job do
     File.cd!(working_dir, fn ->
       with {:ok, _} <- create_merge_worktree(git, job_branch, temp_dir),
            merge_result <- attempt_merge_in_worktree(git, temp_dir, lead_branch, job_branch) do
-        cleanup_merge_worktree(git, working_dir, temp_dir)
-        merge_result
+        case merge_result do
+          {:ok, :conflict, conflicted_files} ->
+            # Preserve the temp worktree for the merge-resolution Runner
+            # Return the worktree path so it can be cleaned up later
+            {:ok, :conflict, conflicted_files, temp_dir}
+
+          _ ->
+            # Clean up immediately for success or errors
+            cleanup_merge_worktree(git, working_dir, temp_dir)
+            merge_result
+        end
       else
         error ->
           cleanup_merge_worktree(git, working_dir, temp_dir)
