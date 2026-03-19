@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.3
 
-- Implement real tool execution in Lead `execute_tool/2` (lead.ex:694-698): delegate to `Deft.Tool.execute/3` with the Lead's `tool_context` instead of returning `"Tool result placeholder"`; Lead's LLM planning and verification turns currently get fake results for all Read/Grep/Find/Ls calls
 - Add `:contract` message sending logic to Lead: when a Runner completes work that satisfies a dependency interface, the Lead must send `{:lead_message, :contract, content, %{lead_id: data.lead_id}}` to the Foreman; currently no code path in lead.ex ever sends a `:contract` type message, making partial dependency unblocking (spec §3.3) dead code
 - Handle stream process DOWN in Lead and Foreman: add a handler for `{:DOWN, ref, :process, pid, reason}` where `ref == data.stream_monitor_ref`; on match, cancel streaming state, log error, and transition to `{current_phase, :idle}` with error handling; currently both Lead (lead.ex:542-548) and Foreman (foreman.ex:666-668) silently drop stream DOWN messages, causing permanent hang in `:calling`/`:streaming`
 - Handle verification Runner crash in Foreman: add a DOWN handler or task-ref-based crash handler for verification tasks stored in `data.tool_tasks`; currently if the verification Runner crashes, the `{:DOWN, ref, ...}` message hits the Lead crash handler (foreman.ex:654) which doesn't match and returns `:keep_state_and_data`; job hangs in `:verifying` permanently

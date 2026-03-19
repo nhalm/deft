@@ -691,10 +691,49 @@ defmodule Deft.Job.Lead do
     end
   end
 
-  defp execute_tool(tool_call, _data) do
-    # Placeholder for tool execution
-    Logger.debug("Lead executing tool: #{tool_call.name}")
-    {:ok, "Tool result placeholder"}
+  defp execute_tool(tool_call, data) do
+    # Build tool context for execution
+    tool_context = build_tool_context(data)
+
+    # Lead uses read-only tools (same list as in call_llm)
+    tools = [Deft.Tools.Read, Deft.Tools.Grep, Deft.Tools.Find, Deft.Tools.Ls]
+    tool_map = Map.new(tools, fn tool_module -> {tool_module.name(), tool_module} end)
+
+    # Look up the tool module and execute
+    case Map.get(tool_map, tool_call.name) do
+      nil ->
+        {:error, "Tool '#{tool_call.name}' not found"}
+
+      tool_module ->
+        try do
+          tool_module.execute(tool_call.args, tool_context)
+        rescue
+          exception ->
+            {:error, "Tool execution error: #{Exception.message(exception)}"}
+        end
+    end
+  end
+
+  defp build_tool_context(data) do
+    # Build a Deft.Tool.Context struct for tool execution in Lead's worktree
+    cache_config = %{
+      "default" => 10_000,
+      "read" => 20_000,
+      "grep" => 8_000,
+      "ls" => 4_000,
+      "find" => 4_000
+    }
+
+    %Deft.Tool.Context{
+      working_dir: data.worktree_path,
+      session_id: data.session_id,
+      lead_id: data.lead_id,
+      emit: fn _output -> :ok end,
+      file_scope: nil,
+      bash_timeout: 120_000,
+      cache_tid: data.cache_tid,
+      cache_config: cache_config
+    }
   end
 
   defp call_llm(data) do
