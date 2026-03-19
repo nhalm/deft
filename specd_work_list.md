@@ -27,7 +27,3 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement `add_tool_results/2` in Lead to inject tool results into messages (lead.ex:742-746): same placeholder as Foreman
 - Add orchestration config keys to `Deft.Config`: `job_max_leads`, `job_max_runners_per_lead`, `job_research_timeout`, `job_runner_timeout`, `job_foreman_model`, `job_lead_model`, `job_runner_model`, `job_research_runner_model`, `job_max_duration` per spec section 8; parse from `job.*` in config YAML; wire through CLI `agent_config` map so Foreman/Lead can read them
 
-## git-strategy v0.1
-
-- Fix `merge_lead_branch/1` `@spec` to match actual return type (git/job.ex:315-316): spec says `{:ok, :conflict, [String.t()]}` but function returns `{:ok, :conflict, [String.t()], String.t()}` (4-tuple including temp_dir path); any caller written to the published spec crashes on conflict
-

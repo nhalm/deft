@@ -313,7 +313,7 @@ defmodule Deft.Git.Job do
       # => {:error, {:merge_failed, 1}}
   """
   @spec merge_lead_branch(keyword()) ::
-          {:ok, :merged} | {:ok, :conflict, [String.t()]} | {:error, term()}
+          {:ok, :merged} | {:ok, :conflict, [String.t()], String.t()} | {:error, term()}
   def merge_lead_branch(opts) do
     lead_id = Keyword.fetch!(opts, :lead_id)
     job_id = Keyword.fetch!(opts, :job_id)
