@@ -17,3 +17,10 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
+## evals v0.3
+
+- Fix CI safety gate pass-rate extraction (tier1-evals.yml:69-70): `grep -i "hallucination"` matches failure lines (`[hypothetical] Iteration 1 FAILED (hallucination detected)`) which contain no percentage, while the pass rate line (`[hypothetical] Pass rate: 19/20 (95.0%)`) doesn't contain "hallucination"; HALLUCINATION_RATE is always empty and the 90% threshold check never fires; must grep for the category or pass-rate format instead; same issue for PII (no PII eval tests exist at all)
+- Create missing fixture directories: `test/eval/fixtures/skills/`, `test/eval/fixtures/coding_conversations/`, `test/eval/fixtures/tool_results/`; skills suggestion test (suggestion_test.exs:57) crashes with MatchError because `{:ok, fixture} = load_fixture(fixture_path)` fails when fixtures don't exist
+- Create missing e2e test files: `test/eval/e2e/single_task_test.exs`, `test/eval/e2e/multi_agent_test.exs`, `test/eval/e2e/verification_circuit_breaker_test.exs` per spec section 1.2 (blocked: fixtures/codebase_snapshots need synthetic repos)
+- Create missing holdout infrastructure: `test/eval/fixtures/holdout/` directory, `@tag :holdout` tests, `make test.eval.holdout` target per spec section 1.4
+- Create missing support modules: `test/eval/support/scoring.ex` (confidence interval reporting per spec section 1.5), `test/eval/support/judge_calibration.ex` (calibration set management per spec section 1.6)
