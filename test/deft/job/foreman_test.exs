@@ -530,8 +530,8 @@ defmodule Deft.Job.ForemanTest do
           session_id: session_id,
           config: %{
             provider: "anthropic",
-            lead_model: "claude-sonnet-4",
-            research_runner_model: "claude-sonnet-4"
+            job_lead_model: "claude-sonnet-4",
+            job_research_runner_model: "claude-sonnet-4"
           },
           prompt: "test prompt",
           rate_limiter_pid: self(),
@@ -570,8 +570,8 @@ defmodule Deft.Job.ForemanTest do
           session_id: session_id,
           config: %{
             provider: "anthropic",
-            lead_model: "claude-sonnet-4",
-            research_timeout: 120_000
+            job_lead_model: "claude-sonnet-4",
+            job_research_timeout: 120_000
           },
           prompt: "test prompt",
           rate_limiter_pid: self(),
@@ -606,7 +606,7 @@ defmodule Deft.Job.ForemanTest do
           session_id: session_id,
           config: %{
             provider: "anthropic",
-            lead_model: "claude-sonnet-4"
+            job_lead_model: "claude-sonnet-4"
           },
           prompt: "test prompt",
           rate_limiter_pid: self(),
@@ -660,8 +660,8 @@ defmodule Deft.Job.ForemanTest do
           session_id: session_id,
           config: %{
             provider: "anthropic",
-            lead_model: "claude-sonnet-4",
-            research_timeout: 100
+            job_lead_model: "claude-sonnet-4",
+            job_research_timeout: 100
           },
           prompt: "test prompt",
           rate_limiter_pid: self(),

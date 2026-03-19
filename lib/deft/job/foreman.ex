@@ -293,7 +293,7 @@ defmodule Deft.Job.Foreman do
     research_specs = determine_research_tasks(data.prompt)
 
     # Get research timeout from config (default 120s)
-    research_timeout = Map.get(data.config, :research_timeout, 120_000)
+    research_timeout = Map.get(data.config, :job_research_timeout, 120_000)
 
     # Spawn research Runners via Task.Supervisor.async_nolink
     tasks =
@@ -304,7 +304,11 @@ defmodule Deft.Job.Foreman do
             fn ->
               # Get research runner model from config (defaults to same as lead model)
               research_model =
-                Map.get(data.config, :research_runner_model, Map.get(data.config, :lead_model))
+                Map.get(
+                  data.config,
+                  :job_research_runner_model,
+                  Map.get(data.config, :job_lead_model)
+                )
 
               runner_config = %{
                 provider: get_provider(data),
@@ -452,7 +456,7 @@ defmodule Deft.Job.Foreman do
       {:keep_state_and_data}
     else
       # Get max_leads config (default 5)
-      max_leads = Map.get(data.config, :max_leads, 5)
+      max_leads = Map.get(data.config, :job_max_leads, 5)
 
       # Count currently active leads
       active_leads = map_size(data.leads)
@@ -493,7 +497,7 @@ defmodule Deft.Job.Foreman do
     test_command = Map.get(data.config, :job_test_command, "mix test")
 
     # Get runner model from config
-    runner_model = Map.get(data.config, :runner_model, Map.get(data.config, :lead_model))
+    runner_model = Map.get(data.config, :job_runner_model, Map.get(data.config, :job_lead_model))
 
     # Build verification instructions
     verification_instructions = """
@@ -1634,7 +1638,7 @@ defmodule Deft.Job.Foreman do
     Logger.info("Merge conflict for Lead #{lead_id}, spawning merge-resolution Runner")
 
     # Get runner model from config
-    runner_model = Map.get(data.config, :runner_model, Map.get(data.config, :lead_model))
+    runner_model = Map.get(data.config, :job_runner_model, Map.get(data.config, :job_lead_model))
 
     runner_config = %{
       provider: get_provider(data),
@@ -1946,7 +1950,7 @@ defmodule Deft.Job.Foreman do
   defp get_provider(data) do
     provider_name = Map.get(data.config, :provider, "anthropic")
     # Default model for resolving provider
-    model_name = Map.get(data.config, :lead_model, "claude-sonnet-4")
+    model_name = Map.get(data.config, :job_lead_model, "claude-sonnet-4")
 
     case Deft.Provider.Registry.resolve(provider_name, model_name) do
       {:ok, {provider_module, _model_config}} ->
