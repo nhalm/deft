@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## observational-memory v0.3
-
-- Wire OM threshold config fields from spec section 8 through `Deft.Config`: `om.message_token_threshold`, `om.observation_token_threshold`, `om.buffer_interval`, `om.buffer_tail_retention`, `om.hard_threshold_multiplier`, `om.previous_observer_tokens` are all hardcoded as module constants in state.ex; cannot be tuned without code changes
-
 ## git-strategy v0.2
 
 - Add git stash pop after job completion (git/job.ex): if the user's uncommitted changes were stashed before job creation (line 133-134), the stash is never popped after `complete_job`; user's working state is not restored; add `git stash pop` on the success path of `complete_job` and warn on failure

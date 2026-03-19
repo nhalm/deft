@@ -12,11 +12,6 @@ defmodule Deft.OM.Context do
   alias Deft.Message.Text
   alias Deft.OM.Tokens
 
-  # Default observation threshold (spec section 8)
-  @default_message_threshold 30_000
-  # Tail retention: 20% of observation threshold (spec section 5.2)
-  @tail_retention_pct 0.2
-
   @doc """
   Injects observations into the message list and trims observed messages.
 
@@ -35,6 +30,8 @@ defmodule Deft.OM.Context do
     - `:calibration_factor` - Token calibration factor (default: 4.0)
     - `:current_task` - Current task description from Observer (optional)
     - `:continuation_hint` - Dynamic continuation hint from Observer (optional)
+    - `:message_token_threshold` - Message token threshold (default: 30,000)
+    - `:buffer_tail_retention` - Tail retention fraction (default: 0.2)
 
   ## Returns
 
@@ -53,6 +50,8 @@ defmodule Deft.OM.Context do
     calibration_factor = Keyword.get(opts, :calibration_factor, 4.0)
     current_task = Keyword.get(opts, :current_task)
     continuation_hint = Keyword.get(opts, :continuation_hint)
+    message_token_threshold = Keyword.get(opts, :message_token_threshold, 30_000)
+    buffer_tail_retention = Keyword.get(opts, :buffer_tail_retention, 0.2)
 
     if observations == "" or Enum.empty?(observed_message_ids) do
       # No observations yet - return messages as-is
@@ -60,7 +59,13 @@ defmodule Deft.OM.Context do
     else
       # Trim observed messages (keeping tail)
       trimmed_messages =
-        trim_observed_messages(messages, observed_message_ids, calibration_factor)
+        trim_observed_messages(
+          messages,
+          observed_message_ids,
+          calibration_factor,
+          message_token_threshold,
+          buffer_tail_retention
+        )
 
       # Build observation system message
       obs_message = build_observation_message(observations, current_task)
@@ -83,14 +88,20 @@ defmodule Deft.OM.Context do
   ## Private Functions
 
   # Trims observed messages from the message list while keeping the tail.
-  # Per spec section 5.2: keep the lesser of 20% of threshold or unobserved messages.
-  defp trim_observed_messages(messages, observed_message_ids, calibration_factor) do
+  # Per spec section 5.2: keep the lesser of configured % of threshold or unobserved messages.
+  defp trim_observed_messages(
+         messages,
+         observed_message_ids,
+         calibration_factor,
+         message_token_threshold,
+         buffer_tail_retention
+       ) do
     # Separate observed and unobserved messages
     {observed, unobserved} =
       Enum.split_with(messages, fn msg -> msg.id in observed_message_ids end)
 
-    # Calculate tail size: 20% of observation threshold (default: 6,000 tokens)
-    tail_token_limit = trunc(@default_message_threshold * @tail_retention_pct)
+    # Calculate tail size from config values (spec section 8)
+    tail_token_limit = trunc(message_token_threshold * buffer_tail_retention)
 
     # If we have no observed messages, return all
     if Enum.empty?(observed) do

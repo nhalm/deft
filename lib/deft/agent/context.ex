@@ -52,7 +52,9 @@ defmodule Deft.Agent.Context do
           observations: observations,
           observed_message_ids: observed_ids,
           calibration_factor: calibration_factor,
-          continuation_hint: continuation_hint
+          continuation_hint: continuation_hint,
+          message_token_threshold: config.om_message_token_threshold,
+          buffer_tail_retention: config.om_buffer_tail_retention
         )
       else
         messages
@@ -99,9 +101,14 @@ defmodule Deft.Agent.Context do
               {_observations, _observed_ids, _continuation_hint, _calibration_factor,
                pending_message_tokens, observation_tokens} ->
                 # Sync fallback: check hard thresholds per spec section 6.3
-                # Observation hard threshold: 1.2x * 30,000 = 36,000
-                # Reflection hard threshold: 1.2x * 40,000 = 48,000
-                check_sync_fallback(session_id, pending_message_tokens, observation_tokens)
+                # Observation hard threshold: hard_threshold_multiplier * message_token_threshold
+                # Reflection hard threshold: hard_threshold_multiplier * observation_token_threshold
+                check_sync_fallback(
+                  session_id,
+                  config,
+                  pending_message_tokens,
+                  observation_tokens
+                )
 
                 # Re-fetch context after sync fallback to get freshly observed/reflected data
                 case OMState.get_context(session_id) do
@@ -130,9 +137,12 @@ defmodule Deft.Agent.Context do
 
   # Checks if sync fallback is needed and calls force_observe/force_reflect
   # Per spec section 6.3, this ensures observation/reflection happens even if async buffering fails
-  defp check_sync_fallback(session_id, pending_message_tokens, observation_tokens) do
-    # Hard threshold for observation: 1.2x * 30,000 = 36,000 tokens
-    if pending_message_tokens >= 36_000 do
+  defp check_sync_fallback(session_id, config, pending_message_tokens, observation_tokens) do
+    # Hard threshold for observation: multiplier * message_token_threshold (per spec section 8)
+    obs_hard_threshold =
+      trunc(config.om_message_token_threshold * config.om_hard_threshold_multiplier)
+
+    if pending_message_tokens >= obs_hard_threshold do
       case OMState.force_observe(session_id, 60_000) do
         {:ok, _} ->
           :ok
@@ -144,8 +154,11 @@ defmodule Deft.Agent.Context do
       end
     end
 
-    # Hard threshold for reflection: 1.2x * 40,000 = 48,000 tokens
-    if observation_tokens >= 48_000 do
+    # Hard threshold for reflection: multiplier * observation_token_threshold (per spec section 8)
+    refl_hard_threshold =
+      trunc(config.om_observation_token_threshold * config.om_hard_threshold_multiplier)
+
+    if observation_tokens >= refl_hard_threshold do
       case OMState.force_reflect(session_id, 60_000) do
         {:ok, _} ->
           :ok

@@ -21,11 +21,6 @@ defmodule Deft.OM.State do
   alias Deft.OM.Observer.Parse
   alias Deft.Session.Entry.Observation, as: ObservationEntry
 
-  # Default thresholds from spec section 8
-  @default_message_threshold 30_000
-  @default_observation_threshold 40_000
-  @default_buffer_interval 0.2
-
   @type t :: %__MODULE__{
           session_id: String.t(),
           config: Config.t(),
@@ -86,6 +81,20 @@ defmodule Deft.OM.State do
     circuit_opened_at: nil,
     continuation_hint: nil
   ]
+
+  ## Config Helpers
+
+  # Get message token threshold from config (spec section 8)
+  defp message_threshold(config), do: config.om_message_token_threshold
+
+  # Get observation token threshold from config (spec section 8)
+  defp observation_threshold(config), do: config.om_observation_token_threshold
+
+  # Get buffer interval from config (spec section 8)
+  defp buffer_interval(config), do: config.om_buffer_interval
+
+  # Get hard cap threshold (1.5x observation threshold per spec section 4.6)
+  defp hard_cap_threshold(config), do: trunc(observation_threshold(config) * 1.5)
 
   ## Client API
 
@@ -362,7 +371,7 @@ defmodule Deft.OM.State do
     )
 
     # If observation_tokens is below threshold, return immediately
-    if state.observation_tokens < @default_observation_threshold do
+    if state.observation_tokens < observation_threshold(state.config) do
       {:reply, {:ok, :below_threshold}, state}
     else
       # Emit sync fallback event
@@ -373,7 +382,7 @@ defmodule Deft.OM.State do
       task_supervisor = Supervisor.task_supervisor_name(state.session_id)
 
       # Target size is 50% of reflection threshold (per spec section 4.3)
-      target_size = div(@default_observation_threshold, 2)
+      target_size = div(observation_threshold(state.config), 2)
 
       # Spawn Reflector Task with 1 retry max (sync path)
       task =
@@ -714,7 +723,7 @@ defmodule Deft.OM.State do
           # After Reflector completes, check if there are buffered chunks to activate
           # (now that is_reflecting is false)
           if not Enum.empty?(state.buffered_chunks) and
-               state.pending_message_tokens >= @default_message_threshold do
+               state.pending_message_tokens >= message_threshold(state.config) do
             activate_buffered_chunks(state)
           else
             state
@@ -1040,7 +1049,8 @@ defmodule Deft.OM.State do
   end
 
   defp check_and_spawn_observer(state) do
-    buffer_size = trunc(@default_message_threshold * @default_buffer_interval)
+    msg_threshold = message_threshold(state.config)
+    buffer_size = trunc(msg_threshold * buffer_interval(state.config))
     current_threshold = div(state.pending_message_tokens, buffer_size) * buffer_size
 
     # First, check if we should activate buffered chunks
@@ -1052,7 +1062,7 @@ defmodule Deft.OM.State do
   end
 
   defp maybe_activate_buffered_chunks(state) do
-    if state.pending_message_tokens >= @default_message_threshold and
+    if state.pending_message_tokens >= message_threshold(state.config) and
          not Enum.empty?(state.buffered_chunks) and
          not state.is_reflecting and
          not state.is_buffering_reflection do
@@ -1210,7 +1220,7 @@ defmodule Deft.OM.State do
 
   defp check_and_spawn_reflector(state) do
     # Per spec section 6.2, buffering triggers at 50% of threshold (20,000 tokens)
-    buffer_threshold = div(@default_observation_threshold, 2)
+    buffer_threshold = div(observation_threshold(state.config), 2)
 
     cond do
       # Full threshold reached - activate buffered reflection or spawn immediate reflection
@@ -1228,7 +1238,7 @@ defmodule Deft.OM.State do
   end
 
   defp should_activate_reflection?(state) do
-    state.observation_tokens >= @default_observation_threshold and
+    state.observation_tokens >= observation_threshold(state.config) and
       not state.is_reflecting and
       not state.is_observing and
       not state.is_buffering_reflection
@@ -1340,7 +1350,7 @@ defmodule Deft.OM.State do
       broadcast_event(state.session_id, {:om, :reflection_started, %{level: 0}})
 
       # Target size is 50% of reflection threshold (per spec section 4.3)
-      target_size = div(@default_observation_threshold, 2)
+      target_size = div(observation_threshold(state.config), 2)
 
       task_supervisor = Supervisor.task_supervisor_name(state.session_id)
 
@@ -1390,7 +1400,7 @@ defmodule Deft.OM.State do
       broadcast_event(state.session_id, {:om, :reflection_started, %{level: 0}})
 
       # Target size is 50% of reflection threshold (per spec section 4.3)
-      target_size = div(@default_observation_threshold, 2)
+      target_size = div(observation_threshold(state.config), 2)
 
       task_supervisor = Supervisor.task_supervisor_name(state.session_id)
 
@@ -1523,20 +1533,19 @@ defmodule Deft.OM.State do
 
   ## Hard Observation Cap (Spec Section 4.6)
 
-  # Hard cap threshold: 1.5x reflection threshold = 60,000 tokens
-  @hard_cap_threshold 60_000
-
   defp maybe_apply_hard_cap(state) do
-    if state.observation_tokens > @hard_cap_threshold do
-      apply_hard_cap(state)
+    cap = hard_cap_threshold(state.config)
+
+    if state.observation_tokens > cap do
+      apply_hard_cap(state, cap)
     else
       state
     end
   end
 
-  defp apply_hard_cap(state) do
+  defp apply_hard_cap(state, cap) do
     Logger.warning(
-      "OM hard cap exceeded for session #{state.session_id}: #{state.observation_tokens} > #{@hard_cap_threshold} tokens, truncating Session History"
+      "OM hard cap exceeded for session #{state.session_id}: #{state.observation_tokens} > #{cap} tokens, truncating Session History"
     )
 
     before_tokens = state.observation_tokens
@@ -1565,7 +1574,7 @@ defmodule Deft.OM.State do
 
     # Calculate target Session History size
     # Use 95% of remaining space to account for token estimation inaccuracies
-    available_tokens = @hard_cap_threshold - other_sections_tokens - separator_tokens
+    available_tokens = cap - other_sections_tokens - separator_tokens
     target_history_tokens = max(0, trunc(available_tokens * 0.95))
 
     # Truncate Session History from the head (oldest entries) until under target

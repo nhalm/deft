@@ -62,8 +62,9 @@ defmodule Deft.OM.Observer do
     # Format messages for Observer input (spec section 3.3)
     formatted_messages = Prompt.format_messages(messages)
 
-    # Truncate existing observations to 8k token budget (spec section 3.2)
-    truncated_observations = Prompt.truncate_observations(existing_observations, 8_000)
+    # Truncate existing observations to configured token budget (spec section 3.2)
+    truncated_observations =
+      Prompt.truncate_observations(existing_observations, config.om_previous_observer_tokens)
 
     # Build the user message with truncated observations + new messages
     user_content = build_user_message(truncated_observations, formatted_messages)
