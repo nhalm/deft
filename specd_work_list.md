@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## orchestration v0.3
-
-- Spawn merge-resolution Runner on merge conflict instead of discarding work: `handle_merge_conflict` (foreman.ex:1288-1303) sends a `:critical_finding` and deletes the Lead's worktree, permanently losing the Lead's work; spec section 3.4 requires spawning a merge-resolution Runner to resolve conflicts
-
 ## git-strategy v0.1
 
 - Delete Lead branch after successful merge and test: add `git branch -d deft/lead-<id>` call after `cleanup_worktree` in `handle_test_success` (foreman.ex:1245-1261); currently only the worktree is removed, leaving orphaned branches that accumulate and require manual `deft startup` cleanup

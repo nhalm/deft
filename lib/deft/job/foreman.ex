@@ -98,7 +98,8 @@ defmodule Deft.Job.Foreman do
       cost_ceiling_reached: false,
       decisions: [],
       session_file_path: session_file_path,
-      saved_message_ids: MapSet.new()
+      saved_message_ids: MapSet.new(),
+      merge_resolution_tasks: %{}
     }
 
     gen_statem_opts = if name, do: [name: name], else: []
@@ -762,6 +763,51 @@ defmodule Deft.Job.Foreman do
     {:next_state, {:decomposing, :idle}, data}
   end
 
+  # Merge-resolution task completion
+  def handle_event(
+        :info,
+        {ref, result},
+        {:executing, _agent_state},
+        %{merge_resolution_tasks: tasks} = data
+      )
+      when is_reference(ref) do
+    case Map.pop(tasks, ref) do
+      {nil, _tasks} ->
+        # Not a merge-resolution task, ignore
+        :keep_state_and_data
+
+      {task_context, remaining_tasks} ->
+        %{lead_id: lead_id, lead_info: lead_info, conflicted_files: conflicted_files} =
+          task_context
+
+        data = %{data | merge_resolution_tasks: remaining_tasks}
+
+        case result do
+          {:ok, _output} ->
+            Logger.info("Merge-resolution Runner succeeded for Lead #{lead_id}, retrying merge")
+            # Retry the merge now that conflicts are resolved
+            handle_lead_merge(lead_id, lead_info, data)
+
+          {:error, reason} ->
+            Logger.error("Merge-resolution Runner failed for Lead #{lead_id}: #{inspect(reason)}")
+
+            send_to_self =
+              {:lead_message, :critical_finding,
+               "Merge conflict for Lead #{lead_id} could not be automatically resolved: #{Enum.join(conflicted_files, ", ")}. Manual intervention required.\n\nRunner error: #{inspect(reason)}",
+               %{lead_id: lead_id, conflicted_files: conflicted_files}}
+
+            send(self(), send_to_self)
+
+            # Clean up the Lead's worktree
+            cleanup_worktree(lead_info.worktree_path, data.working_dir)
+
+            # Remove Lead from tracking
+            leads = Map.delete(data.leads, lead_id)
+            {:keep_state, %{data | leads: leads}}
+        end
+    end
+  end
+
   # Tool task completion
   def handle_event(
         :info,
@@ -1318,21 +1364,62 @@ defmodule Deft.Job.Foreman do
 
   # Handle merge conflict
   defp handle_merge_conflict(lead_id, conflicted_files, lead_info, data) do
-    Logger.error("Merge conflict for Lead #{lead_id}: #{inspect(conflicted_files)}")
+    Logger.info("Merge conflict for Lead #{lead_id}, spawning merge-resolution Runner")
 
-    send_to_self =
-      {:lead_message, :critical_finding,
-       "Merge conflict detected for Lead #{lead_id}: #{Enum.join(conflicted_files, ", ")}. Manual intervention required.",
-       %{lead_id: lead_id, conflicted_files: conflicted_files}}
+    # Get runner model from config
+    runner_model = Map.get(data.config, :runner_model, Map.get(data.config, :lead_model))
 
-    send(self(), send_to_self)
+    runner_config = %{
+      provider: get_provider(data),
+      model: runner_model
+    }
 
-    # Clean up the Lead's worktree
-    cleanup_worktree(lead_info.worktree_path, data.working_dir)
+    # Build instructions for the merge-resolution Runner
+    instructions = """
+    Resolve the merge conflicts in the following files:
+    #{Enum.join(conflicted_files, "\n")}
 
-    # Remove Lead from tracking
-    leads = Map.delete(data.leads, lead_id)
-    %{data | leads: leads}
+    The conflicts arose when merging Lead #{lead_id}'s work into the job branch.
+    Review both sides of the conflict, understand the intent of each change,
+    and resolve the conflicts to integrate both changes correctly.
+
+    After resolving all conflicts, stage the resolved files using git add.
+    """
+
+    context = """
+    Lead #{lead_id} completed its deliverable: #{lead_info.deliverable.name}
+    Worktree path: #{lead_info.worktree_path}
+    Conflicted files: #{Enum.join(conflicted_files, ", ")}
+    """
+
+    # Spawn merge-resolution Runner
+    task =
+      Task.Supervisor.async_nolink(
+        SessionWorker.tool_runner_via_tuple(data.session_id),
+        fn ->
+          Runner.run(
+            :merge_resolution,
+            instructions,
+            context,
+            data.session_id,
+            runner_config,
+            lead_info.worktree_path
+          )
+        end
+      )
+
+    # Monitor the task
+    Process.monitor(task.pid)
+
+    # Store task context for when it completes
+    merge_resolution_tasks =
+      Map.put(data.merge_resolution_tasks, task.ref, %{
+        lead_id: lead_id,
+        lead_info: lead_info,
+        conflicted_files: conflicted_files
+      })
+
+    %{data | merge_resolution_tasks: merge_resolution_tasks}
   end
 
   # Handle merge error
