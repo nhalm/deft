@@ -486,6 +486,9 @@ defmodule Deft.CLI do
     # Ensure Issues GenServer is started
     ensure_issues_started(flags)
 
+    # Set up SIGINT handler
+    setup_sigint_handler()
+
     # Get ready issues (sorted by priority, then created_at)
     ready_issues = Issues.ready()
 
@@ -503,6 +506,9 @@ defmodule Deft.CLI do
   defp execute_command({:work_issue, issue_id}, flags) do
     # Ensure Issues GenServer is started
     ensure_issues_started(flags)
+
+    # Set up SIGINT handler
+    setup_sigint_handler()
 
     # Get the specific issue
     case Issues.get(issue_id) do
