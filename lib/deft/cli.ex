@@ -2236,7 +2236,10 @@ defmodule Deft.CLI do
     # Try to manually rollback the issue status
     case Issues.update(issue.id, %{status: :open}) do
       {:ok, _issue} ->
-        IO.puts("Issue #{issue.id} status manually rolled back to open.")
+        IO.puts(
+          :stderr,
+          "Warning: Issue #{issue.id} status manually rolled back to open due to shutdown timeout."
+        )
 
       {:error, reason} ->
         IO.puts(
