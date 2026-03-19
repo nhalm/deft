@@ -154,8 +154,12 @@ defmodule Deft.Job.Runner do
          max_turns,
          current_turn
        ) do
-    with {:ok, :proceed} <- request_llm_call(job_id, messages, tools, provider, config),
-         {:ok, assistant_message} <- call_provider(messages, tools, provider, config) do
+    with {:ok, estimated_tokens} <- request_llm_call(job_id, messages, tools, provider, config),
+         {:ok, assistant_message, usage} <- call_provider(messages, tools, provider, config) do
+      # Reconcile estimated vs actual token usage
+      provider_name = Map.get(config, :provider_name, "anthropic")
+      RateLimiter.reconcile(job_id, provider_name, estimated_tokens, usage)
+
       handle_assistant_message(
         assistant_message,
         messages,
@@ -228,7 +232,7 @@ defmodule Deft.Job.Runner do
     provider_name = Map.get(config, :provider_name, "anthropic")
 
     case RateLimiter.request(job_id, provider_name, messages, :runner) do
-      {:ok, _estimated_tokens} -> {:ok, :proceed}
+      {:ok, estimated_tokens} -> {:ok, estimated_tokens}
       {:error, reason} -> {:error, reason}
     end
   end
@@ -258,26 +262,27 @@ defmodule Deft.Job.Runner do
     }
 
     tool_call_buffers = %{}
+    usage = nil
 
-    collect_loop(stream_ref, current_message, tool_call_buffers, timeout)
+    collect_loop(stream_ref, current_message, tool_call_buffers, usage, timeout)
   end
 
-  defp collect_loop(stream_ref, current_message, tool_call_buffers, timeout) do
+  defp collect_loop(stream_ref, current_message, tool_call_buffers, usage, timeout) do
     receive do
       {:provider_event, %TextDelta{delta: text}} ->
         # Append text to content
         new_content = append_text_delta(current_message.content, text)
         new_message = %{current_message | content: new_content}
-        collect_loop(stream_ref, new_message, tool_call_buffers, timeout)
+        collect_loop(stream_ref, new_message, tool_call_buffers, usage, timeout)
 
       {:provider_event, %ThinkingDelta{}} ->
         # Ignore thinking deltas for now
-        collect_loop(stream_ref, current_message, tool_call_buffers, timeout)
+        collect_loop(stream_ref, current_message, tool_call_buffers, usage, timeout)
 
       {:provider_event, %ToolCallStart{id: tool_id, name: tool_name}} ->
         # Initialize tool call buffer
         new_buffers = Map.put(tool_call_buffers, tool_id, %{name: tool_name, args_json: ""})
-        collect_loop(stream_ref, current_message, new_buffers, timeout)
+        collect_loop(stream_ref, current_message, new_buffers, usage, timeout)
 
       {:provider_event, %ToolCallDelta{id: tool_id, delta: args_delta}} ->
         # Append to tool call buffer
@@ -286,7 +291,7 @@ defmodule Deft.Job.Runner do
             %{buffer | args_json: buffer.args_json <> args_delta}
           end)
 
-        collect_loop(stream_ref, current_message, new_buffers, timeout)
+        collect_loop(stream_ref, current_message, new_buffers, usage, timeout)
 
       {:provider_event, %ToolCallDone{id: tool_id}} ->
         # Finalize tool call
@@ -302,19 +307,20 @@ defmodule Deft.Job.Runner do
 
             new_content = current_message.content ++ [tool_use]
             new_message = %{current_message | content: new_content}
-            collect_loop(stream_ref, new_message, tool_call_buffers, timeout)
+            collect_loop(stream_ref, new_message, tool_call_buffers, usage, timeout)
 
           {:error, _} ->
             {:error, "Failed to parse tool arguments for #{tool_id}"}
         end
 
-      {:provider_event, %Usage{}} ->
-        # Ignore usage events (rate limiter handles reconciliation at job level)
-        collect_loop(stream_ref, current_message, tool_call_buffers, timeout)
+      {:provider_event, %Usage{input: input_tokens, output: output_tokens}} ->
+        # Capture usage for reconciliation
+        new_usage = %{input: input_tokens, output: output_tokens}
+        collect_loop(stream_ref, current_message, tool_call_buffers, new_usage, timeout)
 
       {:provider_event, %Done{}} ->
-        # Stream complete
-        {:ok, current_message}
+        # Stream complete - return message and usage
+        {:ok, current_message, usage}
 
       {:provider_event, %Error{message: error_msg}} ->
         {:error, error_msg}
