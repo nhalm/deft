@@ -497,6 +497,11 @@ defmodule Deft.Job.Foreman do
     # Clean up all Lead worktrees
     cleanup_all_lead_worktrees(data)
 
+    # Delete job branch unless configured to keep it
+    unless data.config.job_keep_failed_branches do
+      delete_job_branch_on_failure(data.session_id, data.working_dir)
+    end
+
     # Archive job files for debugging
     archive_job_files(data.session_id, data.working_dir, :aborted)
 
@@ -826,11 +831,26 @@ defmodule Deft.Job.Foreman do
       # Clean up all Lead worktrees
       cleanup_all_lead_worktrees(data)
 
+      # Delete job branch unless configured to keep it
+      keep_branch = data.config.job_keep_failed_branches
+
+      unless keep_branch do
+        delete_job_branch_on_failure(data.session_id, data.working_dir)
+      end
+
       # Archive job files for debugging
       archive_job_files(data.session_id, data.working_dir, :verification_failed)
 
       # Identify responsible Lead based on test failures
       responsible_lead = identify_responsible_lead(results, data)
+
+      # Build failure message, noting if branch was kept
+      branch_status =
+        if keep_branch do
+          "The job has been stopped. Changes remain in the job branch: deft/job-#{data.session_id}\nYou can review the changes and decide how to proceed."
+        else
+          "The job has been stopped and the job branch has been deleted.\nChanges were not merged to your original branch."
+        end
 
       # Report failure to user
       failure_message = """
@@ -840,8 +860,7 @@ defmodule Deft.Job.Foreman do
 
       #{if responsible_lead, do: "Most likely responsible: #{responsible_lead}", else: ""}
 
-      The job has been stopped. Changes remain in the job branch: deft/job-#{data.session_id}
-      You can review the changes and decide how to proceed.
+      #{branch_status}
       """
 
       send_user_message(failure_message, data)
@@ -1424,6 +1443,25 @@ defmodule Deft.Job.Foreman do
     end
 
     :ok
+  end
+
+  # Deletes the job branch on abort or verification failure.
+  # Only called when job_keep_failed_branches config is false.
+  defp delete_job_branch_on_failure(job_id, working_dir) do
+    job_branch = "deft/job-#{job_id}"
+
+    File.cd!(working_dir, fn ->
+      case Git.cmd(["branch", "-D", job_branch]) do
+        {_output, 0} ->
+          Logger.info("Deleted job branch: #{job_branch}")
+          :ok
+
+        {error_output, _exit_code} ->
+          # Log warning but don't fail - branch deletion is non-fatal
+          Logger.warning("Failed to delete job branch #{job_branch}: #{error_output}")
+          :ok
+      end
+    end)
   end
 
   # Archives job files for debugging by writing a status file.

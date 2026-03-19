@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## git-strategy v0.1
-
-- Fix abort and verification-failure paths to delete job branch: abort handler (foreman.ex:485-506) and verification failure handler (foreman.ex:823-850) clean up worktrees but never delete `deft/job-<job_id>` branch; `job_keep_failed_branches` config field exists in Deft.Config but is never read anywhere; orphaned job branches accumulate
-
 ## filesystem v0.3
 
 - Fix resolve_git_root for normal (non-worktree) repos (REGRESSION): `git rev-parse --git-common-dir` returns relative `.git`, `Path.dirname(".git")` returns `"."`, all normal repos map to same `~/.deft/projects/.` directory (project.ex:131-139); must expand relative path against working dir before dirname; previously fixed per specd_history but fix has regressed
