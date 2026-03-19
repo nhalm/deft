@@ -953,27 +953,47 @@ defmodule Deft.CLI do
       input ->
         prompt = String.trim(input)
 
-        cond do
-          prompt == "/quit" ->
-            :ok
+        process_prompt(agent_pid, prompt)
+    end
+  end
 
-          prompt == "" ->
+  # Process a prompt: handle quit, empty input, or dispatch to agent
+  defp process_prompt(agent_pid, prompt) do
+    cond do
+      prompt == "/quit" ->
+        :ok
+
+      prompt == "" ->
+        interactive_loop(agent_pid)
+
+      true ->
+        case handle_user_input(prompt) do
+          {:ok, text_to_send} ->
+            send_to_agent(agent_pid, {:prompt, text_to_send})
+
+          {:inject_skill, skill_definition} ->
+            send_to_agent(agent_pid, {:inject_skill, skill_definition})
+
+          {:error, error_msg} ->
+            IO.puts(:stderr, error_msg)
             interactive_loop(agent_pid)
-
-          true ->
-            case handle_user_input(prompt) do
-              {:ok, text_to_send} ->
-                Deft.Agent.prompt(agent_pid, text_to_send)
-                interactive_response_loop()
-                IO.puts("")
-                interactive_loop(agent_pid)
-
-              {:error, error_msg} ->
-                IO.puts(:stderr, error_msg)
-                interactive_loop(agent_pid)
-            end
         end
     end
+  end
+
+  # Send input to agent and wait for response
+  defp send_to_agent(agent_pid, {:prompt, text}) do
+    Deft.Agent.prompt(agent_pid, text)
+    interactive_response_loop()
+    IO.puts("")
+    interactive_loop(agent_pid)
+  end
+
+  defp send_to_agent(agent_pid, {:inject_skill, definition}) do
+    Deft.Agent.inject_skill(agent_pid, definition)
+    interactive_response_loop()
+    IO.puts("")
+    interactive_loop(agent_pid)
   end
 
   # Handle user input - dispatch slash commands or pass through regular text
@@ -991,14 +1011,12 @@ defmodule Deft.CLI do
             {:ok, text}
 
           {:ok, :skill, definition} ->
-            # Skills: inject definition as instruction
-            # TODO: When TUI is implemented, skills should be injected as system-level
-            # instructions rather than user messages. For now, CLI treats them like commands.
+            # Skills: inject definition as system-level instruction per spec section 2.4
             # If args provided, append them to the definition
             text =
               if args == "", do: definition, else: "#{definition}\n\nAdditional context: #{args}"
 
-            {:ok, text}
+            {:inject_skill, text}
 
           {:error, :not_found, cmd_name} ->
             {:error, "Unknown command: /#{cmd_name}"}

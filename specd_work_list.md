@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## skills v0.4
-
-- Fix CLI skill injection to use system-level instructions (cli.ex:987-995): CLI returns skill definition via `{:ok, text}` which goes to `Deft.Agent.prompt/2` (user message); spec section 2.4 requires skills to be injected as system instructions; TUI correctly uses `{:inject_skill, full_text}` — CLI must match; the TODO comment at line 989 acknowledges this bug
-
 ## harness v0.2
 
 - Fix abort in `:executing_tools` to terminate inner per-tool tasks (agent.ex:1079-1088): `cancel_state_operations` only kills the outer wrapper task via `Task.Supervisor.terminate_child`; inner tasks spawned by `ToolRunner.execute_batch` under the same supervisor continue running until timeout (up to 120s); must either track inner tasks or terminate all children of the supervisor
