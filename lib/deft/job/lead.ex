@@ -539,6 +539,38 @@ defmodule Deft.Job.Lead do
     end
   end
 
+  # Stream process crash handling (DOWN message)
+  def handle_event(
+        :info,
+        {:DOWN, monitor_ref, :process, _pid, reason},
+        {chunk_phase, agent_state},
+        data
+      )
+      when monitor_ref == data.stream_monitor_ref and agent_state in [:calling, :streaming] do
+    Logger.error(
+      "Lead #{data.lead_id}: stream process crashed in #{agent_state} state, reason: #{inspect(reason)}"
+    )
+
+    # Send error to Foreman
+    send_lead_message(
+      data.foreman_pid,
+      :error,
+      "Stream process crashed during #{agent_state}",
+      %{reason: inspect(reason)}
+    )
+
+    # Cancel streaming state
+    data = %{
+      data
+      | stream_ref: nil,
+        stream_monitor_ref: nil,
+        current_message: nil
+    }
+
+    # Transition to idle state to allow recovery
+    {:next_state, {chunk_phase, :idle}, data}
+  end
+
   # Catch-all for unhandled events
   def handle_event(event_type, event_content, state, _data) do
     Logger.debug(

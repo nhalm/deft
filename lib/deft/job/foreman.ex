@@ -650,6 +650,30 @@ defmodule Deft.Job.Foreman do
     end
   end
 
+  # Stream process crash handling (DOWN message)
+  def handle_event(
+        :info,
+        {:DOWN, monitor_ref, :process, _pid, reason},
+        {job_phase, agent_state},
+        data
+      )
+      when monitor_ref == data.stream_monitor_ref and agent_state in [:calling, :streaming] do
+    Logger.error(
+      "Foreman: stream process crashed in #{agent_state} state, reason: #{inspect(reason)}"
+    )
+
+    # Cancel streaming state
+    data = %{
+      data
+      | stream_ref: nil,
+        stream_monitor_ref: nil,
+        current_message: nil
+    }
+
+    # Transition to idle state to allow recovery
+    {:next_state, {job_phase, :idle}, data}
+  end
+
   # Lead crash handling (DOWN message)
   def handle_event(
         :info,
