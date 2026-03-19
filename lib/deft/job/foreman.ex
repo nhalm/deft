@@ -1514,8 +1514,8 @@ defmodule Deft.Job.Foreman do
     # Request permission from rate limiter
     case RateLimiter.request(job_id, provider_name, messages, :foreman) do
       {:ok, estimated_tokens} ->
-        # Foreman uses empty tools list - it delegates actual work to Runners
-        tools = []
+        # Foreman uses read-only tools for planning and decomposition
+        tools = [Deft.Tools.Read, Deft.Tools.Grep, Deft.Tools.Find, Deft.Tools.Ls]
 
         # Get the configured provider module
         provider_module = get_provider(data)
