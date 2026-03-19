@@ -233,13 +233,26 @@ defmodule Deft.Job.Lead do
   end
 
   def handle_event(:enter, _old_state, {:verifying, :idle}, data) do
-    # When entering verification phase, run compile checks
+    # When entering verification phase, spawn a testing runner to run compile checks and tests
     Logger.info("Lead #{data.lead_id} starting verification")
 
-    # Spawn a testing runner to verify the deliverable
-    verification_prompt = build_verification_prompt(data)
+    # Build verification instructions for the testing runner
+    verification_instructions = build_verification_prompt(data)
 
-    {:keep_state_and_data, [{:next_event, :cast, {:prompt, verification_prompt}}]}
+    # Build context for the runner
+    runner_context = build_runner_context_for_verification(data)
+
+    # Spawn a testing runner (has bash access for compile checks and tests)
+    {:ok, _task_ref, _monitor_ref, data} =
+      spawn_runner(
+        data,
+        :testing,
+        "Verify deliverable with compile checks and tests",
+        verification_instructions,
+        runner_context
+      )
+
+    {:keep_state, data}
   end
 
   def handle_event(:enter, _old_state, {chunk_phase, :executing_tools}, data) do
@@ -1412,6 +1425,31 @@ defmodule Deft.Job.Lead do
     ## Deliverable Goal
 
     #{data.deliverable}
+    """
+  end
+
+  # Builds context string for verification runner
+  defp build_runner_context_for_verification(data) do
+    # Read relevant information from site log
+    site_log_context = read_site_log_context(data.site_log_tid)
+
+    # Include all completed tasks for verification context
+    completed_tasks =
+      data.task_list
+      |> Enum.filter(fn t -> t.status == :done end)
+      |> Enum.map(fn t -> "- #{t.description}" end)
+      |> Enum.join("\n")
+
+    """
+    #{site_log_context}
+
+    ## Deliverable Goal
+
+    #{data.deliverable}
+
+    ## Completed Tasks
+
+    #{completed_tasks}
     """
   end
 

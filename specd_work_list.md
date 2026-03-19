@@ -19,5 +19,4 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.4
 
-- Fix Lead verification phase to spawn a testing Runner instead of prompting itself — the Lead enters `{:verifying, :idle}` and sends a `:prompt` to its own LLM with instructions to "run compile checks" and "run tests", but the Lead's tool set is read-only `[Read, Grep, Find, Ls]` and cannot execute anything; spec v0.4 explicitly requires spawning a testing Runner
 - Add DOWN handler for research runner crashes in Foreman — `Process.monitor(task.pid)` at foreman.ex:335 creates a monitor ref distinct from `task.ref`, but the only DOWN handler (foreman.ex:684) checks `tool_tasks` not `research_tasks`; crashed research runners are never cleaned up, hanging the research phase until the 120s timeout
