@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **issues v0.2 (2026-03-18):** Implement `deft work <id>`: same as `deft work` but for a specific issue ID, verify issue exists and is open
 - **issues v0.2 (2026-03-18):** Implement `deft work`: call ready/0, pick first, set status :in_progress, start Foreman job with issue structured JSON as prompt (context → research, acceptance_criteria → verification targets, constraints → Lead steering), on success set :closed + job_id, on failure set back to :open
 - **filesystem v0.2 (2026-03-18):** Implement session-end cache cleanup: on session termination, delete all files under cache/<session_id>/
 - **filesystem v0.2 (2026-03-18):** Implement per-Lead cache isolation: start one Deft.Store instance per Lead with DETS at cache/<session_id>/lead-<lead_id>.dets; Lead cleanup deletes its own cache instance
