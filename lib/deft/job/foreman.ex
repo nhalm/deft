@@ -37,7 +37,7 @@ defmodule Deft.Job.Foreman do
   alias Deft.Project
   alias Deft.Git
   alias Deft.Git.Job, as: GitJob
-  alias Deft.Job.Lead
+  alias Deft.Job.LeadSupervisor
   alias Deft.Job.Runner
   alias Deft.Job.RateLimiter
   alias Deft.Provider.Anthropic
@@ -2052,7 +2052,7 @@ defmodule Deft.Job.Foreman do
           runner_supervisor: runner_supervisor_name
         ]
 
-        case Lead.start_link(lead_opts) do
+        case LeadSupervisor.start_lead(data.session_id, lead_opts) do
           {:ok, lead_pid} ->
             # Monitor the Lead process
             monitor_ref = Process.monitor(lead_pid)

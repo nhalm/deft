@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.3
 
-- Start Leads via `LeadSupervisor.start_lead/2` instead of calling `Lead.start_link/1` directly (foreman.ex:2041): Leads currently bypass the DynamicSupervisor and run unsupervised
 - Implement per-Lead `Deft.Job.Lead.Supervisor` (one_for_one) containing the Lead gen_statem and RunnerSupervisor as siblings per spec section 1; currently `Task.Supervisor.start_link` is called directly in `start_lead` (foreman.ex:2022), leaving the RunnerSupervisor as an orphaned process
 - Enforce Runner timeout in Lead: after spawning a Runner via `spawn_runner`, call `Process.send_after(self(), {:runner_timeout, task_ref}, timeout)` using the `job.runner_timeout` config value (default 300_000ms per spec section 8); currently no timeout is enforced (lead.ex:703-733)
 - Fix `determine_completed_deliverables` key parsing (foreman.ex:2474-2509): `generate_site_log_key(:complete, metadata)` produces `"complete-<session_id>-<deliverable_name>-<timestamp>"` but `String.split(key, "-", parts: 3)` splits at the first two hyphens, giving wrong lead_id when session_id contains hyphens (UUIDs); use a delimiter that doesn't appear in UUIDs or store lead_id as a separate field
