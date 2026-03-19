@@ -30,17 +30,18 @@ defmodule Deft.Eval.Scoring do
            ] ->
         {:statistical, 0.95}
 
-      # Continuation
-      "actor.continuation" ->
+      # High-threshold evals: continuation, compression, verification circuit breaker
+      cat
+      when cat in [
+             "actor.continuation",
+             "reflector.compression",
+             "foreman.verification_accuracy"
+           ] ->
         {:statistical, 0.90}
 
       # Extraction and cache
       cat when cat in ["observer.extraction", "cache_retrieval"] ->
         {:statistical, 0.85}
-
-      # Compression
-      "reflector.compression" ->
-        {:statistical, 0.90}
 
       # Decomposition and steering
       cat
