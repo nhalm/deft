@@ -2077,9 +2077,6 @@ defmodule Deft.CLI do
         # Monitor Foreman for completion
         ref = Process.monitor(foreman_pid)
 
-        # Send initial prompt to start the job
-        Foreman.prompt(foreman_pid, issue_prompt)
-
         # Wait for job completion
         result = wait_for_job_completion(foreman_pid, ref)
 

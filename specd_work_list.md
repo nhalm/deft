@@ -17,6 +17,3 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## issues v0.2
-
-- Remove duplicate prompt send in `run_work_on_issue` (cli.ex:2069,2081 + foreman.ex:267): `Foreman.start_link` stores prompt in initial data, and the `:enter` handler for `{:planning, :idle}` casts `{:prompt, data.prompt}` to self; then `Foreman.prompt(foreman_pid, issue_prompt)` sends it again; Foreman receives the same task description twice
