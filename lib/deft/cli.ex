@@ -537,46 +537,7 @@ defmodule Deft.CLI do
         :ok
 
       {:ok, sessions} ->
-        IO.puts("Recent Sessions:")
-        IO.puts("================")
-        IO.puts("")
-
-        session_list =
-          sessions
-          |> Enum.take(10)
-
-        session_list
-        |> Enum.with_index(1)
-        |> Enum.each(fn {session, idx} ->
-          formatted_time = Calendar.strftime(session.last_message_at, "%Y-%m-%d %H:%M")
-
-          IO.puts("#{idx}. #{session.session_id} - #{session.working_dir} (#{formatted_time})")
-
-          IO.puts("   #{session.message_count} messages: #{session.last_user_prompt}")
-          IO.puts("")
-        end)
-
-        IO.puts("Enter session number to resume (or 'q' to quit): ")
-
-        case IO.gets("") |> String.trim() do
-          "q" ->
-            :ok
-
-          input ->
-            case Integer.parse(input) do
-              {idx, ""} when idx >= 1 and idx <= length(session_list) ->
-                selected_session = Enum.at(session_list, idx - 1)
-                execute_command({:resume_session, selected_session.session_id}, flags)
-
-              _ ->
-                IO.puts(
-                  :stderr,
-                  "Invalid selection. Please enter a number between 1 and #{length(session_list)}."
-                )
-
-                exit({:shutdown, 1})
-            end
-        end
+        handle_session_selection(sessions, flags)
 
       {:error, reason} ->
         IO.puts(:stderr, "Error listing sessions: #{inspect(reason)}")
@@ -675,6 +636,49 @@ defmodule Deft.CLI do
     IO.puts(:stderr, "Error: #{message}")
     IO.puts(:stderr, "\nRun 'deft --help' for usage information.")
     exit({:shutdown, 1})
+  end
+
+  defp handle_session_selection(sessions, flags) do
+    IO.puts("Recent Sessions:")
+    IO.puts("================")
+    IO.puts("")
+
+    session_list = Enum.take(sessions, 10)
+
+    session_list
+    |> Enum.with_index(1)
+    |> Enum.each(fn {session, idx} ->
+      formatted_time = Calendar.strftime(session.last_message_at, "%Y-%m-%d %H:%M")
+      IO.puts("#{idx}. #{session.session_id} - #{session.working_dir} (#{formatted_time})")
+      IO.puts("   #{session.message_count} messages: #{session.last_user_prompt}")
+      IO.puts("")
+    end)
+
+    IO.puts("Enter session number to resume (or 'q' to quit): ")
+
+    case IO.gets("") |> String.trim() do
+      "q" ->
+        :ok
+
+      input ->
+        handle_session_input(input, session_list, flags)
+    end
+  end
+
+  defp handle_session_input(input, session_list, flags) do
+    case Integer.parse(input) do
+      {idx, ""} when idx >= 1 and idx <= length(session_list) ->
+        selected_session = Enum.at(session_list, idx - 1)
+        execute_command({:resume_session, selected_session.session_id}, flags)
+
+      _ ->
+        IO.puts(
+          :stderr,
+          "Invalid selection. Please enter a number between 1 and #{length(session_list)}."
+        )
+
+        exit({:shutdown, 1})
+    end
   end
 
   # Display a summary of the session's last 10 messages

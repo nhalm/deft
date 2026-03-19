@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## sessions v0.4
-
-- Fix `resume/1` to use observation entries from main JSONL as fallback (store.ex:143-165): `reconstruct_state` loads `om_state` from observation entries but `resume` overwrites it with `_om.jsonl` snapshot; if snapshot is missing, `om_snapshot` is `nil` and OM state is lost even when valid observation entries exist in the main JSONL; use observation entries as fallback when `_om.jsonl` is absent
-
 ## skills v0.4
 
 - Fix CLI skill injection to use system-level instructions (cli.ex:987-995): CLI returns skill definition via `{:ok, text}` which goes to `Deft.Agent.prompt/2` (user message); spec section 2.4 requires skills to be injected as system instructions; TUI correctly uses `{:inject_skill, full_text}` — CLI must match; the TODO comment at line 989 acknowledges this bug
