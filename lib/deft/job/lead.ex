@@ -229,7 +229,9 @@ defmodule Deft.Job.Lead do
     # Build initial planning prompt from deliverable assignment and site log
     planning_prompt = build_planning_prompt(data)
 
-    {:keep_state_and_data, [{:next_event, :cast, {:prompt, planning_prompt}}]}
+    # Use cast instead of next_event - next_event is prohibited in state_enter callbacks
+    :gen_statem.cast(self(), {:prompt, planning_prompt})
+    :keep_state_and_data
   end
 
   def handle_event(:enter, _old_state, {:verifying, :idle}, data) do
