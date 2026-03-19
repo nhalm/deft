@@ -16,8 +16,3 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
-
-## observational-memory v0.3
-
-- Add `om_observer_temperature` and `om_reflector_temperature` fields to `Deft.Config` and wire through to Observer/Reflector (currently hardcoded to `0.0`)
-

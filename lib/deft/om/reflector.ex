@@ -198,7 +198,7 @@ defmodule Deft.OM.Reflector do
         # Call LLM with Reflector prompt
         llm_config = %{
           model: config.om_reflector_model,
-          temperature: 0.0,
+          temperature: config.om_reflector_temperature,
           max_tokens: 100_000
         }
 

@@ -90,7 +90,7 @@ defmodule Deft.OM.Observer do
         # Call LLM with Observer prompt
         llm_config = %{
           model: config.om_observer_model,
-          temperature: 0.0,
+          temperature: config.om_observer_temperature,
           max_tokens: 16_000
         }
 
