@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## orchestration v0.3
-
-- Handle Lead start failure in Foreman `start_lead/2` (foreman.ex:2518-2525): when `LeadSupervisor.start_lead` or worktree creation fails, the deliverable name is never added to `started_leads`; `all_leads_complete?` requires `started_count == deliverables_count` which can never be satisfied; either add the deliverable to `started_leads` on failure (so the count matches) or use a different completion check that accounts for failed starts
-
 ## issues v0.4
 
 - Add fallback clauses to `normalize_status/1` and `normalize_source/1` in Issue (issue.ex:134-142): unrecognized string values (e.g., from a bad git merge) raise `FunctionClauseError` which propagates through `decode/1` and crashes `Issues.init/1`; add `defp normalize_status(_), do: :open` and `defp normalize_source(_), do: :user` with a Logger.warning

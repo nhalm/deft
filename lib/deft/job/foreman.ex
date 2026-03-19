@@ -2598,12 +2598,18 @@ defmodule Deft.Job.Foreman do
 
           {:error, reason} ->
             Logger.error("Failed to start Lead #{lead_id}: #{inspect(reason)}")
-            data
+            # Clean up the worktree that was created
+            cleanup_worktree(worktree_path, data.working_dir)
+            # Add to started_leads so all_leads_complete? can eventually be satisfied
+            started_leads = MapSet.put(data.started_leads, deliverable.name)
+            %{data | started_leads: started_leads}
         end
 
       {:error, reason} ->
         Logger.error("Failed to create worktree for Lead #{lead_id}: #{inspect(reason)}")
-        data
+        # Add to started_leads so all_leads_complete? can eventually be satisfied
+        started_leads = MapSet.put(data.started_leads, deliverable.name)
+        %{data | started_leads: started_leads}
     end
   end
 
