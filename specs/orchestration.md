@@ -2,11 +2,14 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.5 |
+| Version | 0.6 |
 | Status | Ready |
 | Last Updated | 2026-03-19 |
 
 ## Changelog
+
+### v0.6 (2026-03-19)
+- Changed: User corrections are now explicit via the `/correct` command. The implicit correction classification via LLM analysis is removed. The Foreman receives `{:lead_message, :correction, ...}` only when users explicitly invoke `/correct`.
 
 ### v0.5 (2026-03-19)
 - Clarified: Foreman must delegate tool execution to `Deft.Tool.execute/3`, not return placeholder results
@@ -233,7 +236,7 @@ All Foreman↔Lead communication happens via Erlang process messages.
 | `complete` | Lead→Foreman | Deliverable finished |
 | `error` | Any→Foreman | Something went wrong |
 | `cost` | RateLimiter→Foreman | Cost checkpoint (sent as `{:rate_limiter, :cost, amount}`, not `{:lead_message, ...}`) |
-| `correction` | User→Foreman | User course-correction — auto-promoted to site log |
+| `correction` | User→Foreman (via `/correct`) | User course-correction via explicit `/correct` command — auto-promoted to site log |
 | `critical_finding` | Lead→Foreman | Important finding — auto-promoted to site log |
 
 #### 6.3 Deft.Store Site Log Instance
@@ -258,6 +261,7 @@ The TUI shows Lead status (running/waiting/complete), current Runner activity, c
 |--------|-----|
 | Check status | `/status` or ask the Foreman |
 | Redirect | "Focus on the backend first" |
+| Send correction | `/correct <message>` — explicit course-correction, auto-promoted to site log |
 | Abort a deliverable | "Stop working on the frontend" |
 | Abort entire job | Ctrl+C or `/abort` (cleans up all worktrees) |
 | Add context | "By the way, we use Ecto for the database layer" |
