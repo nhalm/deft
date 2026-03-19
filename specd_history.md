@@ -1,4 +1,5 @@
 # History
+- **evals v0.3 (2026-03-19):** Create missing invocation fidelity fixture files: `test/eval/fixtures/skills/multi_step_skill.json`, `test/eval/fixtures/skills/use_skill_tool.json`, `test/eval/fixtures/skills/ordered_steps_skill.json`; `invocation_fidelity_test.exs` line 51 pattern-matches `{:ok, fixture} = load_fixture(fixture_path)` which raises MatchError when files are missing
 - **evals v0.3 (2026-03-19):** Fix `scoring.ex` misclassification of `actor.continuation`: line 68 classifies it as `{:hard_assertion, 1.00}` but actor.md section 4.2 specifies 90% over 20 iterations (statistical); should be `{:statistical, 0.90}`
 - **evals v0.4 (2026-03-19):** Update `test/eval/reflector/compression_test.exs` line 20: change `@compression_pass_rate 0.80` to `@compression_pass_rate 0.90` to match reflector.md section 3.1 and updated README section 1.5
 - **evals v0.3 (2026-03-19):** Add observer section-ordering hard assertion test: `scoring.ex` registers `"observer.section_ordering"` as `{:hard_assertion, 1.00}` (line 66) but no test exercises it; need a test that asserts the 5 Observer section headers appear in canonical order in a single iteration

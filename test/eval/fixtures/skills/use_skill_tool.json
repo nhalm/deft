@@ -1,0 +1,18 @@
+{
+  "id": "skills-invocation-use-skill-tool-001",
+  "spec_version": "0.3",
+  "description": "Agent correctly invokes use_skill tool when appropriate",
+  "tags": ["skills", "invocation", "use-skill-tool"],
+  "should_invoke_use_skill": true,
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "I need to perform a comprehensive code review. Can you help me with that?"
+        }
+      ]
+    }
+  ]
+}
