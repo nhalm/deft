@@ -16,7 +16,3 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
-
-## orchestration v0.4
-
-- Add DOWN handler for research runner crashes in Foreman — `Process.monitor(task.pid)` at foreman.ex:335 creates a monitor ref distinct from `task.ref`, but the only DOWN handler (foreman.ex:684) checks `tool_tasks` not `research_tasks`; crashed research runners are never cleaned up, hanging the research phase until the 120s timeout

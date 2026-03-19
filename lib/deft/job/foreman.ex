@@ -681,25 +681,52 @@ defmodule Deft.Job.Foreman do
     {:next_state, {job_phase, :idle}, data}
   end
 
-  # Tool task crash handling (DOWN message) - includes verification Runner
+  # Task crash handling (DOWN message) - research runners, tool tasks, and verification Runner
   def handle_event(
         :info,
         {:DOWN, _monitor_ref, :process, _pid, reason} = down_msg,
         {job_phase, agent_state} = state,
-        %{tool_tasks: tool_tasks} = data
+        data
       ) do
     # Extract ref from DOWN message
     {:DOWN, ref, :process, _pid, _reason} = down_msg
 
+    # Check if this ref matches any research task
+    research_tasks = Map.get(data, :research_tasks, [])
+    crashed_research_task = Enum.find(research_tasks, fn task -> task.ref == ref end)
+
     # Check if this ref matches any tool task
-    crashed_task = Enum.find(tool_tasks, fn task -> task.ref == ref end)
+    tool_tasks = Map.get(data, :tool_tasks, [])
+    crashed_tool_task = Enum.find(tool_tasks, fn task -> task.ref == ref end)
 
-    case crashed_task do
-      nil ->
-        # Not a tool task, fall through to Lead crash handler
-        handle_lead_crash(down_msg, state, data)
+    cond do
+      crashed_research_task ->
+        # A research task crashed
+        Logger.error(
+          "Research task crashed in #{job_phase}:#{agent_state}, reason: #{inspect(reason)}"
+        )
 
-      _task ->
+        # Remove crashed task from tracking
+        remaining_tasks = Enum.reject(research_tasks, fn task -> task.ref == ref end)
+        data = %{data | research_tasks: remaining_tasks}
+
+        # If all research tasks done (including crashed ones), transition to decomposing
+        if Enum.empty?(remaining_tasks) do
+          # Cancel timeout timer
+          if data.research_timeout_ref do
+            Process.cancel_timer(data.research_timeout_ref)
+          end
+
+          Logger.info(
+            "Research phase complete (with crashes), collected #{length(data.research_findings)} findings"
+          )
+
+          {:next_state, {:decomposing, :idle}, data}
+        else
+          {:keep_state, data}
+        end
+
+      crashed_tool_task ->
         # A tool task crashed
         Logger.error(
           "Tool task crashed in #{job_phase}:#{agent_state}, reason: #{inspect(reason)}"
@@ -730,6 +757,10 @@ defmodule Deft.Job.Foreman do
             # The normal flow will detect incomplete tasks and handle appropriately
             {:keep_state, data}
         end
+
+      true ->
+        # Not a research or tool task, fall through to Lead crash handler
+        handle_lead_crash(down_msg, state, data)
     end
   end
 
