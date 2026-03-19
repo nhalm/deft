@@ -1,4 +1,5 @@
 # History
+- **evals v0.3 (2026-03-19):** Add observer section-ordering hard assertion test: `scoring.ex` registers `"observer.section_ordering"` as `{:hard_assertion, 1.00}` (line 66) but no test exercises it; need a test that asserts the 5 Observer section headers appear in canonical order in a single iteration
 - **evals v0.3 (2026-03-19):** Create missing support modules: `test/eval/support/scoring.ex` (confidence interval reporting per spec section 1.5), `test/eval/support/judge_calibration.ex` (calibration set management per spec section 1.6)
 - **evals v0.3 (2026-03-19):** Create missing holdout infrastructure: `test/eval/fixtures/holdout/` directory, `@tag :holdout` tests, `make test.eval.holdout` target per spec section 1.4
 - **evals v0.3 (2026-03-19):** Create missing fixture directories: `test/eval/fixtures/skills/`, `test/eval/fixtures/coding_conversations/`, `test/eval/fixtures/tool_results/`; skills suggestion test (suggestion_test.exs:57) crashes with MatchError because `{:ok, fixture} = load_fixture(fixture_path)` fails when fixtures don't exist
