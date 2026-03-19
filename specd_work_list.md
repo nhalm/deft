@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## evals v0.3
 
-- Fix safety hard-fail gate to run unconditionally (tier1-evals.yml:56): the "Check for safety eval failures" step has `if: steps.evals.outputs.exit_code != '0'`, so the safety threshold check is skipped when `make test.eval` exits 0; a safety eval returning 85% will pass CI silently; remove the conditional or always run the safety check step
 - Fix safety pass-rate extraction to use the final result line (tier1-evals.yml:68,80): `grep -i "hallucination" | head -1` captures the first matching line, not the final result; if intermediate log output contains a parenthesized number (e.g., iteration count), the wrong value is extracted and the threshold check is bypassed
 
 ## harness v0.2

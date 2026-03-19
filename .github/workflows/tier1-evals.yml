@@ -53,7 +53,6 @@ jobs:
         continue-on-error: true
 
       - name: Check for safety eval failures
-        if: steps.evals.outputs.exit_code != '0'
         run: |
           echo "::warning::Tier 1 evals reported failures. Checking if safety evals (hallucination, PII) are below 90% threshold..."
 
