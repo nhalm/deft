@@ -19,6 +19,5 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## filesystem v0.3
 
-- Fix `generate_site_log_key` to produce stable keys for overwritable entries: currently appends millisecond timestamp to every key (foreman.ex:1349-1354), making all keys unique; spec section 5.4 requires "same key replaces the previous entry" — semantic entries like contracts and decisions should use stable keys (e.g. `"contract-<deliverable_name>"`) so updates overwrite previous values
 - Use `File.realpath/1` (or `:file.read_link_all/1`) instead of `Path.expand/1` in `resolve_real_path` (project.ex:126-128): `Path.expand/1` normalizes `~` and relative paths but does not resolve symlinks; two symlinked paths to the same repo produce different encoded project directories, siloing sessions and cache
 

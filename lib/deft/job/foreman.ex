@@ -1504,10 +1504,34 @@ defmodule Deft.Job.Foreman do
   end
 
   defp generate_site_log_key(category, metadata) do
-    # Generate a human-readable key with timestamp for uniqueness
+    # Check if an explicit key is provided (e.g., for :plan entries)
+    case Map.get(metadata, :key) do
+      nil ->
+        # No explicit key - generate based on category and metadata
+        generate_stable_or_unique_key(category, metadata)
+
+      explicit_key ->
+        # Use explicit key without timestamp (allows overwrites)
+        "#{category}-#{explicit_key}"
+    end
+  end
+
+  # Semantic categories use stable keys to allow overwrites (spec section 5.4)
+  defp generate_stable_or_unique_key(category, metadata)
+       when category in [:contract, :decision, :complete] do
+    # Use deliverable_name if available, otherwise lead_id
+    base_key =
+      Map.get(metadata, :deliverable_name) ||
+        Map.get(metadata, :deliverable) ||
+        Map.get(metadata, :lead_id, "entry")
+
+    "#{category}-#{base_key}"
+  end
+
+  # Other categories use unique keys with timestamps
+  defp generate_stable_or_unique_key(category, metadata) do
     timestamp = System.system_time(:millisecond)
-    # For completion messages, use lead_id; otherwise fall back to explicit key or "entry"
-    base_key = Map.get(metadata, :lead_id) || Map.get(metadata, :key, "entry")
+    base_key = Map.get(metadata, :lead_id, "entry")
     "#{category}-#{base_key}-#{timestamp}"
   end
 
