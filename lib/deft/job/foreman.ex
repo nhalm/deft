@@ -1077,15 +1077,18 @@ defmodule Deft.Job.Foreman do
           "Lead #{lead_id} crashed, cleaning up worktree: #{lead_info.worktree_path}, reason: #{inspect(reason)}"
         )
 
+        # Extract deliverable name from lead_id (format: "#{session_id}-#{deliverable_name}")
+        deliverable_name = String.replace_prefix(lead_id, "#{data.session_id}-", "")
+
+        # Write failure marker to site log to allow completion check to be satisfied
+        write_failure_marker(lead_id, deliverable_name, "Lead crashed: #{inspect(reason)}", data)
+
         # Clean up the Lead's worktree
         cleanup_worktree(lead_info.worktree_path, data.working_dir)
 
         # Remove crashed Lead from tracking
         leads = Map.delete(leads, lead_id)
         data = %{data | leads: leads}
-
-        # TODO: Decide whether to retry or mark deliverable as failed
-        # For now, just clean up and continue
 
         # Check if all Leads are complete after crash
         case check_phase_transition(:complete, job_phase, data) do
@@ -1698,6 +1701,17 @@ defmodule Deft.Job.Foreman do
   defp handle_test_failure(lead_id, lead_info, test_output, data) do
     Logger.error("Post-merge tests failed for Lead #{lead_id}. Manual intervention required.")
 
+    # Extract deliverable name from lead_id (format: "#{session_id}-#{deliverable_name}")
+    deliverable_name = String.replace_prefix(lead_id, "#{data.session_id}-", "")
+
+    # Write failure marker to site log to allow completion check to be satisfied
+    write_failure_marker(
+      lead_id,
+      deliverable_name,
+      "Post-merge tests failed",
+      data
+    )
+
     # Clean up the Lead's worktree
     cleanup_worktree(lead_info.worktree_path, data.working_dir)
 
@@ -1722,6 +1736,17 @@ defmodule Deft.Job.Foreman do
   # Handle post-merge test execution error
   defp handle_test_error(lead_id, lead_info, reason, data) do
     Logger.error("Failed to run post-merge tests for Lead #{lead_id}: #{inspect(reason)}")
+
+    # Extract deliverable name from lead_id (format: "#{session_id}-#{deliverable_name}")
+    deliverable_name = String.replace_prefix(lead_id, "#{data.session_id}-", "")
+
+    # Write failure marker to site log to allow completion check to be satisfied
+    write_failure_marker(
+      lead_id,
+      deliverable_name,
+      "Test execution error: #{inspect(reason)}",
+      data
+    )
 
     # Clean up the Lead's worktree
     cleanup_worktree(lead_info.worktree_path, data.working_dir)
@@ -1809,6 +1834,12 @@ defmodule Deft.Job.Foreman do
   defp handle_merge_error(lead_id, reason, lead_info, data) do
     Logger.error("Failed to merge Lead #{lead_id}: #{inspect(reason)}")
 
+    # Extract deliverable name from lead_id (format: "#{session_id}-#{deliverable_name}")
+    deliverable_name = String.replace_prefix(lead_id, "#{data.session_id}-", "")
+
+    # Write failure marker to site log to allow completion check to be satisfied
+    write_failure_marker(lead_id, deliverable_name, "Merge failed: #{inspect(reason)}", data)
+
     send_to_self =
       {:lead_message, :error, "Failed to merge Lead #{lead_id}: #{inspect(reason)}",
        %{lead_id: lead_id}}
@@ -1863,7 +1894,7 @@ defmodule Deft.Job.Foreman do
 
   # Semantic categories use stable keys to allow overwrites (spec section 5.4)
   defp generate_stable_or_unique_key(category, metadata)
-       when category in [:contract, :decision, :complete] do
+       when category in [:contract, :decision, :complete, :failed] do
     # Use deliverable_name if available, otherwise lead_id
     base_key =
       Map.get(metadata, :deliverable_name) ||
@@ -1899,7 +1930,7 @@ defmodule Deft.Job.Foreman do
     # All Leads complete if:
     # 1. We have a plan with deliverables
     # 2. All deliverables have been started
-    # 3. All started deliverables have a corresponding completion record in the site log
+    # 3. All started deliverables have a corresponding completion OR failure record in the site log
     # 4. No Leads remain in the tracking map (all merged and cleaned up)
     has_plan = not is_nil(data.plan) and not is_nil(Map.get(data.plan, :deliverables))
 
@@ -1908,13 +1939,18 @@ defmodule Deft.Job.Foreman do
       started_count = MapSet.size(data.started_leads)
       remaining_leads = map_size(data.leads)
 
-      # Get completed deliverables from site log
+      # Get completed and failed deliverables from site log
       completed_deliverables = determine_completed_deliverables(data)
       completed_count = length(completed_deliverables)
 
-      # All deliverables started, all started deliverables completed, and no Leads remain
+      failed_deliverables = determine_failed_deliverables(data)
+      failed_count = length(failed_deliverables)
+
+      finished_count = completed_count + failed_count
+
+      # All deliverables started, all started deliverables finished (completed or failed), and no Leads remain
       deliverables_count > 0 and started_count == deliverables_count and
-        completed_count == deliverables_count and remaining_leads == 0
+        finished_count == deliverables_count and remaining_leads == 0
     else
       false
     end
@@ -2615,8 +2651,18 @@ defmodule Deft.Job.Foreman do
 
           {:error, reason} ->
             Logger.error("Failed to start Lead #{lead_id}: #{inspect(reason)}")
+
+            # Write failure marker to site log to allow completion check to be satisfied
+            write_failure_marker(
+              lead_id,
+              deliverable.name,
+              "Failed to start Lead: #{inspect(reason)}",
+              data
+            )
+
             # Clean up the worktree that was created
             cleanup_worktree(worktree_path, data.working_dir)
+
             # Add to started_leads so all_leads_complete? can eventually be satisfied
             started_leads = MapSet.put(data.started_leads, deliverable.name)
             %{data | started_leads: started_leads}
@@ -2624,6 +2670,15 @@ defmodule Deft.Job.Foreman do
 
       {:error, reason} ->
         Logger.error("Failed to create worktree for Lead #{lead_id}: #{inspect(reason)}")
+
+        # Write failure marker to site log to allow completion check to be satisfied
+        write_failure_marker(
+          lead_id,
+          deliverable.name,
+          "Failed to create worktree: #{inspect(reason)}",
+          data
+        )
+
         # Add to started_leads so all_leads_complete? can eventually be satisfied
         started_leads = MapSet.put(data.started_leads, deliverable.name)
         %{data | started_leads: started_leads}
@@ -3065,5 +3120,52 @@ defmodule Deft.Job.Foreman do
       |> Enum.reject(&is_nil/1)
 
     completed_deliverables
+  end
+
+  defp determine_failed_deliverables(data) do
+    # Read the site log to find failed deliverables
+    # Deliverables are failed if the site log contains a `:failed` message
+
+    # Get all keys from the site log
+    tid = Store.tid(data.site_log_pid)
+    site_log_keys = Store.keys(tid)
+
+    # Look for "failed-*" entries and extract deliverable names from metadata
+    failed_deliverables =
+      site_log_keys
+      |> Enum.filter(&String.starts_with?(&1, "failed-"))
+      |> Enum.map(fn key ->
+        # Read the entry to get metadata instead of parsing the key
+        case Store.read(tid, key) do
+          {:ok, entry} ->
+            # Extract deliverable name from lead_id (format: "#{session_id}-#{deliverable_name}")
+            lead_id = get_in(entry, [:metadata, :lead_id])
+
+            if lead_id do
+              String.replace_prefix(lead_id, "#{data.session_id}-", "")
+            else
+              nil
+            end
+
+          _ ->
+            nil
+        end
+      end)
+      |> Enum.reject(&is_nil/1)
+
+    failed_deliverables
+  end
+
+  defp write_failure_marker(lead_id, deliverable_name, reason, data) do
+    # Write failure marker to site log for resume tracking
+    # This allows all_leads_complete? to be satisfied even when Leads crash or fail
+    metadata = %{lead_id: lead_id, deliverable: deliverable_name, failure_reason: reason}
+
+    write_to_site_log(
+      :failed,
+      "Deliverable #{deliverable_name} failed: #{reason}",
+      metadata,
+      data
+    )
   end
 end
