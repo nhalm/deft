@@ -436,7 +436,9 @@ defmodule Deft.Job.RateLimiter do
     buckets = state.providers[provider]
 
     # Calculate actual tokens used (input only, since we estimated input tokens)
-    actual_tokens = Map.get(actual_usage, :input, estimated_tokens)
+    # Handle nil actual_usage (when no Usage events arrive from the provider)
+    actual_tokens =
+      if actual_usage, do: Map.get(actual_usage, :input, estimated_tokens), else: estimated_tokens
 
     # Credit back the difference (estimated - actual), capped at bucket capacity
     credit_amount = max(0, estimated_tokens - actual_tokens)
@@ -445,8 +447,8 @@ defmodule Deft.Job.RateLimiter do
     new_buckets = %{buckets | tpm: new_tpm_bucket}
     new_state = put_in(state, [:providers, provider], new_buckets)
 
-    # Track cost from actual usage
-    new_state = track_cost(new_state, actual_usage)
+    # Track cost from actual usage (only if we have actual usage data)
+    new_state = if actual_usage, do: track_cost(new_state, actual_usage), else: new_state
 
     # Process queue in case capacity became available
     new_state = process_queue(new_state)

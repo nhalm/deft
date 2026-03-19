@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.5
 
-- Fix `RateLimiter.reconcile/4` to handle nil `actual_usage` (rate_limiter.ex:439): Runner's `collect_stream_events` initializes `usage = nil` (runner.ex:265); if no Usage events arrive, `RateLimiter.reconcile` is called with nil; `Map.get(nil, :input, ...)` raises `BadMapError`, crashing the RateLimiter GenServer for the entire job
 - Fix merge-resolution retry counter to increment on each attempt (foreman.ex:2358): `handle_merge_retry_attempt` passes `retry_count` unchanged to `handle_lead_merge_with_retry`; should pass `retry_count + 1`; the retry cap of 3 is never enforced, allowing infinite merge-resolution loops
 - Add `terminate/3` callback to Foreman for DETS cleanup (foreman.ex): in isolated startup (test, resume), the Foreman starts the site log Store directly without a supervisor; on Foreman exit, the Store is never stopped and the DETS file is not flushed; risk of DETS corruption on abnormal exit
 
