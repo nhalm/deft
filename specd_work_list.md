@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## orchestration v0.3
-
-- Fix merge conflict/error paths to remove Lead from tracking and clean up worktree: `handle_lead_merge` returns unchanged `data` on `{:ok, :conflict, ...}` and `{:error, reason}` (foreman.ex:1201-1208); Lead stays in `data.leads`, worktree is leaked, `all_leads_complete?` never returns true, job hangs in `:executing` permanently
-
 ## git-strategy v0.1
 
 - Fix `run_post_merge_tests` to run tests on the job branch: currently runs tests via `File.cd!(working_dir, ...)` where `working_dir` is the main repo root, not a worktree checked out to `deft/job-<job_id>` (job.ex:474-481); merged code on the job branch is never tested, defeating post-merge test purpose

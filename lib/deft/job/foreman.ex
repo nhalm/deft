@@ -1199,12 +1199,10 @@ defmodule Deft.Job.Foreman do
         handle_successful_merge(lead_id, lead_info, data)
 
       {:ok, :conflict, conflicted_files} ->
-        handle_merge_conflict(lead_id, conflicted_files)
-        data
+        handle_merge_conflict(lead_id, conflicted_files, lead_info, data)
 
       {:error, reason} ->
-        handle_merge_error(lead_id, reason)
-        data
+        handle_merge_error(lead_id, reason, lead_info, data)
     end
   end
 
@@ -1268,7 +1266,7 @@ defmodule Deft.Job.Foreman do
   end
 
   # Handle merge conflict
-  defp handle_merge_conflict(lead_id, conflicted_files) do
+  defp handle_merge_conflict(lead_id, conflicted_files, lead_info, data) do
     Logger.error("Merge conflict for Lead #{lead_id}: #{inspect(conflicted_files)}")
 
     send_to_self =
@@ -1277,10 +1275,17 @@ defmodule Deft.Job.Foreman do
        %{lead_id: lead_id, conflicted_files: conflicted_files}}
 
     send(self(), send_to_self)
+
+    # Clean up the Lead's worktree
+    cleanup_worktree(lead_info.worktree_path, data.working_dir)
+
+    # Remove Lead from tracking
+    leads = Map.delete(data.leads, lead_id)
+    %{data | leads: leads}
   end
 
   # Handle merge error
-  defp handle_merge_error(lead_id, reason) do
+  defp handle_merge_error(lead_id, reason, lead_info, data) do
     Logger.error("Failed to merge Lead #{lead_id}: #{inspect(reason)}")
 
     send_to_self =
@@ -1288,6 +1293,13 @@ defmodule Deft.Job.Foreman do
        %{lead_id: lead_id}}
 
     send(self(), send_to_self)
+
+    # Clean up the Lead's worktree
+    cleanup_worktree(lead_info.worktree_path, data.working_dir)
+
+    # Remove Lead from tracking
+    leads = Map.delete(data.leads, lead_id)
+    %{data | leads: leads}
   end
 
   defp write_to_site_log(category, content, metadata, data) do
