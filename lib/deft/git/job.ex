@@ -425,33 +425,37 @@ defmodule Deft.Git.Job do
 
     Logger.info("Running post-merge tests on #{job_branch}: #{test_command}")
 
-    try do
-      # Change to working directory to ensure tests run in correct location
-      File.cd!(working_dir, fn ->
-        # Parse the test command (may include arguments)
-        [cmd | args] = String.split(test_command, " ", trim: true)
+    # Run the test command in a task with timeout enforcement
+    task =
+      Task.async(fn ->
+        File.cd!(working_dir, fn ->
+          # Parse the test command (may include arguments)
+          [cmd | args] = String.split(test_command, " ", trim: true)
 
-        # Run the test command
-        case System.cmd(cmd, args, stderr_to_stdout: true, timeout: timeout) do
-          {_output, 0} ->
-            Logger.info("Post-merge tests passed on #{job_branch}")
-            {:ok, :passed}
-
-          {output, exit_code} ->
-            Logger.error("Post-merge tests failed on #{job_branch} (exit code: #{exit_code})")
-            {:error, :test_failed, output}
-        end
+          # Run the test command
+          System.cmd(cmd, args, stderr_to_stdout: true)
+        end)
       end)
-    rescue
-      e in ErlangError ->
-        # Handle timeout or other system errors
-        if e.original == :timeout do
-          Logger.error("Post-merge tests timed out on #{job_branch}")
-          {:error, :timeout}
-        else
-          Logger.error("Failed to run post-merge tests: #{inspect(e)}")
-          {:error, {:test_execution_failed, e.original}}
-        end
+
+    # Wait for the task to complete with timeout
+    case Task.yield(task, timeout) do
+      {:ok, {_output, 0}} ->
+        Logger.info("Post-merge tests passed on #{job_branch}")
+        {:ok, :passed}
+
+      {:ok, {output, exit_code}} ->
+        Logger.error("Post-merge tests failed on #{job_branch} (exit code: #{exit_code})")
+        {:error, :test_failed, output}
+
+      {:exit, reason} ->
+        Logger.error("Post-merge tests crashed on #{job_branch}: #{inspect(reason)}")
+        {:error, {:test_execution_failed, reason}}
+
+      nil ->
+        # Task timed out - kill it to prevent process leak
+        Task.shutdown(task, :brutal_kill)
+        Logger.error("Post-merge tests timed out on #{job_branch} after #{timeout}ms")
+        {:error, :timeout}
     end
   end
 

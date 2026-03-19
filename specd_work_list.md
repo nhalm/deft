@@ -25,7 +25,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## git-strategy v0.1
 
-- Fix run_post_merge_tests :timeout option: System.cmd/3 does not support a :timeout option (job.ex:418); the unsupported option causes FunctionClauseError or is silently ignored; post-merge test timeout is not enforced; use Task.async + Process.send_after pattern instead
 - Fix merge_lead_branch to not checkout on main working tree: git checkout in File.cd!(working_dir) (job.ex:310-315) conflicts with worktrees that may have the job branch checked out; use `git merge` in a worktree or `git merge-tree` instead
 
 ## issues v0.2
