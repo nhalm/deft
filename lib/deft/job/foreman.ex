@@ -240,6 +240,13 @@ defmodule Deft.Job.Foreman do
     :keep_state_and_data
   end
 
+  def handle_event(:enter, _old_state, {:verifying, :idle}, _data) do
+    # When entering verification phase, spawn verification Runner
+    Logger.info("Foreman starting verification phase")
+    :gen_statem.cast(self(), :start_verification)
+    :keep_state_and_data
+  end
+
   def handle_event(:enter, _old_state, {job_phase, :executing_tools}, data) do
     # Extract tool calls from the last assistant message
     tool_calls = extract_tool_calls(data.messages)
@@ -326,6 +333,63 @@ defmodule Deft.Job.Foreman do
 
       {:keep_state, updated_data}
     end
+  end
+
+  # Start verification Runner handling
+  def handle_event(:cast, :start_verification, {:verifying, :idle}, data) do
+    Logger.info("Spawning verification Runner for final testing and review")
+
+    # Get job branch for testing
+    job_branch = "deft/job-#{data.session_id}"
+
+    # Get test command from config (defaults to "mix test")
+    test_command = Map.get(data.config, :job_test_command, "mix test")
+
+    # Get runner model from config
+    runner_model = Map.get(data.config, :runner_model, Map.get(data.config, :lead_model))
+
+    # Build verification instructions
+    verification_instructions = """
+    Run the full test suite and review all modified files for quality.
+
+    1. Run the test suite: #{test_command}
+    2. Review the modified files in this job for:
+       - Code quality and adherence to project conventions
+       - Potential bugs or issues
+       - Test coverage
+
+    If all tests pass and the code looks good, report success.
+    If tests fail or there are quality issues, report the failures with details.
+    """
+
+    verification_context = """
+    Job branch: #{job_branch}
+    Test command: #{test_command}
+    """
+
+    runner_config = %{
+      provider: get_provider(data),
+      model: runner_model
+    }
+
+    # Spawn verification Runner
+    task =
+      Task.Supervisor.async_nolink(
+        SessionWorker.tool_runner_via_tuple(data.session_id),
+        fn ->
+          Runner.run(
+            :review,
+            verification_instructions,
+            verification_context,
+            data.session_id,
+            runner_config,
+            data.working_dir
+          )
+        end
+      )
+
+    # Store verification task
+    {:keep_state, %{data | tool_tasks: [task]}}
   end
 
   # Abort handling (works in any state)
@@ -598,6 +662,75 @@ defmodule Deft.Job.Foreman do
       end
     else
       {:keep_state, data}
+    end
+  end
+
+  # Verification task completion
+  def handle_event(
+        :info,
+        {ref, results},
+        {:verifying, :idle},
+        %{tool_tasks: tasks} = data
+      )
+      when is_reference(ref) do
+    # Verification Runner completed
+    tasks = Enum.reject(tasks, fn task -> task.ref == ref end)
+    data = %{data | tool_tasks: tasks}
+
+    Logger.info("Verification Runner completed")
+
+    # Check verification results
+    verification_passed = analyze_verification_results(results)
+
+    if verification_passed do
+      Logger.info("Verification passed - proceeding with squash-merge")
+
+      # Get original branch (stored in config or default to current branch)
+      original_branch = Map.get(data.config, :original_branch, "main")
+
+      # Trigger squash-merge
+      case GitJob.complete_job(
+             job_id: data.session_id,
+             original_branch: original_branch,
+             squash: true,
+             working_dir: data.working_dir
+           ) do
+        {:ok, :completed} ->
+          Logger.info("Job completed successfully - squash-merge done")
+          {:next_state, {:complete, :idle}, data}
+
+        {:error, reason} ->
+          Logger.error("Failed to complete job: #{inspect(reason)}")
+          # Report error to user
+          error_message = """
+          Verification passed but failed to merge changes: #{inspect(reason)}
+
+          You may need to manually merge the job branch: deft/job-#{data.session_id}
+          """
+
+          send_user_message(error_message, data)
+          {:next_state, {:complete, :idle}, data}
+      end
+    else
+      Logger.warning("Verification failed")
+
+      # Identify responsible Lead based on test failures
+      responsible_lead = identify_responsible_lead(results, data)
+
+      # Report failure to user
+      failure_message = """
+      Verification failed. Test suite or code review found issues.
+
+      #{format_verification_failures(results)}
+
+      #{if responsible_lead, do: "Most likely responsible: #{responsible_lead}", else: ""}
+
+      The job has been stopped. Changes remain in the job branch: deft/job-#{data.session_id}
+      You can review the changes and decide how to proceed.
+      """
+
+      send_user_message(failure_message, data)
+      {:next_state, {:complete, :idle}, data}
     end
   end
 
@@ -1967,5 +2100,97 @@ defmodule Deft.Job.Foreman do
       """
     end}
     """
+  end
+
+  # Verification helpers
+
+  defp analyze_verification_results(results) do
+    # Results from the verification Runner - check for test failures or quality issues
+    # The Runner returns a map with findings
+    case results do
+      %{success: true} ->
+        true
+
+      %{success: false} ->
+        false
+
+      # If results is a string, check for common failure indicators
+      result_str when is_binary(result_str) ->
+        # Check for test failure patterns
+        not (String.contains?(result_str, "failed") or
+               String.contains?(result_str, "error") or
+               String.contains?(result_str, "FAILED"))
+
+      # Default to failed if structure is unexpected
+      _ ->
+        Logger.warning("Unexpected verification result format: #{inspect(results)}")
+        false
+    end
+  end
+
+  defp identify_responsible_lead(results, data) do
+    # Try to map failures to specific Leads based on file paths
+    # This is a best-effort attempt - may not always be accurate
+
+    failure_info = extract_failure_info(results)
+
+    # Get file paths mentioned in failures
+    failed_files = extract_failed_files(failure_info)
+
+    # Match files to Leads based on their deliverables
+    leads_by_files =
+      Enum.reduce(data.leads, %{}, fn {lead_id, lead_info}, acc ->
+        deliverable = Map.get(lead_info, :deliverable, %{})
+        files = Map.get(deliverable, :files, [])
+        Map.put(acc, lead_id, files)
+      end)
+
+    # Find Lead with most overlap
+    lead_scores =
+      Enum.map(leads_by_files, fn {lead_id, lead_files} ->
+        overlap =
+          Enum.count(failed_files, fn failed_file ->
+            Enum.any?(lead_files, fn lead_file ->
+              String.contains?(failed_file, lead_file) or String.contains?(lead_file, failed_file)
+            end)
+          end)
+
+        {lead_id, overlap}
+      end)
+
+    case Enum.max_by(lead_scores, fn {_id, score} -> score end, fn -> nil end) do
+      {lead_id, score} when score > 0 -> lead_id
+      _ -> nil
+    end
+  end
+
+  defp extract_failure_info(results) when is_binary(results), do: results
+  defp extract_failure_info(%{message: msg}), do: msg
+  defp extract_failure_info(%{error: err}), do: err
+  defp extract_failure_info(_), do: ""
+
+  defp extract_failed_files(failure_info) when is_binary(failure_info) do
+    # Extract file paths from failure messages
+    # Look for common patterns like "path/to/file.ex:123"
+    Regex.scan(~r/([a-z_\/]+\.ex):\d+/i, failure_info)
+    |> Enum.map(fn [_, path] -> path end)
+    |> Enum.uniq()
+  end
+
+  defp extract_failed_files(_), do: []
+
+  defp format_verification_failures(results) do
+    case results do
+      %{message: msg} -> msg
+      %{error: err} -> err
+      result_str when is_binary(result_str) -> result_str
+      _ -> inspect(results)
+    end
+  end
+
+  defp send_user_message(message, _data) do
+    # Log the message - in a real implementation this would send to the TUI
+    Logger.info("Message to user:\n#{message}")
+    # TODO: Send to TUI/user interface
   end
 end
