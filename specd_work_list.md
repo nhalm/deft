@@ -21,7 +21,7 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 - Wire Lead call_llm to use LLM provider through RateLimiter: currently a no-op stub returning make_ref() (lead.ex:622-626); Lead steering cannot produce real LLM output
 - Add RateLimiter.reconcile call after Runner LLM response: Runner never calls reconcile/4 after getting API response; TPM bucket tokens are deducted but never credited back, causing bucket to drain faster than actual usage (runner.ex:157-172)
-- Implement verification phase: after all Leads complete, Foreman spawns verification Runner (full test suite + reviews modified files); on pass, trigger squash-merge; on fail, identify responsible Lead and report (blocked: Wire Foreman call_llm..., Wire Lead call_llm...)
+- Implement verification phase: after all Leads complete, Foreman spawns verification Runner (full test suite + reviews modified files); on pass, trigger squash-merge; on fail, identify responsible Lead and report (blocked: Wire Lead call_llm...)
 - Implement job cleanup: Foreman cleans all worktrees on completion/failure/abort, archives job files to ~/.deft/projects/<path-encoded-repo>/jobs/<job_id>/; on Lead crash, Foreman cleans that Lead's worktree immediately (blocked: Implement verification phase...)
 - Implement job persistence and resume: store sitelog.dets, plan.json, foreman_session.jsonl, lead_<id>_session.jsonl at ~/.deft/projects/<path-encoded-repo>/jobs/<job_id>/; on resume, read site log + plan.json, start fresh Leads for incomplete deliverables (blocked: Implement verification phase...)
 
