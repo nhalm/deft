@@ -17,3 +17,20 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
+## orchestration v0.3
+
+- Pass `work_cost_ceiling` config to RateLimiter in `Job.Supervisor.init/1` (supervisor.ex:79): RateLimiter is started with only `[job_id, foreman_pid]`; its `init/1` defaults `cost_ceiling` to `10.0` (rate_limiter.ex:336) while `Deft.Config` defaults `work.cost_ceiling` to `50.0` (config.ex:163); jobs pause at $10 regardless of user config
+- Add `check_phase_transition` call after merge-resolution completion in Foreman (foreman.ex:831-832): merge-resolution handler returns `{:keep_state, new_data}` without checking if all Leads are complete; if the last Lead required conflict resolution, the job permanently stalls in `:executing` and never enters `:verifying`
+- Derive `publishing_deliverable` from Foreman's Lead tracking map instead of metadata in `process_lead_message(:contract, ...)` (foreman.ex:1343-1344): code reads `Map.get(metadata, :deliverable_name)` but Lead's `send_lead_message/4` never populates this key; `contract_matches?` always returns `false` (line 2514 guards `publishing_deliverable != nil`); contract-based dependency unblocking never fires
+
+## git-strategy v0.1
+
+- Guard `{:executing, :idle}` enter handler against resume: `create_job_branch` is called unconditionally on entering `{:executing, :idle}` (foreman.ex:355-373); resume enters this state (foreman.ex:270) but the branch already exists; `create_branch` fails and the enter handler transitions to `{:complete, :idle}`, immediately aborting the resumed job
+- Commit resolved files in merge-resolution Runner before retrying merge (foreman.ex:825,831,1651-1661): Runner instructions say "stage the resolved files using git add" but never commit; `cleanup_worktree` at line 825 removes the worktree (and staged files) before `handle_lead_merge` retry at line 831 creates a new merge worktree with the same unresolved conflicts
+- Change `delete_lead_branch` to use `git branch -D` (force delete) instead of `-d` (foreman.ex:1850): merge happens in a temporary worktree, not the main HEAD; from the main repo's perspective the lead branch is never merged; `-d` always fails with "not fully merged"; return value is discarded by callers so branches silently accumulate
+
+## issues v0.3
+
+- Start `Deft.Issues` from `Deft.Application` when `.deft/issues.jsonl` exists (application.ex:12-20): spec §4 requires "Started by `Deft.Application` if `.deft/issues.jsonl` exists"; currently only started ad-hoc by CLI and IssueCreate tool
+- Use context `working_dir` instead of `File.cwd!()` in `IssueCreate.ensure_issues_started/0` (issue_create.ex:175): loads config from OS cwd rather than the session's working directory; wrong `compaction_days` applied when `--working-dir` flag differs from cwd
+
