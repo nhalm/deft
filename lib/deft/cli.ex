@@ -2117,7 +2117,7 @@ defmodule Deft.CLI do
         result = wait_for_job_completion(foreman_pid, ref)
         cost = get_job_cost(job_id)
 
-        case handle_job_result(result, issue, job_id) do
+        case handle_job_result(result, issue, job_id, cost) do
           :ok -> {:ok, cost}
           other -> other
         end
@@ -2254,7 +2254,7 @@ defmodule Deft.CLI do
   end
 
   # Handle the result of a job
-  defp handle_job_result({:ok, :completed}, issue, job_id) do
+  defp handle_job_result({:ok, :completed}, issue, job_id, _cost) do
     # Job completed successfully - close the issue
     case Issues.close(issue.id, job_id) do
       {:ok, _issue} ->
@@ -2282,7 +2282,7 @@ defmodule Deft.CLI do
     end
   end
 
-  defp handle_job_result({:error, :sigint_shutdown}, issue, _job_id) do
+  defp handle_job_result({:error, :sigint_shutdown}, issue, _job_id, _cost) do
     # SIGINT received and Foreman shut down gracefully
     # Rollback the issue status to :open
     IO.puts("\nJob aborted by user (Ctrl+C).")
@@ -2302,7 +2302,7 @@ defmodule Deft.CLI do
     {:error, :aborted}
   end
 
-  defp handle_job_result({:error, :sigint_timeout}, issue, _job_id) do
+  defp handle_job_result({:error, :sigint_timeout}, issue, _job_id, _cost) do
     # SIGINT received but Foreman did not shut down within 5 seconds
     IO.puts(:stderr, "\nJob aborted by user (Ctrl+C), but shutdown timed out.")
 
@@ -2325,7 +2325,7 @@ defmodule Deft.CLI do
     {:error, :aborted}
   end
 
-  defp handle_job_result({:error, :aborted}, issue, job_id) do
+  defp handle_job_result({:error, :aborted}, issue, _job_id, cost) do
     # Non-SIGINT abort (e.g., Foreman :shutdown exit)
     IO.puts("\nJob aborted.")
 
@@ -2342,14 +2342,13 @@ defmodule Deft.CLI do
     end
 
     # Report the job cost
-    cost = get_job_cost(job_id)
     IO.puts("Job cost: $#{Float.round(cost, 2)}")
 
     # Return aborted error to stop the work loop
     {:error, :aborted}
   end
 
-  defp handle_job_result({:error, reason}, issue, _job_id) do
+  defp handle_job_result({:error, reason}, issue, _job_id, _cost) do
     # Job failed - revert issue to open
     case Issues.update(issue.id, %{status: :open}) do
       {:ok, _issue} ->
