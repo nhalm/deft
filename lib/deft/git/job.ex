@@ -69,7 +69,7 @@ defmodule Deft.Git.Job do
 
       {output, 0} when byte_size(output) > 0 ->
         # Working tree has uncommitted changes
-        handle_dirty_working_tree(output, auto_approve)
+        handle_dirty_working_tree(git, output, auto_approve)
 
       {error_output, exit_code} ->
         Logger.error("Failed to check git status: #{error_output}")
@@ -78,7 +78,7 @@ defmodule Deft.Git.Job do
   end
 
   # Handle dirty working tree by prompting user or auto-failing
-  defp handle_dirty_working_tree(status_output, auto_approve) do
+  defp handle_dirty_working_tree(git, status_output, auto_approve) do
     if auto_approve do
       # In auto-approve mode, we can't stash - fail immediately
       Logger.error("""
@@ -102,28 +102,45 @@ defmodule Deft.Git.Job do
       """)
 
       IO.write("Stash changes and continue? [y/N]: ")
-
       response = IO.gets("")
+      handle_stash_response(git, response)
+    end
+  end
 
-      case response do
-        :eof ->
-          # Non-interactive environment (e.g., tests with no stdin)
-          IO.puts("\nJob creation cancelled (no input available).\n")
-          {:error, :dirty_working_tree}
+  # Handle user response to stash prompt
+  defp handle_stash_response(git, response) do
+    case response do
+      :eof ->
+        # Non-interactive environment (e.g., tests with no stdin)
+        IO.puts("\nJob creation cancelled (no input available).\n")
+        {:error, :dirty_working_tree}
 
-        input when is_binary(input) ->
-          case String.trim(input) |> String.downcase() do
-            answer when answer in ["y", "yes"] ->
-              # User agreed to stash - they need to do it manually
-              IO.puts("\nPlease run: git stash")
-              IO.puts("Then restart the job.\n")
-              {:error, :dirty_working_tree}
+      input when is_binary(input) ->
+        case String.trim(input) |> String.downcase() do
+          answer when answer in ["y", "yes"] ->
+            perform_stash(git)
 
-            _ ->
-              IO.puts("\nJob creation cancelled.\n")
-              {:error, :dirty_working_tree}
-          end
-      end
+          _ ->
+            IO.puts("\nJob creation cancelled.\n")
+            {:error, :dirty_working_tree}
+        end
+    end
+  end
+
+  # Perform the actual git stash operation
+  defp perform_stash(git) do
+    IO.puts("\nStashing changes...")
+
+    case git.cmd(["stash"]) do
+      {output, 0} ->
+        IO.puts(output)
+        IO.puts("Changes stashed successfully. Continuing with job creation.\n")
+        :ok
+
+      {error_output, exit_code} ->
+        Logger.error("Failed to stash changes: #{error_output}")
+        IO.puts("\nFailed to stash changes. Please resolve manually and restart the job.\n")
+        {:error, {:stash_failed, exit_code}}
     end
   end
 

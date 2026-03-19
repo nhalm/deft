@@ -1,4 +1,5 @@
 # History
+- **git-strategy v0.1 (2026-03-18):** Fix stash prompt to actually stash: user answering "yes" to stash prompt prints "Please run: git stash" and returns {:error, :dirty_working_tree} (job.ex:116-120); should call `git stash` programmatically and continue job creation
 - **orchestration v0.3 (2026-03-18):** Add RateLimiter.reconcile call after Runner LLM response: Runner never calls reconcile/4 after getting API response; TPM bucket tokens are deducted but never credited back, causing bucket to drain faster than actual usage (runner.ex:157-172)
 - **orchestration v0.3 (2026-03-18):** Wire Lead call_llm to use LLM provider through RateLimiter: currently a no-op stub returning make_ref() (lead.ex:622-626); Lead steering cannot produce real LLM output
 - **orchestration v0.3 (2026-03-18):** Wire Foreman call_llm to use LLM provider through RateLimiter: currently a no-op stub returning make_ref() (foreman.ex:633-638); Foreman planning/decomposition phases cannot produce real LLM output
