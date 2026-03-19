@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## harness v0.2
 
-- Fix abort in `:executing_tools` to terminate inner per-tool tasks (agent.ex:1079-1088): `cancel_state_operations` only kills the outer wrapper task via `Task.Supervisor.terminate_child`; inner tasks spawned by `ToolRunner.execute_batch` under the same supervisor continue running until timeout (up to 120s); must either track inner tasks or terminate all children of the supervisor
 - Fix `om_enabled` default in `maybe_compact_messages` (agent.ex:1540): defaults to `false` but all other call sites (agent.ex:691, context.ex:90, config.ex:321) default to `true`; with a bare-map config, compaction runs alongside OM, violating the mutual-exclusion invariant; change default to `true`
 - Fix turn counter off-by-one (agent.ex:1430): the initial prompt-triggered LLM call is never counted in `turn_count` (only incremented in `continue_after_tools`); with `max_turns: 25`, 26 LLM calls happen; either increment `turn_count` on the initial call or start `turn_count` at 1 when entering `:calling`
 

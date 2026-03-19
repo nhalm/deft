@@ -1082,8 +1082,11 @@ defmodule Deft.Agent do
     tool_runner = get_tool_runner_supervisor(data)
 
     if tool_runner do
-      Enum.each(data.tool_tasks, fn task_info ->
-        Task.Supervisor.terminate_child(tool_runner, task_info.pid)
+      # Terminate ALL children of the supervisor to catch both wrapper tasks
+      # and inner per-tool tasks spawned by ToolRunner.execute_batch
+      Task.Supervisor.children(tool_runner)
+      |> Enum.each(fn pid ->
+        Task.Supervisor.terminate_child(tool_runner, pid)
       end)
     end
   end
