@@ -50,6 +50,34 @@ defmodule Deft.Session.Store do
   end
 
   @doc """
+  Appends an entry to a session JSONL file at a custom path.
+
+  Creates parent directories if they don't exist. Used for job orchestration
+  sessions (Foreman and Lead sessions) that live in the job directory instead
+  of the default sessions directory.
+
+  ## Examples
+
+      iex> entry = Entry.SessionStart.new("abc123", "/tmp", "claude-sonnet-4", %{})
+      iex> Store.append_to_path("/tmp/job_123/foreman_session.jsonl", entry)
+      :ok
+  """
+  @spec append_to_path(String.t(), Entry.t()) :: :ok | {:error, term()}
+  def append_to_path(path, entry) do
+    with :ok <- File.mkdir_p(Path.dirname(path)),
+         {:ok, json} <- Jason.encode(entry),
+         line <- json <> "\n",
+         :ok <- File.write(path, line, [:append]) do
+      :ok
+    else
+      {:error, reason} = error ->
+        require Logger
+        Logger.error("Failed to append to session file #{path}: #{inspect(reason)}")
+        error
+    end
+  end
+
+  @doc """
   Loads all entries from a session JSONL file.
 
   Returns the entries in chronological order (same order as written).

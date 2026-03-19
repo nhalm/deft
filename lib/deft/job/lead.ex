@@ -79,6 +79,10 @@ defmodule Deft.Job.Lead do
     runner_supervisor = Keyword.fetch!(opts, :runner_supervisor)
     name = Keyword.get(opts, :name)
 
+    # Build session file path for Lead
+    jobs_dir = Project.jobs_dir(working_dir)
+    session_file_path = Path.join([jobs_dir, session_id, "lead_#{lead_id}_session.jsonl"])
+
     initial_data = %{
       lead_id: lead_id,
       session_id: session_id,
@@ -103,7 +107,9 @@ defmodule Deft.Job.Lead do
       tool_call_buffers: %{},
       turn_count: 0,
       total_input_tokens: 0,
-      total_output_tokens: 0
+      total_output_tokens: 0,
+      session_file_path: session_file_path,
+      saved_message_ids: MapSet.new()
     }
 
     gen_statem_opts = if name, do: [name: name], else: []
@@ -261,8 +267,11 @@ defmodule Deft.Job.Lead do
 
     messages = data.messages ++ [user_message]
 
-    # Start LLM call
+    # Save the user message to session
     data = %{data | messages: messages, turn_count: data.turn_count + 1}
+    data = save_unsaved_messages(data)
+
+    # Start LLM call
     {:ok, stream_ref, monitor_ref} = call_llm(data)
     data = %{data | stream_ref: stream_ref, stream_monitor_ref: monitor_ref}
     {:next_state, {chunk_phase, :calling}, data}
@@ -668,6 +677,9 @@ defmodule Deft.Job.Lead do
   defp finalize_streaming(data) do
     # Finalize the current message and add to messages list
     # Placeholder implementation
+    # In a full implementation, this would create a complete Message from current_message
+    # and add it to data.messages, then save to session
+    data = save_unsaved_messages(data)
     data
   end
 
@@ -1011,5 +1023,31 @@ defmodule Deft.Job.Lead do
       String.contains?(desc_lower, ["merge", "conflict", "resolve"]) -> :merge_resolution
       true -> :implementation
     end
+  end
+
+  # Session persistence helpers
+
+  defp save_unsaved_messages(data) do
+    alias Deft.Session.{Entry, Store}
+
+    # Find messages that haven't been saved yet
+    unsaved_messages =
+      Enum.reject(data.messages, fn msg ->
+        MapSet.member?(data.saved_message_ids, msg.id)
+      end)
+
+    # Save each message to the Lead session file
+    Enum.each(unsaved_messages, fn msg ->
+      entry = Entry.Message.from_message(msg)
+      Store.append_to_path(data.session_file_path, entry)
+    end)
+
+    # Update saved_message_ids set
+    new_saved_ids =
+      Enum.reduce(unsaved_messages, data.saved_message_ids, fn msg, acc ->
+        MapSet.put(acc, msg.id)
+      end)
+
+    %{data | saved_message_ids: new_saved_ids}
   end
 end

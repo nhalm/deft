@@ -65,6 +65,11 @@ defmodule Deft.Job.Foreman do
     rate_limiter_pid = Keyword.fetch!(opts, :rate_limiter_pid)
     working_dir = Keyword.get(opts, :working_dir, File.cwd!())
     name = Keyword.get(opts, :name)
+    resumed_plan = Keyword.get(opts, :resumed_plan)
+
+    # Build session file path for Foreman
+    jobs_dir = Project.jobs_dir(working_dir)
+    session_file_path = Path.join([jobs_dir, session_id, "foreman_session.jsonl"])
 
     initial_data = %{
       session_id: session_id,
@@ -87,11 +92,13 @@ defmodule Deft.Job.Foreman do
       research_findings: [],
       research_timeout_ref: nil,
       site_log_pid: nil,
-      plan: nil,
+      plan: resumed_plan,
       blocked_leads: %{},
       started_leads: MapSet.new(),
       cost_ceiling_reached: false,
-      decisions: []
+      decisions: [],
+      session_file_path: session_file_path,
+      saved_message_ids: MapSet.new()
     }
 
     gen_statem_opts = if name, do: [name: name], else: []
@@ -126,6 +133,64 @@ defmodule Deft.Job.Foreman do
     :gen_statem.cast(foreman, :reject_plan)
   end
 
+  @doc """
+  Resumes a job from persisted state (plan.json and sitelog.dets).
+
+  Reads the approved work plan and site log, determines which deliverables
+  are complete, and starts fresh Leads for incomplete deliverables.
+
+  ## Options
+
+  - `:session_id` — Required. Job identifier.
+  - `:config` — Required. Configuration map.
+  - `:rate_limiter_pid` — Required. PID of Deft.Job.RateLimiter.
+  - `:working_dir` — Optional. Working directory for the project (defaults to File.cwd!()).
+  """
+  @spec resume(Keyword.t()) :: {:ok, pid()} | {:error, term()}
+  def resume(opts) do
+    session_id = Keyword.fetch!(opts, :session_id)
+    working_dir = Keyword.get(opts, :working_dir, File.cwd!())
+
+    jobs_dir = Project.jobs_dir(working_dir)
+    job_dir = Path.join(jobs_dir, session_id)
+    plan_path = Path.join(job_dir, "plan.json")
+
+    # Check if plan.json exists
+    if File.exists?(plan_path) do
+      # Read and parse plan.json
+      case File.read(plan_path) do
+        {:ok, json_content} ->
+          case Jason.decode(json_content) do
+            {:ok, plan_data} ->
+              # Start Foreman with plan loaded
+              config = Keyword.fetch!(opts, :config)
+              rate_limiter_pid = Keyword.fetch!(opts, :rate_limiter_pid)
+
+              # Convert plan data to the expected format
+              plan = parse_plan_from_json(plan_data)
+
+              # Start Foreman with resume: true flag to trigger resume logic
+              start_link(
+                session_id: session_id,
+                config: Map.put(config, :resume, true),
+                prompt: "Resuming job #{session_id}",
+                rate_limiter_pid: rate_limiter_pid,
+                working_dir: working_dir,
+                resumed_plan: plan
+              )
+
+            {:error, reason} ->
+              {:error, {:invalid_plan_json, reason}}
+          end
+
+        {:error, reason} ->
+          {:error, {:plan_read_failed, reason}}
+      end
+    else
+      {:error, :plan_not_found}
+    end
+  end
+
   # gen_statem callbacks
 
   @impl :gen_statem
@@ -155,10 +220,31 @@ defmodule Deft.Job.Foreman do
         owner_name: foreman_name
       )
 
-    # Start in planning phase, idle agent state
-    initial_state = {:planning, :idle}
     data = %{initial_data | site_log_pid: site_log_pid}
-    {:ok, initial_state, data}
+
+    # Check if we're resuming
+    if Map.get(initial_data.config, :resume) && initial_data.plan do
+      Logger.info("Resuming job #{initial_data.session_id}")
+
+      # Build dependency structures from the resumed plan
+      data = store_plan_and_build_dependencies(initial_data.plan, data)
+
+      # Determine which deliverables are complete by checking site log
+      completed_deliverables = determine_completed_deliverables(data)
+      Logger.info("Completed deliverables: #{inspect(completed_deliverables)}")
+
+      # Update started_leads to reflect completed work
+      started_leads = MapSet.new(completed_deliverables)
+      data = %{data | started_leads: started_leads}
+
+      # Start in executing phase, ready to resume incomplete work
+      initial_state = {:executing, :idle}
+      {:ok, initial_state, data}
+    else
+      # Normal start in planning phase, idle agent state
+      initial_state = {:planning, :idle}
+      {:ok, initial_state, data}
+    end
   end
 
   @impl :gen_statem
@@ -286,8 +372,11 @@ defmodule Deft.Job.Foreman do
 
     messages = data.messages ++ [user_message]
 
-    # Start LLM call
+    # Save the user message to session
     data = %{data | messages: messages, turn_count: data.turn_count + 1}
+    data = save_unsaved_messages(data)
+
+    # Start LLM call
     {:ok, stream_ref, monitor_ref} = call_llm(data)
     data = %{data | stream_ref: stream_ref, stream_monitor_ref: monitor_ref}
     {:next_state, {job_phase, :calling}, data}
@@ -842,6 +931,9 @@ defmodule Deft.Job.Foreman do
   defp finalize_streaming(data) do
     # Finalize the current message and add to messages list
     # Placeholder implementation
+    # In a full implementation, this would create a complete Message from current_message
+    # and add it to data.messages, then save to session
+    data = save_unsaved_messages(data)
     data
   end
 
@@ -1075,6 +1167,9 @@ defmodule Deft.Job.Foreman do
     deliverable_name = Map.get(metadata, :deliverable)
 
     Logger.info("Lead #{lead_id} completed deliverable: #{deliverable_name}")
+
+    # Write completion marker to site log for resume tracking
+    write_to_site_log(:complete, "Deliverable #{deliverable_name} completed", metadata, data)
 
     # Get Lead info for worktree cleanup
     lead_info = Map.get(data.leads, lead_id)
@@ -2265,5 +2360,100 @@ defmodule Deft.Job.Foreman do
     # Log the message - in a real implementation this would send to the TUI
     Logger.info("Message to user:\n#{message}")
     # TODO: Send to TUI/user interface
+  end
+
+  # Session persistence helpers
+
+  defp save_unsaved_messages(data) do
+    alias Deft.Session.{Entry, Store}
+
+    # Find messages that haven't been saved yet
+    unsaved_messages =
+      Enum.reject(data.messages, fn msg ->
+        MapSet.member?(data.saved_message_ids, msg.id)
+      end)
+
+    # Save each message to the Foreman session file
+    Enum.each(unsaved_messages, fn msg ->
+      entry = Entry.Message.from_message(msg)
+      Store.append_to_path(data.session_file_path, entry)
+    end)
+
+    # Update saved_message_ids set
+    new_saved_ids =
+      Enum.reduce(unsaved_messages, data.saved_message_ids, fn msg, acc ->
+        MapSet.put(acc, msg.id)
+      end)
+
+    %{data | saved_message_ids: new_saved_ids}
+  end
+
+  # Resume helpers
+
+  defp parse_plan_from_json(plan_data) do
+    # Convert JSON plan data back to internal format
+    %{
+      deliverables: parse_deliverables_from_json(plan_data),
+      dependencies: Map.get(plan_data, "dependencies", []),
+      contracts: Map.get(plan_data, "contracts", []),
+      estimates: parse_estimates_from_json(plan_data),
+      raw_plan: Map.get(plan_data, "raw_plan", "")
+    }
+  end
+
+  defp parse_deliverables_from_json(plan_data) do
+    (plan_data["deliverables"] || [])
+    |> Enum.map(fn d ->
+      %{
+        name: Map.get(d, "name", "Unnamed"),
+        description: Map.get(d, "description", ""),
+        files: Map.get(d, "files", []),
+        complexity: Map.get(d, "complexity", "medium")
+      }
+    end)
+  end
+
+  defp parse_estimates_from_json(plan_data) do
+    %{
+      duration: get_in(plan_data, ["estimates", "duration"]) || "unknown",
+      cost: get_in(plan_data, ["estimates", "cost"]) || "unknown"
+    }
+  end
+
+  defp determine_completed_deliverables(data) do
+    # Read the site log to find completed deliverables
+    # Deliverables are complete if the site log contains a `:complete` message from their Lead
+
+    # Get all keys from the site log
+    site_log_keys = Store.keys(Store.tid(data.site_log_pid))
+
+    # Look for "complete-lead-*" entries
+    completed_lead_ids =
+      site_log_keys
+      |> Enum.filter(&String.starts_with?(&1, "complete-"))
+      |> Enum.map(fn key ->
+        # Extract lead_id from the key
+        case String.split(key, "-", parts: 3) do
+          ["complete", lead_id | _] -> lead_id
+          _ -> nil
+        end
+      end)
+      |> Enum.reject(&is_nil/1)
+
+    # Map lead_ids back to deliverable names
+    # Lead IDs are formatted as "<job_id>-<deliverable_name>"
+    completed_deliverables =
+      completed_lead_ids
+      |> Enum.map(fn lead_id ->
+        # Extract deliverable name from lead_id
+        # Lead ID format: "#{session_id}-#{deliverable.name}"
+        case String.split(lead_id, "-", parts: 2) do
+          [_session_id, deliverable_name] -> deliverable_name
+          _ -> nil
+        end
+      end)
+      |> Enum.reject(&is_nil/1)
+
+    completed_deliverables
   end
 end
