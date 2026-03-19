@@ -40,7 +40,6 @@ defmodule Deft.Job.Foreman do
   alias Deft.Job.LeadSupervisor
   alias Deft.Job.Runner
   alias Deft.Job.RateLimiter
-  alias Deft.Provider.Anthropic
 
   alias Deft.Provider.Event.{
     TextDelta,
@@ -1141,8 +1140,15 @@ defmodule Deft.Job.Foreman do
         # Foreman uses empty tools list - it delegates actual work to Runners
         tools = []
 
+        # Get the configured provider module
+        provider_module = get_provider(data)
+
+        # Use Foreman's model instead of session model
+        foreman_model = Map.get(config, :job_foreman_model, "claude-sonnet-4")
+        llm_config = Map.put(config, :model, foreman_model)
+
         # Start streaming from the provider
-        case Anthropic.stream(messages, tools, config) do
+        case provider_module.stream(messages, tools, llm_config) do
           {:ok, stream_ref} ->
             # Monitor the stream process
             monitor_ref = Process.monitor(stream_ref)
@@ -2111,8 +2117,8 @@ defmodule Deft.Job.Foreman do
   # Get provider module from config
   defp get_provider(data) do
     provider_name = Map.get(data.config, :provider, "anthropic")
-    # Default model for resolving provider
-    model_name = Map.get(data.config, :job_lead_model, "claude-sonnet-4")
+    # Use Foreman's model for resolving provider
+    model_name = Map.get(data.config, :job_foreman_model, "claude-sonnet-4")
 
     case Deft.Provider.Registry.resolve(provider_name, model_name) do
       {:ok, {provider_module, _model_config}} ->

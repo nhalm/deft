@@ -44,7 +44,6 @@ defmodule Deft.Job.Lead do
   alias Deft.Job.RateLimiter
   alias Deft.Store
   alias Deft.Project
-  alias Deft.Provider.Anthropic
 
   alias Deft.Provider.Event.{
     TextDelta,
@@ -782,8 +781,15 @@ defmodule Deft.Job.Lead do
         # Delegates actual implementation work to Runners
         tools = [Deft.Tools.Read, Deft.Tools.Grep, Deft.Tools.Find, Deft.Tools.Ls]
 
+        # Get the configured provider module
+        provider_module = get_provider(data)
+
+        # Use Lead's model instead of session model
+        lead_model = Map.get(config, :job_lead_model, "claude-sonnet-4")
+        llm_config = Map.put(config, :model, lead_model)
+
         # Start streaming from the provider
-        case Anthropic.stream(messages, tools, config) do
+        case provider_module.stream(messages, tools, llm_config) do
           {:ok, stream_ref} ->
             # Monitor the stream process
             monitor_ref = Process.monitor(stream_ref)
@@ -800,6 +806,24 @@ defmodule Deft.Job.Lead do
         )
 
         {:error, reason}
+    end
+  end
+
+  defp get_provider(data) do
+    provider_name = Map.get(data.config, :provider, "anthropic")
+    # Use Lead's model for resolving provider
+    model_name = Map.get(data.config, :job_lead_model, "claude-sonnet-4")
+
+    case Deft.Provider.Registry.resolve(provider_name, model_name) do
+      {:ok, {provider_module, _model_config}} ->
+        provider_module
+
+      {:error, _} ->
+        # Fallback to anthropic
+        {:ok, {provider_module, _}} =
+          Deft.Provider.Registry.resolve("anthropic", "claude-sonnet-4")
+
+        provider_module
     end
   end
 
