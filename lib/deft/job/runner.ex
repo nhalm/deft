@@ -96,8 +96,8 @@ defmodule Deft.Job.Runner do
     # Get provider and model from config
     provider = Map.get(config, :provider)
 
-    unless provider do
-      {:error, "No provider configured"}
+    if is_nil(provider) do
+      raise ArgumentError, "No provider configured in runner config"
     end
 
     # Build tool context
