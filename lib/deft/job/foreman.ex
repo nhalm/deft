@@ -109,6 +109,7 @@ defmodule Deft.Job.Foreman do
       verification_timeout_ref: nil,
       job_timeout_ref: nil,
       site_log_pid: nil,
+      started_site_log: false,
       plan: resumed_plan,
       blocked_leads: %{},
       started_leads: MapSet.new(),
@@ -234,7 +235,7 @@ defmodule Deft.Job.Foreman do
     site_log_via = {:via, Registry, {Deft.ProcessRegistry, site_log_name}}
     site_log_pid = GenServer.whereis(site_log_via)
 
-    site_log_pid =
+    {site_log_pid, started_site_log} =
       if site_log_pid == nil do
         # Store not started yet (e.g., in tests) - start it now
         jobs_dir = Project.jobs_dir(initial_data.working_dir)
@@ -248,12 +249,12 @@ defmodule Deft.Job.Foreman do
             owner_name: foreman_name
           )
 
-        pid
+        {pid, true}
       else
-        site_log_pid
+        {site_log_pid, false}
       end
 
-    data = %{initial_data | site_log_pid: site_log_pid}
+    data = %{initial_data | site_log_pid: site_log_pid, started_site_log: started_site_log}
 
     # Set up job-level timeout
     job_max_duration = Map.get(initial_data.config, :job_max_duration, 1_800_000)
@@ -283,6 +284,20 @@ defmodule Deft.Job.Foreman do
       initial_state = {:planning, :idle}
       {:ok, initial_state, data}
     end
+  end
+
+  @impl :gen_statem
+  def terminate(_reason, _state, data) do
+    # Clean up the site log Store if we started it directly (e.g., in tests or resume)
+    # When started by the supervisor, the supervisor handles cleanup
+    if data.started_site_log && data.site_log_pid do
+      if Process.alive?(data.site_log_pid) do
+        Logger.info("Foreman terminating: stopping site log Store for cleanup")
+        GenServer.stop(data.site_log_pid, :normal, 5000)
+      end
+    end
+
+    :ok
   end
 
   @impl :gen_statem

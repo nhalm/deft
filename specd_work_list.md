@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## orchestration v0.5
-
-- Add `terminate/3` callback to Foreman for DETS cleanup (foreman.ex): in isolated startup (test, resume), the Foreman starts the site log Store directly without a supervisor; on Foreman exit, the Store is never stopped and the DETS file is not flushed; risk of DETS corruption on abnormal exit
-
 ## git-strategy v0.2
 
 - Add stash pop on job failure/abort path (git/job.ex): `pop_job_stash/2` is called only in `complete_job/1` (success path); if a job fails or is aborted, the user's stashed changes are permanently stranded; add stash pop to the failure/abort cleanup
