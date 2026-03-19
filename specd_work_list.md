@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.3
 
-- Enforce `job.max_leads` config (default 5) in `get_ready_deliverables` or `start_ready_leads`: currently all ready deliverables are started simultaneously with no cap (foreman.ex:1992-2003)
 - Spawn merge-resolution Runner on merge conflict instead of discarding work: `handle_merge_conflict` (foreman.ex:1288-1303) sends a `:critical_finding` and deletes the Lead's worktree, permanently losing the Lead's work; spec section 3.4 requires spawning a merge-resolution Runner to resolve conflicts
 
 ## git-strategy v0.1

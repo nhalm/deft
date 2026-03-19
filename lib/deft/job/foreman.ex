@@ -422,12 +422,30 @@ defmodule Deft.Job.Foreman do
       Logger.info("Cost ceiling reached - not starting new Leads until spending approved")
       {:keep_state_and_data}
     else
+      # Get max_leads config (default 5)
+      max_leads = Map.get(data.config, :max_leads, 5)
+
+      # Count currently active leads
+      active_leads = map_size(data.leads)
+
+      # Calculate how many new leads can be started
+      available_slots = max(0, max_leads - active_leads)
+
       # Determine which Leads can start immediately (no dependencies or dependencies satisfied)
       ready_deliverables = get_ready_deliverables(data)
 
+      # Limit to available slots
+      deliverables_to_start = Enum.take(ready_deliverables, available_slots)
+
+      if available_slots == 0 and length(ready_deliverables) > 0 do
+        Logger.info(
+          "Max concurrent Leads reached (#{max_leads}) - deferring #{length(ready_deliverables)} ready deliverable(s)"
+        )
+      end
+
       # Start each ready Lead
       updated_data =
-        Enum.reduce(ready_deliverables, data, fn deliverable, acc_data ->
+        Enum.reduce(deliverables_to_start, data, fn deliverable, acc_data ->
           start_lead(deliverable, acc_data)
         end)
 
