@@ -159,8 +159,12 @@ defmodule Deft.Eval.JudgeCalibration do
     path = Path.join(@calibration_dir, filename)
 
     case Jason.encode(result, pretty: true) do
-      {:ok, json} -> File.write(path, json)
-      error -> error
+      {:ok, json} ->
+        File.mkdir_p!(@calibration_dir)
+        File.write(path, json)
+
+      error ->
+        error
     end
   end
 
