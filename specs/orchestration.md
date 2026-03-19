@@ -2,11 +2,16 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.4 |
-| Status | Implemented |
+| Version | 0.5 |
+| Status | Ready |
 | Last Updated | 2026-03-19 |
 
 ## Changelog
+
+### v0.5 (2026-03-19)
+- Clarified: Foreman must delegate tool execution to `Deft.Tool.execute/3`, not return placeholder results
+- Clarified: Lead state_enter handlers must not use `next_event` actions (prohibited by OTP gen_statem)
+- Clarified: Foreman and Lead must call `RateLimiter.reconcile/4` after each LLM response to credit back unused tokens
 
 ### v0.4 (2026-03-19)
 - Clarified section 4.2: "runs compile checks" means the Lead spawns a testing Runner to verify build and test output — the Lead does not have direct bash access.

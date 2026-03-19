@@ -2,11 +2,15 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.1 |
-| Status | Implemented |
-| Last Updated | 2026-03-17 |
+| Version | 0.2 |
+| Status | Ready |
+| Last Updated | 2026-03-19 |
 
 ## Changelog
+
+### v0.2 (2026-03-19)
+- Clarified: stash must be popped/restored after job completion to return user's working state
+- Clarified: merge-resolution retry must have a cap (e.g., max 3 attempts) to prevent infinite loops
 
 ### v0.1 (2026-03-17)
 - Extracted from orchestration.md v0.2 — git worktree strategy, merge, cleanup, orphan recovery

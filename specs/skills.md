@@ -2,11 +2,14 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.3 |
-| Status | Implemented |
-| Last Updated | 2026-03-18 |
+| Version | 0.4 |
+| Status | Ready |
+| Last Updated | 2026-03-19 |
 
 ## Changelog
+
+### v0.4 (2026-03-19)
+- Clarified: CLI skill invocation must inject definitions as system-level instructions (matching TUI behavior), not user messages
 
 ### v0.3 (2026-03-18)
 - Added command descriptions: extract the first non-empty line of the command markdown file as the description.

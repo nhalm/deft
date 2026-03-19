@@ -2,11 +2,16 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.2 |
-| Status | Implemented |
-| Last Updated | 2026-03-18 |
+| Version | 0.3 |
+| Status | Ready |
+| Last Updated | 2026-03-19 |
 
 ## Changelog
+
+### v0.3 (2026-03-19)
+- Clarified token estimation: must use `String.length` (character count), not `byte_size` (byte count) — multi-byte characters inflate estimates
+- Clarified keep_tail: must skip oversized messages and continue, not halt on first oversized message
+- Clarified: OM threshold config fields from section 8 must be wired through `Deft.Config`
 
 ### v0.2 (2026-03-18)
 - Fix spec/code divergence: OM state is persisted as a separate `<session_id>_om.jsonl` file, not entries in the session JSONL (spec section 9). This was a deliberate implementation choice to avoid JSONL write interleaving when session and OM systems write concurrently.

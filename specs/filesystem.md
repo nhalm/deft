@@ -2,11 +2,15 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.3 |
-| Status | Implemented |
-| Last Updated | 2026-03-18 |
+| Version | 0.4 |
+| Status | Ready |
+| Last Updated | 2026-03-19 |
 
 ## Changelog
+
+### v0.4 (2026-03-19)
+- Clarified: Store async load must use `Task.async_nolink` (not `Task.async`) to prevent linked crash from killing the GenServer
+- Clarified: `resolve_real_path` must use `File.realpath/1` to resolve symlinks in intermediate path components (`:file.read_link_all/1` only resolves the final component)
 
 ### v0.3 (2026-03-18)
 - Fixed directory layout: use `git rev-parse --git-common-dir` + `Path.dirname/1` instead of `--show-toplevel` for git worktree canonical root. `--show-toplevel` returns the worktree root, not the main repo root, breaking project directory resolution for Leads.

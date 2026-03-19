@@ -2,11 +2,16 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.1 |
-| Status | Implemented |
-| Last Updated | 2026-03-16 |
+| Version | 0.2 |
+| Status | Ready |
+| Last Updated | 2026-03-19 |
 
 ## Changelog
+
+### v0.2 (2026-03-19)
+- Clarified: abort in `:executing_tools` must terminate all per-tool inner tasks, not just the outer wrapper task
+- Clarified: `om_enabled` default must be consistent across all code paths (default `true`)
+- Clarified: turn counter must include the initial prompt-triggered LLM call in the count
 
 ### v0.1 (2026-03-16)
 - Initial spec — agent loop (gen_statem), canonical message format, process architecture, context assembly

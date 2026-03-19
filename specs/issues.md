@@ -2,11 +2,14 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.4 |
-| Status | Implemented |
+| Version | 0.5 |
+| Status | Ready |
 | Last Updated | 2026-03-19 |
 
 ## Changelog
+
+### v0.5 (2026-03-19)
+- Clarified: `handle_job_result` must have an explicit clause for `{:error, :aborted}` that returns to the work loop instead of calling `exit/1`
 
 ### v0.4 (2026-03-19)
 - **SIGINT rollback behavior:** On SIGINT (Ctrl+C), if the rollback timeout expires, the CLI manually rolls back the issue status to `:open` with a warning, rather than leaving it at `:in_progress`. This prevents orphaned in-progress issues.

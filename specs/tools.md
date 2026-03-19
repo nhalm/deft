@@ -2,11 +2,15 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.1 |
-| Status | Implemented |
-| Last Updated | 2026-03-16 |
+| Version | 0.2 |
+| Status | Ready |
+| Last Updated | 2026-03-19 |
 
 ## Changelog
+
+### v0.2 (2026-03-19)
+- Clarified edit tool: unified diff must use a real diff algorithm (LCS or Myers), not positional line comparison
+- Clarified find tool: `fd` exit code 1 must be treated as an error on fd v8+, not as "no results"
 
 ### v0.1 (2026-03-16)
 - Initial spec — extracted from harness spec. Tool behaviour, 7 built-in tools, tool execution model.

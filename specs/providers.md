@@ -2,11 +2,14 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.2 |
-| Status | Implemented |
-| Last Updated | 2026-03-16 |
+| Version | 0.3 |
+| Status | Ready |
+| Last Updated | 2026-03-19 |
 
 ## Changelog
+
+### v0.3 (2026-03-19)
+- Clarified: consumers of Usage events must accumulate (not replace) input and output token counts across multiple events per request
 
 ### v0.2 (2026-03-16)
 - Updated SSE event mapping table: clarify that `content_block_start` events don't carry text content. First meaningful text arrives in `content_block_delta`, not from `content_block_start`.

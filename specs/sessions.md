@@ -2,11 +2,15 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.3 |
-| Status | Implemented |
-| Last Updated | 2026-03-17 |
+| Version | 0.4 |
+| Status | Ready |
+| Last Updated | 2026-03-19 |
 
 ## Changelog
+
+### v0.4 (2026-03-19)
+- Clarified resume: must use observation entries from main JSONL as fallback when `_om.jsonl` snapshot is missing
+- Clarified: `Store` must use `Deft.Project.sessions_dir/1` for project-scoped paths (not hardcoded `~/.deft/sessions/`)
 
 ### v0.3 (2026-03-17)
 - Session storage path is now project-scoped: `~/.deft/projects/<path-encoded-repo>/sessions/<session_id>.jsonl`. See filesystem.md for the full directory layout.

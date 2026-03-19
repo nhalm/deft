@@ -2,11 +2,15 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.1 |
-| Status | Implemented |
-| Last Updated | 2026-03-16 |
+| Version | 0.2 |
+| Status | Ready |
+| Last Updated | 2026-03-19 |
 
 ## Changelog
+
+### v0.2 (2026-03-19)
+- Clarified slash command dispatch: must handle all error variants from `SlashCommand.dispatch/1`, including I/O errors
+- Clarified markdown rendering: link nodes without `href` attribute must not crash
 
 ### v0.1 (2026-03-16)
 - Initial spec — extracted from harness spec. Breeze views, rendering, input handling, slash commands, status bar.

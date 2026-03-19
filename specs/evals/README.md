@@ -2,11 +2,14 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.2 |
-| Status | Implemented |
-| Last Updated | 2026-03-17 |
+| Version | 0.3 |
+| Status | Ready |
+| Last Updated | 2026-03-19 |
 
 ## Changelog
+
+### v0.3 (2026-03-19)
+- Clarified: safety eval hard-fail gate must actually parse test output and enforce 90% threshold (not a TODO stub)
 
 ### v0.2 (2026-03-17)
 - Major expansion: added eval categories for tool result spilling, cache retrieval, skill suggestion and invocation, issue creation, end-to-end task completion, overnight loop safety
