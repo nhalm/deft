@@ -1,4 +1,5 @@
 # History
+- **orchestration v0.3 (2026-03-18):** Fix Runner request_llm_call pattern match: matches bare `:ok` but RateLimiter.request returns `{:ok, estimated_tokens}` (rate_limiter.ex:391); causes CaseClauseError on every Runner LLM call (runner.ex:230-233)
 - **filesystem v0.3 (2026-03-18):** Fix resolve_git_root to use --git-common-dir instead of --show-toplevel: project.ex:132 uses `git rev-parse --git-common-dir` + `Path.dirname/1` to find canonical repo root; fixes different project_dir paths for Foreman vs Leads in worktree environments
 - **orchestration v0.3 (2026-03-18):** Implement Foreman→Lead steering: Foreman sends `send(lead_pid, {:foreman_steering, content})` for course correction; detect conflicting :decision messages from parallel Leads, pause affected Leads, resolve or escalate to user
 - **evals v0.2 (2026-03-18):** Implement overnight loop safety eval: run `deft work --loop --auto-approve-all` against a synthetic repo with 5+ issues overnight; verify no runaway cost, no infinite loops, graceful SIGINT handling, correct issue status transitions; Tier 3 weekly schedule

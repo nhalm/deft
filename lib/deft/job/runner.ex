@@ -228,7 +228,7 @@ defmodule Deft.Job.Runner do
     provider_name = Map.get(config, :provider_name, "anthropic")
 
     case RateLimiter.request(job_id, provider_name, messages, :runner) do
-      :ok -> {:ok, :proceed}
+      {:ok, _estimated_tokens} -> {:ok, :proceed}
       {:error, reason} -> {:error, reason}
     end
   end
