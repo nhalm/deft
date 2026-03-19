@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## evals v0.3
-
-- Implement safety eval hard-fail gate in CI workflow (.github/workflows/tier1-evals.yml:55-67): the step currently has a TODO and exits 0 unconditionally; must parse test output for safety eval pass rates and hard fail the build if any safety category (hallucination, PII) drops below 90% per spec section 3.2
-
 ## filesystem v0.4
 
 - Change Store async load from `Task.async` to `Task.async_nolink` (store.ex:177): `Task.async` creates a link; if the load task crashes (e.g., DETS iteration error), the linked exit kills the Store GenServer before the `{:DOWN, ...}` handler at line 252 can fire; `Task.async_nolink` preserves the monitor-based error handling that the spec requires (graceful degradation to `:miss` on load failure)
