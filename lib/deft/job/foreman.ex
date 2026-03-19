@@ -1151,7 +1151,7 @@ defmodule Deft.Job.Foreman do
           You may need to manually merge the job branch: deft/job-#{data.session_id}
           """
 
-          send_user_message(error_message, data)
+          data = send_user_message(error_message, data)
 
           # Cancel job timeout timer
           data = cancel_job_timeout(data)
@@ -1196,7 +1196,7 @@ defmodule Deft.Job.Foreman do
       #{branch_status}
       """
 
-      send_user_message(failure_message, data)
+      data = send_user_message(failure_message, data)
 
       # Cancel job timeout timer
       data = cancel_job_timeout(data)
@@ -3329,10 +3329,26 @@ defmodule Deft.Job.Foreman do
     end
   end
 
-  defp send_user_message(message, _data) do
-    # Log the message - in a real implementation this would send to the TUI
-    Logger.info("Message to user:\n#{message}")
-    # TODO: Send to TUI/user interface
+  defp send_user_message(message, data) do
+    # Create an assistant message to add to the session
+    assistant_message = %Message{
+      id: generate_message_id(),
+      role: :assistant,
+      content: [%Text{text: message}],
+      timestamp: DateTime.utc_now()
+    }
+
+    # Add to messages and persist
+    messages = data.messages ++ [assistant_message]
+    data = %{data | messages: messages}
+    data = save_unsaved_messages(data)
+
+    # Send to CLI if available for immediate display during job execution
+    if data.cli_pid && Process.alive?(data.cli_pid) do
+      send(data.cli_pid, {:job_message, message})
+    end
+
+    data
   end
 
   # Session persistence helpers

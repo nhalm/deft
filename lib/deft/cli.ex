@@ -2150,6 +2150,16 @@ defmodule Deft.CLI do
         # Continue waiting for job completion
         wait_for_job_completion(foreman_pid, ref)
 
+      {:job_message, message} ->
+        # Display message from Foreman (e.g., verification failure, merge error)
+        IO.puts("\n" <> String.duplicate("=", 80))
+        IO.puts("JOB MESSAGE")
+        IO.puts(String.duplicate("=", 80))
+        IO.puts("\n#{message}\n")
+        IO.puts(String.duplicate("=", 80))
+        # Continue waiting for job completion
+        wait_for_job_completion(foreman_pid, ref)
+
       {:signal, :sigint} ->
         # SIGINT received - initiate graceful shutdown
         IO.puts("\nReceived Ctrl+C. Sending shutdown to Foreman...")

@@ -17,6 +17,3 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## orchestration v0.4
-
-- Implement `send_user_message/2` in Foreman: the stub at foreman.ex:3217 only logs messages. Verification failures (line 1139) and merge errors after verification (line 1094) silently disappear — the user never learns the job outcome. Wire this to the TUI/session so job results are delivered to the user.
