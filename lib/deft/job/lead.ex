@@ -39,11 +39,22 @@ defmodule Deft.Job.Lead do
   @behaviour :gen_statem
 
   alias Deft.Message
+  alias Deft.Message.Text
   alias Deft.Job.Runner
   alias Deft.Job.RateLimiter
   alias Deft.Store
   alias Deft.Project
   alias Deft.Provider.Anthropic
+
+  alias Deft.Provider.Event.{
+    TextDelta,
+    ThinkingDelta,
+    ToolCallStart,
+    ToolCallDelta,
+    ToolCallDone,
+    Usage,
+    Done
+  }
 
   require Logger
 
@@ -720,14 +731,147 @@ defmodule Deft.Job.Lead do
     end
   end
 
-  defp process_provider_event(_event, data) do
-    # Placeholder for processing provider events
+  defp process_provider_event(event, data) do
     data
+    |> ensure_current_message()
+    |> handle_provider_event(event)
+  end
+
+  defp handle_provider_event(data, %TextDelta{delta: delta}) do
+    handle_text_delta_event(data, delta)
+  end
+
+  defp handle_provider_event(data, %ThinkingDelta{delta: delta}) do
+    handle_thinking_delta_event(data, delta)
+  end
+
+  defp handle_provider_event(data, %ToolCallStart{id: id, name: name}) do
+    handle_tool_call_start_event(data, id, name)
+  end
+
+  defp handle_provider_event(data, %ToolCallDelta{id: id, delta: delta}) do
+    handle_tool_call_delta_event(data, id, delta)
+  end
+
+  defp handle_provider_event(data, %ToolCallDone{id: id, args: parsed_args}) do
+    handle_tool_call_done_event(data, id, parsed_args)
+  end
+
+  defp handle_provider_event(data, %Usage{input: input_tokens, output: output_tokens}) do
+    handle_usage_event(data, input_tokens, output_tokens)
+  end
+
+  defp handle_provider_event(data, _event), do: data
+
+  defp ensure_current_message(%{current_message: nil} = data) do
+    current_message = %Message{
+      id: generate_message_id(),
+      role: :assistant,
+      content: [],
+      timestamp: DateTime.utc_now()
+    }
+
+    %{data | current_message: current_message}
+  end
+
+  defp ensure_current_message(data), do: data
+
+  defp handle_text_delta_event(data, delta) do
+    new_message = append_text_delta(data.current_message, delta)
+    %{data | current_message: new_message}
+  end
+
+  defp handle_thinking_delta_event(data, delta) do
+    new_message = append_thinking_delta(data.current_message, delta)
+    %{data | current_message: new_message}
+  end
+
+  defp handle_tool_call_start_event(data, id, name) do
+    tool_use = %Deft.Message.ToolUse{id: id, name: name, args: %{}}
+    new_content = data.current_message.content ++ [tool_use]
+    new_message = %{data.current_message | content: new_content}
+
+    tool_call_buffers = Map.get(data, :tool_call_buffers, %{})
+    new_buffers = Map.put(tool_call_buffers, id, "")
+
+    %{data | current_message: new_message, tool_call_buffers: new_buffers}
+  end
+
+  defp handle_tool_call_delta_event(data, id, delta) do
+    tool_call_buffers = Map.get(data, :tool_call_buffers, %{})
+    current_buffer = Map.get(tool_call_buffers, id, "")
+    new_buffers = Map.put(tool_call_buffers, id, current_buffer <> delta)
+
+    %{data | tool_call_buffers: new_buffers}
+  end
+
+  defp handle_tool_call_done_event(data, id, parsed_args) do
+    new_message = update_tool_call_args(data.current_message, id, parsed_args)
+
+    tool_call_buffers = Map.get(data, :tool_call_buffers, %{})
+    new_buffers = Map.delete(tool_call_buffers, id)
+
+    %{data | current_message: new_message, tool_call_buffers: new_buffers}
+  end
+
+  defp handle_usage_event(data, input_tokens, output_tokens) do
+    total_input = Map.get(data, :total_input_tokens, 0) + input_tokens
+    total_output = Map.get(data, :total_output_tokens, 0) + output_tokens
+
+    %{data | total_input_tokens: total_input, total_output_tokens: total_output}
+  end
+
+  defp append_text_delta(message, delta) do
+    case List.last(message.content) do
+      %Text{text: existing_text} ->
+        # Update the last Text block
+        new_text = existing_text <> delta
+        new_content = List.replace_at(message.content, -1, %Text{text: new_text})
+        %{message | content: new_content}
+
+      _ ->
+        # No Text block at the end, create a new one
+        new_content = message.content ++ [%Text{text: delta}]
+        %{message | content: new_content}
+    end
+  end
+
+  defp append_thinking_delta(message, delta) do
+    alias Deft.Message.Thinking
+
+    case List.last(message.content) do
+      %Thinking{text: existing_text} ->
+        # Update the last Thinking block
+        new_text = existing_text <> delta
+        new_content = List.replace_at(message.content, -1, %Thinking{text: new_text})
+        %{message | content: new_content}
+
+      _ ->
+        # No Thinking block at the end, create a new one
+        new_content = message.content ++ [%Thinking{text: delta}]
+        %{message | content: new_content}
+    end
+  end
+
+  defp update_tool_call_args(message, tool_id, parsed_args) do
+    alias Deft.Message.ToolUse
+
+    # Find the ToolUse block with matching ID and update its args
+    new_content =
+      Enum.map(message.content, fn
+        %ToolUse{id: ^tool_id} = tool_use ->
+          %{tool_use | args: parsed_args}
+
+        other ->
+          other
+      end)
+
+    %{message | content: new_content}
   end
 
   defp done_streaming?(event) do
     # Check if this is a Done event
-    match?(%Deft.Provider.Event.Done{}, event)
+    match?(%Done{}, event)
   end
 
   defp finalize_streaming(data) do
