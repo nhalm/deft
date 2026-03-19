@@ -29,6 +29,10 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Commit resolved files in merge-resolution Runner before retrying merge (foreman.ex:825,831,1651-1661): Runner instructions say "stage the resolved files using git add" but never commit; `cleanup_worktree` at line 825 removes the worktree (and staged files) before `handle_lead_merge` retry at line 831 creates a new merge worktree with the same unresolved conflicts
 - Change `delete_lead_branch` to use `git branch -D` (force delete) instead of `-d` (foreman.ex:1850): merge happens in a temporary worktree, not the main HEAD; from the main repo's perspective the lead branch is never merged; `-d` always fails with "not fully merged"; return value is discarded by callers so branches silently accumulate
 
+## issues v0.4
+
+- Update `handle_job_result({:error, :sigint_timeout}, ...)` at cli.ex to emit a warning when manually rolling back issue status to `:open` (spec v0.4 §5.3)
+
 ## issues v0.3
 
 - Start `Deft.Issues` from `Deft.Application` when `.deft/issues.jsonl` exists (application.ex:12-20): spec §4 requires "Started by `Deft.Application` if `.deft/issues.jsonl` exists"; currently only started ad-hoc by CLI and IssueCreate tool

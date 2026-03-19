@@ -2,11 +2,14 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.3 |
+| Version | 0.4 |
 | Status | Ready |
 | Last Updated | 2026-03-19 |
 
 ## Changelog
+
+### v0.4 (2026-03-19)
+- **SIGINT rollback behavior:** On SIGINT (Ctrl+C), if the rollback timeout expires, the CLI manually rolls back the issue status to `:open` with a warning, rather than leaving it at `:in_progress`. This prevents orphaned in-progress issues.
 
 ### v0.3 (2026-03-19)
 - **Cycle detection clarification:** "Affected issues" in cycle detection means only issues that are part of the cycle itself, not issues that point into the cycle. When a cycle is detected during init, only the cycle members' dependencies are cleared.
@@ -251,7 +254,7 @@ deft work --loop --auto-approve-all # Fully autonomous: skip all plan approvals
 4. Stop when: no ready issues remain, cumulative cost exceeds `work.cost_ceiling` (separate from per-job ceiling), or user aborts (Ctrl+C)
 5. Between jobs: unblock any issues whose dependencies were just closed
 
-On SIGINT (Ctrl+C), the CLI catches the signal, sends a graceful shutdown to the Foreman, waits for the current issue's status to be rolled back to `:open` (with a 5-second timeout), then exits. If the timeout expires, the issue is left at `:in_progress` and will be detected as stale on next startup.
+On SIGINT (Ctrl+C), the CLI catches the signal, sends a graceful shutdown to the Foreman, waits for the current issue's status to be rolled back to `:open` (with a 5-second timeout), then exits. If the timeout expires, the CLI manually rolls back the issue status to `:open` with a warning to prevent orphaned in-progress issues.
 
 ### 6. Foreman Integration
 
