@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.3
 
-- Pass `foreman_pid` to RateLimiter in `Job.Supervisor.init/1` (supervisor.ex:74): RateLimiter is started with only `[job_id: job_id]`, so `foreman_pid` defaults to `nil` and all cost-reporting functions no-op; Foreman never receives cost messages
 - Fix `Task.Supervisor.terminate_child` call in Lead runner timeout handler (lead.ex:505): passes `task_ref` (a reference) but the function expects a PID; runner processes are never killed on timeout
 - Store `task.pid` in `runner_info` map in `spawn_runner` (lead.ex:780-786): PID is needed for `terminate_child` but is not saved; only `monitor_ref` and `timeout_ref` are stored
 - Change verification Runner type from `:review` to `:testing` (foreman.ex:511): `:review` type has no `bash` tool so the verification Runner cannot execute the test suite; spec requires full test suite execution

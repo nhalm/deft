@@ -71,7 +71,7 @@ defmodule Deft.Job.Supervisor do
       # RateLimiter
       %{
         id: Deft.Job.RateLimiter,
-        start: {Deft.Job.RateLimiter, :start_link, [[job_id: job_id]]},
+        start: {Deft.Job.RateLimiter, :start_link, [[job_id: job_id, foreman_pid: foreman_name]]},
         restart: :temporary
       },
 
