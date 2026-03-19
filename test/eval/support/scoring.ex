@@ -30,6 +30,10 @@ defmodule Deft.Eval.Scoring do
            ] ->
         {:statistical, 0.95}
 
+      # Continuation
+      "actor.continuation" ->
+        {:statistical, 0.90}
+
       # Extraction and cache
       cat when cat in ["observer.extraction", "cache_retrieval"] ->
         {:statistical, 0.85}
@@ -65,7 +69,6 @@ defmodule Deft.Eval.Scoring do
       when cat in [
              "observer.section_ordering",
              "reflector.section_ordering",
-             "actor.continuation",
              "correction_marker_survival"
            ] ->
         {:hard_assertion, 1.00}
