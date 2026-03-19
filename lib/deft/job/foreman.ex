@@ -1356,7 +1356,12 @@ defmodule Deft.Job.Foreman do
     # Check for blocked Leads that can now start
     # Extract which deliverable published this contract
     lead_id = Map.get(metadata, :lead_id)
-    publishing_deliverable = Map.get(metadata, :deliverable_name)
+    # Derive publishing_deliverable from the Lead tracking map
+    publishing_deliverable =
+      case Map.get(data.leads, lead_id) do
+        %{deliverable: %{name: name}} -> name
+        _ -> nil
+      end
 
     # Check blocked_leads for any that depend on this contract
     unblocked_deliverables =

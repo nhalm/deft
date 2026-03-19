@@ -16,7 +16,3 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
-
-## orchestration v0.3
-
-- Derive `publishing_deliverable` from Foreman's Lead tracking map instead of metadata in `process_lead_message(:contract, ...)` (foreman.ex:1343-1344): code reads `Map.get(metadata, :deliverable_name)` but Lead's `send_lead_message/4` never populates this key; `contract_matches?` always returns `false` (line 2514 guards `publishing_deliverable != nil`); contract-based dependency unblocking never fires
