@@ -30,7 +30,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 - Delete Lead branch after successful merge and test: add `git branch -d deft/lead-<id>` call after `cleanup_worktree` in `handle_test_success` (foreman.ex:1245-1261); currently only the worktree is removed, leaving orphaned branches that accumulate and require manual `deft startup` cleanup
 - Wire `GitJob.create_job_branch/1` into Foreman startup: function exists (job.ex:49) but is never called from foreman.ex or anywhere else; `create_lead_worktree` references `deft/job-<job_id>` branch that was never created, causing worktree creation to fail with "not a valid object name"
-- Read `job.squash_on_complete` config in Foreman verification-passed handler instead of hardcoding `squash: true` (foreman.ex:795): setting the config to `false` has no effect; users cannot preserve individual Lead commit history as the spec allows
 - Handle post-merge test failure by removing Lead from tracking and spawning fix-up Runner or flagging user: `handle_test_failure` (foreman.ex:1264-1273) sends a `:critical_finding` but leaves the Lead in `data.leads`, so `all_leads_complete?` never returns true and the job hangs in `:executing` permanently; spec section 3 step 4 requires fix-up Runner or user intervention
 
 ## filesystem v0.3

@@ -799,11 +799,14 @@ defmodule Deft.Job.Foreman do
       # Get original branch (stored in config or default to current branch)
       original_branch = Map.get(data.config, :original_branch, "main")
 
+      # Get squash setting from config (default true per git-strategy.md section 7)
+      squash = Map.get(data.config, :job_squash_on_complete, true)
+
       # Trigger squash-merge
       case GitJob.complete_job(
              job_id: data.session_id,
              original_branch: original_branch,
-             squash: true,
+             squash: squash,
              working_dir: data.working_dir
            ) do
         {:ok, :completed} ->
