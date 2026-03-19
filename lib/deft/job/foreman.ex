@@ -358,10 +358,13 @@ defmodule Deft.Job.Foreman do
 
     # Create job branch for Lead worktrees to branch from
     case GitJob.create_job_branch(job_id: data.session_id, auto_approve: true) do
-      {:ok, branch_name} ->
-        Logger.info("Created job branch: #{branch_name}")
+      {:ok, branch_name, original_branch} ->
+        Logger.info("Created job branch: #{branch_name} from #{original_branch}")
+        # Store original branch in config for later squash-merge
+        updated_config = Map.put(data.config, :original_branch, original_branch)
+        updated_data = %{data | config: updated_config}
         :gen_statem.cast(self(), :start_ready_leads)
-        :keep_state_and_data
+        {:keep_state, updated_data}
 
       {:error, reason} ->
         Logger.error("Failed to create job branch: #{inspect(reason)}")

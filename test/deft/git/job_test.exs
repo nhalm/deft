@@ -17,6 +17,10 @@ defmodule Deft.Git.JobTest do
       end
     end
 
+    defp get_mock_response(["rev-parse", "--abbrev-ref", "HEAD"]) do
+      Process.get(:mock_current_branch_response, {"main\n", 0})
+    end
+
     defp get_mock_response(["status", "--porcelain"]) do
       Process.get(:mock_status_response)
     end
@@ -38,7 +42,7 @@ defmodule Deft.Git.JobTest do
       Process.put(:mock_status_response, {"", 0})
       Process.put(:mock_branch_response, {"", 0})
 
-      assert {:ok, "deft/job-test123"} =
+      assert {:ok, "deft/job-test123", "main"} =
                Job.create_job_branch(
                  job_id: "test123",
                  git: MockGit,
@@ -46,6 +50,7 @@ defmodule Deft.Git.JobTest do
                )
 
       # Verify git commands were called
+      assert_received {:git_cmd, ["rev-parse", "--abbrev-ref", "HEAD"]}
       assert_received {:git_cmd, ["status", "--porcelain"]}
       assert_received {:git_cmd, ["branch", "deft/job-test123"]}
     end
@@ -98,7 +103,7 @@ defmodule Deft.Git.JobTest do
       Process.put(:mock_status_response, {"", 0})
       Process.put(:mock_branch_response, {"", 0})
 
-      assert {:ok, "deft/job-abc-123-xyz"} =
+      assert {:ok, "deft/job-abc-123-xyz", "main"} =
                Job.create_job_branch(
                  job_id: "abc-123-xyz",
                  git: MockGit,
@@ -118,6 +123,21 @@ defmodule Deft.Git.JobTest do
       # This test verifies the option defaults but doesn't actually call git
       # We can't easily test the default without a real git repo or more complex mocking
       assert is_function(&Job.create_job_branch/1)
+    end
+
+    test "captures current branch name correctly" do
+      Process.put(:mock_current_branch_response, {"feature/my-feature\n", 0})
+      Process.put(:mock_status_response, {"", 0})
+      Process.put(:mock_branch_response, {"", 0})
+
+      assert {:ok, "deft/job-test123", "feature/my-feature"} =
+               Job.create_job_branch(
+                 job_id: "test123",
+                 git: MockGit,
+                 auto_approve: true
+               )
+
+      assert_received {:git_cmd, ["rev-parse", "--abbrev-ref", "HEAD"]}
     end
   end
 

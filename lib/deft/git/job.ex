@@ -31,7 +31,7 @@ defmodule Deft.Git.Job do
 
   ## Returns
 
-  - `{:ok, branch_name}` - Branch created successfully
+  - `{:ok, job_branch_name, original_branch}` - Branch created successfully
   - `{:error, :dirty_working_tree}` - Working tree has uncommitted changes and user declined to stash
   - `{:error, reason}` - Git command failed
 
@@ -39,13 +39,13 @@ defmodule Deft.Git.Job do
 
       # Success with clean working tree
       Deft.Git.Job.create_job_branch(job_id: "abc123", auto_approve: true)
-      # => {:ok, "deft/job-abc123"}
+      # => {:ok, "deft/job-abc123", "main"}
 
       # Error with dirty working tree
       Deft.Git.Job.create_job_branch(job_id: "abc123", auto_approve: true)
       # => {:error, :dirty_working_tree}
   """
-  @spec create_job_branch(keyword()) :: {:ok, String.t()} | {:error, term()}
+  @spec create_job_branch(keyword()) :: {:ok, String.t(), String.t()} | {:error, term()}
   def create_job_branch(opts) do
     job_id = Keyword.fetch!(opts, :job_id)
     git = Keyword.get(opts, :git, Deft.Git)
@@ -53,10 +53,23 @@ defmodule Deft.Git.Job do
 
     branch_name = "deft/job-#{job_id}"
 
-    with :ok <- verify_clean_working_tree(git, auto_approve),
+    with {:ok, original_branch} <- get_current_branch(git),
+         :ok <- verify_clean_working_tree(git, auto_approve),
          :ok <- create_branch(git, branch_name) do
-      Logger.info("Created job branch: #{branch_name}")
-      {:ok, branch_name}
+      Logger.info("Created job branch: #{branch_name} from #{original_branch}")
+      {:ok, branch_name, original_branch}
+    end
+  end
+
+  # Get the name of the current branch
+  defp get_current_branch(git) do
+    case git.cmd(["rev-parse", "--abbrev-ref", "HEAD"]) do
+      {branch_name, 0} ->
+        {:ok, String.trim(branch_name)}
+
+      {error_output, exit_code} ->
+        Logger.error("Failed to get current branch: #{error_output}")
+        {:error, {:get_branch_failed, exit_code}}
     end
   end
 
