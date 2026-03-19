@@ -2106,27 +2106,14 @@ defmodule Deft.CLI do
 
   # Build a prompt from issue structured fields
   defp build_issue_prompt(issue) do
-    """
-    # Issue: #{issue.title}
-
-    ## Context
-    #{issue.context}
-
-    ## Acceptance Criteria
-    #{format_list(issue.acceptance_criteria)}
-
-    ## Constraints
-    #{format_list(issue.constraints)}
-    """
-  end
-
-  # Format a list for display
-  defp format_list([]), do: "(none)"
-
-  defp format_list(items) do
-    items
-    |> Enum.map(fn item -> "- #{item}" end)
-    |> Enum.join("\n")
+    Jason.encode!(%{
+      id: issue.id,
+      title: issue.title,
+      priority: issue.priority,
+      context: issue.context,
+      acceptance_criteria: issue.acceptance_criteria,
+      constraints: issue.constraints
+    })
   end
 
   # Wait for job completion by monitoring Foreman process
