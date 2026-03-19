@@ -455,35 +455,52 @@ defmodule Deft.Job.Foreman do
 
   # Prompt handling
   def handle_event(:cast, {:prompt, text}, {job_phase, :idle}, data) do
-    # Add user message to conversation
-    user_message = %Message{
-      id: generate_message_id(),
-      role: :user,
-      content: [%Deft.Message.Text{text: text}],
-      timestamp: DateTime.utc_now()
-    }
+    # Check if this is a job correction (explicit user course-correction)
+    case String.split(text, "__JOB_CORRECTION__: ", parts: 2) do
+      [_prefix, correction_content] ->
+        # This is a correction - auto-promote to site log
+        Logger.info("User correction received: #{correction_content}")
+        metadata = %{source: "user", timestamp: DateTime.utc_now()}
+        data = write_to_site_log(:correction, correction_content, metadata, data)
 
-    messages = data.messages ++ [user_message]
+        # Send acknowledgment message to user
+        data = send_user_message("Correction recorded and promoted to site log.", data)
 
-    # Save the user message to session
-    data = %{data | messages: messages, turn_count: data.turn_count + 1}
-    data = save_unsaved_messages(data)
+        # Stay in idle state
+        {:keep_state, data}
 
-    # Start LLM call
-    case call_llm(data) do
-      {:ok, stream_ref, monitor_ref, estimated_tokens} ->
-        data = %{
-          data
-          | stream_ref: stream_ref,
-            stream_monitor_ref: monitor_ref,
-            estimated_tokens: estimated_tokens
+      [_] ->
+        # Normal prompt - proceed with LLM call
+        # Add user message to conversation
+        user_message = %Message{
+          id: generate_message_id(),
+          role: :user,
+          content: [%Deft.Message.Text{text: text}],
+          timestamp: DateTime.utc_now()
         }
 
-        {:next_state, {job_phase, :calling}, data}
+        messages = data.messages ++ [user_message]
 
-      {:error, reason} ->
-        Logger.error("Foreman LLM call failed in #{job_phase}: #{inspect(reason)}")
-        {:next_state, {:complete, :idle}, data}
+        # Save the user message to session
+        data = %{data | messages: messages, turn_count: data.turn_count + 1}
+        data = save_unsaved_messages(data)
+
+        # Start LLM call
+        case call_llm(data) do
+          {:ok, stream_ref, monitor_ref, estimated_tokens} ->
+            data = %{
+              data
+              | stream_ref: stream_ref,
+                stream_monitor_ref: monitor_ref,
+                estimated_tokens: estimated_tokens
+            }
+
+            {:next_state, {job_phase, :calling}, data}
+
+          {:error, reason} ->
+            Logger.error("Foreman LLM call failed in #{job_phase}: #{inspect(reason)}")
+            {:next_state, {:complete, :idle}, data}
+        end
     end
   end
 

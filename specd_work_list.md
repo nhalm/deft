@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## orchestration v0.6
-
-- Implement `/correct` command: users send explicit course-corrections that route to Foreman as `{:lead_message, :correction, ...}` and are auto-promoted to site log; remove implicit LLM-based correction classification logic
-
 ## evals v0.3
 
 - Restore eval test files: test/eval/ contains only results/ — all component eval test files (observer/, reflector/, actor/, foreman/, lead/, spilling/, skills/, issues/, e2e/), fixtures, and support modules are missing; previous restore (specd_history) regressed

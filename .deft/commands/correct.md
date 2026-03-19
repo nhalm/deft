@@ -1,10 +1,20 @@
-Correct an observation by replacing incorrect text with correct text.
+Send a course-correction to the Foreman during job execution, or correct an observation in a regular session.
 
 ## Usage
 
-`/correct <old> → <new>` — Search for observations matching `<old>`, show them to the user, and ask for confirmation before appending a CORRECTION marker to replace the text
+- `/correct <message>` — Send a course-correction during job execution (auto-promoted to site log)
+- `/correct <old> → <new>` — Correct an observation by replacing incorrect text
 
 ## Instructions
+
+### Job Correction (when Foreman is active)
+
+When the user runs `/correct <message>` without `→` during a job:
+
+1. Add the prefix `__JOB_CORRECTION__: ` to the message
+2. The Foreman will detect this prefix, auto-promote the correction to the site log, and make it available to all Leads
+
+### Observation Correction (regular sessions)
 
 When the user runs `/correct <old> → <new>`:
 
@@ -17,10 +27,20 @@ When the user runs `/correct <old> → <new>`:
    - Inform the user that the CORRECTION has been added
 6. If the user declines or if no matches were found, inform them and stop
 
-## Example
+## Examples
 
+**Job correction:**
+```
+User: /correct Focus on the backend API first, skip the frontend for now
+Assistant: __JOB_CORRECTION__: Focus on the backend API first, skip the frontend for now
+[Foreman auto-promotes to site log]
+```
+
+**Observation correction:**
+```
 User: /correct we use PostgreSQL → we use SQLite
 Assistant: [searches and shows matches]
 Assistant: "Do you want to replace these observations?"
 User: yes
 Assistant: [confirms and uses correct tool with mode="confirm"]
+```
