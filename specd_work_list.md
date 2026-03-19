@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## tools v0.2
-
-- Fix edit tool line-range deletion with empty `new_content` (edit.ex:224): `String.split("", "\n")` returns `[""]` not `[]`; replacing a line range with `new_content: ""` inserts a spurious blank line instead of cleanly deleting
-
 ## observational-memory v0.3
 
 - Fix `calibrate_from_usage` to use `String.length` instead of `byte_size` (state.ex:1445): multi-byte characters (emoji priority markers 🔴🟡🟢 are 4 bytes each) inflate the calibration factor, causing threshold drift; `Tokens.estimate/2` was already fixed but the calibration path was missed

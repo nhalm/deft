@@ -200,7 +200,7 @@ defmodule Deft.Tools.EditTest do
       }
 
       assert {:ok, [%Text{}]} = Edit.execute(args, context)
-      assert File.read!(file_path) == "Line 1\n\nLine 4"
+      assert File.read!(file_path) == "Line 1\nLine 4"
     end
 
     test "replaces first line", %{context: context} do

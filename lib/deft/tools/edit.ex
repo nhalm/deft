@@ -221,7 +221,7 @@ defmodule Deft.Tools.Edit do
        ) do
     before = Enum.take(lines, start_line - 1)
     after_lines = Enum.drop(lines, end_line)
-    new_lines = String.split(new_content, "\n")
+    new_lines = if new_content == "", do: [], else: String.split(new_content, "\n")
 
     new_file_lines = before ++ new_lines ++ after_lines
     new_file_content = Enum.join(new_file_lines, "\n")
