@@ -17,3 +17,21 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
+## orchestration v0.3
+
+- Fix `determine_completed_deliverables` site log key parsing: `generate_site_log_key(:complete, metadata)` uses `Map.get(metadata, :key, "entry")` as base_key, but completion metadata has `:lead_id` and `:deliverable` — not `:key`; all completion entries get key `"complete-entry-<ts>"`, so resume always parses `lead_id = "entry"` and finds zero completed deliverables (foreman.ex:1318-1323, 2430-2457)
+- Fix merge conflict/error paths to remove Lead from tracking and clean up worktree: `handle_lead_merge` returns unchanged `data` on `{:ok, :conflict, ...}` and `{:error, reason}` (foreman.ex:1201-1208); Lead stays in `data.leads`, worktree is leaked, `all_leads_complete?` never returns true, job hangs in `:executing` permanently
+
+## git-strategy v0.1
+
+- Fix `run_post_merge_tests` to run tests on the job branch: currently runs tests via `File.cd!(working_dir, ...)` where `working_dir` is the main repo root, not a worktree checked out to `deft/job-<job_id>` (job.ex:474-481); merged code on the job branch is never tested, defeating post-merge test purpose
+- Fix abort and verification-failure paths to delete job branch: abort handler (foreman.ex:485-506) and verification failure handler (foreman.ex:823-850) clean up worktrees but never delete `deft/job-<job_id>` branch; `job_keep_failed_branches` config field exists in Deft.Config but is never read anywhere; orphaned job branches accumulate
+
+## filesystem v0.3
+
+- Fix resolve_git_root for normal (non-worktree) repos (REGRESSION): `git rev-parse --git-common-dir` returns relative `.git`, `Path.dirname(".git")` returns `"."`, all normal repos map to same `~/.deft/projects/.` directory (project.ex:131-139); must expand relative path against working dir before dirname; previously fixed per specd_history but fix has regressed
+
+## issues v0.2
+
+- Fix SIGINT abort return value in work loop: `handle_job_result({:error, :sigint_shutdown}, ...)` returns `:ok` (cli.ex:2204), which `run_work_on_issue` maps to `{:ok, cost}` (cli.ex:2069); loop at cli.ex:1955 matches `{:ok, job_cost}` and continues to next issue instead of stopping; should return `{:error, :aborted}` to match the loop's stop condition at cli.ex:1963
+
