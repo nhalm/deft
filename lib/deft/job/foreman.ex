@@ -106,6 +106,7 @@ defmodule Deft.Job.Foreman do
       research_tasks: [],
       research_findings: [],
       research_timeout_ref: nil,
+      verification_timeout_ref: nil,
       site_log_pid: nil,
       plan: resumed_plan,
       blocked_leads: %{},
@@ -513,6 +514,9 @@ defmodule Deft.Job.Foreman do
     # Get runner model from config
     runner_model = Map.get(data.config, :job_runner_model, Map.get(data.config, :job_lead_model))
 
+    # Get verification timeout from config (default 300s)
+    job_runner_timeout = Map.get(data.config, :job_runner_timeout, 300_000)
+
     # Build verification instructions
     verification_instructions = """
     Run the full test suite and review all modified files for quality.
@@ -556,8 +560,14 @@ defmodule Deft.Job.Foreman do
         end
       )
 
-    # Store verification task
-    {:keep_state, %{data | tool_tasks: [task]}}
+    # Monitor the task
+    Process.monitor(task.pid)
+
+    # Set timeout timer
+    timeout_ref = Process.send_after(self(), :verification_timeout, job_runner_timeout)
+
+    # Store verification task and timeout ref
+    {:keep_state, %{data | tool_tasks: [task], verification_timeout_ref: timeout_ref}}
   end
 
   # Abort handling (works in any state)
@@ -684,12 +694,12 @@ defmodule Deft.Job.Foreman do
   # Task crash handling (DOWN message) - research runners, tool tasks, and verification Runner
   def handle_event(
         :info,
-        {:DOWN, _monitor_ref, :process, _pid, reason} = down_msg,
+        {:DOWN, _monitor_ref, :process, _pid, _reason} = down_msg,
         {job_phase, agent_state} = state,
         data
       ) do
     # Extract ref from DOWN message
-    {:DOWN, ref, :process, _pid, _reason} = down_msg
+    {:DOWN, ref, :process, _pid, reason} = down_msg
 
     # Check if this ref matches any research task
     research_tasks = Map.get(data, :research_tasks, [])
@@ -701,62 +711,10 @@ defmodule Deft.Job.Foreman do
 
     cond do
       crashed_research_task ->
-        # A research task crashed
-        Logger.error(
-          "Research task crashed in #{job_phase}:#{agent_state}, reason: #{inspect(reason)}"
-        )
-
-        # Remove crashed task from tracking
-        remaining_tasks = Enum.reject(research_tasks, fn task -> task.ref == ref end)
-        data = %{data | research_tasks: remaining_tasks}
-
-        # If all research tasks done (including crashed ones), transition to decomposing
-        if Enum.empty?(remaining_tasks) do
-          # Cancel timeout timer
-          if data.research_timeout_ref do
-            Process.cancel_timer(data.research_timeout_ref)
-          end
-
-          Logger.info(
-            "Research phase complete (with crashes), collected #{length(data.research_findings)} findings"
-          )
-
-          {:next_state, {:decomposing, :idle}, data}
-        else
-          {:keep_state, data}
-        end
+        handle_research_task_crash(ref, reason, job_phase, agent_state, data)
 
       crashed_tool_task ->
-        # A tool task crashed
-        Logger.error(
-          "Tool task crashed in #{job_phase}:#{agent_state}, reason: #{inspect(reason)}"
-        )
-
-        # Remove crashed task from tracking
-        remaining_tasks = Enum.reject(tool_tasks, fn task -> task.ref == ref end)
-        data = %{data | tool_tasks: remaining_tasks}
-
-        case job_phase do
-          :verifying ->
-            # Verification Runner crashed - this is a critical failure
-            Logger.error("Verification Runner crashed - marking job as failed")
-
-            # Clean up all worktrees and transition to complete with error
-            cleanup_all_lead_worktrees(data)
-
-            unless Map.get(data.config, :job_keep_failed_branches, false) do
-              delete_job_branch_on_failure(data.session_id, data.working_dir)
-            end
-
-            archive_job_files(data.session_id, data.working_dir, :verification_crash)
-
-            {:next_state, {:complete, :idle}, data}
-
-          _other_phase ->
-            # For other phases, just keep state with updated task list
-            # The normal flow will detect incomplete tasks and handle appropriately
-            {:keep_state, data}
-        end
+        handle_tool_task_crash(ref, reason, job_phase, agent_state, data)
 
       true ->
         # Not a research or tool task, fall through to Lead crash handler
@@ -882,6 +840,32 @@ defmodule Deft.Job.Foreman do
     {:next_state, {:decomposing, :idle}, data}
   end
 
+  # Verification timeout
+  def handle_event(:info, :verification_timeout, {:verifying, :idle}, data) do
+    Logger.error("Verification timeout reached - marking job as failed")
+
+    # Kill any remaining verification tasks
+    Enum.each(data.tool_tasks, fn task ->
+      # Task is a struct with pid and ref fields
+      if Process.alive?(task.pid) do
+        Process.exit(task.pid, :kill)
+      end
+    end)
+
+    # Clean up all worktrees
+    cleanup_all_lead_worktrees(data)
+
+    unless Map.get(data.config, :job_keep_failed_branches, false) do
+      delete_job_branch_on_failure(data.session_id, data.working_dir)
+    end
+
+    archive_job_files(data.session_id, data.working_dir, :verification_timeout)
+
+    # Transition to complete with error
+    data = %{data | tool_tasks: [], verification_timeout_ref: nil}
+    {:next_state, {:complete, :idle}, data}
+  end
+
   # Merge-resolution task completion
   def handle_event(
         :info,
@@ -987,6 +971,13 @@ defmodule Deft.Job.Foreman do
     tasks = Enum.reject(tasks, fn task -> task.ref == ref end)
     data = %{data | tool_tasks: tasks}
 
+    # Cancel timeout timer
+    if data.verification_timeout_ref do
+      Process.cancel_timer(data.verification_timeout_ref)
+    end
+
+    data = %{data | verification_timeout_ref: nil}
+
     Logger.info("Verification Runner completed")
 
     # Check verification results
@@ -1091,6 +1082,75 @@ defmodule Deft.Job.Foreman do
   end
 
   # Private helpers
+
+  defp handle_research_task_crash(ref, reason, job_phase, agent_state, data) do
+    Logger.error(
+      "Research task crashed in #{job_phase}:#{agent_state}, reason: #{inspect(reason)}"
+    )
+
+    # Remove crashed task from tracking
+    research_tasks = Map.get(data, :research_tasks, [])
+    remaining_tasks = Enum.reject(research_tasks, fn task -> task.ref == ref end)
+    data = %{data | research_tasks: remaining_tasks}
+
+    # If all research tasks done (including crashed ones), transition to decomposing
+    if Enum.empty?(remaining_tasks) do
+      # Cancel timeout timer
+      if data.research_timeout_ref do
+        Process.cancel_timer(data.research_timeout_ref)
+      end
+
+      Logger.info(
+        "Research phase complete (with crashes), collected #{length(data.research_findings)} findings"
+      )
+
+      {:next_state, {:decomposing, :idle}, data}
+    else
+      {:keep_state, data}
+    end
+  end
+
+  defp handle_tool_task_crash(ref, reason, job_phase, agent_state, data) do
+    Logger.error("Tool task crashed in #{job_phase}:#{agent_state}, reason: #{inspect(reason)}")
+
+    # Remove crashed task from tracking
+    tool_tasks = Map.get(data, :tool_tasks, [])
+    remaining_tasks = Enum.reject(tool_tasks, fn task -> task.ref == ref end)
+    data = %{data | tool_tasks: remaining_tasks}
+
+    case job_phase do
+      :verifying ->
+        handle_verification_crash(data)
+
+      _other_phase ->
+        # For other phases, just keep state with updated task list
+        # The normal flow will detect incomplete tasks and handle appropriately
+        {:keep_state, data}
+    end
+  end
+
+  defp handle_verification_crash(data) do
+    # Verification Runner crashed - this is a critical failure
+    Logger.error("Verification Runner crashed - marking job as failed")
+
+    # Cancel timeout timer
+    if data.verification_timeout_ref do
+      Process.cancel_timer(data.verification_timeout_ref)
+    end
+
+    data = %{data | verification_timeout_ref: nil}
+
+    # Clean up all worktrees and transition to complete with error
+    cleanup_all_lead_worktrees(data)
+
+    unless Map.get(data.config, :job_keep_failed_branches, false) do
+      delete_job_branch_on_failure(data.session_id, data.working_dir)
+    end
+
+    archive_job_files(data.session_id, data.working_dir, :verification_crash)
+
+    {:next_state, {:complete, :idle}, data}
+  end
 
   defp handle_lead_crash(
          {:DOWN, monitor_ref, :process, _pid, reason},

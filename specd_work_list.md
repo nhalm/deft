@@ -19,5 +19,4 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.4
 
-- Add verification Runner timeout in Foreman `start_verification` — use `job_runner_timeout` config (default 300_000ms) with `Process.send_after` and a handler to fail the job on timeout, matching the pattern used by `research_timeout`
 - Add `job.max_duration` enforcement in Foreman — set a job-level timer on init using `job_max_duration` config (default 1_800_000ms), handle timeout by aborting the job with cleanup
