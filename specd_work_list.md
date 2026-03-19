@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## observational-memory v0.3
-
-- Add epoch staleness check to immediate reflection path (state.ex:687-731): when is_buffering_reflection is false and reflection completes, verify activation_epoch before applying compressed observations (same check as buffered path at 6.4)
-
 ## evals v0.3
 
 - Fix safety hard-fail gate to run unconditionally (tier1-evals.yml:56): the "Check for safety eval failures" step has `if: steps.evals.outputs.exit_code != '0'`, so the safety threshold check is skipped when `make test.eval` exits 0; a safety eval returning 85% will pass CI silently; remove the conditional or always run the safety check step

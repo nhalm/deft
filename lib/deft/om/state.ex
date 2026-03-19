@@ -685,49 +685,8 @@ defmodule Deft.OM.State do
           # (in case we already crossed the full threshold while buffering)
           check_and_spawn_reflector(state)
         else
-          # This was an immediate reflection - apply it now
-          # Emit reflection_complete event
-          broadcast_event(state.session_id, {
-            :om,
-            :reflection_complete,
-            %{before_tokens: result.before_tokens, after_tokens: result.after_tokens}
-          })
-
-          # Replace active_observations with compressed result
-          # Increment generation_count and activation_epoch
-          state = %{
-            state
-            | active_observations: result.compressed_observations,
-              observation_tokens: result.after_tokens,
-              generation_count: state.generation_count + 1,
-              activation_epoch: state.activation_epoch + 1,
-              is_reflecting: false,
-              reflector_ref: nil,
-              snapshot_dirty: true
-          }
-
-          # Check if hard cap truncation is needed (spec section 4.6)
-          state = maybe_apply_hard_cap(state)
-
-          # Write snapshot after reflection activation (spec section 9.1)
-          state =
-            case write_snapshot(state) do
-              :ok ->
-                %{state | snapshot_dirty: false}
-
-              {:error, _reason} ->
-                # Log already happened in write_snapshot, continue with dirty flag set
-                state
-            end
-
-          # After Reflector completes, check if there are buffered chunks to activate
-          # (now that is_reflecting is false)
-          if not Enum.empty?(state.buffered_chunks) and
-               state.pending_message_tokens >= message_threshold(state.config) do
-            activate_buffered_chunks(state)
-          else
-            state
-          end
+          # This was an immediate reflection - check epoch staleness before applying
+          apply_immediate_reflection_with_epoch_check(state, result)
         end
 
       {:noreply, state}
@@ -1326,6 +1285,64 @@ defmodule Deft.OM.State do
     end
   end
 
+  # Apply immediate reflection with epoch staleness check (per spec section 6.4)
+  defp apply_immediate_reflection_with_epoch_check(state, result) do
+    # Verify activation_epoch before applying compressed observations
+    if result.epoch == state.activation_epoch do
+      # Epoch is current - apply the reflection
+      # Emit reflection_complete event
+      broadcast_event(state.session_id, {
+        :om,
+        :reflection_complete,
+        %{before_tokens: result.before_tokens, after_tokens: result.after_tokens}
+      })
+
+      # Replace active_observations with compressed result
+      # Increment generation_count and activation_epoch
+      state = %{
+        state
+        | active_observations: result.compressed_observations,
+          observation_tokens: result.after_tokens,
+          generation_count: state.generation_count + 1,
+          activation_epoch: state.activation_epoch + 1,
+          is_reflecting: false,
+          reflector_ref: nil,
+          snapshot_dirty: true
+      }
+
+      # Check if hard cap truncation is needed (spec section 4.6)
+      state = maybe_apply_hard_cap(state)
+
+      # Write snapshot after reflection activation (spec section 9.1)
+      state =
+        case write_snapshot(state) do
+          :ok ->
+            %{state | snapshot_dirty: false}
+
+          {:error, _reason} ->
+            # Log already happened in write_snapshot, continue with dirty flag set
+            state
+        end
+
+      # After Reflector completes, check if there are buffered chunks to activate
+      # (now that is_reflecting is false)
+      if not Enum.empty?(state.buffered_chunks) and
+           state.pending_message_tokens >= message_threshold(state.config) do
+        activate_buffered_chunks(state)
+      else
+        state
+      end
+    else
+      # Epoch is stale - discard the reflection
+      Logger.warning(
+        "Discarding stale immediate reflection for session #{state.session_id} (epoch #{result.epoch} < #{state.activation_epoch})"
+      )
+
+      # Clear is_reflecting flag and continue
+      %{state | is_reflecting: false, reflector_ref: nil}
+    end
+  end
+
   # Spawn a buffered Reflector Task (per spec section 6.2)
   # Task carries the current activation_epoch
   defp spawn_buffered_reflector_task(state) do
@@ -1404,15 +1421,22 @@ defmodule Deft.OM.State do
 
       task_supervisor = Supervisor.task_supervisor_name(state.session_id)
 
+      # Capture the current epoch - the Task result will be tagged with this epoch
+      current_epoch = state.activation_epoch
+
       # Spawn Reflector Task
       task =
         Task.Supervisor.async_nolink(task_supervisor, fn ->
-          Reflector.run(
-            state.config,
-            state.active_observations,
-            target_size,
-            state.calibration_factor
-          )
+          result =
+            Reflector.run(
+              state.config,
+              state.active_observations,
+              target_size,
+              state.calibration_factor
+            )
+
+          # Tag the result with the epoch it was computed against
+          Map.put(result, :epoch, current_epoch)
         end)
 
       %{
