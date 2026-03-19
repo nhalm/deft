@@ -41,5 +41,4 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 ## issues v0.2
 
 - Add existence validation for blocked-by dependency IDs on issue create: `handle_call({:create, attrs})` (issues.ex:213-247) calls `check_cycle` but never `validate_blocker_exists`; contrast `add_dependency` (issues.ex:340-342) which validates both issue and blocker exist; currently `--blocked-by deft-nonexistent` creates an issue that appears immediately unblocked, violating spec intent for explicit dependencies; add validation and warning for missing dependencies
-- Fix `resolve_file_path` to expand relative `.git` path before `Path.dirname` (issues.ex:443-448): `git rev-parse --git-common-dir` returns relative `".git"` for normal repos; `Path.dirname(".git")` returns `"."` which resolves to cwd, not repo root; running `deft issue` from a subdirectory reads/writes `<subdir>/.deft/issues.jsonl` instead of the project root's file; same bug as project.ex had before fix (use `Path.expand/1` with working dir)
 

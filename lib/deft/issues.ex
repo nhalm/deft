@@ -444,7 +444,9 @@ defmodule Deft.Issues do
     case Git.cmd(["rev-parse", "--git-common-dir"]) do
       {output, 0} ->
         common_dir = String.trim(output)
-        repo_root = Path.dirname(common_dir)
+        # Expand relative .git path before getting dirname
+        expanded_common_dir = Path.expand(common_dir, File.cwd!())
+        repo_root = Path.dirname(expanded_common_dir)
         Path.join([repo_root, ".deft", "issues.jsonl"])
 
       _error ->
