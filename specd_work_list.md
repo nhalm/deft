@@ -32,6 +32,10 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Preserve merge-conflict temp worktree until merge-resolution Runner completes (git/job.ex:334): `cleanup_merge_worktree` runs unconditionally before `merge_lead_branch` returns `{:ok, :conflict, ...}`; the Foreman spawns a merge-resolution Runner pointing at `lead_info.worktree_path` which has no conflict markers; conflicts can never be resolved
 - Add running-job check to `find_orphaned_branches` in orphan cleanup (git/job.ex:651-667): returns all `deft/*` branches unconditionally; if `cleanup_orphans` runs during an active job, it deletes branches belonging to the live job
 
+## issues v0.3
+
+- Fix cycle detection in `detect_and_fix_cycles` (issues.ex:553-580) to only clear dependencies of cycle members, not issues that point into the cycle (spec v0.3): current implementation marks issues as affected if they traverse to a cycle member, destroying valid dependency data; should only flag and clear dependencies for issues whose own ID appears in a cycle
+
 ## issues v0.2
 
 - Send structured JSON to Foreman instead of Markdown in `build_issue_prompt` (cli.ex:2108-2121): spec section 6.1 requires structured JSON with `id`, `title`, `priority`, `context`, `acceptance_criteria`, `constraints`; code builds freeform Markdown text; `id` and `priority` are omitted entirely; Foreman cannot programmatically use `acceptance_criteria` as verification targets

@@ -2,11 +2,14 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.2 |
+| Version | 0.3 |
 | Status | Ready |
-| Last Updated | 2026-03-17 |
+| Last Updated | 2026-03-19 |
 
 ## Changelog
+
+### v0.3 (2026-03-19)
+- **Cycle detection clarification:** "Affected issues" in cycle detection means only issues that are part of the cycle itself, not issues that point into the cycle. When a cycle is detected during init, only the cycle members' dependencies are cleared.
 
 ### v0.2 (2026-03-17)
 - **Approval model:** Changed from single-approval to approve-every-plan as default for `deft work --loop`. Added `--auto-approve-all` flag for fully autonomous mode.
@@ -149,7 +152,7 @@ An issue is **blocked** when:
 
 Circular dependency detection: on create or update, walk the dependency graph. If adding a dependency would create a cycle, reject with an error.
 
-Cycle detection also runs during `init/1` after loading from JSONL. If a cycle is detected (e.g., from a bad branch merge), the affected issues are logged as warnings and their dependencies are cleared to break the cycle.
+Cycle detection also runs during `init/1` after loading from JSONL. If a cycle is detected (e.g., from a bad branch merge), only the issues that are members of the cycle are logged as warnings and have their dependencies cleared to break the cycle. Issues that point into the cycle but are not part of it retain their dependencies.
 
 ### 4. Process Architecture
 
