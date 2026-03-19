@@ -81,7 +81,7 @@ ETS handles reads — concurrent, no process bottleneck. DETS handles persistenc
 
 Project directories use path-encoded names (replace `/` with `-`, strip leading `-`). A project maps to a git repository root.
 
-Resolve the working directory to a real path (no symlinks) via `Path.expand/1` before encoding. For git worktrees, use `git rev-parse --git-common-dir` + `Path.dirname/1` to find the canonical repo root (`--show-toplevel` returns the worktree root, not the main repo root).
+Resolve the working directory to a real path (no symlinks) via symlink resolution (e.g. `File.realpath/1` or `:file.read_link_all/1`) before encoding. For git worktrees, use `git rev-parse --git-common-dir` + `Path.dirname/1` to find the canonical repo root (`--show-toplevel` returns the worktree root, not the main repo root).
 
 Monorepos share a single project directory — the site log is repo-scoped, not subdirectory-scoped.
 
