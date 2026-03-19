@@ -78,6 +78,7 @@ defmodule Deft.Job.Foreman do
     working_dir = Keyword.get(opts, :working_dir, File.cwd!())
     name = Keyword.get(opts, :name)
     resumed_plan = Keyword.get(opts, :resumed_plan)
+    cli_pid = Keyword.get(opts, :cli_pid)
 
     # Build session file path for Foreman
     jobs_dir = Project.jobs_dir(working_dir)
@@ -90,6 +91,7 @@ defmodule Deft.Job.Foreman do
       rate_limiter_pid: rate_limiter_pid,
       runner_supervisor: runner_supervisor,
       working_dir: working_dir,
+      cli_pid: cli_pid,
       messages: [],
       leads: %{},
       current_message: nil,
@@ -2475,11 +2477,15 @@ defmodule Deft.Job.Foreman do
   end
 
   # Present plan to user for approval
-  defp present_plan_for_approval(plan, _data) do
-    # In a real implementation, this would send the plan to the TUI for display
-    # For now, just log it
-    Logger.info("Plan ready for approval:\n#{plan.raw_plan}")
-    Logger.info("Waiting for user approval (send {:approve_plan} or {:reject_plan} message)")
+  defp present_plan_for_approval(plan, data) do
+    # Send plan to CLI process if available
+    if data.cli_pid && Process.alive?(data.cli_pid) do
+      send(data.cli_pid, {:plan_approval_needed, plan})
+    else
+      # Fallback for interactive sessions or when no CLI is attached
+      Logger.info("Plan ready for approval:\n#{plan.raw_plan}")
+      Logger.info("Waiting for user approval (send {:approve_plan} or {:reject_plan} message)")
+    end
   end
 
   # Store the plan and build dependency tracking structures

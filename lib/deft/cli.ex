@@ -2078,11 +2078,13 @@ defmodule Deft.CLI do
     }
 
     # Start Job Supervisor (which starts Foreman with runner_supervisor)
+    # Pass current process PID so Foreman can send plan approval messages
     case Deft.Job.Supervisor.start_link(
            job_id: job_id,
            config: agent_config,
            prompt: issue_prompt,
-           working_dir: working_dir
+           working_dir: working_dir,
+           cli_pid: self()
          ) do
       {:ok, _job_supervisor_pid} ->
         foreman_pid = get_foreman_pid(job_id)
@@ -2142,6 +2144,12 @@ defmodule Deft.CLI do
           other -> {:error, other}
         end
 
+      {:plan_approval_needed, plan} ->
+        # Foreman needs plan approval - display and prompt user
+        handle_plan_approval(foreman_pid, plan)
+        # Continue waiting for job completion
+        wait_for_job_completion(foreman_pid, ref)
+
       {:signal, :sigint} ->
         # SIGINT received - initiate graceful shutdown
         IO.puts("\nReceived Ctrl+C. Sending shutdown to Foreman...")
@@ -2177,6 +2185,36 @@ defmodule Deft.CLI do
         end
 
         {:error, :timeout}
+    end
+  end
+
+  # Handle plan approval request from Foreman
+  defp handle_plan_approval(foreman_pid, plan) do
+    # Display the plan
+    IO.puts("\n" <> String.duplicate("=", 80))
+    IO.puts("WORK PLAN")
+    IO.puts(String.duplicate("=", 80))
+    IO.puts("\n#{plan.raw_plan}\n")
+    IO.puts(String.duplicate("=", 80))
+
+    # Prompt for approval
+    IO.puts("\nApprove this plan?")
+    IO.puts("  [y] Yes, proceed with this plan")
+    IO.puts("  [n] No, request a revision")
+    IO.write("\nYour choice: ")
+
+    case IO.gets("") |> String.trim() |> String.downcase() do
+      "y" ->
+        IO.puts("Plan approved. Execution will begin...")
+        Foreman.approve_plan(foreman_pid)
+
+      "n" ->
+        IO.puts("Plan rejected. Foreman will revise...")
+        Foreman.reject_plan(foreman_pid)
+
+      _ ->
+        IO.puts("Invalid choice. Please enter 'y' or 'n'.")
+        handle_plan_approval(foreman_pid, plan)
     end
   end
 

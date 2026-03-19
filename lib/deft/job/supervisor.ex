@@ -27,6 +27,7 @@ defmodule Deft.Job.Supervisor do
   - `:prompt` — Required. Initial user prompt/issue.
   - `:working_dir` — Optional. Working directory (defaults to File.cwd!()).
   - `:resumed_plan` — Optional. Plan to resume from.
+  - `:cli_pid` — Optional. CLI process PID for plan approval messages.
   """
   def start_link(opts) do
     job_id = Keyword.fetch!(opts, :job_id)
@@ -41,6 +42,7 @@ defmodule Deft.Job.Supervisor do
     prompt = Keyword.fetch!(opts, :prompt)
     working_dir = Keyword.get(opts, :working_dir, File.cwd!())
     resumed_plan = Keyword.get(opts, :resumed_plan)
+    cli_pid = Keyword.get(opts, :cli_pid)
 
     # Build paths for Store
     jobs_dir = Project.jobs_dir(working_dir)
@@ -103,6 +105,7 @@ defmodule Deft.Job.Supervisor do
                runner_supervisor: runner_supervisor_name,
                working_dir: working_dir,
                resumed_plan: resumed_plan,
+               cli_pid: cli_pid,
                name: foreman_name
              ]
            ]},
