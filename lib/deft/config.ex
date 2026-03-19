@@ -27,7 +27,16 @@ defmodule Deft.Config do
           work_cost_ceiling: float(),
           job_test_command: String.t(),
           job_keep_failed_branches: boolean(),
-          job_squash_on_complete: boolean()
+          job_squash_on_complete: boolean(),
+          job_max_leads: pos_integer(),
+          job_max_runners_per_lead: pos_integer(),
+          job_research_timeout: pos_integer(),
+          job_runner_timeout: pos_integer(),
+          job_foreman_model: String.t(),
+          job_lead_model: String.t(),
+          job_runner_model: String.t(),
+          job_research_runner_model: String.t(),
+          job_max_duration: pos_integer()
         }
 
   @enforce_keys [
@@ -48,7 +57,16 @@ defmodule Deft.Config do
     :work_cost_ceiling,
     :job_test_command,
     :job_keep_failed_branches,
-    :job_squash_on_complete
+    :job_squash_on_complete,
+    :job_max_leads,
+    :job_max_runners_per_lead,
+    :job_research_timeout,
+    :job_runner_timeout,
+    :job_foreman_model,
+    :job_lead_model,
+    :job_runner_model,
+    :job_research_runner_model,
+    :job_max_duration
   ]
 
   defstruct [
@@ -69,7 +87,16 @@ defmodule Deft.Config do
     :work_cost_ceiling,
     :job_test_command,
     :job_keep_failed_branches,
-    :job_squash_on_complete
+    :job_squash_on_complete,
+    :job_max_leads,
+    :job_max_runners_per_lead,
+    :job_research_timeout,
+    :job_runner_timeout,
+    :job_foreman_model,
+    :job_lead_model,
+    :job_runner_model,
+    :job_research_runner_model,
+    :job_max_duration
   ]
 
   @doc """
@@ -138,7 +165,16 @@ defmodule Deft.Config do
       job: %{
         test_command: "mix test",
         keep_failed_branches: false,
-        squash_on_complete: true
+        squash_on_complete: true,
+        max_leads: 5,
+        max_runners_per_lead: 3,
+        research_timeout: 120_000,
+        runner_timeout: 300_000,
+        foreman_model: "claude-sonnet-4",
+        lead_model: "claude-sonnet-4",
+        runner_model: "claude-sonnet-4",
+        research_runner_model: "claude-sonnet-4",
+        max_duration: 1_800_000
       }
     }
   end
@@ -294,7 +330,16 @@ defmodule Deft.Config do
       work_cost_ceiling: Map.get(work_config, :cost_ceiling, 50.0),
       job_test_command: Map.get(job_config, :test_command, "mix test"),
       job_keep_failed_branches: Map.get(job_config, :keep_failed_branches, false),
-      job_squash_on_complete: Map.get(job_config, :squash_on_complete, true)
+      job_squash_on_complete: Map.get(job_config, :squash_on_complete, true),
+      job_max_leads: Map.get(job_config, :max_leads, 5),
+      job_max_runners_per_lead: Map.get(job_config, :max_runners_per_lead, 3),
+      job_research_timeout: Map.get(job_config, :research_timeout, 120_000),
+      job_runner_timeout: Map.get(job_config, :runner_timeout, 300_000),
+      job_foreman_model: Map.get(job_config, :foreman_model, "claude-sonnet-4"),
+      job_lead_model: Map.get(job_config, :lead_model, "claude-sonnet-4"),
+      job_runner_model: Map.get(job_config, :runner_model, "claude-sonnet-4"),
+      job_research_runner_model: Map.get(job_config, :research_runner_model, "claude-sonnet-4"),
+      job_max_duration: Map.get(job_config, :max_duration, 1_800_000)
     }
   end
 end

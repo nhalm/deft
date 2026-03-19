@@ -2065,7 +2065,16 @@ defmodule Deft.CLI do
       max_turns: config.turn_limit,
       tools: [Deft.Tools.UseSkill, Deft.Tools.IssueCreate],
       auto_approve_all: flags[:auto_approve_all],
-      job_keep_failed_branches: config.job_keep_failed_branches
+      job_keep_failed_branches: config.job_keep_failed_branches,
+      job_max_leads: config.job_max_leads,
+      job_max_runners_per_lead: config.job_max_runners_per_lead,
+      job_research_timeout: config.job_research_timeout,
+      job_runner_timeout: config.job_runner_timeout,
+      job_foreman_model: config.job_foreman_model,
+      job_lead_model: config.job_lead_model,
+      job_runner_model: config.job_runner_model,
+      job_research_runner_model: config.job_research_runner_model,
+      job_max_duration: config.job_max_duration
     }
 
     # Start Job Supervisor (which starts Foreman with runner_supervisor)

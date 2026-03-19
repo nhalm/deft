@@ -24,5 +24,4 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement `process_provider_event/2` in Lead to accumulate streaming text and tool calls (lead.ex:723-726): same no-op placeholder as Foreman; Lead cannot process LLM responses for task decomposition or steering
 - Implement `finalize_streaming/1` in Lead to build complete assistant message from stream (lead.ex:733-740): same placeholder as Foreman
 - Implement `add_tool_results/2` in Lead to inject tool results into messages (lead.ex:742-746): same placeholder as Foreman
-- Add orchestration config keys to `Deft.Config`: `job_max_leads`, `job_max_runners_per_lead`, `job_research_timeout`, `job_runner_timeout`, `job_foreman_model`, `job_lead_model`, `job_runner_model`, `job_research_runner_model`, `job_max_duration` per spec section 8; parse from `job.*` in config YAML; wire through CLI `agent_config` map so Foreman/Lead can read them
 

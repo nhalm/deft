@@ -26,7 +26,16 @@ defmodule Deft.OM.StateTest do
       work_cost_ceiling: 50.0,
       job_test_command: "mix test",
       job_keep_failed_branches: false,
-      job_squash_on_complete: true
+      job_squash_on_complete: true,
+      job_max_leads: 5,
+      job_max_runners_per_lead: 3,
+      job_research_timeout: 120_000,
+      job_runner_timeout: 300_000,
+      job_foreman_model: "claude-sonnet-4",
+      job_lead_model: "claude-sonnet-4",
+      job_runner_model: "claude-sonnet-4",
+      job_research_runner_model: "claude-sonnet-4",
+      job_max_duration: 1_800_000
     }
 
     # Start OM.Supervisor which will start State
