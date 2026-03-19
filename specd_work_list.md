@@ -19,6 +19,5 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.4
 
-- Fix `get_provider/1` in Foreman (foreman.ex:2408) and Lead (lead.ex:829): `Map.get(data.config, :provider, "anthropic")` returns atom `Deft.Provider.Anthropic` (set by CLI at cli.ex:2060), but `Provider.Registry.resolve/2` requires binary args (`is_binary` guard at registry.ex:59). FunctionClauseError crashes the process at the first LLM call. Either normalize the config value to a string or add an atom-handling clause to `resolve/2`.
 - Fix `config.work_cost_ceiling` KeyError in `Job.Supervisor.init/1` (supervisor.ex:83): the `.` accessor on the plain `agent_config` map raises KeyError because the CLI (cli.ex:2058-2078) does not include a `work_cost_ceiling` key. Either add `work_cost_ceiling` to the CLI config map from `config.work_cost_ceiling`, or use `Map.get(config, :work_cost_ceiling, 10.0)` in the supervisor.
 

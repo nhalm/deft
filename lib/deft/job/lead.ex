@@ -827,7 +827,9 @@ defmodule Deft.Job.Lead do
   end
 
   defp get_provider(data) do
-    provider_name = Map.get(data.config, :provider, "anthropic")
+    provider_value = Map.get(data.config, :provider, "anthropic")
+    # Normalize provider to string (CLI sets it as atom, Registry expects string)
+    provider_name = normalize_provider_name(provider_value)
     # Use Lead's model for resolving provider
     model_name = Map.get(data.config, :job_lead_model, "claude-sonnet-4")
 
@@ -842,6 +844,17 @@ defmodule Deft.Job.Lead do
 
         provider_module
     end
+  end
+
+  # Normalize provider name from atom to string
+  # CLI sets provider as Deft.Provider.Anthropic, Registry expects "anthropic"
+  defp normalize_provider_name(provider) when is_binary(provider), do: provider
+
+  defp normalize_provider_name(provider) when is_atom(provider) do
+    provider
+    |> Module.split()
+    |> List.last()
+    |> String.downcase()
   end
 
   defp process_provider_event(event, data) do

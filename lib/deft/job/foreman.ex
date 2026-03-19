@@ -2406,7 +2406,9 @@ defmodule Deft.Job.Foreman do
 
   # Get provider module from config
   defp get_provider(data) do
-    provider_name = Map.get(data.config, :provider, "anthropic")
+    provider_value = Map.get(data.config, :provider, "anthropic")
+    # Normalize provider to string (CLI sets it as atom, Registry expects string)
+    provider_name = normalize_provider_name(provider_value)
     # Use Foreman's model for resolving provider
     model_name = Map.get(data.config, :job_foreman_model, "claude-sonnet-4")
 
@@ -2421,6 +2423,17 @@ defmodule Deft.Job.Foreman do
 
         provider_module
     end
+  end
+
+  # Normalize provider name from atom to string
+  # CLI sets provider as Deft.Provider.Anthropic, Registry expects "anthropic"
+  defp normalize_provider_name(provider) when is_binary(provider), do: provider
+
+  defp normalize_provider_name(provider) when is_atom(provider) do
+    provider
+    |> Module.split()
+    |> List.last()
+    |> String.downcase()
   end
 
   # Determine the next phase after completing current agent loop
