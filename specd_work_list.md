@@ -17,6 +17,10 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
+## orchestration v0.4
+
+- Audit Lead code to confirm section 4.2 implementation: verify that when the Lead needs to "run compile checks", it spawns a testing Runner (not executing bash directly). Check Lead's `execute_tool` and `call_llm` use the read-only tool set [Read, Grep, Find, Ls]. Update code comments if needed to clarify that delegation to Runners is intentional.
+
 ## orchestration v0.3
 
 - Move completion marker write in `process_lead_message(:complete, ...)` (foreman.ex:1619) to AFTER successful merge+test in `handle_test_success`. Currently it's written before `handle_lead_merge`, so a merge failure leaves a stale marker that causes `all_leads_complete?` to falsely return true — job transitions to `:verifying` with unmerged code.

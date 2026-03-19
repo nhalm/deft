@@ -2,11 +2,14 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.3 |
+| Version | 0.4 |
 | Status | Ready |
-| Last Updated | 2026-03-17 |
+| Last Updated | 2026-03-19 |
 
 ## Changelog
+
+### v0.4 (2026-03-19)
+- Clarified section 4.2: "runs compile checks" means the Lead spawns a testing Runner to verify build and test output — the Lead does not have direct bash access.
 
 ### v0.3 (2026-03-17)
 - Split rate limiter and git strategy into separate specs.
@@ -149,7 +152,7 @@ When a Lead starts, it reads its deliverable assignment and interface contracts 
 
 #### 4.2 Active Steering
 
-The Lead is a **pair-programming manager**: plans tasks with rich context, spawns Runners with detailed instructions, evaluates Runner output, spawns corrective Runners if needed, updates its task list, runs compile checks after each Runner, and sends progress messages to the Foreman. The Lead is the memory bridge — Runners get exactly the context the Lead decides they need.
+The Lead is a **pair-programming manager**: plans tasks with rich context, spawns Runners with detailed instructions, evaluates Runner output, spawns corrective Runners if needed, updates its task list, spawns a testing Runner to verify compile checks and tests after each implementation Runner, and sends progress messages to the Foreman. The Lead is the memory bridge — Runners get exactly the context the Lead decides they need. The Lead's own tool set is read-only ([Read, Grep, Find, Ls](tools.md)) — execution and verification tasks are delegated to Runners.
 
 The Lead handles `{:foreman_steering, content}` messages from the Foreman in `handle_info`, allowing course correction at any point.
 
