@@ -17,7 +17,3 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## evals v0.3
-
-- Restore all eval test files (3rd regression): `test/eval/` contains only `results/`; all 26+ component tests, fixtures, and support modules are missing again; previous two restorations (specd_history) both regressed; investigate root cause of recurring deletion and add prevention (e.g., CI check that test/eval/ contains test files)
-

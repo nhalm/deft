@@ -1,0 +1,32 @@
+{
+  "id": "deft-a1b2",
+  "spec_version": "0.2",
+  "description": "Well-structured JWT auth issue with context, AC, and constraints",
+  "tags": ["issues", "diagnostic", "jwt-auth"],
+  "issue": {
+    "id": "deft-a1b2",
+    "title": "Add JWT authentication to the API",
+    "context": "The API currently has no authentication. We need JWT-based auth so the frontend can make authenticated requests. This is blocking the user management features scheduled for next sprint.",
+    "acceptance_criteria": [
+      "POST /auth/register accepts email+password, returns 201 with JWT",
+      "POST /auth/login verifies credentials, returns 200 with JWT",
+      "Invalid/expired tokens return 401",
+      "Tokens expire after 24 hours"
+    ],
+    "constraints": [
+      "Use argon2 for password hashing, not bcrypt",
+      "Don't modify the existing User schema - add a separate Credential model",
+      "JWT secret must be loaded from environment variable"
+    ],
+    "status": "open",
+    "priority": 1,
+    "dependencies": [],
+    "source": "user"
+  },
+  "expected_plan_properties": {
+    "has_specific_deliverables": true,
+    "references_constraints": true,
+    "includes_verification_targets": true,
+    "deliverable_count": 1
+  }
+}

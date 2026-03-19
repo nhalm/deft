@@ -1,6 +1,8 @@
 pre-commit:
   parallel: true
   commands:
+    eval-structure:
+      run: make test.eval.check-structure
     format:
       run: mix format --check-formatted
       glob: "*.{ex,exs}"

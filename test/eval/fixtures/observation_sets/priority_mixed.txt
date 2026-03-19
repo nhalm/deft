@@ -1,0 +1,98 @@
+## Current State
+- (14:55) Active task: testing priority preservation in Reflector compression
+- (14:55) Last action: created fixture with mixed priority markers
+- (14:52) Blocking error: none
+
+## User Preferences
+- (14:32) 🔴 User wants minimal dependencies — prefers standard library over third-party
+- (14:35) 🔴 User prefers YAML over TOML for config
+- (14:38) 🔴 User emphasizes comprehensive test coverage
+- (14:40) 🔴 User prefers explicit error handling
+- (14:42) 🔴 User likes small, focused commits
+- (14:45) 🔴 User stated they are building an Elixir AI agent
+- (14:48) 🔴 User prefers OTP design patterns
+- (14:50) 🔴 User wants observational memory for context retention
+- (14:52) 🔴 User emphasizes security and input validation
+- (14:55) 🔴 User prefers functional programming patterns
+- (14:58) 🟡 User mentioned they work in Elixir professionally
+- (15:00) 🟡 User likes comprehensive documentation
+- (15:02) 🟡 User prefers gen_statem for complex state machines
+- (15:05) 🟡 User mentioned experience with distributed systems
+- (15:08) 🟡 User prefers immutable data structures
+- (15:10) 🟡 User likes pattern matching over conditionals
+- (15:12) 🟡 User prefers supervised processes
+- (15:15) 🟡 User wants structured logging
+- (15:18) 🟡 User mentioned preference for property-based testing
+- (15:20) 🟡 User likes algebraic data types
+- (15:22) 🟡 User prefers Railway-oriented programming
+- (15:25) 🟡 User wants telemetry integration
+- (15:28) 🟡 User prefers release-based deployments
+- (15:30) 🟡 User likes compile-time configuration validation
+- (15:32) 🟡 User mentioned experience with Phoenix
+- (15:35) 🟡 User prefers Ecto for database interactions
+- (15:38) 🟡 User likes LiveView for real-time UIs
+- (15:40) 🟡 User wants comprehensive error messages
+- (15:42) 🟡 User prefers integration tests over unit tests
+- (15:45) 🟡 User mentioned CI/CD pipeline requirements
+- (15:48) User stated preference for descriptive variable names
+- (15:50) User likes code comments for complex logic
+- (15:52) User prefers early returns over nested conditionals
+- (15:55) User mentioned using mix format regularly
+- (15:58) User likes Credo for static analysis
+- (16:00) User prefers Dialyzer for type checking
+- (16:02) User mentioned using ExDoc for documentation
+- (16:05) User likes keeping dependencies up to date
+- (16:08) User prefers semantic versioning
+- (16:10) User mentioned using GitHub Actions
+- (16:12) User likes automated testing on PRs
+- (16:15) User prefers trunk-based development
+- (16:18) User mentioned using feature flags
+- (16:20) User likes blue-green deployments
+
+## Files & Architecture
+- (14:40) 🟡 Read lib/deft/om/reflector.ex — Reflector implementation
+- (14:45) 🟡 Modified lib/deft/om/reflector.ex — added compression levels
+- (14:42) 🟡 Architecture: gen_statem for agent loop
+- (14:48) Read lib/deft/config.ex — configuration system
+- (14:50) Read lib/deft/provider/anthropic.ex — provider implementation
+- (14:52) Read specs/observational-memory.md — OM spec
+- (14:55) Modified lib/deft/om/observer.ex — improved extraction
+- (14:58) Read lib/deft/om/tokens.ex — token estimation
+- (15:00) Read lib/deft/message.ex — message structures
+- (15:02) Modified lib/deft/om/prompt.ex — refined prompts
+- (15:05) Read lib/deft/provider.ex — provider behavior
+- (15:08) Read lib/deft/agent.ex — agent loop
+- (15:10) Modified lib/deft/state.ex — state management
+- (15:12) Read test/support/eval_helpers.ex — test helpers
+- (15:15) Read specs/evals/README.md — eval framework spec
+- (15:18) Read specs/evals/reflector.md — Reflector eval spec
+- (15:20) Modified test/eval/fixtures/observation_sets/priority_mixed.txt — this file
+
+## Decisions
+- (14:40) 🟡 Chose argon2 for password hashing
+- (14:33) 🟡 Chose Breeze for TUI
+- (14:35) 🟡 Decided on JSONL for persistence
+- (14:38) Chose Tribunal for eval framework
+- (14:42) Decided to use synthetic fixtures for evals
+- (14:45) Chose section-aware merging for observations
+- (14:48) Decided on priority markers for preservation
+- (14:50) Chose escalating compression levels
+- (14:52) Decided on 40k token reflection threshold
+- (14:55) Chose OTP supervision for fault tolerance
+
+## Session History
+- (14:32) 🔴 User stated they are building Deft AI coding agent
+- (14:33) 🟡 User asked about TUI options for Elixir
+- (14:35) 🟡 Discussed session persistence strategies
+- (14:38) 🟡 User requested comprehensive eval coverage
+- (14:40) 🟡 Implemented Observer extraction logic
+- (14:42) 🟡 Added section-aware merging
+- (14:45) Tests passing after Observer refactor
+- (14:47) User concerned about context window limits
+- (14:48) Implemented Reflector compression
+- (14:50) Added escalating compression levels
+- (14:52) Implemented CORRECTION marker preservation
+- (14:55) User requested Reflector eval suite
+- (14:58) Started designing fixture strategy
+- (15:00) Created observation_sets directory
+- (15:02) Discussed token estimation calibration

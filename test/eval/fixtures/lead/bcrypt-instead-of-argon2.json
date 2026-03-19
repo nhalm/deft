@@ -1,0 +1,15 @@
+{
+  "id": "bcrypt-instead-of-argon2",
+  "spec_version": "0.2",
+  "description": "Runner used bcrypt instead of argon2 for password hashing",
+  "task": {
+    "id": "create-user-schema",
+    "description": "Create User schema with password hashing using argon2",
+    "done_state": "lib/app/accounts/user.ex exists with argon2 password hashing"
+  },
+  "runner_output": "I've created the User schema with password hashing.\n\nFile: lib/app/accounts/user.ex\n\ndefmodule App.Accounts.User do\n  use Ecto.Schema\n  import Ecto.Changeset\n\n  schema \"users\" do\n    field :email, :string\n    field :password, :string, virtual: true\n    field :password_hash, :string\n\n    timestamps()\n  end\n\n  def changeset(user, attrs) do\n    user\n    |> cast(attrs, [:email, :password])\n    |> validate_required([:email, :password])\n    |> validate_format(:email, ~r/@/)\n    |> put_password_hash()\n  end\n\n  defp put_password_hash(changeset) do\n    case changeset do\n      %Ecto.Changeset{valid?: true, changes: %{password: password}} ->\n        put_change(changeset, :password_hash, Bcrypt.hash_pwd_salt(password))\n\n      _ ->\n        changeset\n    end\n  end\nend",
+  "expected_steering": {
+    "identifies_error": "Used Bcrypt instead of Argon2",
+    "correction": "The implementation in user.ex uses Bcrypt.hash_pwd_salt/1 for password hashing, but the task specifies argon2. Replace Bcrypt with Argon2 (via the :argon2_elixir library). Update the put_password_hash/1 function in the User changeset to call Argon2.hash_pwd_salt/1 instead. Also add :argon2_elixir to mix.exs dependencies."
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "id": "extract-validation-001",
+  "spec_version": "0.2",
+  "description": "Agent-created issue for code duplication",
+  "tags": ["issues", "agent-created", "refactoring"],
+  "session_context": "Agent noticed duplicate validation logic across register and login endpoints",
+  "expected_issue": {
+    "title": "Extract duplicate validation logic to shared module",
+    "context": "Multiple endpoints (register, login, password reset) have identical email and password validation logic. This duplication increases maintenance burden—changes require updates in multiple places—and creates inconsistency risk if one location diverges. Should be extracted to a shared validation module.",
+    "acceptance_criteria": [
+      "Validation logic centralized in Deft.Auth.Validator module",
+      "All auth endpoints use shared validator functions",
+      "Error messages remain consistent across endpoints"
+    ],
+    "constraints": [
+      "Keep existing error message format for API backward compatibility"
+    ],
+    "priority": 3,
+    "source": "agent"
+  }
+}

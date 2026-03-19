@@ -42,6 +42,9 @@ jobs:
       - name: Compile
         run: mix compile --warnings-as-errors
 
+      - name: Validate test/eval structure
+        run: make test.eval.check-structure
+
       - name: Run Tier 1 evals
         id: evals
         run: |

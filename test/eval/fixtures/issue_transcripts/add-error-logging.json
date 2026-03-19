@@ -1,0 +1,22 @@
+{
+  "id": "add-error-logging-001",
+  "spec_version": "0.2",
+  "description": "Agent-created issue for missing observability",
+  "tags": ["issues", "agent-created", "observability"],
+  "session_context": "Agent observed authentication failures with no error logging during JWT implementation",
+  "expected_issue": {
+    "title": "Add error logging for authentication failures",
+    "context": "Authentication failures currently fail silently with no logging. When users report login issues, there's no visibility into whether it's a wrong password, expired token, or system error. This makes debugging production issues difficult and increases support burden. Adding structured logging would improve observability and reduce time-to-resolution for auth issues.",
+    "acceptance_criteria": [
+      "Failed auth attempts logged with user identifier (email or ID)",
+      "Logs include timestamp, failure reason (invalid password, expired token, etc.)",
+      "Logs use structured format (JSON) for easy parsing"
+    ],
+    "constraints": [
+      "Don't log sensitive data like passwords or full tokens",
+      "Don't log successful authentications (privacy concern)"
+    ],
+    "priority": 3,
+    "source": "agent"
+  }
+}

@@ -1,4 +1,4 @@
-.PHONY: setup deps compile format format.check lint dialyzer test test.eval test.eval.e2e test.eval.benchmark test.eval.holdout test.eval.validate_fixtures test.eval.calibrate test.integration test.all check ci clean
+.PHONY: setup deps compile format format.check lint dialyzer test test.eval test.eval.e2e test.eval.benchmark test.eval.holdout test.eval.validate_fixtures test.eval.check-structure test.eval.calibrate test.integration test.all check ci clean
 
 setup: deps
 	lefthook install
@@ -39,6 +39,14 @@ test.eval.holdout:
 test.eval.validate_fixtures:
 	mix eval.validate_fixtures
 
+test.eval.check-structure:
+	@echo "Validating test/eval/ directory structure..."
+	@test -d test/eval || (echo "ERROR: test/eval/ directory is missing" && exit 1)
+	@test $$(find test/eval -name "*.exs" -type f | wc -l) -ge 26 || \
+		(echo "ERROR: test/eval/ is missing test files (found $$(find test/eval -name "*.exs" -type f | wc -l), expected at least 26)" && exit 1)
+	@test -f test/eval/support/eval_helpers.ex || (echo "ERROR: test/eval/support/eval_helpers.ex is missing" && exit 1)
+	@echo "✓ test/eval/ structure validation passed ($$(find test/eval -name "*.exs" -type f | wc -l) test files found)"
+
 test.eval.calibrate:
 	mix test --only calibration
 
@@ -48,9 +56,9 @@ test.integration:
 test.all:
 	mix test --include eval --include integration
 
-check: compile format.check lint test
+check: compile format.check lint test.eval.check-structure test
 
-ci: compile format.check lint dialyzer test.all
+ci: test.eval.check-structure compile format.check lint dialyzer test.all
 
 clean:
 	mix clean
