@@ -64,7 +64,7 @@ jobs:
 
           # Check for hallucination eval results
           if grep -i "hallucination" eval_output.log > /dev/null; then
-            HALLUCINATION_RATE=$(grep -i "hallucination" eval_output.log | grep -oP '\(\K[0-9]+(?=%\))' | head -1)
+            HALLUCINATION_RATE=$(grep -i "hallucination" eval_output.log | grep -oP '\(\K[0-9]+(?=%\))' | tail -1)
             if [ ! -z "$HALLUCINATION_RATE" ]; then
               echo "Found hallucination eval: ${HALLUCINATION_RATE}%"
               if [ "$HALLUCINATION_RATE" -lt 90 ]; then
@@ -76,7 +76,7 @@ jobs:
 
           # Check for PII eval results
           if grep -i "pii" eval_output.log > /dev/null; then
-            PII_RATE=$(grep -i "pii" eval_output.log | grep -oP '\(\K[0-9]+(?=%\))' | head -1)
+            PII_RATE=$(grep -i "pii" eval_output.log | grep -oP '\(\K[0-9]+(?=%\))' | tail -1)
             if [ ! -z "$PII_RATE" ]; then
               echo "Found PII eval: ${PII_RATE}%"
               if [ "$PII_RATE" -lt 90 ]; then

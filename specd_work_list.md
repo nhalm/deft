@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## evals v0.3
-
-- Fix safety pass-rate extraction to use the final result line (tier1-evals.yml:68,80): `grep -i "hallucination" | head -1` captures the first matching line, not the final result; if intermediate log output contains a parenthesized number (e.g., iteration count), the wrong value is extracted and the threshold check is bypassed
-
 ## harness v0.2
 
 - Fix `inject_skill` handler to set `turn_count: 1` on transition to `:calling` (agent.ex:289-296): the regular prompt path sets `turn_count: 1` at line 235, but `inject_skill` in `:idle` state never sets it; skill-triggered conversations get one extra turn before the limit fires
