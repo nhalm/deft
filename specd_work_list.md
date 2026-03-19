@@ -31,7 +31,3 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 - Fix `merge_lead_branch/1` `@spec` to match actual return type (git/job.ex:315-316): spec says `{:ok, :conflict, [String.t()]}` but function returns `{:ok, :conflict, [String.t()], String.t()}` (4-tuple including temp_dir path); any caller written to the published spec crashes on conflict
 
-## issues v0.3
-
-- Fix `run_work_on_issue` to start Foreman through `Job.Supervisor.start_link/1` instead of calling `Foreman.start_link/1` directly (cli.ex:2080-2086): direct call omits required `:runner_supervisor` argument; `Keyword.fetch!` at foreman.ex:66 raises `KeyError`; `deft work` is completely non-functional
-

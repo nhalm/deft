@@ -2054,14 +2054,6 @@ defmodule Deft.CLI do
     # Build issue prompt from structured fields
     issue_prompt = build_issue_prompt(issue)
 
-    # Start rate limiter
-    {:ok, rate_limiter_pid} =
-      RateLimiter.start_link(
-        job_id: job_id,
-        cost_ceiling: 10.0,
-        model: config.model
-      )
-
     # Build agent config for Foreman
     agent_config = %{
       model: config.model,
@@ -2076,39 +2068,46 @@ defmodule Deft.CLI do
       job_keep_failed_branches: config.job_keep_failed_branches
     }
 
-    # Start Foreman
-    case Foreman.start_link(
-           session_id: job_id,
+    # Start Job Supervisor (which starts Foreman with runner_supervisor)
+    case Deft.Job.Supervisor.start_link(
+           job_id: job_id,
            config: agent_config,
            prompt: issue_prompt,
-           rate_limiter_pid: rate_limiter_pid,
            working_dir: working_dir
          ) do
-      {:ok, foreman_pid} ->
-        # Monitor Foreman for completion
+      {:ok, _job_supervisor_pid} ->
+        foreman_pid = get_foreman_pid(job_id)
         ref = Process.monitor(foreman_pid)
-
-        # Wait for job completion
         result = wait_for_job_completion(foreman_pid, ref)
+        cost = get_job_cost(job_id)
 
-        # Get cost and clean up rate limiter
-        cost = get_cost_and_cleanup_rate_limiter(rate_limiter_pid, job_id)
-
-        # Handle job result
         case handle_job_result(result, issue, job_id) do
           :ok -> {:ok, cost}
           other -> other
         end
 
       {:error, reason} ->
-        # Get cost and clean up rate limiter
-        cost = get_cost_and_cleanup_rate_limiter(rate_limiter_pid, job_id)
-
-        # Revert issue status
+        cost = get_job_cost(job_id)
         Issues.update(issue.id, %{status: :open})
-        IO.puts(:stderr, "Error: Failed to start Foreman: #{inspect(reason)}")
+        IO.puts(:stderr, "Error: Failed to start Job Supervisor: #{inspect(reason)}")
         IO.puts("Job cost: $#{Float.round(cost, 2)}")
         exit({:shutdown, 1})
+    end
+  end
+
+  # Get Foreman PID from registry
+  defp get_foreman_pid(job_id) do
+    case Registry.lookup(Deft.ProcessRegistry, {:foreman, job_id}) do
+      [{pid, _}] -> pid
+      [] -> raise "Foreman not found in registry for job #{job_id}"
+    end
+  end
+
+  # Get cost from rate limiter and clean it up
+  defp get_job_cost(job_id) do
+    case Registry.lookup(Deft.ProcessRegistry, {:rate_limiter, job_id}) do
+      [{rate_limiter_pid, _}] -> get_cost_and_cleanup_rate_limiter(rate_limiter_pid, job_id)
+      [] -> 0.0
     end
   end
 
