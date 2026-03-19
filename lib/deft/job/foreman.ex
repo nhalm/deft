@@ -97,6 +97,7 @@ defmodule Deft.Job.Foreman do
       stream_monitor_ref: nil,
       tool_tasks: [],
       tool_call_buffers: %{},
+      tool_results: [],
       turn_count: 0,
       total_input_tokens: 0,
       total_output_tokens: 0,
@@ -1009,7 +1010,8 @@ defmodule Deft.Job.Foreman do
     # Placeholder for tool execution
     # In real implementation, this would delegate to Deft.Tool
     Logger.debug("Executing tool: #{tool_call.name}")
-    {:ok, "Tool result placeholder"}
+    # Return tuple of {tool_use_id, result} so we can map results to tool calls
+    {tool_call.id, {:ok, "Tool result placeholder"}}
   end
 
   defp call_llm(data) do
@@ -1209,10 +1211,73 @@ defmodule Deft.Job.Foreman do
     end
   end
 
-  defp add_tool_results(_results, data) do
-    # Add tool results to the messages
-    # Placeholder implementation
-    data
+  defp add_tool_results(result, data) do
+    # Accumulate this tool result
+    accumulated = Map.get(data, :tool_results, [])
+    new_accumulated = accumulated ++ [result]
+    data = %{data | tool_results: new_accumulated}
+
+    # If all tool tasks are complete, build the user message with tool results
+    if Enum.empty?(data.tool_tasks) do
+      finalize_tool_results(new_accumulated, data)
+    else
+      # Not all tasks done yet, just return data with accumulated result
+      data
+    end
+  end
+
+  defp finalize_tool_results(accumulated_results, data) do
+    # Extract tool calls from the last assistant message to get tool names
+    tool_calls = extract_tool_calls(data.messages)
+
+    # Build tool result blocks
+    tool_result_blocks = build_tool_result_blocks(accumulated_results, tool_calls)
+
+    # Create user message with tool results
+    tool_result_message = %Message{
+      id: generate_message_id(),
+      role: :user,
+      content: tool_result_blocks,
+      timestamp: DateTime.utc_now()
+    }
+
+    # Add to messages and clear accumulated results
+    new_messages = data.messages ++ [tool_result_message]
+    data = %{data | messages: new_messages, tool_results: []}
+
+    # Save the new message to session
+    save_unsaved_messages(data)
+  end
+
+  defp build_tool_result_blocks(accumulated_results, tool_calls) do
+    Enum.map(accumulated_results, fn {tool_use_id, tool_result} ->
+      # Find the tool name from the original tool call
+      tool_name =
+        Enum.find_value(tool_calls, fn tool_use ->
+          if tool_use.id == tool_use_id, do: tool_use.name
+        end) || "unknown"
+
+      # Build the ToolResult block based on result type
+      build_tool_result_block(tool_use_id, tool_name, tool_result)
+    end)
+  end
+
+  defp build_tool_result_block(tool_use_id, tool_name, {:ok, content}) do
+    %Deft.Message.ToolResult{
+      tool_use_id: tool_use_id,
+      name: tool_name,
+      content: content,
+      is_error: false
+    }
+  end
+
+  defp build_tool_result_block(tool_use_id, tool_name, {:error, error_message}) do
+    %Deft.Message.ToolResult{
+      tool_use_id: tool_use_id,
+      name: tool_name,
+      content: error_message,
+      is_error: true
+    }
   end
 
   defp should_continue_turn?(data) do
