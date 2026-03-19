@@ -26,7 +26,7 @@ defmodule Deft.Job.Lead do
   - Evaluates Runner output
   - Spawns corrective Runners if needed
   - Updates task list
-  - Runs compile checks after each Runner
+  - Spawns testing Runners to verify compile checks and tests (delegates, not executes)
   - Sends progress messages to Foreman
 
   ## Runner Management
