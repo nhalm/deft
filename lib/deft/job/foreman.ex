@@ -1894,7 +1894,8 @@ defmodule Deft.Job.Foreman do
     # All Leads complete if:
     # 1. We have a plan with deliverables
     # 2. All deliverables have been started
-    # 3. No Leads remain in the tracking map (all merged and cleaned up)
+    # 3. All started deliverables have a corresponding completion record in the site log
+    # 4. No Leads remain in the tracking map (all merged and cleaned up)
     has_plan = not is_nil(data.plan) and not is_nil(Map.get(data.plan, :deliverables))
 
     if has_plan do
@@ -1902,8 +1903,13 @@ defmodule Deft.Job.Foreman do
       started_count = MapSet.size(data.started_leads)
       remaining_leads = map_size(data.leads)
 
-      # All deliverables started and no Leads remain
-      deliverables_count > 0 and started_count == deliverables_count and remaining_leads == 0
+      # Get completed deliverables from site log
+      completed_deliverables = determine_completed_deliverables(data)
+      completed_count = length(completed_deliverables)
+
+      # All deliverables started, all started deliverables completed, and no Leads remain
+      deliverables_count > 0 and started_count == deliverables_count and
+        completed_count == deliverables_count and remaining_leads == 0
     else
       false
     end
