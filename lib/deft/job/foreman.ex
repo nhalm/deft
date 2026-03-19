@@ -1429,12 +1429,53 @@ defmodule Deft.Job.Foreman do
     end
   end
 
-  defp execute_tool(tool_call, _data) do
-    # Placeholder for tool execution
-    # In real implementation, this would delegate to Deft.Tool
-    Logger.debug("Executing tool: #{tool_call.name}")
-    # Return tuple of {tool_use_id, result} so we can map results to tool calls
-    {tool_call.id, {:ok, "Tool result placeholder"}}
+  defp execute_tool(tool_call, data) do
+    # Build tool context for execution
+    tool_context = build_tool_context(data)
+
+    # Foreman uses read-only tools (same as Lead)
+    tools = [Deft.Tools.Read, Deft.Tools.Grep, Deft.Tools.Find, Deft.Tools.Ls]
+    tool_map = Map.new(tools, fn tool_module -> {tool_module.name(), tool_module} end)
+
+    # Look up the tool module and execute
+    result =
+      case Map.get(tool_map, tool_call.name) do
+        nil ->
+          {:error, "Tool '#{tool_call.name}' not found"}
+
+        tool_module ->
+          try do
+            tool_module.execute(tool_call.args, tool_context)
+          rescue
+            exception ->
+              {:error, "Tool execution error: #{Exception.message(exception)}"}
+          end
+      end
+
+    # Return tuple of {tool_call.id, result} for build_tool_result_blocks
+    {tool_call.id, result}
+  end
+
+  defp build_tool_context(data) do
+    # Build a Deft.Tool.Context struct for tool execution
+    cache_config = %{
+      "default" => 10_000,
+      "read" => 20_000,
+      "grep" => 8_000,
+      "ls" => 4_000,
+      "find" => 4_000
+    }
+
+    %Deft.Tool.Context{
+      working_dir: data.working_dir,
+      session_id: data.session_id,
+      lead_id: "foreman",
+      emit: fn _output -> :ok end,
+      file_scope: nil,
+      bash_timeout: 120_000,
+      cache_tid: nil,
+      cache_config: cache_config
+    }
   end
 
   defp call_llm(data) do

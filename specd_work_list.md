@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.5
 
-- Implement real tool execution in Foreman `execute_tool/2` (foreman.ex:1432-1438): delegate to `Deft.Tool.execute/3` with the Foreman's tool context instead of returning `"Tool result placeholder"`; Foreman's LLM planning turns get fake results for all tool calls
 - Fix Lead state_enter handler to not use `{:next_event, :cast, ...}` (lead.ex:226-233): `next_event` is a `transition_action` and is prohibited in state_enter callbacks by OTP gen_statem; crashes Lead on start; use `gen_statem.cast(self(), ...)` like the Foreman does (foreman.ex:293)
 - Add `RateLimiter.reconcile/4` call after LLM response in Foreman `call_llm` (foreman.ex:1440+) and Lead `call_llm` (lead.ex:827+): both request tokens via `RateLimiter.request` but never credit back actual usage; TPM bucket is progressively drained without refund for Foreman and Lead calls
 
