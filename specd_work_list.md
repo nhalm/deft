@@ -20,7 +20,3 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 ## evals v0.3
 
 - Restore all eval test files (test/eval/ is empty again): previous restoration (commit ab28121, decision logged 2026-03-19T21:13:48Z) has regressed; all 26 component tests, fixtures, and support modules are missing; restore from git history and investigate which subsequent commit deleted them to prevent recurrence
-
-## orchestration v0.6
-
-- Fix clause ordering: merge_resolution handler (foreman.ex:1031) matches `{:executing, _agent_state}` which swallows tool task results in `{:executing, :executing_tools}` state; `Map.pop(tasks, ref)` returns `{nil, _}` and handler returns `:keep_state_and_data`, preventing tool task handler (foreman.ex:1139) from ever firing; tool results are permanently lost and Foreman hangs

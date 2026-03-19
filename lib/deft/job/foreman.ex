@@ -1027,6 +1027,50 @@ defmodule Deft.Job.Foreman do
     {:next_state, {:complete, :idle}, data}
   end
 
+  # Tool task completion
+  def handle_event(
+        :info,
+        {ref, results},
+        {job_phase, :executing_tools},
+        %{tool_tasks: tasks} = data
+      )
+      when is_reference(ref) do
+    # A tool task completed
+    tasks = Enum.reject(tasks, fn task -> task.ref == ref end)
+    data = %{data | tool_tasks: tasks}
+
+    # Add tool results to messages
+    data = add_tool_results(results, data)
+
+    # If all tasks done, loop back to call LLM or check for continuation
+    if Enum.empty?(tasks) do
+      if should_continue_turn?(data) do
+        # Make another LLM call
+        case call_llm(data) do
+          {:ok, stream_ref, monitor_ref, estimated_tokens} ->
+            data = %{
+              data
+              | stream_ref: stream_ref,
+                stream_monitor_ref: monitor_ref,
+                estimated_tokens: estimated_tokens
+            }
+
+            {:next_state, {job_phase, :calling}, data}
+
+          {:error, reason} ->
+            Logger.error("Foreman LLM call failed in #{job_phase}: #{inspect(reason)}")
+            {:next_state, {:complete, :idle}, data}
+        end
+      else
+        # Check if we need to transition to next phase
+        {next_state, updated_data} = determine_next_phase(job_phase, data)
+        {:next_state, next_state, updated_data}
+      end
+    else
+      {:keep_state, data}
+    end
+  end
+
   # Merge-resolution task completion
   def handle_event(
         :info,
@@ -1132,50 +1176,6 @@ defmodule Deft.Job.Foreman do
             new_data = handle_test_error(lead_id, lead_info, reason, data)
             {:keep_state, new_data}
         end
-    end
-  end
-
-  # Tool task completion
-  def handle_event(
-        :info,
-        {ref, results},
-        {job_phase, :executing_tools},
-        %{tool_tasks: tasks} = data
-      )
-      when is_reference(ref) do
-    # A tool task completed
-    tasks = Enum.reject(tasks, fn task -> task.ref == ref end)
-    data = %{data | tool_tasks: tasks}
-
-    # Add tool results to messages
-    data = add_tool_results(results, data)
-
-    # If all tasks done, loop back to call LLM or check for continuation
-    if Enum.empty?(tasks) do
-      if should_continue_turn?(data) do
-        # Make another LLM call
-        case call_llm(data) do
-          {:ok, stream_ref, monitor_ref, estimated_tokens} ->
-            data = %{
-              data
-              | stream_ref: stream_ref,
-                stream_monitor_ref: monitor_ref,
-                estimated_tokens: estimated_tokens
-            }
-
-            {:next_state, {job_phase, :calling}, data}
-
-          {:error, reason} ->
-            Logger.error("Foreman LLM call failed in #{job_phase}: #{inspect(reason)}")
-            {:next_state, {:complete, :idle}, data}
-        end
-      else
-        # Check if we need to transition to next phase
-        {next_state, updated_data} = determine_next_phase(job_phase, data)
-        {:next_state, next_state, updated_data}
-      end
-    else
-      {:keep_state, data}
     end
   end
 
