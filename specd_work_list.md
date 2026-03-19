@@ -20,5 +20,4 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 ## evals v0.3
 
 - Create missing e2e test files: `test/eval/e2e/single_task_test.exs`, `test/eval/e2e/multi_agent_test.exs`, `test/eval/e2e/verification_circuit_breaker_test.exs` per spec section 1.2 (blocked: fixtures/codebase_snapshots need synthetic repos)
-- Create missing holdout infrastructure: `test/eval/fixtures/holdout/` directory, `@tag :holdout` tests, `make test.eval.holdout` target per spec section 1.4
 - Create missing support modules: `test/eval/support/scoring.ex` (confidence interval reporting per spec section 1.5), `test/eval/support/judge_calibration.ex` (calibration set management per spec section 1.6)
