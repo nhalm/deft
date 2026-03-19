@@ -30,6 +30,8 @@ defmodule Deft.CLI do
   alias Deft.Git.Job, as: GitJob
   alias Deft.Issue.ElicitationPrompt
   alias Deft.Issues
+  alias Deft.Job.Foreman
+  alias Deft.Job.RateLimiter
   alias Deft.Session.Entry.SessionStart
   alias Deft.Session.Store
   alias Deft.SlashCommand
@@ -195,6 +197,14 @@ defmodule Deft.CLI do
       match?(["issue", "dep", "remove", _], positional) ->
         [_cmd, _subcmd, _action, issue_id] = positional
         {:issue_dep_remove, issue_id}
+
+      # Work commands
+      positional == ["work"] ->
+        :work
+
+      match?(["work", _], positional) ->
+        [_cmd, issue_id] = positional
+        {:work_issue, issue_id}
 
       Enum.empty?(positional) ->
         :new_session
@@ -436,6 +446,46 @@ defmodule Deft.CLI do
       {:error, reason} ->
         IO.puts(:stderr, "Error: Failed to remove dependency: #{inspect(reason)}")
         exit({:shutdown, 1})
+    end
+  end
+
+  defp execute_command(:work, flags) do
+    # Ensure Issues GenServer is started
+    ensure_issues_started(flags)
+
+    # Get ready issues (sorted by priority, then created_at)
+    ready_issues = Issues.ready()
+
+    case ready_issues do
+      [] ->
+        IO.puts("No ready issues found.")
+        :ok
+
+      [issue | _] ->
+        IO.puts("Starting work on issue #{issue.id}: #{issue.title}")
+        run_work_on_issue(issue, flags)
+    end
+  end
+
+  defp execute_command({:work_issue, issue_id}, flags) do
+    # Ensure Issues GenServer is started
+    ensure_issues_started(flags)
+
+    # Get the specific issue
+    case Issues.get(issue_id) do
+      {:error, :not_found} ->
+        IO.puts(:stderr, "Error: Issue not found: #{issue_id}")
+        exit({:shutdown, 1})
+
+      {:ok, issue} ->
+        # Verify it's open
+        if issue.status != :open do
+          IO.puts(:stderr, "Error: Issue #{issue_id} is not open (status: #{issue.status})")
+          exit({:shutdown, 1})
+        end
+
+        IO.puts("Starting work on issue #{issue.id}: #{issue.title}")
+        run_work_on_issue(issue, flags)
     end
   end
 
@@ -686,6 +736,8 @@ defmodule Deft.CLI do
       deft issue update <id> [FLAGS]      Update an issue
       deft issue dep add <id> --blocked-by <blocker_id>      Add a dependency
       deft issue dep remove <id> --blocked-by <blocker_id>   Remove a dependency
+      deft work                           Pick highest-priority ready issue and run as job
+      deft work <id>                      Run a specific issue as a job
       deft --help                         Show this help
       deft --version                      Show version
 
@@ -1748,5 +1800,185 @@ defmodule Deft.CLI do
       acceptance_criteria: draft["acceptance_criteria"] || issue.acceptance_criteria,
       constraints: draft["constraints"] || issue.constraints
     }
+  end
+
+  # Run a Foreman job for an issue
+  defp run_work_on_issue(issue, flags) do
+    working_dir = flags[:working_dir] || File.cwd!()
+    cli_flags = build_cli_flags(flags)
+    config = Config.load(cli_flags, working_dir)
+
+    # Verify API key and register provider
+    verify_api_key()
+    :ok = Deft.Provider.Registry.register("anthropic", Deft.Provider.Anthropic)
+
+    # Set issue status to in_progress
+    case Issues.update(issue.id, %{status: :in_progress}) do
+      {:ok, _issue} ->
+        IO.puts("Issue #{issue.id} status set to in_progress")
+
+      {:error, reason} ->
+        IO.puts(:stderr, "Error: Failed to update issue status: #{inspect(reason)}")
+        exit({:shutdown, 1})
+    end
+
+    # Generate job ID
+    job_id = "job_" <> (:crypto.strong_rand_bytes(8) |> Base.encode16(case: :lower))
+
+    # Build issue prompt from structured fields
+    issue_prompt = build_issue_prompt(issue)
+
+    # Start rate limiter
+    {:ok, rate_limiter_pid} =
+      RateLimiter.start_link(
+        job_id: job_id,
+        cost_ceiling: 10.0,
+        model: config.model
+      )
+
+    # Build agent config for Foreman
+    agent_config = %{
+      model: config.model,
+      provider: Deft.Provider.Anthropic,
+      working_dir: working_dir,
+      turn_limit: config.turn_limit,
+      tool_timeout: config.tool_timeout,
+      bash_timeout: config.bash_timeout,
+      max_turns: config.turn_limit,
+      tools: [Deft.Tools.UseSkill, Deft.Tools.IssueCreate],
+      auto_approve_plans: !flags[:auto_approve_all]
+    }
+
+    # Start Foreman
+    case Foreman.start_link(
+           session_id: job_id,
+           config: agent_config,
+           prompt: issue_prompt,
+           rate_limiter_pid: rate_limiter_pid,
+           working_dir: working_dir
+         ) do
+      {:ok, foreman_pid} ->
+        # Monitor Foreman for completion
+        ref = Process.monitor(foreman_pid)
+
+        # Send initial prompt to start the job
+        Foreman.prompt(foreman_pid, issue_prompt)
+
+        # Wait for job completion
+        result = wait_for_job_completion(foreman_pid, ref)
+
+        # Clean up rate limiter
+        if Process.alive?(rate_limiter_pid) do
+          GenServer.stop(rate_limiter_pid)
+        end
+
+        # Handle job result
+        handle_job_result(result, issue, job_id)
+
+      {:error, reason} ->
+        # Clean up rate limiter on failure
+        if Process.alive?(rate_limiter_pid) do
+          GenServer.stop(rate_limiter_pid)
+        end
+
+        # Revert issue status
+        Issues.update(issue.id, %{status: :open})
+        IO.puts(:stderr, "Error: Failed to start Foreman: #{inspect(reason)}")
+        exit({:shutdown, 1})
+    end
+  end
+
+  # Build a prompt from issue structured fields
+  defp build_issue_prompt(issue) do
+    """
+    # Issue: #{issue.title}
+
+    ## Context
+    #{issue.context}
+
+    ## Acceptance Criteria
+    #{format_list(issue.acceptance_criteria)}
+
+    ## Constraints
+    #{format_list(issue.constraints)}
+    """
+  end
+
+  # Format a list for display
+  defp format_list([]), do: "(none)"
+
+  defp format_list(items) do
+    items
+    |> Enum.map(fn item -> "- #{item}" end)
+    |> Enum.join("\n")
+  end
+
+  # Wait for job completion by monitoring Foreman process
+  defp wait_for_job_completion(foreman_pid, ref) do
+    receive do
+      {:DOWN, ^ref, :process, ^foreman_pid, reason} ->
+        case reason do
+          :normal -> {:ok, :completed}
+          :shutdown -> {:error, :aborted}
+          other -> {:error, other}
+        end
+    after
+      # Timeout after 1 hour
+      3_600_000 ->
+        Process.demonitor(ref, [:flush])
+
+        if Process.alive?(foreman_pid) do
+          :gen_statem.stop(foreman_pid)
+        end
+
+        {:error, :timeout}
+    end
+  end
+
+  # Handle the result of a job
+  defp handle_job_result({:ok, :completed}, issue, job_id) do
+    # Job completed successfully - close the issue
+    case Issues.close(issue.id, job_id) do
+      {:ok, _issue} ->
+        IO.puts("\nJob #{job_id} completed successfully!")
+        IO.puts("Issue #{issue.id} closed.")
+
+        # Check for newly unblocked issues
+        all_issues = Issues.list(status: [:open, :in_progress])
+        previously_blocked = find_issues_blocked_by(all_issues, issue.id)
+        newly_unblocked = find_newly_unblocked(previously_blocked)
+
+        unless Enum.empty?(newly_unblocked) do
+          IO.puts("\nNewly unblocked issues:")
+
+          Enum.each(newly_unblocked, fn issue ->
+            IO.puts("  - #{issue.id}: #{issue.title}")
+          end)
+        end
+
+        :ok
+
+      {:error, reason} ->
+        IO.puts(:stderr, "Warning: Failed to close issue: #{inspect(reason)}")
+        :ok
+    end
+  end
+
+  defp handle_job_result({:error, reason}, issue, _job_id) do
+    # Job failed - revert issue to open
+    case Issues.update(issue.id, %{status: :open}) do
+      {:ok, _issue} ->
+        IO.puts(:stderr, "\nJob failed: #{inspect(reason)}")
+        IO.puts(:stderr, "Issue #{issue.id} status reverted to open.")
+        exit({:shutdown, 1})
+
+      {:error, update_reason} ->
+        IO.puts(
+          :stderr,
+          "Error: Job failed and failed to revert issue status: #{inspect(update_reason)}"
+        )
+
+        exit({:shutdown, 1})
+    end
   end
 end
