@@ -1,4 +1,5 @@
 # History
+- **orchestration v0.3 (2026-03-19):** Add `tool_results: []` to Lead's `initial_data` map (lead.ex:97-124): map update syntax `%{data | tool_results: ...}` in `add_tool_results/2` (lead.ex:898) raises `KeyError` because the key doesn't exist; Lead crashes on first tool execution
 - **orchestration v0.3 (2026-03-19):** Implement `add_tool_results/2` in Lead to inject tool results into messages (lead.ex:742-746): same placeholder as Foreman
 - **orchestration v0.3 (2026-03-19):** Implement `finalize_streaming/1` in Lead to build complete assistant message from stream (lead.ex:733-740): same placeholder as Foreman
 - **orchestration v0.3 (2026-03-19):** Implement `process_provider_event/2` in Lead to accumulate streaming text and tool calls (lead.ex:723-726): same no-op placeholder as Foreman; Lead cannot process LLM responses for task decomposition or steering

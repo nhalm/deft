@@ -116,6 +116,7 @@ defmodule Deft.Job.Lead do
       stream_monitor_ref: nil,
       tool_tasks: [],
       tool_call_buffers: %{},
+      tool_results: [],
       turn_count: 0,
       total_input_tokens: 0,
       total_output_tokens: 0,
