@@ -171,10 +171,12 @@ defmodule Deft.Store do
     # Async load task sends entries to GenServer for insertion.
     tid = :ets.new(:store_table, [:set, :protected])
 
-    # Start async load task (linked to GenServer)
+    # Start async load task (monitored but not linked to GenServer)
     # Task collects entries and sends them to GenServer for insertion.
     # GenServer is ready immediately; reads return :miss for not-yet-loaded entries.
+    # Unlink to prevent task crash from killing GenServer (monitor preserved for {:DOWN, ...})
     load_task = Task.async(fn -> collect_dets_entries(dets_file) end)
+    Process.unlink(load_task.pid)
 
     state = %{
       type: type,
