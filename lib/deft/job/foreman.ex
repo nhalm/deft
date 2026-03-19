@@ -116,7 +116,8 @@ defmodule Deft.Job.Foreman do
       decisions: [],
       session_file_path: session_file_path,
       saved_message_ids: MapSet.new(),
-      merge_resolution_tasks: %{}
+      merge_resolution_tasks: %{},
+      post_merge_test_tasks: %{}
     }
 
     gen_statem_opts = if name, do: [name: name], else: []
@@ -704,7 +705,7 @@ defmodule Deft.Job.Foreman do
     {:next_state, {job_phase, :idle}, data}
   end
 
-  # Task crash handling (DOWN message) - research runners, tool tasks, and verification Runner
+  # Task crash handling (DOWN message) - research runners, tool tasks, merge resolution, post-merge tests, and verification Runner
   def handle_event(
         :info,
         {:DOWN, _monitor_ref, :process, _pid, _reason} = down_msg,
@@ -722,6 +723,14 @@ defmodule Deft.Job.Foreman do
     tool_tasks = Map.get(data, :tool_tasks, [])
     crashed_tool_task = Enum.find(tool_tasks, fn task -> task.ref == ref end)
 
+    # Check if this ref matches any merge resolution task
+    merge_resolution_tasks = Map.get(data, :merge_resolution_tasks, %{})
+    crashed_merge_task = Map.get(merge_resolution_tasks, ref)
+
+    # Check if this ref matches any post-merge test task
+    post_merge_test_tasks = Map.get(data, :post_merge_test_tasks, %{})
+    crashed_test_task = Map.get(post_merge_test_tasks, ref)
+
     cond do
       crashed_research_task ->
         handle_research_task_crash(ref, reason, job_phase, agent_state, data)
@@ -729,8 +738,14 @@ defmodule Deft.Job.Foreman do
       crashed_tool_task ->
         handle_tool_task_crash(ref, reason, job_phase, agent_state, data)
 
+      crashed_merge_task ->
+        handle_merge_task_crash(ref, reason, crashed_merge_task, data)
+
+      crashed_test_task ->
+        handle_post_merge_test_crash(ref, reason, crashed_test_task, data)
+
       true ->
-        # Not a research or tool task, fall through to Lead crash handler
+        # Not a research, tool, merge, or test task - fall through to Lead crash handler
         handle_lead_crash(down_msg, state, data)
     end
   end
@@ -989,6 +1004,51 @@ defmodule Deft.Job.Foreman do
     end
   end
 
+  # Post-merge test task completion
+  def handle_event(
+        :info,
+        {ref, result},
+        {:executing, _agent_state},
+        %{post_merge_test_tasks: tasks} = data
+      )
+      when is_reference(ref) do
+    case Map.pop(tasks, ref) do
+      {nil, _tasks} ->
+        # Not a post-merge test task, ignore
+        :keep_state_and_data
+
+      {task_context, remaining_tasks} ->
+        %{
+          lead_id: lead_id,
+          lead_info: lead_info
+        } = task_context
+
+        data = %{data | post_merge_test_tasks: remaining_tasks}
+
+        case result do
+          {:ok, :passed} ->
+            new_data = handle_test_success(lead_id, lead_info, data)
+
+            # Check if all Leads are complete after test success
+            case check_phase_transition(:complete, :executing, new_data) do
+              {:transition, new_phase} ->
+                {:next_state, {new_phase, :idle}, new_data}
+
+              :no_transition ->
+                {:keep_state, new_data}
+            end
+
+          {:error, :test_failed, test_output} ->
+            new_data = handle_test_failure(lead_id, lead_info, test_output, data)
+            {:keep_state, new_data}
+
+          {:error, reason} ->
+            new_data = handle_test_error(lead_id, lead_info, reason, data)
+            {:keep_state, new_data}
+        end
+    end
+  end
+
   # Tool task completion
   def handle_event(
         :info,
@@ -1200,6 +1260,56 @@ defmodule Deft.Job.Foreman do
         # The normal flow will detect incomplete tasks and handle appropriately
         {:keep_state, data}
     end
+  end
+
+  defp handle_merge_task_crash(ref, reason, task_context, data) do
+    Logger.error("Merge resolution task crashed, reason: #{inspect(reason)}")
+
+    %{
+      lead_id: lead_id,
+      lead_info: lead_info,
+      conflicted_files: conflicted_files,
+      merge_worktree_path: merge_worktree_path
+    } = task_context
+
+    # Remove crashed task from tracking
+    merge_resolution_tasks = Map.delete(data.merge_resolution_tasks, ref)
+    data = %{data | merge_resolution_tasks: merge_resolution_tasks}
+
+    # Clean up the merge worktree (where conflicts were resolved)
+    cleanup_worktree(merge_worktree_path, data.working_dir)
+
+    # Send critical finding for user intervention
+    send_to_self =
+      {:lead_message, :critical_finding,
+       "Merge conflict resolution Runner crashed for Lead #{lead_id}. Manual intervention required.\n\nConflicted files: #{Enum.join(conflicted_files, ", ")}\n\nCrash reason: #{inspect(reason)}",
+       %{lead_id: lead_id, conflicted_files: conflicted_files}}
+
+    send(self(), send_to_self)
+
+    # Clean up the Lead's worktree
+    cleanup_worktree(lead_info.worktree_path, data.working_dir)
+
+    # Remove Lead from tracking to prevent job hang
+    leads = Map.delete(data.leads, lead_id)
+    {:keep_state, %{data | leads: leads}}
+  end
+
+  defp handle_post_merge_test_crash(ref, reason, task_context, data) do
+    Logger.error("Post-merge test task crashed, reason: #{inspect(reason)}")
+
+    %{
+      lead_id: lead_id,
+      lead_info: lead_info
+    } = task_context
+
+    # Remove crashed task from tracking
+    post_merge_test_tasks = Map.delete(data.post_merge_test_tasks, ref)
+    data = %{data | post_merge_test_tasks: post_merge_test_tasks}
+
+    # Treat crash as test error - use the same cleanup flow
+    new_data = handle_test_error(lead_id, lead_info, {:test_execution_failed, reason}, data)
+    {:keep_state, new_data}
   end
 
   defp handle_verification_crash(data) do
@@ -1840,18 +1950,33 @@ defmodule Deft.Job.Foreman do
     end
   end
 
-  # Handle successful merge by running post-merge tests
+  # Handle successful merge by spawning async post-merge test task
   defp handle_successful_merge(lead_id, lead_info, data) do
-    case run_post_merge_tests(data) do
-      {:ok, :passed} ->
-        handle_test_success(lead_id, lead_info, data)
+    Logger.info("Spawning async post-merge test task for Lead #{lead_id}")
 
-      {:error, :test_failed, test_output} ->
-        handle_test_failure(lead_id, lead_info, test_output, data)
+    # Get test command from config (defaults to "mix test")
+    test_command = Map.get(data.config, :job_test_command, "mix test")
+    timeout = Map.get(data.config, :job_runner_timeout, 300_000)
 
-      {:error, reason} ->
-        handle_test_error(lead_id, lead_info, reason, data)
-    end
+    # Spawn async task for post-merge tests
+    task =
+      Task.Supervisor.async_nolink(data.runner_supervisor, fn ->
+        GitJob.run_post_merge_tests(
+          job_id: data.session_id,
+          test_command: test_command,
+          working_dir: data.working_dir,
+          timeout: timeout
+        )
+      end)
+
+    # Store task context for when it completes
+    post_merge_test_tasks =
+      Map.put(data.post_merge_test_tasks, task.ref, %{
+        lead_id: lead_id,
+        lead_info: lead_info
+      })
+
+    %{data | post_merge_test_tasks: post_merge_test_tasks}
   end
 
   # Handle successful post-merge tests
@@ -2152,16 +2277,6 @@ defmodule Deft.Job.Foreman do
 
   # Runs post-merge tests on the job branch using the configured test command.
   # This catches semantic conflicts that may not show up as merge conflicts.
-  defp run_post_merge_tests(data) do
-    # Get test command from config (defaults to "mix test")
-    test_command = Map.get(data.config, :job_test_command, "mix test")
-
-    GitJob.run_post_merge_tests(
-      job_id: data.session_id,
-      test_command: test_command,
-      working_dir: data.working_dir
-    )
-  end
 
   # Cleans up a Lead's worktree when the Lead crashes.
   # Uses `git worktree remove --force` to handle cases where index.lock exists.
