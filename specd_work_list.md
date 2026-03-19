@@ -16,7 +16,3 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
-
-## orchestration v0.4
-
-- Fix Foreman lead message handler to transition to `{new_phase, :idle}` instead of `{new_phase, agent_state}`: foreman.ex:653 preserves the current `agent_state` on phase transition, but the `:verifying` enter handler (foreman.ex:388) and `:start_verification` cast handler (foreman.ex:505) only match `{:verifying, :idle}`; if the last Lead completes while Foreman is in `:calling`/`:streaming`, verification never starts and the job hangs

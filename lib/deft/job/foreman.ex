@@ -639,7 +639,7 @@ defmodule Deft.Job.Foreman do
   def handle_event(
         :info,
         {:lead_message, type, content, metadata},
-        {job_phase, agent_state},
+        {job_phase, _agent_state},
         data
       ) do
     Logger.info("Foreman received lead message: #{type}")
@@ -650,7 +650,7 @@ defmodule Deft.Job.Foreman do
     # Check if this message triggers a phase transition
     case check_phase_transition(type, job_phase, data) do
       {:transition, new_phase} ->
-        {:next_state, {new_phase, agent_state}, data}
+        {:next_state, {new_phase, :idle}, data}
 
       :no_transition ->
         {:keep_state, data}
