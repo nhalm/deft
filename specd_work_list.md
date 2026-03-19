@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## issues v0.3
-
-- Fix cycle detection in `detect_and_fix_cycles` (issues.ex:553-580) to only clear dependencies of cycle members, not issues that point into the cycle (spec v0.3): current implementation marks issues as affected if they traverse to a cycle member, destroying valid dependency data; should only flag and clear dependencies for issues whose own ID appears in a cycle
-
 ## issues v0.2
 
 - Send structured JSON to Foreman instead of Markdown in `build_issue_prompt` (cli.ex:2108-2121): spec section 6.1 requires structured JSON with `id`, `title`, `priority`, `context`, `acceptance_criteria`, `constraints`; code builds freeform Markdown text; `id` and `priority` are omitted entirely; Foreman cannot programmatically use `acceptance_criteria` as verification targets

@@ -80,8 +80,8 @@ defmodule Deft.IssuesTest do
         end)
 
       # Verify warnings were logged for both issues
-      assert log =~ "Cycle detected in dependencies for issue deft-aaa1"
-      assert log =~ "Cycle detected in dependencies for issue deft-bbb2"
+      assert log =~ "Issue deft-aaa1 is part of a dependency cycle"
+      assert log =~ "Issue deft-bbb2 is part of a dependency cycle"
 
       # Verify dependencies were cleared
       {:ok, loaded_issue1} = Issues.get("deft-aaa1")
@@ -155,9 +155,9 @@ defmodule Deft.IssuesTest do
         end)
 
       # Verify warnings were logged for all three issues
-      assert log =~ "Cycle detected in dependencies for issue deft-aaa3"
-      assert log =~ "Cycle detected in dependencies for issue deft-bbb4"
-      assert log =~ "Cycle detected in dependencies for issue deft-ccc5"
+      assert log =~ "Issue deft-aaa3 is part of a dependency cycle"
+      assert log =~ "Issue deft-bbb4 is part of a dependency cycle"
+      assert log =~ "Issue deft-ccc5 is part of a dependency cycle"
 
       # Verify dependencies were cleared
       {:ok, loaded_issue_a} = Issues.get("deft-aaa3")
@@ -275,7 +275,7 @@ defmodule Deft.IssuesTest do
         end)
 
       # Verify warning was logged
-      assert log =~ "Cycle detected in dependencies for issue deft-self"
+      assert log =~ "Issue deft-self is part of a dependency cycle"
 
       # Verify dependency was cleared
       {:ok, loaded_issue} = Issues.get("deft-self")

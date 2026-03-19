@@ -550,22 +550,31 @@ defmodule Deft.Issues do
   end
 
   # Detects cycles in dependency graph and clears dependencies with warnings
+  # Only clears dependencies for issues that are actual members of cycles,
+  # not issues that merely point into a cycle
   defp detect_and_fix_cycles(issues, file_path) do
-    {corrected_issues, cycles_found} =
-      Enum.map_reduce(issues, false, fn issue, acc ->
-        if has_cycle?(issue, issues, MapSet.new([issue.id])) do
-          Logger.warning(
-            "Cycle detected in dependencies for issue #{issue.id}. Clearing dependencies."
-          )
+    # Build issue map for quick lookup
+    issue_map = Map.new(issues, fn issue -> {issue.id, issue} end)
 
-          {%{issue | dependencies: []}, true}
-        else
-          {issue, acc}
-        end
-      end)
+    # Find all issues that are members of cycles using DFS
+    cycle_members = find_cycle_members(issue_map)
 
-    # Persist corrected issues to disk if cycles were found
-    if cycles_found do
+    if MapSet.size(cycle_members) > 0 do
+      # Clear dependencies only for cycle members
+      corrected_issues =
+        Enum.map(issues, fn issue ->
+          if MapSet.member?(cycle_members, issue.id) do
+            Logger.warning(
+              "Issue #{issue.id} is part of a dependency cycle. Clearing dependencies."
+            )
+
+            %{issue | dependencies: []}
+          else
+            issue
+          end
+        end)
+
+      # Persist to disk
       case write_issues_during_init(corrected_issues, file_path) do
         :ok ->
           corrected_issues
@@ -575,36 +584,83 @@ defmodule Deft.Issues do
           corrected_issues
       end
     else
-      corrected_issues
+      issues
     end
   end
 
-  # Checks if an issue has a cycle in its dependency graph
-  defp has_cycle?(_issue, _all_issues, visited) when map_size(visited) > 100 do
-    # Safety limit to prevent infinite recursion
-    true
+  # Find all issue IDs that are part of dependency cycles using DFS
+  defp find_cycle_members(issue_map) do
+    initial_state = %{visited: MapSet.new(), cycle_members: MapSet.new()}
+
+    final_state =
+      Map.keys(issue_map)
+      |> Enum.reduce(initial_state, fn issue_id, state ->
+        if MapSet.member?(state.visited, issue_id) do
+          state
+        else
+          find_cycles_from_node(issue_id, issue_map, [], state)
+        end
+      end)
+
+    final_state.cycle_members
   end
 
-  defp has_cycle?(issue, all_issues, visited) do
-    Enum.any?(issue.dependencies, fn dep_id ->
-      cond do
-        MapSet.member?(visited, dep_id) ->
-          true
+  # DFS from a single node with path tracking to detect cycles
+  # Returns updated state with visited nodes and cycle members
+  defp find_cycles_from_node(issue_id, issue_map, path, state) do
+    cond do
+      # Node is in current path - found a cycle!
+      issue_id in path ->
+        mark_cycle_members(issue_id, path, state)
 
-        true ->
-          case Enum.find(all_issues, &(&1.id == dep_id)) do
-            nil -> false
-            dep_issue -> has_cycle?(dep_issue, all_issues, MapSet.put(visited, dep_id))
-          end
-      end
-    end)
+      # Already visited in a previous DFS - skip
+      MapSet.member?(state.visited, issue_id) ->
+        state
+
+      # Visit this node
+      true ->
+        visit_issue_node(issue_id, issue_map, path, state)
+    end
+  end
+
+  # Mark all nodes in a cycle as cycle members
+  defp mark_cycle_members(issue_id, path, state) do
+    cycle_start_idx = Enum.find_index(path, &(&1 == issue_id))
+    cycle_nodes = [issue_id | Enum.take(path, cycle_start_idx + 1)]
+
+    %{
+      state
+      | cycle_members: Enum.reduce(cycle_nodes, state.cycle_members, &MapSet.put(&2, &1))
+    }
+  end
+
+  # Visit an issue node and recursively check its dependencies
+  defp visit_issue_node(issue_id, issue_map, path, state) do
+    issue = Map.get(issue_map, issue_id)
+
+    if issue do
+      state = %{state | visited: MapSet.put(state.visited, issue_id)}
+      path = [issue_id | path]
+
+      Enum.reduce(issue.dependencies, state, fn dep_id, acc ->
+        if Map.has_key?(issue_map, dep_id) do
+          find_cycles_from_node(dep_id, issue_map, path, acc)
+        else
+          acc
+        end
+      end)
+    else
+      state
+    end
   end
 
   # Checks if adding/updating an issue would create a cycle
   defp check_cycle(issue, other_issues) do
     all_issues = [issue | other_issues]
+    issue_map = Map.new(all_issues, fn i -> {i.id, i} end)
+    cycle_members = find_cycle_members(issue_map)
 
-    if has_cycle?(issue, all_issues, MapSet.new([issue.id])) do
+    if MapSet.size(cycle_members) > 0 do
       {:error, :cycle_detected}
     else
       {:ok, issue}
