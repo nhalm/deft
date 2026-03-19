@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## observational-memory v0.3
 
-- Fix `keep_tail/3` to skip oversized messages instead of halting (context.ex:112-124): `reduce_while` halts on the first message that exceeds remaining budget; if the most recent message is large (e.g., big tool result), zero messages are kept; should use `{:cont, ...}` to skip and continue, preserving conversational continuity per spec
 - Wire OM threshold config fields from spec section 8 through `Deft.Config`: `om.message_token_threshold`, `om.observation_token_threshold`, `om.buffer_interval`, `om.buffer_tail_retention`, `om.hard_threshold_multiplier`, `om.previous_observer_tokens` are all hardcoded as module constants in state.ex; cannot be tuned without code changes
 
 ## git-strategy v0.2

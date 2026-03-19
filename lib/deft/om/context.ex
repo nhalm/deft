@@ -106,20 +106,21 @@ defmodule Deft.OM.Context do
 
   # Keeps the most recent messages that fit within the token budget.
   # Processes from end (most recent) to beginning.
+  # Skips oversized messages and continues to preserve conversational continuity.
   defp keep_tail(messages, token_limit, calibration_factor) do
     # Reverse to process from most recent to oldest
     {kept, _tokens} =
       messages
       |> Enum.reverse()
-      |> Enum.reduce_while({[], 0}, fn msg, {kept_msgs, tokens_so_far} ->
+      |> Enum.reduce({[], 0}, fn msg, {kept_msgs, tokens_so_far} ->
         msg_tokens = estimate_message_tokens(msg, calibration_factor)
 
         if tokens_so_far + msg_tokens <= token_limit do
           # Can keep this message
-          {:cont, {[msg | kept_msgs], tokens_so_far + msg_tokens}}
+          {[msg | kept_msgs], tokens_so_far + msg_tokens}
         else
-          # Exceeded budget, halt processing
-          {:halt, {kept_msgs, tokens_so_far}}
+          # Skip this oversized message, continue processing
+          {kept_msgs, tokens_so_far}
         end
       end)
 
