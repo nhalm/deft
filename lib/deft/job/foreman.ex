@@ -1326,6 +1326,9 @@ defmodule Deft.Job.Foreman do
     # Clean up the Lead's worktree
     cleanup_worktree(lead_info.worktree_path, data.working_dir)
 
+    # Delete the Lead's branch
+    delete_lead_branch(lead_id, data.working_dir)
+
     # Remove Lead from tracking
     leads = Map.delete(data.leads, lead_id)
     data = %{data | leads: leads}
@@ -1539,6 +1542,24 @@ defmodule Deft.Job.Foreman do
 
         _ ->
           Logger.error("Failed to remove worktree #{worktree_path}: #{output}")
+          {:error, output}
+      end
+    end)
+  end
+
+  defp delete_lead_branch(lead_id, working_dir) do
+    branch_name = "deft/lead-#{lead_id}"
+
+    File.cd!(working_dir, fn ->
+      {output, exit_code} = Git.cmd(["branch", "-d", branch_name])
+
+      case exit_code do
+        0 ->
+          Logger.info("Successfully deleted Lead branch: #{branch_name}")
+          :ok
+
+        _ ->
+          Logger.error("Failed to delete Lead branch #{branch_name}: #{output}")
           {:error, output}
       end
     end)
