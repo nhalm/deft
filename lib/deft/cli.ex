@@ -2200,8 +2200,8 @@ defmodule Deft.CLI do
         )
     end
 
-    # Exit gracefully (not an error)
-    :ok
+    # Return aborted error to stop the work loop
+    {:error, :aborted}
   end
 
   defp handle_job_result({:error, :sigint_timeout}, issue, _job_id) do
@@ -2220,8 +2220,8 @@ defmodule Deft.CLI do
         )
     end
 
-    # Exit gracefully (not an error, user-initiated)
-    :ok
+    # Return aborted error to stop the work loop
+    {:error, :aborted}
   end
 
   defp handle_job_result({:error, reason}, issue, _job_id) do

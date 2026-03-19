@@ -17,7 +17,3 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## issues v0.2
-
-- Fix SIGINT abort return value in work loop: `handle_job_result({:error, :sigint_shutdown}, ...)` returns `:ok` (cli.ex:2204), which `run_work_on_issue` maps to `{:ok, cost}` (cli.ex:2069); loop at cli.ex:1955 matches `{:ok, job_cost}` and continues to next issue instead of stopping; should return `{:error, :aborted}` to match the loop's stop condition at cli.ex:1963
-
