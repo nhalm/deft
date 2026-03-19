@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.3
 
-- Handle verification Runner crash in Foreman: add a DOWN handler or task-ref-based crash handler for verification tasks stored in `data.tool_tasks`; currently if the verification Runner crashes, the `{:DOWN, ref, ...}` message hits the Lead crash handler (foreman.ex:654) which doesn't match and returns `:keep_state_and_data`; job hangs in `:verifying` permanently
 - Call `check_phase_transition` after Lead crash in Foreman DOWN handler (foreman.ex:680-686): after removing the crashed Lead from `data.leads`, check if `all_leads_complete?` is now true and transition to `:verifying` if so; currently returns `{:keep_state, data}` unconditionally, causing the job to hang in `:executing` if the last Lead crashes
 - Handle Lead start failure in Foreman `start_lead/2` (foreman.ex:2518-2525): when `LeadSupervisor.start_lead` or worktree creation fails, the deliverable name is never added to `started_leads`; `all_leads_complete?` requires `started_count == deliverables_count` which can never be satisfied; either add the deliverable to `started_leads` on failure (so the count matches) or use a different completion check that accounts for failed starts
 

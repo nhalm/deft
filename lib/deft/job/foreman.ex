@@ -674,40 +674,55 @@ defmodule Deft.Job.Foreman do
     {:next_state, {job_phase, :idle}, data}
   end
 
-  # Lead crash handling (DOWN message)
+  # Tool task crash handling (DOWN message) - includes verification Runner
   def handle_event(
         :info,
-        {:DOWN, monitor_ref, :process, _pid, reason},
-        _state,
-        %{leads: leads} = data
+        {:DOWN, _monitor_ref, :process, _pid, reason} = down_msg,
+        {job_phase, agent_state} = state,
+        %{tool_tasks: tool_tasks} = data
       ) do
-    # Find crashed Lead by monitor ref
-    crashed_lead =
-      Enum.find(leads, fn {_lead_id, info} ->
-        info.monitor_ref == monitor_ref
-      end)
+    # Extract ref from DOWN message
+    {:DOWN, ref, :process, _pid, _reason} = down_msg
 
-    case crashed_lead do
+    # Check if this ref matches any tool task
+    crashed_task = Enum.find(tool_tasks, fn task -> task.ref == ref end)
+
+    case crashed_task do
       nil ->
-        # Not a Lead monitor, ignore
-        :keep_state_and_data
+        # Not a tool task, fall through to Lead crash handler
+        handle_lead_crash(down_msg, state, data)
 
-      {lead_id, lead_info} ->
+      _task ->
+        # A tool task crashed
         Logger.error(
-          "Lead #{lead_id} crashed, cleaning up worktree: #{lead_info.worktree_path}, reason: #{inspect(reason)}"
+          "Tool task crashed in #{job_phase}:#{agent_state}, reason: #{inspect(reason)}"
         )
 
-        # Clean up the Lead's worktree
-        cleanup_worktree(lead_info.worktree_path, data.working_dir)
+        # Remove crashed task from tracking
+        remaining_tasks = Enum.reject(tool_tasks, fn task -> task.ref == ref end)
+        data = %{data | tool_tasks: remaining_tasks}
 
-        # Remove crashed Lead from tracking
-        leads = Map.delete(leads, lead_id)
-        data = %{data | leads: leads}
+        case job_phase do
+          :verifying ->
+            # Verification Runner crashed - this is a critical failure
+            Logger.error("Verification Runner crashed - marking job as failed")
 
-        # TODO: Decide whether to retry or mark deliverable as failed
-        # For now, just clean up and continue
+            # Clean up all worktrees and transition to complete with error
+            cleanup_all_lead_worktrees(data)
 
-        {:keep_state, data}
+            unless Map.get(data.config, :job_keep_failed_branches, false) do
+              delete_job_branch_on_failure(data.session_id, data.working_dir)
+            end
+
+            archive_job_files(data.session_id, data.working_dir, :verification_crash)
+
+            {:next_state, {:complete, :idle}, data}
+
+          _other_phase ->
+            # For other phases, just keep state with updated task list
+            # The normal flow will detect incomplete tasks and handle appropriately
+            {:keep_state, data}
+        end
     end
   end
 
@@ -1038,6 +1053,41 @@ defmodule Deft.Job.Foreman do
   end
 
   # Private helpers
+
+  defp handle_lead_crash(
+         {:DOWN, monitor_ref, :process, _pid, reason},
+         _state,
+         %{leads: leads} = data
+       ) do
+    # Find crashed Lead by monitor ref
+    crashed_lead =
+      Enum.find(leads, fn {_lead_id, info} ->
+        info.monitor_ref == monitor_ref
+      end)
+
+    case crashed_lead do
+      nil ->
+        # Not a Lead monitor, ignore
+        :keep_state_and_data
+
+      {lead_id, lead_info} ->
+        Logger.error(
+          "Lead #{lead_id} crashed, cleaning up worktree: #{lead_info.worktree_path}, reason: #{inspect(reason)}"
+        )
+
+        # Clean up the Lead's worktree
+        cleanup_worktree(lead_info.worktree_path, data.working_dir)
+
+        # Remove crashed Lead from tracking
+        leads = Map.delete(leads, lead_id)
+        data = %{data | leads: leads}
+
+        # TODO: Decide whether to retry or mark deliverable as failed
+        # For now, just clean up and continue
+
+        {:keep_state, data}
+    end
+  end
 
   defp extract_tool_calls(messages) do
     case List.last(messages) do
