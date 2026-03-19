@@ -87,7 +87,7 @@ defmodule Deft.Tools.IssueCreate do
   end
 
   @impl Deft.Tool
-  def execute(args, %Context{}) do
+  def execute(args, %Context{} = context) do
     # Validate the input
     with :ok <- validate_title(args["title"]),
          :ok <- validate_context(args["context"]),
@@ -95,7 +95,7 @@ defmodule Deft.Tools.IssueCreate do
          :ok <- validate_constraints(args["constraints"]),
          :ok <- validate_priority(args["priority"]) do
       # Ensure Issues GenServer is running
-      ensure_issues_started()
+      ensure_issues_started(context)
 
       # Build issue attributes with agent source
       # Note: priority defaults to 3 (low) for agent-created issues when not provided
@@ -167,12 +167,11 @@ defmodule Deft.Tools.IssueCreate do
   defp priority_name(_), do: "unknown"
 
   # Ensures the Issues GenServer is running, starting it if necessary
-  defp ensure_issues_started do
+  defp ensure_issues_started(%Context{working_dir: working_dir}) do
     case Process.whereis(Issues) do
       nil ->
         # Not running, start it
         # Load config to get compaction_days setting
-        working_dir = File.cwd!()
         config = Config.load(%{}, working_dir)
 
         case Issues.start_link(compaction_days: config.issues_compaction_days) do
