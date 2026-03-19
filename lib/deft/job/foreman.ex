@@ -1321,12 +1321,10 @@ defmodule Deft.Job.Foreman do
         handle_test_success(lead_id, lead_info, data)
 
       {:error, :test_failed, test_output} ->
-        handle_test_failure(lead_id, test_output)
-        data
+        handle_test_failure(lead_id, lead_info, test_output, data)
 
       {:error, reason} ->
-        handle_test_error(lead_id, reason)
-        data
+        handle_test_error(lead_id, lead_info, reason, data)
     end
   end
 
@@ -1353,27 +1351,53 @@ defmodule Deft.Job.Foreman do
   end
 
   # Handle post-merge test failure
-  defp handle_test_failure(lead_id, test_output) do
+  defp handle_test_failure(lead_id, lead_info, test_output, data) do
     Logger.error("Post-merge tests failed for Lead #{lead_id}. Manual intervention required.")
 
+    # Clean up the Lead's worktree
+    cleanup_worktree(lead_info.worktree_path, data.working_dir)
+
+    # Delete the Lead's branch
+    delete_lead_branch(lead_id, data.working_dir)
+
+    # Remove Lead from tracking to prevent job hang
+    leads = Map.delete(data.leads, lead_id)
+    data = %{data | leads: leads}
+
+    # Send critical finding for user intervention
     send_to_self =
       {:lead_message, :critical_finding,
        "Post-merge tests failed for Lead #{lead_id}. The merge was successful but tests now fail. Manual intervention or fix-up Runner needed.\n\nTest output:\n#{String.slice(test_output, 0, 1000)}",
        %{lead_id: lead_id, test_failed: true}}
 
     send(self(), send_to_self)
+
+    data
   end
 
   # Handle post-merge test execution error
-  defp handle_test_error(lead_id, reason) do
+  defp handle_test_error(lead_id, lead_info, reason, data) do
     Logger.error("Failed to run post-merge tests for Lead #{lead_id}: #{inspect(reason)}")
 
+    # Clean up the Lead's worktree
+    cleanup_worktree(lead_info.worktree_path, data.working_dir)
+
+    # Delete the Lead's branch
+    delete_lead_branch(lead_id, data.working_dir)
+
+    # Remove Lead from tracking to prevent job hang
+    leads = Map.delete(data.leads, lead_id)
+    data = %{data | leads: leads}
+
+    # Send error message for user intervention
     send_to_self =
       {:lead_message, :error,
        "Failed to run post-merge tests for Lead #{lead_id}: #{inspect(reason)}",
        %{lead_id: lead_id}}
 
     send(self(), send_to_self)
+
+    data
   end
 
   # Handle merge conflict

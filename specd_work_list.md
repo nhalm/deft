@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## git-strategy v0.1
-
-- Handle post-merge test failure by removing Lead from tracking and spawning fix-up Runner or flagging user: `handle_test_failure` (foreman.ex:1264-1273) sends a `:critical_finding` but leaves the Lead in `data.leads`, so `all_leads_complete?` never returns true and the job hangs in `:executing` permanently; spec section 3 step 4 requires fix-up Runner or user intervention
-
 ## filesystem v0.3
 
 - Fix `generate_site_log_key` to produce stable keys for overwritable entries: currently appends millisecond timestamp to every key (foreman.ex:1349-1354), making all keys unique; spec section 5.4 requires "same key replaces the previous entry" — semantic entries like contracts and decisions should use stable keys (e.g. `"contract-<deliverable_name>"`) so updates overwrite previous values
