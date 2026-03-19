@@ -1839,30 +1839,17 @@ defmodule Deft.CLI do
 
   # Set up SIGINT handler for graceful shutdown in work loop
   defp setup_sigint_handler do
-    # Store the current process PID so the signal handler can send a message to it
-    parent_pid = self()
-
-    # Spawn a process to handle SIGINT
-    spawn(fn ->
-      Process.flag(:trap_exit, true)
-
-      receive do
-        {:shutdown, :sigint} ->
-          send(parent_pid, {:sigint_received})
-      end
-    end)
-
-    # Note: In Elixir/BEAM, we can't directly trap SIGINT from the CLI.
-    # This is a placeholder for the pattern. In a real implementation,
-    # we'd need to use :os.set_signal/2 or handle this at the OTP application level.
-    # For now, this structure allows the loop to check for shutdown signals.
+    # Set up SIGINT handler using :os.set_signal/2
+    # The :handle option causes the BEAM to send {:signal, :sigint} messages
+    # to this process when SIGINT is received
+    :os.set_signal(:sigint, :handle)
   end
 
   # Run the work loop - keeps picking and running ready issues
   defp run_work_loop(flags, config, cumulative_cost, iteration) do
     # Check for SIGINT
     receive do
-      {:sigint_received} ->
+      {:signal, :sigint} ->
         IO.puts("\nReceived Ctrl+C. Shutting down gracefully...")
         :ok
     after
@@ -2051,6 +2038,32 @@ defmodule Deft.CLI do
           :shutdown -> {:error, :aborted}
           other -> {:error, other}
         end
+
+      {:signal, :sigint} ->
+        # SIGINT received - initiate graceful shutdown
+        IO.puts("\nReceived Ctrl+C. Sending shutdown to Foreman...")
+        Foreman.abort(foreman_pid)
+
+        # Wait up to 5 seconds for Foreman to shut down and rollback issue status
+        receive do
+          {:DOWN, ^ref, :process, ^foreman_pid, _reason} ->
+            IO.puts("Foreman shut down gracefully.")
+            {:error, :sigint_shutdown}
+        after
+          5_000 ->
+            # Timeout expired - forcefully stop the Foreman
+            IO.puts(
+              "Warning: Foreman did not shut down within 5 seconds. Issue may be left at :in_progress."
+            )
+
+            Process.demonitor(ref, [:flush])
+
+            if Process.alive?(foreman_pid) do
+              :gen_statem.stop(foreman_pid)
+            end
+
+            {:error, :sigint_timeout}
+        end
     after
       # Timeout after 1 hour
       3_600_000 ->
@@ -2091,6 +2104,46 @@ defmodule Deft.CLI do
         IO.puts(:stderr, "Warning: Failed to close issue: #{inspect(reason)}")
         :ok
     end
+  end
+
+  defp handle_job_result({:error, :sigint_shutdown}, issue, _job_id) do
+    # SIGINT received and Foreman shut down gracefully
+    # Rollback the issue status to :open
+    IO.puts("\nJob aborted by user (Ctrl+C).")
+
+    case Issues.update(issue.id, %{status: :open}) do
+      {:ok, _issue} ->
+        IO.puts("Issue #{issue.id} status rolled back to open.")
+
+      {:error, reason} ->
+        IO.puts(
+          :stderr,
+          "Warning: Failed to rollback issue status: #{inspect(reason)}. Issue may be left at :in_progress."
+        )
+    end
+
+    # Exit gracefully (not an error)
+    :ok
+  end
+
+  defp handle_job_result({:error, :sigint_timeout}, issue, _job_id) do
+    # SIGINT received but Foreman did not shut down within 5 seconds
+    IO.puts(:stderr, "\nJob aborted by user (Ctrl+C), but shutdown timed out.")
+
+    # Try to manually rollback the issue status
+    case Issues.update(issue.id, %{status: :open}) do
+      {:ok, _issue} ->
+        IO.puts("Issue #{issue.id} status manually rolled back to open.")
+
+      {:error, reason} ->
+        IO.puts(
+          :stderr,
+          "Warning: Failed to rollback issue status: #{inspect(reason)}. Issue may be left at :in_progress."
+        )
+    end
+
+    # Exit gracefully (not an error, user-initiated)
+    :ok
   end
 
   defp handle_job_result({:error, reason}, issue, _job_id) do
