@@ -188,8 +188,8 @@ defmodule Deft.Job.Runner do
          current_turn
        ) do
     if has_tool_calls?(assistant_message) do
-      {:ok, tool_results} = execute_tools_inline(assistant_message, tools, tool_context)
-      result_messages = messages ++ [assistant_message | tool_results]
+      {:ok, tool_result_message} = execute_tools_inline(assistant_message, tools, tool_context)
+      result_messages = messages ++ [assistant_message, tool_result_message]
 
       loop(result_messages, tools, tool_context, job_id, provider, config,
         max_turns: max_turns,
@@ -363,22 +363,15 @@ defmodule Deft.Job.Runner do
         _ -> false
       end)
 
-    results =
+    tool_result_blocks =
       Enum.map(tool_uses, fn %ToolUse{id: tool_id, name: tool_name, args: args} = _tool_use ->
         case Map.get(tool_map, tool_name) do
           nil ->
-            %Message{
-              id: generate_message_id(),
-              role: :user,
-              content: [
-                %ToolResult{
-                  tool_use_id: tool_id,
-                  name: tool_name,
-                  content: "Error: Tool '#{tool_name}' not found",
-                  is_error: true
-                }
-              ],
-              timestamp: DateTime.utc_now()
+            %ToolResult{
+              tool_use_id: tool_id,
+              name: tool_name,
+              content: "Error: Tool '#{tool_name}' not found",
+              is_error: true
             }
 
           tool_module ->
@@ -394,55 +387,41 @@ defmodule Deft.Job.Runner do
                     end)
                     |> Enum.join("\n")
 
-                  %Message{
-                    id: generate_message_id(),
-                    role: :user,
-                    content: [
-                      %ToolResult{
-                        tool_use_id: tool_id,
-                        name: tool_name,
-                        content: content_text,
-                        is_error: false
-                      }
-                    ],
-                    timestamp: DateTime.utc_now()
+                  %ToolResult{
+                    tool_use_id: tool_id,
+                    name: tool_name,
+                    content: content_text,
+                    is_error: false
                   }
 
                 {:error, error_msg} ->
-                  %Message{
-                    id: generate_message_id(),
-                    role: :user,
-                    content: [
-                      %ToolResult{
-                        tool_use_id: tool_id,
-                        name: tool_name,
-                        content: error_msg,
-                        is_error: true
-                      }
-                    ],
-                    timestamp: DateTime.utc_now()
+                  %ToolResult{
+                    tool_use_id: tool_id,
+                    name: tool_name,
+                    content: error_msg,
+                    is_error: true
                   }
               end
             rescue
               exception ->
-                %Message{
-                  id: generate_message_id(),
-                  role: :user,
-                  content: [
-                    %ToolResult{
-                      tool_use_id: tool_id,
-                      name: tool_name,
-                      content: "Tool execution error: #{Exception.message(exception)}",
-                      is_error: true
-                    }
-                  ],
-                  timestamp: DateTime.utc_now()
+                %ToolResult{
+                  tool_use_id: tool_id,
+                  name: tool_name,
+                  content: "Tool execution error: #{Exception.message(exception)}",
+                  is_error: true
                 }
             end
         end
       end)
 
-    {:ok, results}
+    result_message = %Message{
+      id: generate_message_id(),
+      role: :user,
+      content: tool_result_blocks,
+      timestamp: DateTime.utc_now()
+    }
+
+    {:ok, result_message}
   end
 
   # Extract text from assistant message

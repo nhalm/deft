@@ -16,7 +16,3 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
-
-## orchestration v0.3
-
-- Fix Runner `execute_tools_inline` (runner.ex:357-446) to return a single `%Message{role: :user}` containing all `%ToolResult{}` content blocks. Currently returns one `%Message{role: :user}` per tool result, creating consecutive user messages on multi-tool turns — violates Anthropic API alternating-role requirement and causes API errors.
