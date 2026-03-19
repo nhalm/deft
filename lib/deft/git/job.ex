@@ -995,38 +995,128 @@ defmodule Deft.Git.Job do
   @doc """
   Cleans up after a job failure or abort.
 
-  Restores the user's stashed changes from job creation if they exist.
-  This ensures that user changes are not permanently stranded when a job fails.
+  Removes all Lead worktrees, deletes the job branch (respecting `keep_failed_branches`
+  config), restores the original branch, and pops any stashed changes from job creation.
 
   ## Options
 
   - `:job_id` - Required. Job identifier.
+  - `:original_branch` - Required. The branch to restore (e.g., "main").
   - `:git` - Optional. Git adapter module (defaults to Deft.Git).
+  - `:working_dir` - Optional. Repository root (defaults to File.cwd!()).
+  - `:keep_failed_branches` - Optional. Keep job branch for debugging (defaults to false).
 
   ## Returns
 
-  - `:ok` - Cleanup completed (stash popped if it existed)
+  - `:ok` - Cleanup completed
+  - `{:error, reason}` - Cleanup failed (partial cleanup may have occurred)
 
   ## Examples
 
-      # Abort a job and restore stashed changes
-      Deft.Git.Job.abort_job(job_id: "abc123")
+      # Abort a job and clean up everything
+      Deft.Git.Job.abort_job(job_id: "abc123", original_branch: "main")
       # => :ok
 
-  ## Notes
-
-  This is a minimal implementation that handles stash restoration.
-  Full cleanup (worktree removal, branch deletion) will be added in a future iteration.
+      # Keep the job branch for debugging
+      Deft.Git.Job.abort_job(
+        job_id: "abc123",
+        original_branch: "main",
+        keep_failed_branches: true
+      )
+      # => :ok
   """
-  @spec abort_job(keyword()) :: :ok
+  @spec abort_job(keyword()) :: :ok | {:error, term()}
   def abort_job(opts) do
     job_id = Keyword.fetch!(opts, :job_id)
+    original_branch = Keyword.fetch!(opts, :original_branch)
     git = Keyword.get(opts, :git, Deft.Git)
+    working_dir = Keyword.get(opts, :working_dir, File.cwd!())
+    keep_failed_branches = Keyword.get(opts, :keep_failed_branches, false)
 
-    # Restore user's stashed changes if they were stashed during job creation
-    pop_job_stash(git, job_id)
+    job_branch = "deft/job-#{job_id}"
 
-    Logger.info("Job #{job_id} aborted - stash cleanup completed")
-    :ok
+    Logger.info("Aborting job #{job_id}...")
+
+    File.cd!(working_dir, fn ->
+      # Step 1: Remove all Lead worktrees for this job
+      remove_lead_worktrees(git, working_dir, job_id)
+
+      # Step 2: Restore the original branch
+      case checkout_branch(git, original_branch) do
+        {:ok, :checkout} ->
+          Logger.info("Restored original branch: #{original_branch}")
+
+        {:error, reason} ->
+          Logger.warning(
+            "Failed to checkout original branch #{original_branch}: #{inspect(reason)}"
+          )
+      end
+
+      # Step 3: Delete the job branch if not keeping failed branches
+      if keep_failed_branches do
+        Logger.info("Keeping job branch #{job_branch} for debugging")
+      else
+        case delete_job_branch_force(git, job_branch) do
+          {:ok, :deleted} ->
+            Logger.info("Deleted job branch: #{job_branch}")
+
+          {:error, reason} ->
+            Logger.warning("Failed to delete job branch #{job_branch}: #{inspect(reason)}")
+        end
+      end
+
+      # Step 4: Restore user's stashed changes if they were stashed during job creation
+      pop_job_stash(git, job_id)
+
+      Logger.info("Job #{job_id} aborted - cleanup completed")
+      :ok
+    end)
+  end
+
+  # Remove all Lead worktrees associated with a job
+  defp remove_lead_worktrees(git, working_dir, job_id) do
+    case git.cmd(["worktree", "list", "--porcelain"]) do
+      {output, 0} ->
+        worktrees = parse_worktree_list(output, working_dir)
+
+        # Find all Lead worktrees for this job
+        job_worktrees =
+          Enum.filter(worktrees, fn worktree ->
+            case worktree.branch do
+              # Lead branches: deft/lead-<job_id>-<deliverable>
+              "deft/lead-" <> lead_id ->
+                String.starts_with?(lead_id, job_id <> "-")
+
+              _ ->
+                false
+            end
+          end)
+
+        # Remove each Lead worktree
+        Enum.each(job_worktrees, fn worktree ->
+          case git.cmd(["worktree", "remove", worktree.path, "--force"]) do
+            {_output, 0} ->
+              Logger.info("Removed Lead worktree: #{worktree.branch} at #{worktree.path}")
+
+            {error_output, _exit_code} ->
+              Logger.warning("Failed to remove worktree #{worktree.path}: #{error_output}")
+          end
+        end)
+
+      {error_output, _exit_code} ->
+        Logger.warning("Failed to list worktrees during abort: #{error_output}")
+    end
+  end
+
+  # Delete the job branch forcefully (used during abort)
+  defp delete_job_branch_force(git, job_branch) do
+    case git.cmd(["branch", "-D", job_branch]) do
+      {_output, 0} ->
+        {:ok, :deleted}
+
+      {error_output, exit_code} ->
+        Logger.error("Failed to force-delete branch #{job_branch}: #{error_output}")
+        {:error, {:branch_deletion_failed, exit_code}}
+    end
   end
 end
