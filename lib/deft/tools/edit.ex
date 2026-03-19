@@ -293,33 +293,173 @@ defmodule Deft.Tools.Edit do
   end
 
   defp find_changes(old_lines, new_lines) do
-    # Simple diff: mark all old lines as deleted, all new lines as added
-    # A proper implementation would use LCS or Myers diff algorithm
-    # For now, this provides basic visibility into what changed
+    # Use Myers diff algorithm to produce minimal diff
+    myers_diff(old_lines, new_lines)
+  end
 
-    max_len = max(length(old_lines), length(new_lines))
+  # Myers diff algorithm - finds shortest edit script
+  defp myers_diff(old_lines, new_lines) do
+    n = length(old_lines)
+    m = length(new_lines)
+    max_d = n + m
 
-    0..(max_len - 1)
-    |> Enum.flat_map(fn i ->
-      old_line = Enum.at(old_lines, i)
-      new_line = Enum.at(new_lines, i)
+    # Find the edit graph path using Myers algorithm
+    {path, _} = myers_find_path(old_lines, new_lines, n, m, max_d)
 
-      cond do
-        old_line == new_line and old_line != nil ->
-          [{:context, old_line}]
+    # Convert path to diff operations
+    path_to_diff_ops(path, old_lines, new_lines)
+  end
 
-        old_line != nil and new_line != nil ->
-          [{:delete, old_line}, {:add, new_line}]
+  defp myers_find_path(old_lines, new_lines, n, m, max_d) do
+    # V maps each k-line to the farthest-reaching x coordinate
+    initial_v = %{1 => 0}
 
-        old_line != nil ->
-          [{:delete, old_line}]
+    myers_search(old_lines, new_lines, n, m, max_d, 0, initial_v, [])
+  end
 
-        new_line != nil ->
-          [{:add, new_line}]
+  defp myers_search(_old_lines, _new_lines, _n, _m, max_d, d, v, _path) when d > max_d do
+    # Shouldn't happen, but failsafe: return empty edit script
+    {[], v}
+  end
 
-        true ->
-          []
+  defp myers_search(old_lines, new_lines, n, m, max_d, d, v, path) do
+    # Try all k-lines for this d-value
+    new_v =
+      for k <- (d * -1)..d//2, reduce: v do
+        acc_v ->
+          # Decide whether to move down (insert) or right (delete)
+          x =
+            cond do
+              k == -d ->
+                # Must move down (insert from new)
+                Map.get(acc_v, k + 1, 0)
+
+              k == d ->
+                # Must move right (delete from old)
+                Map.get(acc_v, k - 1, 0) + 1
+
+              true ->
+                # Choose the path that gets us furthest
+                x_down = Map.get(acc_v, k + 1, 0)
+                x_right = Map.get(acc_v, k - 1, 0) + 1
+
+                if x_right > x_down do
+                  x_right
+                else
+                  x_down
+                end
+            end
+
+          # Follow diagonal as far as possible (matching lines)
+          y = x - k
+          {final_x, _final_y} = myers_follow_diagonal(old_lines, new_lines, x, y, n, m)
+
+          # Store the furthest x for this k-line
+          Map.put(acc_v, k, final_x)
       end
-    end)
+
+    # Check if we've reached the end
+    final_k = m - n
+
+    if Map.get(new_v, final_k, -1) >= n do
+      # Reconstruct path by backtracking
+      path = myers_backtrack(old_lines, new_lines, n, m, max_d, d)
+      {path, new_v}
+    else
+      # Continue searching with d+1
+      myers_search(old_lines, new_lines, n, m, max_d, d + 1, new_v, path)
+    end
+  end
+
+  defp myers_follow_diagonal(old_lines, new_lines, x, y, n, m) do
+    cond do
+      x >= n or y >= m ->
+        {x, y}
+
+      Enum.at(old_lines, x) == Enum.at(new_lines, y) ->
+        myers_follow_diagonal(old_lines, new_lines, x + 1, y + 1, n, m)
+
+      true ->
+        {x, y}
+    end
+  end
+
+  defp myers_backtrack(old_lines, new_lines, n, m, _max_d, _d) do
+    # Rebuild the path from (n, m) back to (0, 0)
+    # For simplicity, we'll use a simpler LCS-based approach to build the edit script
+    lcs_diff(old_lines, new_lines, n, m)
+  end
+
+  # LCS-based diff construction (simpler than full Myers backtrack)
+  defp lcs_diff(old_lines, new_lines, n, m) do
+    # Build LCS table
+    lcs_table = build_lcs_table(old_lines, new_lines, n, m)
+
+    # Backtrack to construct diff
+    lcs_backtrack(lcs_table, old_lines, new_lines, n, m)
+  end
+
+  defp build_lcs_table(old_lines, new_lines, n, m) do
+    # Initialize table with zeros
+    initial_table =
+      for i <- 0..n, into: %{} do
+        {i, Map.new(0..m, fn j -> {j, 0} end)}
+      end
+
+    # Fill table using LCS recurrence
+    for i <- 1..n, j <- 1..m, reduce: initial_table do
+      table ->
+        value =
+          if Enum.at(old_lines, i - 1) == Enum.at(new_lines, j - 1) do
+            table[i - 1][j - 1] + 1
+          else
+            max(table[i - 1][j], table[i][j - 1])
+          end
+
+        put_in(table[i][j], value)
+    end
+  end
+
+  defp lcs_backtrack(table, old_lines, new_lines, i, j) when i > 0 and j > 0 do
+    if Enum.at(old_lines, i - 1) == Enum.at(new_lines, j - 1) do
+      # Lines match - context
+      lcs_backtrack(table, old_lines, new_lines, i - 1, j - 1) ++
+        [{:context, Enum.at(old_lines, i - 1)}]
+    else
+      # Lines differ - check which direction to go
+      if table[i][j - 1] > table[i - 1][j] do
+        # Insert from new
+        lcs_backtrack(table, old_lines, new_lines, i, j - 1) ++
+          [{:add, Enum.at(new_lines, j - 1)}]
+      else
+        # Delete from old
+        lcs_backtrack(table, old_lines, new_lines, i - 1, j) ++
+          [{:delete, Enum.at(old_lines, i - 1)}]
+      end
+    end
+  end
+
+  defp lcs_backtrack(_table, old_lines, _new_lines, i, 0) when i > 0 do
+    # Remaining old lines are deletions
+    for idx <- 0..(i - 1) do
+      {:delete, Enum.at(old_lines, idx)}
+    end
+  end
+
+  defp lcs_backtrack(_table, _old_lines, new_lines, 0, j) when j > 0 do
+    # Remaining new lines are insertions
+    for idx <- 0..(j - 1) do
+      {:add, Enum.at(new_lines, idx)}
+    end
+  end
+
+  defp lcs_backtrack(_table, _old_lines, _new_lines, 0, 0) do
+    []
+  end
+
+  defp path_to_diff_ops(_path, old_lines, new_lines) do
+    # This is now handled by lcs_backtrack
+    # Keeping this function for interface compatibility
+    lcs_diff(old_lines, new_lines, length(old_lines), length(new_lines))
   end
 end

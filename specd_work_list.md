@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## tools v0.2
 
-- Fix edit tool `find_changes` to use a real diff algorithm (edit.ex:295-324): current positional line comparison produces wrong diffs when edits insert or delete lines — all subsequent lines appear as delete+add pairs even when identical; implement LCS or Myers diff to produce correct unified diff output
 - Fix find tool `fd` exit code 1 handling (find.ex:96-98): `fd` v8+ uses exit code 0 for success (including zero results) and exit code 1 for errors; current code treats exit code 1 as "no results", silently swallowing real errors (bad patterns, invalid paths); check `fd` version or treat exit code 1 as an error
 
 ## tui v0.2
