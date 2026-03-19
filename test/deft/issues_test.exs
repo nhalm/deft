@@ -281,6 +281,56 @@ defmodule Deft.IssuesTest do
       {:ok, loaded_issue} = Issues.get("deft-self")
       assert loaded_issue.dependencies == []
     end
+
+    test "rejects issue creation with non-existent blocker", %{file_path: file_path} do
+      {:ok, _pid} = Issues.start_link(file_path: file_path)
+
+      # Try to create an issue with a non-existent blocker
+      result =
+        Issues.create(%{
+          title: "Issue with bad blocker",
+          source: :user,
+          dependencies: ["deft-nonexistent"]
+        })
+
+      assert {:error, {:blocker_not_found, "deft-nonexistent"}} = result
+    end
+
+    test "rejects issue creation with multiple non-existent blockers", %{file_path: file_path} do
+      {:ok, _pid} = Issues.start_link(file_path: file_path)
+
+      # Create one valid issue
+      {:ok, valid_issue} = Issues.create(%{title: "Valid Issue", source: :user})
+
+      # Try to create an issue with one valid and two invalid blockers
+      result =
+        Issues.create(%{
+          title: "Issue with bad blockers",
+          source: :user,
+          dependencies: [valid_issue.id, "deft-bad1", "deft-bad2"]
+        })
+
+      assert {:error, {:blockers_not_found, ["deft-bad1", "deft-bad2"]}} = result
+    end
+
+    test "allows issue creation with all valid blockers", %{file_path: file_path} do
+      {:ok, _pid} = Issues.start_link(file_path: file_path)
+
+      # Create two issues
+      {:ok, issue1} = Issues.create(%{title: "Issue 1", source: :user})
+      {:ok, issue2} = Issues.create(%{title: "Issue 2", source: :user})
+
+      # Create an issue that depends on both
+      result =
+        Issues.create(%{
+          title: "Issue 3",
+          source: :user,
+          dependencies: [issue1.id, issue2.id]
+        })
+
+      assert {:ok, issue3} = result
+      assert issue3.dependencies == [issue1.id, issue2.id]
+    end
   end
 
   describe "closed issue compaction" do

@@ -1390,6 +1390,14 @@ defmodule Deft.CLI do
         IO.puts(:stderr, "Error: Adding these dependencies would create a cycle")
         exit({:shutdown, 1})
 
+      {:error, {:blocker_not_found, id}} ->
+        IO.puts(:stderr, "Error: Blocker issue '#{id}' does not exist")
+        exit({:shutdown, 1})
+
+      {:error, {:blockers_not_found, ids}} ->
+        IO.puts(:stderr, "Error: Blocker issues do not exist: #{Enum.join(ids, ", ")}")
+        exit({:shutdown, 1})
+
       {:error, reason} ->
         IO.puts(:stderr, "Error: Failed to create issue: #{inspect(reason)}")
         exit({:shutdown, 1})
@@ -1819,6 +1827,14 @@ defmodule Deft.CLI do
 
       {:error, :cycle_detected} ->
         IO.puts(:stderr, "Error: Adding these dependencies would create a cycle")
+        exit({:shutdown, 1})
+
+      {:error, {:blocker_not_found, id}} ->
+        IO.puts(:stderr, "Error: Blocker issue '#{id}' does not exist")
+        exit({:shutdown, 1})
+
+      {:error, {:blockers_not_found, ids}} ->
+        IO.puts(:stderr, "Error: Blocker issues do not exist: #{Enum.join(ids, ", ")}")
         exit({:shutdown, 1})
 
       {:error, reason} ->

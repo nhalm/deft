@@ -219,28 +219,35 @@ defmodule Deft.Issues do
     # Default priority depends on source: agent defaults to 3 (low), user defaults to 2 (medium)
     default_priority = if source == :agent, do: 3, else: 2
 
-    issue = %Issue{
-      id: id,
-      title: Map.fetch!(attrs, :title),
-      context: Map.get(attrs, :context, ""),
-      acceptance_criteria: Map.get(attrs, :acceptance_criteria, []),
-      constraints: Map.get(attrs, :constraints, []),
-      status: :open,
-      priority: Map.get(attrs, :priority, default_priority),
-      dependencies: Map.get(attrs, :dependencies, []),
-      created_at: timestamp,
-      updated_at: timestamp,
-      closed_at: nil,
-      source: source,
-      job_id: nil
-    }
+    dependencies = Map.get(attrs, :dependencies, [])
 
-    # Check for cycles
-    with {:ok, _} <- check_cycle(issue, state.issues),
-         new_issues = [issue | state.issues],
-         new_state = %{state | issues: new_issues},
-         :ok <- persist_issues(new_state) do
-      {:reply, {:ok, issue}, new_state}
+    # Validate all blocker IDs exist
+    with :ok <- validate_all_blockers_exist(state.issues, dependencies) do
+      issue = %Issue{
+        id: id,
+        title: Map.fetch!(attrs, :title),
+        context: Map.get(attrs, :context, ""),
+        acceptance_criteria: Map.get(attrs, :acceptance_criteria, []),
+        constraints: Map.get(attrs, :constraints, []),
+        status: :open,
+        priority: Map.get(attrs, :priority, default_priority),
+        dependencies: dependencies,
+        created_at: timestamp,
+        updated_at: timestamp,
+        closed_at: nil,
+        source: source,
+        job_id: nil
+      }
+
+      # Check for cycles
+      with {:ok, _} <- check_cycle(issue, state.issues),
+           new_issues = [issue | state.issues],
+           new_state = %{state | issues: new_issues},
+           :ok <- persist_issues(new_state) do
+        {:reply, {:ok, issue}, new_state}
+      else
+        {:error, reason} -> {:reply, {:error, reason}, state}
+      end
     else
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
@@ -639,6 +646,20 @@ defmodule Deft.Issues do
     case Enum.find(issues, &(&1.id == id)) do
       nil -> {:error, :blocker_not_found}
       issue -> {:ok, issue}
+    end
+  end
+
+  # Validates that all blocker IDs in a list exist
+  defp validate_all_blockers_exist(issues, dependency_ids) do
+    missing =
+      Enum.reject(dependency_ids, fn dep_id ->
+        Enum.any?(issues, &(&1.id == dep_id))
+      end)
+
+    case missing do
+      [] -> :ok
+      [single] -> {:error, {:blocker_not_found, single}}
+      multiple -> {:error, {:blockers_not_found, multiple}}
     end
   end
 
