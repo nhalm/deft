@@ -659,13 +659,20 @@ defmodule Deft.Job.Foreman do
       Task.shutdown(task, :brutal_kill)
     end)
 
-    # Clean up all Lead worktrees
-    cleanup_all_lead_worktrees(data)
+    # Delegate git cleanup to GitJob.abort_job/1 which handles:
+    # - Lead worktree removal
+    # - Original branch restoration
+    # - Job branch deletion (respecting keep_failed_branches config)
+    # - Stash pop to restore user's uncommitted changes
+    original_branch = Map.get(data.config, :original_branch, "main")
+    keep_failed_branches = Map.get(data.config, :job_keep_failed_branches, false)
 
-    # Delete job branch unless configured to keep it
-    unless Map.get(data.config, :job_keep_failed_branches, false) do
-      delete_job_branch_on_failure(data.session_id, data.working_dir)
-    end
+    GitJob.abort_job(
+      job_id: data.session_id,
+      original_branch: original_branch,
+      working_dir: data.working_dir,
+      keep_failed_branches: keep_failed_branches
+    )
 
     # Archive job files for debugging
     archive_job_files(data.session_id, data.working_dir, :aborted)

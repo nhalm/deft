@@ -26,7 +26,3 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Add `om_observer_provider` and `om_reflector_provider` fields to `Deft.Config` and wire through to Observer/Reflector (currently hardcoded to use main agent's `config.provider`)
 - Add `om_observer_temperature` and `om_reflector_temperature` fields to `Deft.Config` and wire through to Observer/Reflector (currently hardcoded to `0.0`)
 
-## orchestration v0.5
-
-- Foreman abort handler (foreman.ex:633) must call `GitJob.abort_job/1` or `GitJob.pop_job_stash/2` to restore user's stashed changes; current inline cleanup handles worktrees and branches but never pops the stash
-
