@@ -16,7 +16,7 @@ defmodule Deft.OM.State do
   use GenServer
   require Logger
 
-  alias Deft.{Config, Message}
+  alias Deft.{Config, Message, Project}
   alias Deft.OM.{BufferedChunk, Observer, Reflector, Supervisor, Tokens}
   alias Deft.OM.Observer.Parse
   alias Deft.Session.Entry.Observation, as: ObservationEntry
@@ -170,9 +170,11 @@ defmodule Deft.OM.State do
 
   Per spec section 9.3, this is called during session resume to restore OM state.
   """
-  @spec load_latest_snapshot(String.t()) :: {:ok, ObservationEntry.t() | nil} | {:error, term()}
-  def load_latest_snapshot(session_id) do
-    path = om_snapshot_path(session_id)
+  @spec load_latest_snapshot(String.t(), String.t()) ::
+          {:ok, ObservationEntry.t() | nil} | {:error, term()}
+  def load_latest_snapshot(session_id, working_dir \\ nil) do
+    working_dir = working_dir || File.cwd!()
+    path = om_snapshot_path(session_id, working_dir)
 
     case File.read(path) do
       {:ok, content} ->
@@ -1717,10 +1719,13 @@ defmodule Deft.OM.State do
         state.calibration_factor
       )
 
-    # Write to separate OM snapshot file to avoid JSONL write interleaving
-    path = om_snapshot_path(state.session_id)
+    # Extract working_dir from config
+    working_dir = Map.get(state.config, :working_dir, File.cwd!())
 
-    with :ok <- ensure_sessions_dir(),
+    # Write to separate OM snapshot file to avoid JSONL write interleaving
+    path = om_snapshot_path(state.session_id, working_dir)
+
+    with :ok <- ensure_sessions_dir(working_dir),
          {:ok, json} <- Jason.encode(entry),
          line <- json <> "\n",
          :ok <- File.write(path, line, [:append]) do
@@ -1737,18 +1742,13 @@ defmodule Deft.OM.State do
   end
 
   # Path to the OM snapshot file (separate from session JSONL)
-  defp om_snapshot_path(session_id) do
-    sessions_dir = Path.expand("~/.deft/sessions")
+  defp om_snapshot_path(session_id, working_dir) do
+    sessions_dir = Project.sessions_dir(working_dir)
     Path.join(sessions_dir, "#{session_id}_om.jsonl")
   end
 
-  defp ensure_sessions_dir do
-    sessions_dir = Path.expand("~/.deft/sessions")
-
-    case File.mkdir_p(sessions_dir) do
-      :ok -> :ok
-      {:error, reason} -> {:error, reason}
-    end
+  defp ensure_sessions_dir(working_dir) do
+    Project.ensure_project_dirs(working_dir)
   end
 
   # Parse a single line from the OM snapshot file

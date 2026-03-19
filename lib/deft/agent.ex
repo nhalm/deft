@@ -826,7 +826,8 @@ defmodule Deft.Agent do
 
     # Persist cost entry to session JSONL
     cost_entry = Cost.new(new_session_cost)
-    Store.append(data.session_id, cost_entry)
+    working_dir = Map.get(data.config, :working_dir, File.cwd!())
+    Store.append(data.session_id, cost_entry, working_dir)
 
     broadcast_event(data.session_id, {:usage, %{input: input_tokens, output: output_tokens}})
     {:keep_state, new_data}
@@ -1488,9 +1489,11 @@ defmodule Deft.Agent do
       end)
 
     # Save each message to the session file
+    working_dir = Map.get(data.config, :working_dir, File.cwd!())
+
     Enum.each(unsaved_messages, fn msg ->
       entry = Entry.Message.from_message(msg)
-      Store.append(data.session_id, entry)
+      Store.append(data.session_id, entry, working_dir)
     end)
 
     # Update saved_message_ids set
@@ -1504,6 +1507,8 @@ defmodule Deft.Agent do
 
   defp save_tool_results(tool_results, data) do
     alias Deft.Session.{Entry, Store}
+
+    working_dir = Map.get(data.config, :working_dir, File.cwd!())
 
     # Save each tool result as a separate entry with timing information
     Enum.each(tool_results, fn {tool_use_id, tool_name, result, duration_ms} ->
@@ -1528,7 +1533,7 @@ defmodule Deft.Agent do
         end
 
       entry = Entry.ToolResult.new(tool_use_id, tool_name, result_text, duration_ms, is_error)
-      Store.append(data.session_id, entry)
+      Store.append(data.session_id, entry, working_dir)
     end)
 
     :ok
@@ -1642,8 +1647,9 @@ defmodule Deft.Agent do
       )
 
       # Persist compaction entry to session JSONL
+      working_dir = Map.get(data.config, :working_dir, File.cwd!())
       compaction_entry = Compaction.new(summary_text, pending.messages_to_remove_count)
-      Store.append(data.session_id, compaction_entry)
+      Store.append(data.session_id, compaction_entry, working_dir)
 
       new_data = %{
         data

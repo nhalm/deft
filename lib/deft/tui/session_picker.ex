@@ -35,8 +35,10 @@ defmodule Deft.TUI.SessionPicker do
   """
   def mount(params, term) do
     # Load sessions from store
+    working_dir = Map.get(params, :working_dir, File.cwd!())
+
     sessions =
-      case Store.list() do
+      case Store.list(working_dir) do
         {:ok, sessions} -> sessions
         {:error, _reason} -> []
       end

@@ -18,8 +18,7 @@ defmodule Deft.Session.Store do
 
   alias Deft.OM.State, as: OMState
   alias Deft.Session.Entry
-
-  @sessions_dir Path.expand("~/.deft/sessions")
+  alias Deft.Project
 
   @doc """
   Appends an entry to the session JSONL file.
@@ -29,14 +28,15 @@ defmodule Deft.Session.Store do
   ## Examples
 
       iex> entry = Entry.SessionStart.new("abc123", "/tmp", "claude-sonnet-4", %{})
-      iex> Store.append("abc123", entry)
+      iex> Store.append("abc123", entry, "/tmp")
       :ok
   """
-  @spec append(String.t(), Entry.t()) :: :ok | {:error, term()}
-  def append(session_id, entry) do
-    path = session_path(session_id)
+  @spec append(String.t(), Entry.t(), String.t()) :: :ok | {:error, term()}
+  def append(session_id, entry, working_dir \\ nil) do
+    working_dir = working_dir || File.cwd!()
+    path = session_path(session_id, working_dir)
 
-    with :ok <- ensure_sessions_dir(),
+    with :ok <- ensure_sessions_dir(working_dir),
          {:ok, json} <- Jason.encode(entry),
          line <- json <> "\n",
          :ok <- File.write(path, line, [:append]) do
@@ -84,15 +84,16 @@ defmodule Deft.Session.Store do
 
   ## Examples
 
-      iex> Store.load("abc123")
+      iex> Store.load("abc123", "/tmp")
       {:ok, [%Entry.SessionStart{}, %Entry.Message{}]}
 
-      iex> Store.load("nonexistent")
+      iex> Store.load("nonexistent", "/tmp")
       {:error, :enoent}
   """
-  @spec load(String.t()) :: {:ok, [Entry.t()]} | {:error, term()}
-  def load(session_id) do
-    path = session_path(session_id)
+  @spec load(String.t(), String.t()) :: {:ok, [Entry.t()]} | {:error, term()}
+  def load(session_id, working_dir \\ nil) do
+    working_dir = working_dir || File.cwd!()
+    path = session_path(session_id, working_dir)
 
     case File.read(path) do
       {:ok, content} ->
@@ -125,7 +126,7 @@ defmodule Deft.Session.Store do
 
   ## Examples
 
-      iex> Store.resume("abc123")
+      iex> Store.resume("abc123", "/tmp")
       {:ok, %{
         messages: [%Deft.Message{}, ...],
         config: %{},
@@ -136,18 +137,20 @@ defmodule Deft.Session.Store do
         session_metadata: %Entry.SessionStart{}
       }}
 
-      iex> Store.resume("nonexistent")
+      iex> Store.resume("nonexistent", "/tmp")
       {:error, :enoent}
   """
-  @spec resume(String.t()) :: {:ok, map()} | {:error, term()}
-  def resume(session_id) do
-    case load(session_id) do
+  @spec resume(String.t(), String.t()) :: {:ok, map()} | {:error, term()}
+  def resume(session_id, working_dir \\ nil) do
+    working_dir = working_dir || File.cwd!()
+
+    case load(session_id, working_dir) do
       {:ok, entries} ->
         state = reconstruct_state(entries)
 
         # Load OM snapshot from separate _om.jsonl file (spec section 9.3)
         om_snapshot =
-          case OMState.load_latest_snapshot(session_id) do
+          case OMState.load_latest_snapshot(session_id, working_dir) do
             {:ok, snapshot} -> snapshot
             {:error, _reason} -> nil
           end
@@ -165,7 +168,7 @@ defmodule Deft.Session.Store do
   end
 
   @doc """
-  Lists all sessions with metadata, sorted most-recent-first.
+  Lists all sessions with metadata for the given working directory, sorted most-recent-first.
 
   Returns a list of session metadata maps with:
   - `:session_id` - The session ID
@@ -177,7 +180,7 @@ defmodule Deft.Session.Store do
 
   ## Examples
 
-      iex> Store.list()
+      iex> Store.list("/tmp")
       {:ok, [
         %{
           session_id: "abc123",
@@ -189,16 +192,20 @@ defmodule Deft.Session.Store do
         }
       ]}
   """
-  @spec list() :: {:ok, [map()]} | {:error, term()}
-  def list do
-    with :ok <- ensure_sessions_dir(),
-         {:ok, files} <- File.ls(@sessions_dir) do
+  @spec list(String.t()) :: {:ok, [map()]} | {:error, term()}
+  def list(working_dir \\ nil) do
+    working_dir = working_dir || File.cwd!()
+    sessions_dir = Project.sessions_dir(working_dir)
+
+    with :ok <- ensure_sessions_dir(working_dir),
+         {:ok, files} <- File.ls(sessions_dir) do
       sessions =
         files
         |> Enum.filter(&String.ends_with?(&1, ".jsonl"))
+        |> Enum.reject(&String.ends_with?(&1, "_om.jsonl"))
         |> Enum.map(fn file ->
           session_id = String.replace_suffix(file, ".jsonl", "")
-          extract_metadata(session_id)
+          extract_metadata(session_id, working_dir)
         end)
         |> Enum.reject(&is_nil/1)
         |> Enum.sort_by(& &1.last_message_at, {:desc, DateTime})
@@ -383,15 +390,13 @@ defmodule Deft.Session.Store do
     end
   end
 
-  defp session_path(session_id) do
-    Path.join(@sessions_dir, "#{session_id}.jsonl")
+  defp session_path(session_id, working_dir) do
+    sessions_dir = Project.sessions_dir(working_dir)
+    Path.join(sessions_dir, "#{session_id}.jsonl")
   end
 
-  defp ensure_sessions_dir do
-    case File.mkdir_p(@sessions_dir) do
-      :ok -> :ok
-      {:error, reason} -> {:error, reason}
-    end
+  defp ensure_sessions_dir(working_dir) do
+    Project.ensure_project_dirs(working_dir)
   end
 
   defp parse_entry(line) do
@@ -511,8 +516,8 @@ defmodule Deft.Session.Store do
 
   defp parse_atom(_, _), do: :user
 
-  defp extract_metadata(session_id) do
-    case load(session_id) do
+  defp extract_metadata(session_id, working_dir) do
+    case load(session_id, working_dir) do
       {:ok, entries} ->
         build_session_metadata(session_id, entries)
 

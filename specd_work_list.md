@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## sessions v0.4
 
-- Wire `Store` to use `Deft.Project.sessions_dir/1` for project-scoped storage paths (store.ex:22, 387): `@sessions_dir` is hardcoded to `~/.deft/sessions`; spec v0.3 requires `~/.deft/projects/<path-encoded-repo>/sessions/`; also fix `OM.State` snapshot paths (om/state.ex) and `Store.list/0` (line 194) which lists all sessions globally regardless of project
 - Fix `resume/1` to use observation entries from main JSONL as fallback (store.ex:143-165): `reconstruct_state` loads `om_state` from observation entries but `resume` overwrites it with `_om.jsonl` snapshot; if snapshot is missing, `om_snapshot` is `nil` and OM state is lost even when valid observation entries exist in the main JSONL; use observation entries as fallback when `_om.jsonl` is absent
 
 ## skills v0.4

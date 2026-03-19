@@ -529,7 +529,9 @@ defmodule Deft.CLI do
   end
 
   defp execute_command(:resume_list, flags) do
-    case Store.list() do
+    working_dir = flags[:working_dir] || File.cwd!()
+
+    case Store.list(working_dir) do
       {:ok, sessions} when sessions == [] ->
         IO.puts("No sessions found.")
         :ok
@@ -588,7 +590,7 @@ defmodule Deft.CLI do
     cleanup_git_orphans(working_dir, flags[:auto_approve_all])
 
     # Load the session state
-    case Store.resume(session_id) do
+    case Store.resume(session_id, working_dir) do
       {:ok, state} ->
         # Display session summary
         display_session_summary(session_id, state)
@@ -856,7 +858,7 @@ defmodule Deft.CLI do
   defp create_session(session_id, working_dir, config) do
     config_map = Map.from_struct(config)
     session_start = SessionStart.new(session_id, working_dir, config.model, config_map)
-    Store.append(session_id, session_start)
+    Store.append(session_id, session_start, working_dir)
   end
 
   # Start the Agent process for a session

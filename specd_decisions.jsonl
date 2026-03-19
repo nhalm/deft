@@ -1,3 +1,26 @@
+{"date_time":"2026-03-19T21:24:00Z","spec":"sessions","version":"v0.4","source":"implement","decision_by":"claude","summary":"Wired Store and OM.State to use project-scoped paths via Deft.Project.sessions_dir/1","reasoning":"Store functions (append, load, resume, list) and OM.State snapshot functions now accept working_dir parameter and use Deft.Project.sessions_dir/1 instead of hardcoded ~/.deft/sessions; ensures sessions are project-scoped per spec v0.3; updated all callers in cli.ex, agent.ex, and session_picker.ex to pass working_dir from config; fixed tests to use project-scoped paths","files":{"specs":["specs/sessions.md"],"source_code":["lib/deft/session/store.ex","lib/deft/om/state.ex","lib/deft/cli.ex","lib/deft/agent.ex","lib/deft/tui/session_picker.ex","test/deft/om/state_resume_test.exs"],"other":["specd_work_list.md","specd_history.md"]}}
+{
+  "date_time": "2026-03-19T21:24:00Z",
+  "spec": "sessions",
+  "version": "v0.4",
+  "source": "implement",
+  "decision_by": "claude",
+  "summary": "Wired Store and OM.State to use project-scoped paths via Deft.Project.sessions_dir/1",
+  "reasoning": "Store functions (append, load, resume, list) and OM.State snapshot functions now accept working_dir parameter and use Deft.Project.sessions_dir/1 instead of hardcoded ~/.deft/sessions; ensures sessions are project-scoped per spec v0.3; updated all callers in cli.ex, agent.ex, and session_picker.ex to pass working_dir from config; fixed tests to use project-scoped paths",
+  "files": {
+    "specs": ["specs/sessions.md"],
+    "source_code": [
+      "lib/deft/session/store.ex",
+      "lib/deft/om/state.ex",
+      "lib/deft/cli.ex",
+      "lib/deft/agent.ex",
+      "lib/deft/tui/session_picker.ex",
+      "test/deft/om/state_resume_test.exs"
+    ],
+    "other": ["specd_work_list.md", "specd_history.md"]
+  }
+}
+
 {"date_time":"2026-03-19T13:11:55Z","spec":"tui","version":"v0.2","source":"implement","decision_by":"claude","summary":"Fixed link rendering crash for missing href attribute","reasoning":"List.keyfind returns nil when href is absent, causing elem(nil, 1) to raise ArgumentError; added case statement to handle nil with empty string default","files":{"specs":["specs/tui.md"],"source_code":["lib/deft/tui/markdown.ex"],"other":["specd_work_list.md","specd_history.md"]}}
 {"date_time":"2026-03-19T18:04:52Z","spec":"tools","version":"v0.2","source":"implement","decision_by":"claude","summary":"Fixed fd exit code 1 handling in find tool","reasoning":"fd v8+ uses exit code 0 for all successful operations (including zero results) and exit code 1 for actual errors (bad patterns, invalid paths, etc.). Previous code treated exit code 1 as 'no matches found', silently swallowing real errors. Changed to check for empty output on exit code 0 to distinguish between success-with-results and success-with-no-results, while treating all non-zero exit codes as errors.","files":{"specs":["specs/tools.md"],"source_code":["lib/deft/tools/find.ex"],"other":["specd_work_list.md","specd_history.md"]}}
 {"date_time":"2026-03-19T18:00:46Z","spec":"tools","version":"v0.2","source":"implement","decision_by":"claude","summary":"Replaced positional diff with LCS-based algorithm in edit tool","reasoning":"Previous find_changes used simple positional line comparison (line i vs line i), causing all subsequent lines after an insert/delete to appear as changed. Implemented proper LCS (Longest Common Subsequence) algorithm with dynamic programming table that correctly identifies insertions, deletions, and context lines regardless of position shifts.","files":{"specs":["specs/tools.md"],"source_code":["lib/deft/tools/edit.ex"],"other":["specd_work_list.md","specd_history.md"]}}

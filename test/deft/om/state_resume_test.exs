@@ -1,7 +1,7 @@
 defmodule Deft.OM.StateResumeTest do
   use ExUnit.Case, async: true
 
-  alias Deft.{Config, Message}
+  alias Deft.{Config, Message, Project}
   alias Deft.Message.Text
   alias Deft.OM.State
   alias Deft.Session.Entry.Observation, as: ObservationEntry
@@ -203,7 +203,8 @@ defmodule Deft.OM.StateResumeTest do
 
     test "loads latest snapshot from _om.jsonl file", %{session_id: session_id} do
       # Create a temporary snapshot file
-      sessions_dir = Path.expand("~/.deft/sessions")
+      working_dir = File.cwd!()
+      sessions_dir = Project.sessions_dir(working_dir)
       File.mkdir_p!(sessions_dir)
       snapshot_path = Path.join(sessions_dir, "#{session_id}_om.jsonl")
 
@@ -240,7 +241,7 @@ defmodule Deft.OM.StateResumeTest do
       File.write!(snapshot_path, json1 <> "\n" <> json2 <> "\n")
 
       # Load - should return the latest (snapshot2)
-      assert {:ok, loaded} = State.load_latest_snapshot(session_id)
+      assert {:ok, loaded} = State.load_latest_snapshot(session_id, working_dir)
       assert loaded.active_observations == "Updated observations"
       assert loaded.observation_tokens == 200
       assert loaded.observed_message_ids == ["msg-1", "msg-2"]
@@ -251,7 +252,8 @@ defmodule Deft.OM.StateResumeTest do
     end
 
     test "handles malformed lines gracefully", %{session_id: session_id} do
-      sessions_dir = Path.expand("~/.deft/sessions")
+      working_dir = File.cwd!()
+      sessions_dir = Project.sessions_dir(working_dir)
       File.mkdir_p!(sessions_dir)
       snapshot_path = Path.join(sessions_dir, "#{session_id}_om.jsonl")
 
@@ -273,7 +275,7 @@ defmodule Deft.OM.StateResumeTest do
       File.write!(snapshot_path, "invalid json line\n" <> json <> "\n")
 
       # Should still load the valid snapshot
-      assert {:ok, loaded} = State.load_latest_snapshot(session_id)
+      assert {:ok, loaded} = State.load_latest_snapshot(session_id, working_dir)
       assert loaded.active_observations == "Good observations"
 
       # Cleanup
