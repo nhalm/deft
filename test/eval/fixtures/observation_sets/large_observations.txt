@@ -1,0 +1,174 @@
+## Current State
+- (14:55) Active task: implementing comprehensive observational memory system for Deft AI coding agent
+- (14:55) Last action: completed Reflector compression implementation with escalating levels
+- (14:52) Blocking error: none
+- (14:48) Current focus: building eval test suite for Observer and Reflector components
+- (14:45) Progress: 75% complete on observational memory spec v0.2
+
+## User Preferences
+- (14:32) 🔴 User wants minimal dependencies — prefers standard library over third-party libraries
+- (14:35) 🔴 User prefers YAML over TOML for configuration files
+- (14:38) 🔴 User emphasizes test coverage — all LLM-powered components must have eval tests
+- (14:40) 🟡 User prefers explicit error handling over silent failures
+- (14:42) 🟡 User likes comprehensive documentation in specs
+- (14:45) 🟡 User prefers small, focused commits over large batches
+- (14:47) User mentioned they work in Elixir professionally
+- (14:50) User stated preference for OTP design patterns over ad-hoc processes
+- (14:52) User prefers gen_statem over GenServer for complex state machines
+- (14:55) User likes functional programming patterns and immutability
+
+## Files & Architecture
+- (14:40) 🟡 Read lib/deft/om/reflector.ex — implements Reflector compression with escalating levels 0-3
+- (14:45) 🟡 Modified lib/deft/om/reflector.ex — added CORRECTION marker survival validation
+- (14:42) 🟡 Read lib/deft/om/observer.ex — implements Observer extraction with priority markers
+- (14:48) 🟡 Modified lib/deft/om/observer.ex — improved section-aware merging logic
+- (14:50) 🟡 Read lib/deft/om/tokens.ex — token estimation using calibration factor
+- (14:52) 🟡 Architecture: gen_statem for agent loop, Task-based Observer/Reflector for async operations
+- (14:54) 🟡 Read specs/observational-memory.md — comprehensive spec defining Observer and Reflector behavior
+- (14:56) 🟡 Modified lib/deft/om/prompt.ex — refined Reflector compression prompts
+- (14:58) Read lib/deft/config.ex — configuration system with model settings
+- (15:00) Read lib/deft/provider/anthropic.ex — provider implementation for Claude models
+
+## Decisions
+- (14:40) 🟡 Chose argon2 for password hashing (OWASP recommendation over bcrypt)
+- (14:33) 🟡 Chose Breeze for TUI (LiveView-style API, part of Gazler's Termite stack)
+- (14:35) 🟡 Decided on JSONL for session persistence (append-only, crash-safe, easy to parse)
+- (14:38) 🟡 Chose Tribunal for eval framework (only Elixir-native LLM eval library available)
+- (14:42) 🟡 Decided to use synthetic fixtures instead of recorded conversations for evals
+- (14:45) 🟡 Chose to implement Observer and Reflector as stateless functions called via Task
+- (14:48) 🟡 Decided on section-aware merging instead of naive concatenation for observations
+- (14:50) 🟡 Chose to use priority markers (🔴 🟡) for preservation hints during compression
+- (14:52) 🟡 Decided on escalating compression levels (0-3) with retry logic for Reflector
+- (14:55) 🟡 Chose 40,000 token threshold for Reflector trigger (balances compression frequency and context size)
+
+## Session History
+- (14:32) 🔴 User stated they are building an Elixir coding agent called Deft with observational memory
+- (14:33) 🟡 User asked about TUI options for Elixir — recommended Breeze
+- (14:35) 🟡 Discussed session persistence strategies — decided on JSONL format
+- (14:38) 🟡 User requested comprehensive eval test coverage for all LLM components
+- (14:40) 🟡 Implemented Observer extraction logic with priority marker support
+- (14:42) 🟡 Added section-aware merging to prevent observation duplication
+- (14:45) 🟡 Tests passing after Observer module refactor
+- (14:47) 🟡 User mentioned concern about context window limits — led to Reflector design
+- (14:48) 🟡 Implemented Reflector compression with target size parameter
+- (14:50) 🟡 Added escalating compression levels to handle varying observation sizes
+- (14:52) 🟡 Implemented CORRECTION marker preservation in Reflector
+- (14:55) 🟡 User requested eval test suite for Observer and Reflector
+- (14:58) Started designing fixture strategy for eval tests
+- (15:00) Created initial fixture structure with observation_sets directory
+- (15:02) Discussed token estimation calibration for Reflector target sizing
+- (15:05) User emphasized importance of statistical significance in eval pass rates
+- (15:08) Reviewed Tribunal documentation for LLM eval assertions
+- (15:10) Planned compression eval with 20 iterations at 80% pass rate
+- (15:12) Planned preservation eval with 20 iterations at 95% pass rate
+- (15:15) Discussed hard assertion approach for section structure and CORRECTION survival
+- (15:18) User mentioned preference for separate test files per eval category
+- (15:20) Reviewed observational-memory spec section on Reflector behavior
+- (15:22) Clarified that Reflector must preserve all 5 standard section headers
+- (15:25) Confirmed CORRECTION markers must survive compression (enforced by code)
+- (15:28) Discussed fixture design principles from evals spec
+- (15:30) User emphasized minimal surface area for fixtures (fewest messages needed)
+- (15:32) Started implementation of large observation fixture for compression testing
+- (15:35) Generated realistic observation content across all 5 sections
+- (15:38) Added varied content to Files & Architecture section with file paths
+- (15:40) Included multiple priority levels (🔴 🟡 and unlabeled) for realism
+- (15:42) Added decision log entries to Decisions section
+- (15:45) Expanded Session History with chronological progression
+- (15:48) Verified fixture includes realistic timestamps and content
+- (15:50) Added more entries to reach target token count for compression testing
+- (15:52) Reviewed fixture for balance across sections (Session History should be largest)
+- (15:55) Added additional technical context about Deft architecture
+- (15:58) Included discussion about gen_statem vs GenServer design choice
+- (16:00) Added entries about provider implementation and streaming
+- (16:02) Discussed rate limiting strategy for LLM API calls
+- (16:05) Added observations about message format and tool execution
+- (16:08) Included context about project structure and module organization
+- (16:10) Added entries about testing strategy and CI/CD pipeline
+- (16:12) Discussed git workflow and branch management preferences
+- (16:15) Added observations about code review process
+- (16:18) Included discussion about documentation standards
+- (16:20) Added entries about error handling patterns in Elixir
+- (16:22) Discussed supervision tree design for Deft application
+- (16:25) Added observations about Registry usage for process discovery
+- (16:28) Included discussion about ETS vs DETS for state storage
+- (16:30) Added entries about async vs sync operation design choices
+- (16:32) Discussed timeout handling for LLM streaming calls
+- (16:35) Added observations about provider abstraction layer design
+- (16:38) Included discussion about multi-model support strategy
+- (16:40) Added entries about cost tracking and budget management
+- (16:42) Discussed TUI interaction patterns and user experience
+- (16:45) Added observations about command system and slash commands
+- (16:48) Included discussion about skill auto-selection mechanism
+- (16:50) Added entries about issue tracking integration
+- (16:52) Discussed Foreman/Lead/Runner orchestration architecture
+- (16:55) Added observations about worktree management for multi-agent tasks
+- (16:58) Included discussion about merge conflict resolution strategies
+- (17:00) Added entries about verification phase and test execution
+- (17:02) Discussed rate limiter token bucket algorithm implementation
+- (17:05) Added observations about 429 handling and exponential backoff
+- (17:08) Included discussion about capacity restoration logic
+- (17:10) Added entries about concurrency control and priority queuing
+- (17:12) Discussed cost ceiling enforcement and warnings
+- (17:15) Added observations about session-scoped vs global rate limiting
+- (17:18) Included discussion about cache implementation with DETS
+- (17:20) Added entries about tool result spilling thresholds
+- (17:22) Discussed cache retrieval tool and reference format
+- (17:25) Added observations about site log for cross-Lead communication
+- (17:28) Included discussion about programmatic promotion rules
+- (17:30) Added entries about Lead isolation and cache separation
+- (17:32) Discussed session cleanup and resource management
+- (17:35) Added observations about project-scoped storage organization
+- (17:38) Included discussion about file path encoding for cross-platform support
+- (17:40) Added entries about git repository detection and common-dir handling
+- (17:42) Discussed worktree parsing and branch name extraction
+- (17:45) Added observations about orphan worktree cleanup
+- (17:48) Included discussion about merge ordering and dependency graphs
+- (17:50) Added entries about contract matching for Lead coordination
+- (17:52) Discussed deliverable extraction from plan output
+- (17:55) Added observations about steering messages for course correction
+- (17:58) Included discussion about verification accuracy requirements
+- (18:00) Added entries about eval fixture design and holdout sets
+- (18:02) Discussed LLM-as-judge calibration methodology
+- (18:05) Added observations about statistical regression detection
+- (18:08) Included discussion about baseline tracking with history
+- (18:10) Added entries about eval tier strategy (Tier 1/2/3)
+- (18:12) Discussed CI integration for eval gates
+- (18:15) Added observations about failure example storage in eval results
+- (18:18) Included discussion about multi-model eval strategy
+- (18:20) Added entries about threshold tuning with grid search
+- (18:22) Discussed bootstrapping strategy for eval development
+- (18:25) Added observations about fixture versioning with spec_version field
+- (18:28) Included discussion about anti-hallucination fixture design
+- (18:30) Added entries about codebase snapshot fixtures for E2E evals
+- (18:32) Discussed overnight loop safety eval requirements
+- (18:35) Added observations about SIGINT handling and graceful shutdown
+- (18:38) Included discussion about issue status transitions during work loop
+- (18:40) Added entries about auto-approve-all flag for autonomous mode
+- (18:42) Discussed cost ceiling enforcement in work loop
+- (18:45) Added observations about plan approval checkpoints
+- (18:48) Included discussion about ready issue filtering and prioritization
+- (18:50) Added entries about conversational issue elicitation
+- (18:52) Discussed structured issue fields (context, acceptance_criteria, constraints)
+- (18:55) Added observations about issue update flow with --edit flag
+- (18:58) Included discussion about compact_closed_issues timestamp handling
+- (19:00) Added entries about JSONL format for issue storage
+- (19:02) Discussed git-based issue tracking vs external systems
+- (19:05) Added observations about issue ID generation and uniqueness
+- (19:08) Included discussion about closed_at timestamp truncation
+- (19:10) Added entries about job_id linking to completion tracking
+- (19:12) Discussed stale issue detection on startup
+- (19:15) Added observations about issue list filtering and display
+- (19:18) Included discussion about rich terminal output with colors
+- (19:20) Added entries about skill vs command distinction
+- (19:22) Discussed YAML-based skill definitions for agent selection
+- (19:25) Added observations about markdown-based command prompts for users
+- (19:28) Included discussion about three-level cascade (project/user/system)
+- (19:30) Added entries about skill suggestion eval requirements
+- (19:32) Discussed invocation fidelity testing for skill parameters
+- (19:35) Added observations about command expansion in conversation
+- (19:38) Included discussion about slash command parsing
+- (19:40) Added entries about skill registry initialization
+- (19:42) Discussed command file loading and validation
+- (19:45) Added observations about skill metadata and tags
+- (19:48) Included discussion about agent-facing vs user-facing skills
+- (19:50) Added entries about skill discovery and search
