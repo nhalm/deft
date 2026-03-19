@@ -25,7 +25,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## issues v0.2
 
-- Fix auto_approve config key mismatch and inversion: CLI writes `auto_approve_plans: !flags[:auto_approve_all]` (cli.ex:1965) but Foreman reads `Map.get(data.config, :auto_approve_all, false)` (foreman.ex:1174); key names don't match AND value is inverted; --auto-approve-all flag has no effect on plan approval
 - Implement Edit option in draft confirmation: currently prints "Edit mode not yet implemented" and returns :ok (cli.ex:1729-1731); spec section 5.1 requires reopening conversational flow with existing fields pre-populated
 - Wire cost tracking in deft work loop: run_work_on_issue_with_cost always returns {:ok, 0.0} (cli.ex:1912-1918); cost ceiling check at cli.ex:1875 never triggers; must read actual cost from RateLimiter after job completes
 

@@ -1962,7 +1962,7 @@ defmodule Deft.CLI do
       bash_timeout: config.bash_timeout,
       max_turns: config.turn_limit,
       tools: [Deft.Tools.UseSkill, Deft.Tools.IssueCreate],
-      auto_approve_plans: !flags[:auto_approve_all]
+      auto_approve_all: flags[:auto_approve_all]
     }
 
     # Start Foreman
