@@ -1077,6 +1077,22 @@ defmodule Deft.Job.Lead do
               %{task: runner_info.task_description}
             )
 
+            # Check if this runner's work satisfies a dependency interface
+            if should_publish_contract?(runner_info, output, data) do
+              contract_content = extract_contract(output, runner_info, data)
+
+              send_lead_message(
+                data.foreman_pid,
+                :contract,
+                contract_content,
+                %{lead_id: data.lead_id}
+              )
+
+              Logger.info(
+                "Lead #{data.lead_id} published contract for task: #{runner_info.task_description}"
+              )
+            end
+
             data
 
           {:needs_correction, reason} ->
@@ -1340,6 +1356,45 @@ defmodule Deft.Job.Lead do
       String.contains?(desc_lower, ["merge", "conflict", "resolve"]) -> :merge_resolution
       true -> :implementation
     end
+  end
+
+  # Contract detection and extraction helpers
+
+  # Determines if the runner's work represents a dependency interface contract
+  # that should be published to the Foreman for partial dependency unblocking.
+  defp should_publish_contract?(runner_info, output, _data) do
+    desc_lower = String.downcase(runner_info.task_description)
+    output_lower = String.downcase(output)
+
+    # Check if task description or output suggests a contract/interface was defined
+    contract_keywords = [
+      "interface",
+      "api",
+      "contract",
+      "signature",
+      "protocol",
+      "schema",
+      "endpoint",
+      "define interface",
+      "create interface",
+      "implement interface"
+    ]
+
+    Enum.any?(contract_keywords, fn keyword ->
+      String.contains?(desc_lower, keyword) or String.contains?(output_lower, keyword)
+    end)
+  end
+
+  # Extracts contract details from runner output and formats them for the Foreman.
+  # The contract includes the task description, deliverable context, and output details.
+  defp extract_contract(output, runner_info, data) do
+    """
+    Contract from task: #{runner_info.task_description}
+    Deliverable: #{data.deliverable}
+
+    Interface details:
+    #{output}
+    """
   end
 
   # Session persistence helpers
