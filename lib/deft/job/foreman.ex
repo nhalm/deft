@@ -331,11 +331,22 @@ defmodule Deft.Job.Foreman do
     :keep_state_and_data
   end
 
-  def handle_event(:enter, _old_state, {:executing, :idle}, _data) do
-    # When entering executing phase, start all ready Leads
+  def handle_event(:enter, _old_state, {:executing, :idle}, data) do
+    # When entering executing phase, create job branch first, then start all ready Leads
     Logger.info("Foreman starting execution phase")
-    :gen_statem.cast(self(), :start_ready_leads)
-    :keep_state_and_data
+
+    # Create job branch for Lead worktrees to branch from
+    case GitJob.create_job_branch(job_id: data.session_id, auto_approve: true) do
+      {:ok, branch_name} ->
+        Logger.info("Created job branch: #{branch_name}")
+        :gen_statem.cast(self(), :start_ready_leads)
+        :keep_state_and_data
+
+      {:error, reason} ->
+        Logger.error("Failed to create job branch: #{inspect(reason)}")
+        # Transition to complete with error
+        {:next_state, {:complete, :idle}, data}
+    end
   end
 
   def handle_event(:enter, _old_state, {:verifying, :idle}, _data) do
