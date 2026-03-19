@@ -1862,7 +1862,7 @@ defmodule Deft.Job.Foreman do
     branch_name = "deft/lead-#{lead_id}"
 
     File.cd!(working_dir, fn ->
-      {output, exit_code} = Git.cmd(["branch", "-d", branch_name])
+      {output, exit_code} = Git.cmd(["branch", "-D", branch_name])
 
       case exit_code do
         0 ->

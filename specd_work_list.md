@@ -20,8 +20,3 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 ## orchestration v0.3
 
 - Derive `publishing_deliverable` from Foreman's Lead tracking map instead of metadata in `process_lead_message(:contract, ...)` (foreman.ex:1343-1344): code reads `Map.get(metadata, :deliverable_name)` but Lead's `send_lead_message/4` never populates this key; `contract_matches?` always returns `false` (line 2514 guards `publishing_deliverable != nil`); contract-based dependency unblocking never fires
-
-## git-strategy v0.1
-
-- Change `delete_lead_branch` to use `git branch -D` (force delete) instead of `-d` (foreman.ex:1850): merge happens in a temporary worktree, not the main HEAD; from the main repo's perspective the lead branch is never merged; `-d` always fails with "not fully merged"; return value is discarded by callers so branches silently accumulate
-
