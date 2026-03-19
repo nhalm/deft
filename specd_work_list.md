@@ -17,3 +17,36 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
+## evals v0.3
+
+- Fix safety hard-fail gate to run unconditionally (tier1-evals.yml:56): the "Check for safety eval failures" step has `if: steps.evals.outputs.exit_code != '0'`, so the safety threshold check is skipped when `make test.eval` exits 0; a safety eval returning 85% will pass CI silently; remove the conditional or always run the safety check step
+- Fix safety pass-rate extraction to use the final result line (tier1-evals.yml:68,80): `grep -i "hallucination" | head -1` captures the first matching line, not the final result; if intermediate log output contains a parenthesized number (e.g., iteration count), the wrong value is extracted and the threshold check is bypassed
+
+## harness v0.2
+
+- Fix `inject_skill` handler to set `turn_count: 1` on transition to `:calling` (agent.ex:289-296): the regular prompt path sets `turn_count: 1` at line 235, but `inject_skill` in `:idle` state never sets it; skill-triggered conversations get one extra turn before the limit fires
+
+## tools v0.2
+
+- Fix bash tool to stream-truncate output instead of buffering all in memory (bash.ex:112-137): `collect_output/6` accumulates entire output via `new_acc = acc <> data` before truncation; a command producing hundreds of MB will OOM the agent process; should truncate during collection or stream only to the temp file and read back the tail
+- Fix edit tool line-range deletion with empty `new_content` (edit.ex:224): `String.split("", "\n")` returns `[""]` not `[]`; replacing a line range with `new_content: ""` inserts a spurious blank line instead of cleanly deleting
+
+## observational-memory v0.3
+
+- Fix `calibrate_from_usage` to use `String.length` instead of `byte_size` (state.ex:1445): multi-byte characters (emoji priority markers 🔴🟡🟢 are 4 bytes each) inflate the calibration factor, causing threshold drift; `Tokens.estimate/2` was already fixed but the calibration path was missed
+
+## orchestration v0.5
+
+- Fix Foreman `call_llm/1` to pass read-only tools to the provider (foreman.ex:1518): `tools = []` is hardcoded but `execute_tool/2` at line 1463 defines `[Read, Grep, Find, Ls]`; the LLM never generates tool calls because it receives no tool definitions; Foreman cannot read the codebase during planning or decomposition
+- Fix `RateLimiter.reconcile/4` to handle nil `actual_usage` (rate_limiter.ex:439): Runner's `collect_stream_events` initializes `usage = nil` (runner.ex:265); if no Usage events arrive, `RateLimiter.reconcile` is called with nil; `Map.get(nil, :input, ...)` raises `BadMapError`, crashing the RateLimiter GenServer for the entire job
+- Fix merge-resolution retry counter to increment on each attempt (foreman.ex:2358): `handle_merge_retry_attempt` passes `retry_count` unchanged to `handle_lead_merge_with_retry`; should pass `retry_count + 1`; the retry cap of 3 is never enforced, allowing infinite merge-resolution loops
+- Add `terminate/3` callback to Foreman for DETS cleanup (foreman.ex): in isolated startup (test, resume), the Foreman starts the site log Store directly without a supervisor; on Foreman exit, the Store is never stopped and the DETS file is not flushed; risk of DETS corruption on abnormal exit
+
+## git-strategy v0.2
+
+- Add stash pop on job failure/abort path (git/job.ex): `pop_job_stash/2` is called only in `complete_job/1` (success path); if a job fails or is aborted, the user's stashed changes are permanently stranded; add stash pop to the failure/abort cleanup
+- Implement `abort_job/1` for failure cleanup (git/job.ex): spec Section 5 requires removing Lead worktrees, deleting the job branch (respecting `keep_failed_branches` config), and restoring the original branch; no abort/failure cleanup function exists; `keep_failed_branches` config is never read
+
+## issues v0.5
+
+- Fix double `get_job_cost` in abort path (cli.ex:2118,2345): `run_work_on_issue` calls `get_job_cost(job_id)` at line 2118 which stops the RateLimiter; then `handle_job_result({:error, :aborted}, ...)` calls `get_job_cost(job_id)` again at line 2345; the second call finds a dead process and returns 0.0; aborted jobs always report "$0.00" cost to the user

@@ -63,9 +63,9 @@ Decision reasoning is logged in [specd_decisions.jsonl](../specd_decisions.jsonl
 | [evals](evals/README.md) | v0.3 | Ready | AI eval infrastructure, methodology, and component eval definitions |
 | [harness](harness.md) | v0.2 | Ready | Agent loop (gen_statem), message format, process architecture, context assembly |
 | [tools](tools.md) | v0.2 | Ready | Tool behaviour, 7 built-in tools, tool execution model |
-| [providers](providers.md) | v0.3 | Ready | LLM provider behaviour, SSE streaming, Anthropic implementation |
+| [providers](providers.md) | v0.3 | Implemented | LLM provider behaviour, SSE streaming, Anthropic implementation |
 | [sessions](sessions.md) | v0.4 | Ready | Session persistence (JSONL), resume, configuration, CLI, project-scoped storage |
-| [tui](tui.md) | v0.2 | Ready | Breeze TUI, chat view, markdown rendering, input handling, slash commands |
+| [tui](tui.md) | v0.2 | Implemented | Breeze TUI, chat view, markdown rendering, input handling, slash commands |
 
 ## Core
 
@@ -80,8 +80,8 @@ Decision reasoning is logged in [specd_decisions.jsonl](../specd_decisions.jsonl
 
 | Spec | Version | Status | Description |
 |------|---------|--------|-------------|
-| [filesystem](filesystem.md) | v0.4 | Ready | Deft.Store GenServer — ETS+DETS for cache and site log, cache_read tool, per-tool spilling thresholds |
-| [skills](skills.md) | v0.4 | Ready | Skills (agent-selected YAML) and commands (markdown prompts), three-level cascade |
+| [filesystem](filesystem.md) | v0.4 | Implemented | Deft.Store GenServer — ETS+DETS for cache and site log, cache_read tool, per-tool spilling thresholds |
+| [skills](skills.md) | v0.4 | Implemented | Skills (agent-selected YAML) and commands (markdown prompts), three-level cascade |
 | [issues](issues.md) | v0.5 | Ready | Persistent issue tracker — JSONL+git, interactive creation, approve-every-plan `deft work` loop |
 
 ## Future
