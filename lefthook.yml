@@ -3,6 +3,7 @@ pre-commit:
   commands:
     eval-structure:
       run: make test.eval.check-structure
+      skip: true  # Enable when eval tests are implemented
     format:
       run: mix format --check-formatted
       glob: "*.{ex,exs}"

@@ -40,7 +40,7 @@ defmodule Deft.Eval.Scoring do
 
       # Compression
       "reflector.compression" ->
-        {:statistical, 0.80}
+        {:statistical, 0.90}
 
       # Decomposition and steering
       cat
