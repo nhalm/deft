@@ -24,6 +24,7 @@ defmodule Deft.Config do
           cache_token_threshold_ls: pos_integer(),
           cache_token_threshold_find: pos_integer(),
           issues_compaction_days: pos_integer(),
+          work_cost_ceiling: float(),
           job_test_command: String.t(),
           job_keep_failed_branches: boolean(),
           job_squash_on_complete: boolean()
@@ -44,6 +45,7 @@ defmodule Deft.Config do
     :cache_token_threshold_ls,
     :cache_token_threshold_find,
     :issues_compaction_days,
+    :work_cost_ceiling,
     :job_test_command,
     :job_keep_failed_branches,
     :job_squash_on_complete
@@ -64,6 +66,7 @@ defmodule Deft.Config do
     :cache_token_threshold_ls,
     :cache_token_threshold_find,
     :issues_compaction_days,
+    :work_cost_ceiling,
     :job_test_command,
     :job_keep_failed_branches,
     :job_squash_on_complete
@@ -128,6 +131,9 @@ defmodule Deft.Config do
       },
       issues: %{
         compaction_days: 90
+      },
+      work: %{
+        cost_ceiling: 50.0
       },
       job: %{
         test_command: "mix test",
@@ -267,6 +273,7 @@ defmodule Deft.Config do
     om_config = Map.get(config, :om, %{})
     cache_config = Map.get(config, :cache, %{})
     issues_config = Map.get(config, :issues, %{})
+    work_config = Map.get(config, :work, %{})
     job_config = Map.get(config, :job, %{})
 
     %__MODULE__{
@@ -284,6 +291,7 @@ defmodule Deft.Config do
       cache_token_threshold_ls: Map.get(cache_config, :token_threshold_ls, 4_000),
       cache_token_threshold_find: Map.get(cache_config, :token_threshold_find, 4_000),
       issues_compaction_days: Map.get(issues_config, :compaction_days, 90),
+      work_cost_ceiling: Map.get(work_config, :cost_ceiling, 50.0),
       job_test_command: Map.get(job_config, :test_command, "mix test"),
       job_keep_failed_branches: Map.get(job_config, :keep_failed_branches, false),
       job_squash_on_complete: Map.get(job_config, :squash_on_complete, true)

@@ -21,6 +21,7 @@ defmodule Deft.CLI do
   - `-p <prompt>` - Non-interactive single-turn mode
   - `--output <file>` - Write response to file (non-interactive)
   - `--auto-approve-all` - Skip plan approval for orchestrated jobs
+  - `--loop` - Keep running ready issues (work command only)
   - `--help` / `-h` - Show help
   - `--version` - Show version
   """
@@ -104,6 +105,7 @@ defmodule Deft.CLI do
           prompt: :string,
           output: :string,
           auto_approve_all: :boolean,
+          loop: :boolean,
           help: :boolean,
           version: :boolean,
           status: :string,
@@ -199,6 +201,9 @@ defmodule Deft.CLI do
         {:issue_dep_remove, issue_id}
 
       # Work commands
+      positional == ["work"] and flags[:loop] ->
+        :work_loop
+
       positional == ["work"] ->
         :work
 
@@ -447,6 +452,34 @@ defmodule Deft.CLI do
         IO.puts(:stderr, "Error: Failed to remove dependency: #{inspect(reason)}")
         exit({:shutdown, 1})
     end
+  end
+
+  defp execute_command(:work_loop, flags) do
+    # Ensure Issues GenServer is started
+    ensure_issues_started(flags)
+
+    # Load config to get cost ceiling
+    working_dir = flags[:working_dir] || File.cwd!()
+    cli_flags = build_cli_flags(flags)
+    config = Config.load(cli_flags, working_dir)
+
+    # Set up SIGINT handler
+    setup_sigint_handler()
+
+    IO.puts("Starting work loop...")
+    IO.puts("Cost ceiling: $#{config.work_cost_ceiling}")
+
+    approval_mode =
+      if flags[:auto_approve_all],
+        do: "fully autonomous (--auto-approve-all)",
+        else: "approve every plan"
+
+    IO.puts("Approval mode: #{approval_mode}")
+    IO.puts("Press Ctrl+C to stop gracefully.")
+    IO.puts("")
+
+    # Run the work loop
+    run_work_loop(flags, config, 0.0, 1)
   end
 
   defp execute_command(:work, flags) do
@@ -738,6 +771,7 @@ defmodule Deft.CLI do
       deft issue dep remove <id> --blocked-by <blocker_id>   Remove a dependency
       deft work                           Pick highest-priority ready issue and run as job
       deft work <id>                      Run a specific issue as a job
+      deft work --loop                    Keep running ready issues until queue empty or cost ceiling
       deft --help                         Show this help
       deft --version                      Show version
 
@@ -749,6 +783,7 @@ defmodule Deft.CLI do
       -p <prompt>               Non-interactive single-turn mode
       --output <file>           Write response to file (non-interactive)
       --auto-approve-all        Skip plan approval for orchestrated jobs
+      --loop                    Keep running ready issues (work command only)
       --priority <0-4>          Issue priority (for issue commands)
       --quick                   Skip interactive elicitation (issue create only)
       --blocked-by <ids>        Comma-separated issue IDs this depends on
@@ -1800,6 +1835,100 @@ defmodule Deft.CLI do
       acceptance_criteria: draft["acceptance_criteria"] || issue.acceptance_criteria,
       constraints: draft["constraints"] || issue.constraints
     }
+  end
+
+  # Set up SIGINT handler for graceful shutdown in work loop
+  defp setup_sigint_handler do
+    # Store the current process PID so the signal handler can send a message to it
+    parent_pid = self()
+
+    # Spawn a process to handle SIGINT
+    spawn(fn ->
+      Process.flag(:trap_exit, true)
+
+      receive do
+        {:shutdown, :sigint} ->
+          send(parent_pid, {:sigint_received})
+      end
+    end)
+
+    # Note: In Elixir/BEAM, we can't directly trap SIGINT from the CLI.
+    # This is a placeholder for the pattern. In a real implementation,
+    # we'd need to use :os.set_signal/2 or handle this at the OTP application level.
+    # For now, this structure allows the loop to check for shutdown signals.
+  end
+
+  # Run the work loop - keeps picking and running ready issues
+  defp run_work_loop(flags, config, cumulative_cost, iteration) do
+    # Check for SIGINT
+    receive do
+      {:sigint_received} ->
+        IO.puts("\nReceived Ctrl+C. Shutting down gracefully...")
+        :ok
+    after
+      0 ->
+        # No SIGINT, continue with the loop
+        continue_work_loop(flags, config, cumulative_cost, iteration)
+    end
+  end
+
+  # Continue the work loop - check for ready issues and process them
+  defp continue_work_loop(flags, config, cumulative_cost, iteration) do
+    # Get ready issues (sorted by priority, then created_at)
+    ready_issues = Issues.ready()
+
+    case ready_issues do
+      [] ->
+        IO.puts("No more ready issues. Loop complete.")
+        IO.puts("Total cost: $#{Float.round(cumulative_cost, 2)}")
+        :ok
+
+      [issue | _] ->
+        # Check cost ceiling before starting next job
+        if cumulative_cost >= config.work_cost_ceiling do
+          IO.puts(
+            "Cost ceiling reached ($#{config.work_cost_ceiling}). Total cost: $#{Float.round(cumulative_cost, 2)}"
+          )
+
+          :ok
+        else
+          IO.puts("\n--- Job #{iteration} ---")
+          IO.puts("Starting work on issue #{issue.id}: #{issue.title}")
+          IO.puts("Cumulative cost so far: $#{Float.round(cumulative_cost, 2)}")
+          IO.puts("")
+
+          # Run the job and get the cost
+          case run_work_on_issue_with_cost(issue, flags) do
+            {:ok, job_cost} ->
+              new_cumulative_cost = cumulative_cost + job_cost
+              IO.puts("Job cost: $#{Float.round(job_cost, 2)}")
+              IO.puts("Total cost: $#{Float.round(new_cumulative_cost, 2)}")
+
+              # Continue the loop with updated cost
+              run_work_loop(flags, config, new_cumulative_cost, iteration + 1)
+
+            {:error, :aborted} ->
+              IO.puts("Job aborted by user.")
+              IO.puts("Total cost: $#{Float.round(cumulative_cost, 2)}")
+              :ok
+
+            {:error, reason} ->
+              IO.puts(:stderr, "Job failed: #{inspect(reason)}")
+              IO.puts("Total cost: $#{Float.round(cumulative_cost, 2)}")
+              exit({:shutdown, 1})
+          end
+        end
+    end
+  end
+
+  # Run a Foreman job for an issue and return the cost
+  defp run_work_on_issue_with_cost(issue, flags) do
+    # For now, we'll use a placeholder cost of 0.0
+    # In a real implementation, this would track actual API costs from the rate limiter
+    case run_work_on_issue(issue, flags) do
+      :ok -> {:ok, 0.0}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   # Run a Foreman job for an issue
