@@ -30,6 +30,5 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## issues v0.3
 
-- Start `Deft.Issues` from `Deft.Application` when `.deft/issues.jsonl` exists (application.ex:12-20): spec §4 requires "Started by `Deft.Application` if `.deft/issues.jsonl` exists"; currently only started ad-hoc by CLI and IssueCreate tool
 - Use context `working_dir` instead of `File.cwd!()` in `IssueCreate.ensure_issues_started/0` (issue_create.ex:175): loads config from OS cwd rather than the session's working directory; wrong `compaction_days` applied when `--working-dir` flag differs from cwd
 

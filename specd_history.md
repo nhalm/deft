@@ -1,4 +1,5 @@
 # History
+- **issues v0.3 (2026-03-19):** Start `Deft.Issues` from `Deft.Application` when `.deft/issues.jsonl` exists (application.ex:12-20): spec §4 requires "Started by `Deft.Application` if `.deft/issues.jsonl` exists"; currently only started ad-hoc by CLI and IssueCreate tool
 - **issues v0.4 (2026-03-19):** Update `handle_job_result({:error, :sigint_timeout}, ...)` at cli.ex to emit a warning when manually rolling back issue status to `:open` (spec v0.4 §5.3)
 - **orchestration v0.3 (2026-03-19):** Pass `work_cost_ceiling` config to RateLimiter in `Job.Supervisor.init/1` (supervisor.ex:79): RateLimiter is started with only `[job_id, foreman_pid]`; its `init/1` defaults `cost_ceiling` to `10.0` (rate_limiter.ex:336) while `Deft.Config` defaults `work.cost_ceiling` to `50.0` (config.ex:163); jobs pause at $10 regardless of user config
 - **issues v0.3 (2026-03-19):** Pass `compaction_days` config to `Issues.start_link` in `IssueCreate.ensure_issues_started/0` (issue_create.ex:173): calls `Issues.start_link()` with no args, ignoring user's `issues.compaction_days` config; closed issues compacted at 90 days regardless of setting
