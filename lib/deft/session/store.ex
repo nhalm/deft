@@ -148,11 +148,12 @@ defmodule Deft.Session.Store do
       {:ok, entries} ->
         state = reconstruct_state(entries)
 
-        # Load OM snapshot from separate _om.jsonl file or fall back to observation entries (spec section 9.3)
+        # Load OM snapshot from separate _om.jsonl file or fall back to observation entries (spec section 1.3)
         om_snapshot =
           case OMState.load_latest_snapshot(session_id, working_dir) do
+            {:ok, nil} -> state.om_state
             {:ok, snapshot} -> snapshot
-            {:error, _reason} -> state.om_state
+            {:error, _reason} -> nil
           end
 
         # Replace om_state with om_snapshot from the separate file or observation entries from main JSONL

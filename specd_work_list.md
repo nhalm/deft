@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## sessions v0.4
-
-- Fix resume/2 om_snapshot fallback type mismatch (store.ex:155): verify what OM.Supervisor expects for :snapshot init option; if it requires OM state struct and current fallback uses %Entry.Observation{}, convert to correct format or return nil to let OM start fresh
-
 ## observational-memory v0.3
 
 - Add epoch staleness check to immediate reflection path (state.ex:687-731): when is_buffering_reflection is false and reflection completes, verify activation_epoch before applying compressed observations (same check as buffered path at 6.4)
