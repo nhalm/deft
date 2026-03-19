@@ -1,4 +1,5 @@
 # History
+- **evals v0.2 (2026-03-18):** Implement issue→plan diagnostic eval: verify that structured issue fields (context, acceptance_criteria, constraints) flow correctly into Foreman research/planning/verification phases; 20 iterations, 75% pass rate
 - **evals v0.2 (2026-03-19):** Implement Lead eval suite: task planning, steering
 - **evals v0.2 (2026-03-18):** Implement Foreman eval suite: decomposition (20 iters, 75%), dependency, contract, constraint propagation, verification accuracy
 - **evals v0.2 (2026-03-18):** Implement issues eval suite: elicitation quality (20 iters, 80%), agent-created quality (20 iters, 80%)

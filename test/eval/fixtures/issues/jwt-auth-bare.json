@@ -1,0 +1,23 @@
+{
+  "id": "deft-a1b3",
+  "spec_version": "0.2",
+  "description": "Bare-title JWT auth issue (--quick mode)",
+  "tags": ["issues", "diagnostic", "jwt-auth"],
+  "issue": {
+    "id": "deft-a1b3",
+    "title": "Add JWT authentication to the API",
+    "context": "",
+    "acceptance_criteria": [],
+    "constraints": [],
+    "status": "open",
+    "priority": 1,
+    "dependencies": [],
+    "source": "user"
+  },
+  "expected_plan_properties": {
+    "has_specific_deliverables": false,
+    "references_constraints": false,
+    "includes_verification_targets": false,
+    "deliverable_count": 1
+  }
+}
