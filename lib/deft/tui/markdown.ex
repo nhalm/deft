@@ -241,7 +241,12 @@ defmodule Deft.TUI.Markdown do
 
   # Links
   defp render_node({"a", attrs, children, _meta}) do
-    href = List.keyfind(attrs, "href", 0) |> elem(1)
+    href =
+      case List.keyfind(attrs, "href", 0) do
+        {"href", value} -> value
+        nil -> ""
+      end
+
     ["\e[34m\e[4m", render_ast(children), "\e[24m\e[39m (", href, ")"]
   end
 

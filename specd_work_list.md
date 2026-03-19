@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## tui v0.2
-
-- Fix `render_node` for links without `href` (markdown.ex:244): `List.keyfind(attrs, "href", 0)` returns `nil` when `href` is absent; `elem(nil, 1)` raises `ArgumentError`; guard with a `nil` check or use `List.keyfind/4` with a default
-
 ## sessions v0.4
 
 - Wire `Store` to use `Deft.Project.sessions_dir/1` for project-scoped storage paths (store.ex:22, 387): `@sessions_dir` is hardcoded to `~/.deft/sessions`; spec v0.3 requires `~/.deft/projects/<path-encoded-repo>/sessions/`; also fix `OM.State` snapshot paths (om/state.ex) and `Store.list/0` (line 194) which lists all sessions globally regardless of project
