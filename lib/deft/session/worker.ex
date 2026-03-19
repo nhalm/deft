@@ -44,6 +44,13 @@ defmodule Deft.Session.Worker do
     lead_id = "main"
     cache_dets_path = Path.join([cache_dir, session_id, "lead-#{lead_id}.dets"])
 
+    # Store session-level data for cleanup
+    # Store session_id and cache_dir in supervisor state for terminate/2
+    Process.put(:session_cleanup_data, %{
+      session_id: session_id,
+      cache_dir: cache_dir
+    })
+
     children = [
       # 1. Cache Store — tool result spilling (must start before Agent)
       {Deft.Store,
@@ -71,6 +78,23 @@ defmodule Deft.Session.Worker do
     ]
 
     Supervisor.init(children, strategy: :rest_for_one)
+  end
+
+  def terminate(_reason, _state) do
+    # Clean up session cache directory on termination
+    case Process.get(:session_cleanup_data) do
+      %{session_id: session_id, cache_dir: cache_dir} ->
+        session_cache_dir = Path.join(cache_dir, session_id)
+
+        if File.exists?(session_cache_dir) do
+          File.rm_rf(session_cache_dir)
+        end
+
+      _ ->
+        :ok
+    end
+
+    :ok
   end
 
   @doc """

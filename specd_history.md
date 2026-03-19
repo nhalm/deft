@@ -1,6 +1,7 @@
 # memory History
 
 <!-- Completed work items, newest first. Do not group by spec — just append at the top. -->
+- **filesystem v0.2 (2026-03-18):** Implement session-end cache cleanup: on session termination, delete all files under cache/<session_id>/
 - **filesystem v0.2 (2026-03-18):** Implement per-Lead cache isolation: start one Deft.Store instance per Lead with DETS at cache/<session_id>/lead-<lead_id>.dets; Lead cleanup deletes its own cache instance
 - **filesystem v0.2 (2026-03-18):** Implement site log programmatic promotion: pattern match on Lead messages — auto-promote contract, decision, correction, critical_finding; promote finding if tagged shared; never promote status or blocker
 - **issues v0.2 (2026-03-18):** Implement `deft issue update --edit` flag: reopen conversational elicitation flow with existing fields pre-populated (spec section 5.2); not declared in OptionParser (cli.ex:96-117) and not handled in execute_command
