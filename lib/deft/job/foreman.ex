@@ -2488,31 +2488,22 @@ defmodule Deft.Job.Foreman do
     # Deliverables are complete if the site log contains a `:complete` message from their Lead
 
     # Get all keys from the site log
-    site_log_keys = Store.keys(Store.tid(data.site_log_pid))
+    tid = Store.tid(data.site_log_pid)
+    site_log_keys = Store.keys(tid)
 
-    # Look for "complete-lead-*" entries
-    completed_lead_ids =
+    # Look for "complete-*" entries and extract deliverable names from metadata
+    completed_deliverables =
       site_log_keys
       |> Enum.filter(&String.starts_with?(&1, "complete-"))
       |> Enum.map(fn key ->
-        # Extract lead_id from the key
-        case String.split(key, "-", parts: 3) do
-          ["complete", lead_id | _] -> lead_id
-          _ -> nil
-        end
-      end)
-      |> Enum.reject(&is_nil/1)
+        # Read the entry to get metadata instead of parsing the key
+        case Store.read(tid, key) do
+          {:ok, entry} ->
+            # The metadata contains :deliverable field from the Lead's completion message
+            get_in(entry, [:metadata, :deliverable])
 
-    # Map lead_ids back to deliverable names
-    # Lead IDs are formatted as "<job_id>-<deliverable_name>"
-    completed_deliverables =
-      completed_lead_ids
-      |> Enum.map(fn lead_id ->
-        # Extract deliverable name from lead_id
-        # Lead ID format: "#{session_id}-#{deliverable.name}"
-        case String.split(lead_id, "-", parts: 2) do
-          [_session_id, deliverable_name] -> deliverable_name
-          _ -> nil
+          _ ->
+            nil
         end
       end)
       |> Enum.reject(&is_nil/1)
