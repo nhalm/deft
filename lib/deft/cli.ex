@@ -1571,11 +1571,21 @@ defmodule Deft.CLI do
         IO.write(delta)
         elicitation_response_loop(agent_pid, draft_acc, title, flags)
 
-      {:agent_event, {:tool_call, tool_name, _tool_id, args}} when tool_name == "issue_draft" ->
-        elicitation_response_loop(agent_pid, args, title, flags)
+      {:agent_event, {:tool_call_done, %{id: _tool_id, args: args}}} ->
+        # Check if this is the issue_draft tool by looking at the args structure
+        if Map.has_key?(args, "title") and Map.has_key?(args, "context") and
+             Map.has_key?(args, "acceptance_criteria") do
+          elicitation_response_loop(agent_pid, args, title, flags)
+        else
+          elicitation_response_loop(agent_pid, draft_acc, title, flags)
+        end
 
-      {:agent_event, {:tool_result, _tool_id, result}} ->
+      {:agent_event, {:tool_execution_complete, %{name: "issue_draft", result: result}}} ->
         handle_tool_result(result, agent_pid, draft_acc, title, flags)
+
+      {:agent_event, {:tool_execution_complete, _}} ->
+        # Ignore completion events for other tools
+        elicitation_response_loop(agent_pid, draft_acc, title, flags)
 
       {:agent_event, {:state_change, :idle}} ->
         handle_idle_state(draft_acc, agent_pid, title, flags)

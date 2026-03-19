@@ -1288,7 +1288,8 @@ defmodule Deft.Agent do
           id: tool_use_id,
           name: tool_name,
           success: !is_error,
-          duration: duration_ms
+          duration: duration_ms,
+          result: result
         }
       })
     end)
