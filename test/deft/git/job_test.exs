@@ -400,6 +400,14 @@ defmodule Deft.Git.JobTest do
         Process.get(:mock_checkout_response)
       end
 
+      defp get_mock_response(["worktree", "add", _path, _branch_name]) do
+        Process.get(:mock_worktree_add_response)
+      end
+
+      defp get_mock_response(["worktree", "remove", _path, "--force"]) do
+        Process.get(:mock_worktree_remove_response)
+      end
+
       defp get_mock_response(["merge", "--no-ff", _branch_name]) do
         Process.get(:mock_merge_response)
       end
@@ -412,9 +420,10 @@ defmodule Deft.Git.JobTest do
     end
 
     test "successfully merges Lead branch into job branch", %{tmp_dir: tmp_dir} do
-      # Mock successful checkout and merge
-      Process.put(:mock_checkout_response, {"", 0})
+      # Mock successful worktree creation and merge
+      Process.put(:mock_worktree_add_response, {"", 0})
       Process.put(:mock_merge_response, {"", 0})
+      Process.put(:mock_worktree_remove_response, {"", 0})
 
       assert {:ok, :merged} =
                Job.merge_lead_branch(
@@ -425,13 +434,14 @@ defmodule Deft.Git.JobTest do
                )
 
       # Verify git commands were called in correct order
-      assert_received {:git_cmd, ["checkout", "deft/job-job123"]}
+      assert_received {:git_cmd, ["worktree", "add", _temp_dir, "deft/job-job123"]}
       assert_received {:git_cmd, ["merge", "--no-ff", "deft/lead-lead-1"]}
+      assert_received {:git_cmd, ["worktree", "remove", _temp_dir, "--force"]}
     end
 
     test "detects merge conflicts", %{tmp_dir: tmp_dir} do
-      # Mock successful checkout but merge conflict
-      Process.put(:mock_checkout_response, {"", 0})
+      # Mock successful worktree creation but merge conflict
+      Process.put(:mock_worktree_add_response, {"", 0})
 
       Process.put(
         :mock_merge_response,
@@ -439,6 +449,7 @@ defmodule Deft.Git.JobTest do
       )
 
       Process.put(:mock_diff_response, {"lib/app.ex\ntest/app_test.exs\n", 0})
+      Process.put(:mock_worktree_remove_response, {"", 0})
 
       assert {:ok, :conflict, conflicted_files} =
                Job.merge_lead_branch(
@@ -452,16 +463,18 @@ defmodule Deft.Git.JobTest do
       assert "test/app_test.exs" in conflicted_files
 
       # Verify git commands were called
-      assert_received {:git_cmd, ["checkout", "deft/job-job123"]}
+      assert_received {:git_cmd, ["worktree", "add", _temp_dir, "deft/job-job123"]}
       assert_received {:git_cmd, ["merge", "--no-ff", "deft/lead-lead-1"]}
       assert_received {:git_cmd, ["diff", "--name-only", "--diff-filter=U"]}
+      assert_received {:git_cmd, ["worktree", "remove", _temp_dir, "--force"]}
     end
 
     test "handles merge conflict when diff command fails", %{tmp_dir: tmp_dir} do
-      # Mock successful checkout, merge conflict, but diff fails
-      Process.put(:mock_checkout_response, {"", 0})
+      # Mock successful worktree creation, merge conflict, but diff fails
+      Process.put(:mock_worktree_add_response, {"", 0})
       Process.put(:mock_merge_response, {"CONFLICT detected\n", 1})
       Process.put(:mock_diff_response, {"error\n", 1})
+      Process.put(:mock_worktree_remove_response, {"", 0})
 
       assert {:ok, :conflict, conflicted_files} =
                Job.merge_lead_branch(
@@ -476,10 +489,10 @@ defmodule Deft.Git.JobTest do
     end
 
     test "handles checkout failure", %{tmp_dir: tmp_dir} do
-      # Mock checkout failure
-      Process.put(:mock_checkout_response, {"fatal: invalid branch\n", 1})
+      # Mock worktree creation failure
+      Process.put(:mock_worktree_add_response, {"fatal: invalid branch\n", 1})
 
-      assert {:error, {:checkout_failed, 1}} =
+      assert {:error, {:worktree_creation_failed, 1}} =
                Job.merge_lead_branch(
                  lead_id: "lead-1",
                  job_id: "invalid",
@@ -487,15 +500,16 @@ defmodule Deft.Git.JobTest do
                  working_dir: tmp_dir
                )
 
-      # Should attempt checkout but not merge
-      assert_received {:git_cmd, ["checkout", "deft/job-invalid"]}
+      # Should attempt worktree creation but not merge
+      assert_received {:git_cmd, ["worktree", "add", _temp_dir, "deft/job-invalid"]}
       refute_received {:git_cmd, ["merge" | _]}
     end
 
     test "handles merge failure (non-conflict error)", %{tmp_dir: tmp_dir} do
-      # Mock successful checkout but merge failure (not a conflict)
-      Process.put(:mock_checkout_response, {"", 0})
+      # Mock successful worktree creation but merge failure (not a conflict)
+      Process.put(:mock_worktree_add_response, {"", 0})
       Process.put(:mock_merge_response, {"fatal: unable to merge\n", 128})
+      Process.put(:mock_worktree_remove_response, {"", 0})
 
       assert {:error, {:merge_failed, 128}} =
                Job.merge_lead_branch(
@@ -505,13 +519,15 @@ defmodule Deft.Git.JobTest do
                  working_dir: tmp_dir
                )
 
-      assert_received {:git_cmd, ["checkout", "deft/job-job123"]}
+      assert_received {:git_cmd, ["worktree", "add", _temp_dir, "deft/job-job123"]}
       assert_received {:git_cmd, ["merge", "--no-ff", "deft/lead-lead-1"]}
+      assert_received {:git_cmd, ["worktree", "remove", _temp_dir, "--force"]}
     end
 
     test "creates correct branch names", %{tmp_dir: tmp_dir} do
-      Process.put(:mock_checkout_response, {"", 0})
+      Process.put(:mock_worktree_add_response, {"", 0})
       Process.put(:mock_merge_response, {"", 0})
+      Process.put(:mock_worktree_remove_response, {"", 0})
 
       assert {:ok, :merged} =
                Job.merge_lead_branch(
@@ -521,8 +537,9 @@ defmodule Deft.Git.JobTest do
                  working_dir: tmp_dir
                )
 
-      assert_received {:git_cmd, ["checkout", "deft/job-job-xyz-789"]}
+      assert_received {:git_cmd, ["worktree", "add", _temp_dir, "deft/job-job-xyz-789"]}
       assert_received {:git_cmd, ["merge", "--no-ff", "deft/lead-lead-abc-123"]}
+      assert_received {:git_cmd, ["worktree", "remove", _temp_dir, "--force"]}
     end
 
     test "requires lead_id option" do
@@ -538,8 +555,9 @@ defmodule Deft.Git.JobTest do
     end
 
     test "defaults to File.cwd! when working_dir not provided" do
-      Process.put(:mock_checkout_response, {"", 0})
+      Process.put(:mock_worktree_add_response, {"", 0})
       Process.put(:mock_merge_response, {"", 0})
+      Process.put(:mock_worktree_remove_response, {"", 0})
 
       assert {:ok, :merged} =
                Job.merge_lead_branch(
@@ -549,8 +567,9 @@ defmodule Deft.Git.JobTest do
                )
 
       # Should work - git commands executed in current directory context
-      assert_received {:git_cmd, ["checkout", "deft/job-job123"]}
+      assert_received {:git_cmd, ["worktree", "add", _temp_dir, "deft/job-job123"]}
       assert_received {:git_cmd, ["merge", "--no-ff", "deft/lead-lead-1"]}
+      assert_received {:git_cmd, ["worktree", "remove", _temp_dir, "--force"]}
     end
   end
 

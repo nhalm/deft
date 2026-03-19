@@ -323,37 +323,67 @@ defmodule Deft.Git.Job do
     lead_branch = "deft/lead-#{lead_id}"
     job_branch = "deft/job-#{job_id}"
 
-    # Change to working directory to ensure git commands work correctly
+    # Create a temporary worktree for the merge to avoid checking out
+    # the job branch in the main working tree (which conflicts with other worktrees)
+    temp_dir =
+      Path.join(System.tmp_dir!(), "deft-merge-#{job_id}-#{:erlang.unique_integer([:positive])}")
+
     File.cd!(working_dir, fn ->
-      with {:ok, :checkout} <- checkout_branch(git, job_branch),
-           merge_result <- attempt_merge(git, lead_branch, job_branch) do
+      with {:ok, _} <- create_merge_worktree(git, job_branch, temp_dir),
+           merge_result <- attempt_merge_in_worktree(git, temp_dir, lead_branch, job_branch) do
+        cleanup_merge_worktree(git, working_dir, temp_dir)
         merge_result
+      else
+        error ->
+          cleanup_merge_worktree(git, working_dir, temp_dir)
+          error
       end
     end)
   end
 
-  # Checkout the job branch
-  defp checkout_branch(git, job_branch) do
-    case git.cmd(["checkout", job_branch]) do
+  # Create a temporary worktree for the job branch to perform the merge
+  defp create_merge_worktree(git, job_branch, temp_dir) do
+    case git.cmd(["worktree", "add", temp_dir, job_branch]) do
       {_output, 0} ->
-        {:ok, :checkout}
+        {:ok, :worktree_created}
 
       {error_output, exit_code} ->
-        Logger.error("Failed to checkout #{job_branch}: #{error_output}")
-        {:error, {:checkout_failed, exit_code}}
+        Logger.error("Failed to create merge worktree for #{job_branch}: #{error_output}")
+        {:error, {:worktree_creation_failed, exit_code}}
     end
   end
 
-  # Attempt to merge the Lead branch into the job branch
-  defp attempt_merge(git, lead_branch, job_branch) do
-    case git.cmd(["merge", "--no-ff", lead_branch]) do
-      {_output, 0} ->
-        Logger.info("Successfully merged #{lead_branch} into #{job_branch}")
-        {:ok, :merged}
+  # Attempt to merge the Lead branch into the job branch within the temporary worktree
+  defp attempt_merge_in_worktree(git, temp_dir, lead_branch, job_branch) do
+    # Ensure directory exists (git worktree add creates it, but mocks may not)
+    File.mkdir_p!(temp_dir)
 
-      {output, exit_code} ->
-        handle_merge_failure(git, output, exit_code, lead_branch, job_branch)
-    end
+    File.cd!(temp_dir, fn ->
+      case git.cmd(["merge", "--no-ff", lead_branch]) do
+        {_output, 0} ->
+          Logger.info("Successfully merged #{lead_branch} into #{job_branch}")
+          {:ok, :merged}
+
+        {output, exit_code} ->
+          handle_merge_failure(git, output, exit_code, lead_branch, job_branch)
+      end
+    end)
+  end
+
+  # Clean up the temporary merge worktree
+  defp cleanup_merge_worktree(git, working_dir, temp_dir) do
+    File.cd!(working_dir, fn ->
+      case git.cmd(["worktree", "remove", temp_dir, "--force"]) do
+        {_output, 0} ->
+          :ok
+
+        {error_output, _exit_code} ->
+          Logger.warning("Failed to remove merge worktree #{temp_dir}: #{error_output}")
+          # Try to clean up manually if git worktree remove fails
+          File.rm_rf(temp_dir)
+          :ok
+      end
+    end)
   end
 
   # Handle merge failure - either conflict or error
@@ -380,6 +410,19 @@ defmodule Deft.Git.Job do
       {_error_output, _exit_code} ->
         # Fallback - return empty list if we can't get conflicted files
         []
+    end
+  end
+
+  # Checkout a branch in the main working tree
+  # Used by complete_job to return to the original branch
+  defp checkout_branch(git, branch) do
+    case git.cmd(["checkout", branch]) do
+      {_output, 0} ->
+        {:ok, :checkout}
+
+      {error_output, exit_code} ->
+        Logger.error("Failed to checkout #{branch}: #{error_output}")
+        {:error, {:checkout_failed, exit_code}}
     end
   end
 

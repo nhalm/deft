@@ -1,4 +1,5 @@
 # History
+- **git-strategy v0.1 (2026-03-18):** Fix merge_lead_branch to not checkout on main working tree: git checkout in File.cd!(working_dir) (job.ex:310-315) conflicts with worktrees that may have the job branch checked out; use `git merge` in a worktree or `git merge-tree` instead
 - **git-strategy v0.1 (2026-03-18):** Fix run_post_merge_tests :timeout option: System.cmd/3 does not support a :timeout option (job.ex:418); the unsupported option causes FunctionClauseError or is silently ignored; post-merge test timeout is not enforced; use Task.async + Process.send_after pattern instead
 - **git-strategy v0.1 (2026-03-18):** Fix stash prompt to actually stash: user answering "yes" to stash prompt prints "Please run: git stash" and returns {:error, :dirty_working_tree} (job.ex:116-120); should call `git stash` programmatically and continue job creation
 - **orchestration v0.3 (2026-03-18):** Add RateLimiter.reconcile call after Runner LLM response: Runner never calls reconcile/4 after getting API response; TPM bucket tokens are deducted but never credited back, causing bucket to drain faster than actual usage (runner.ex:157-172)

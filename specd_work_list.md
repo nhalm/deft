@@ -23,10 +23,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement job cleanup: Foreman cleans all worktrees on completion/failure/abort, archives job files to ~/.deft/projects/<path-encoded-repo>/jobs/<job_id>/; on Lead crash, Foreman cleans that Lead's worktree immediately (blocked: Implement verification phase...)
 - Implement job persistence and resume: store sitelog.dets, plan.json, foreman_session.jsonl, lead_<id>_session.jsonl at ~/.deft/projects/<path-encoded-repo>/jobs/<job_id>/; on resume, read site log + plan.json, start fresh Leads for incomplete deliverables (blocked: Implement verification phase...)
 
-## git-strategy v0.1
-
-- Fix merge_lead_branch to not checkout on main working tree: git checkout in File.cd!(working_dir) (job.ex:310-315) conflicts with worktrees that may have the job branch checked out; use `git merge` in a worktree or `git merge-tree` instead
-
 ## issues v0.2
 
 - Fix auto_approve config key mismatch and inversion: CLI writes `auto_approve_plans: !flags[:auto_approve_all]` (cli.ex:1965) but Foreman reads `Map.get(data.config, :auto_approve_all, false)` (foreman.ex:1174); key names don't match AND value is inverted; --auto-approve-all flag has no effect on plan approval
