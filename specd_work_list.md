@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## filesystem v0.3
-
-- Fix resolve_git_root for normal (non-worktree) repos (REGRESSION): `git rev-parse --git-common-dir` returns relative `.git`, `Path.dirname(".git")` returns `"."`, all normal repos map to same `~/.deft/projects/.` directory (project.ex:131-139); must expand relative path against working dir before dirname; previously fixed per specd_history but fix has regressed
-
 ## issues v0.2
 
 - Fix SIGINT abort return value in work loop: `handle_job_result({:error, :sigint_shutdown}, ...)` returns `:ok` (cli.ex:2204), which `run_work_on_issue` maps to `{:ok, cost}` (cli.ex:2069); loop at cli.ex:1955 matches `{:ok, job_cost}` and continues to next issue instead of stopping; should return `{:error, :aborted}` to match the loop's stop condition at cli.ex:1963

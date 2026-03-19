@@ -136,6 +136,7 @@ defmodule Deft.Project do
       {output, 0} ->
         output
         |> String.trim()
+        |> then(&Path.expand(&1, path))
         |> Path.dirname()
 
       {_output, _exit_code} ->
