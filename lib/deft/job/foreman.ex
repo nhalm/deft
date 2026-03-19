@@ -1194,11 +1194,19 @@ defmodule Deft.Job.Foreman do
 
   defp finalize_streaming(data) do
     # Finalize the current message and add to messages list
-    # Placeholder implementation
-    # In a full implementation, this would create a complete Message from current_message
-    # and add it to data.messages, then save to session
-    data = save_unsaved_messages(data)
-    data
+    case data.current_message do
+      nil ->
+        # No message being accumulated, nothing to finalize
+        data
+
+      current_message ->
+        # Add the completed message to the messages list
+        new_messages = data.messages ++ [current_message]
+        data = %{data | messages: new_messages, current_message: nil}
+
+        # Save the new message to session
+        save_unsaved_messages(data)
+    end
   end
 
   defp add_tool_results(_results, data) do

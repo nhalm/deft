@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.3
 
-- Implement `finalize_streaming/1` in Foreman to build a complete assistant message from accumulated stream data (foreman.ex:1049-1056): currently just calls `save_unsaved_messages/1` which has nothing to save since events were never accumulated
 - Implement `add_tool_results/2` in Foreman to inject tool results into the message list (foreman.ex:1058-1062): currently a no-op; Foreman agent loop cannot complete tool execution cycles
 - Implement `process_provider_event/2` in Lead to accumulate streaming text and tool calls (lead.ex:723-726): same no-op placeholder as Foreman; Lead cannot process LLM responses for task decomposition or steering
 - Implement `finalize_streaming/1` in Lead to build complete assistant message from stream (lead.ex:733-740): same placeholder as Foreman
