@@ -29,6 +29,7 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## git-strategy v0.1
 
+- Delete Lead branch after successful merge and test: add `git branch -d deft/lead-<id>` call after `cleanup_worktree` in `handle_test_success` (foreman.ex:1245-1261); currently only the worktree is removed, leaving orphaned branches that accumulate and require manual `deft startup` cleanup
 - Wire `GitJob.create_job_branch/1` into Foreman startup: function exists (job.ex:49) but is never called from foreman.ex or anywhere else; `create_lead_worktree` references `deft/job-<job_id>` branch that was never created, causing worktree creation to fail with "not a valid object name"
 - Read `job.squash_on_complete` config in Foreman verification-passed handler instead of hardcoding `squash: true` (foreman.ex:795): setting the config to `false` has no effect; users cannot preserve individual Lead commit history as the spec allows
 - Handle post-merge test failure by removing Lead from tracking and spawning fix-up Runner or flagging user: `handle_test_failure` (foreman.ex:1264-1273) sends a `:critical_finding` but leaves the Lead in `data.leads`, so `all_leads_complete?` never returns true and the job hangs in `:executing` permanently; spec section 3 step 4 requires fix-up Runner or user intervention
@@ -40,6 +41,7 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## issues v0.2
 
+- Add existence validation for blocked-by dependency IDs on issue create: `handle_call({:create, attrs})` (issues.ex:213-247) calls `check_cycle` but never `validate_blocker_exists`; contrast `add_dependency` (issues.ex:340-342) which validates both issue and blocker exist; currently `--blocked-by deft-nonexistent` creates an issue that appears immediately unblocked, violating spec intent for explicit dependencies; add validation and warning for missing dependencies
 - Fix `resolve_file_path` to expand relative `.git` path before `Path.dirname` (issues.ex:443-448): `git rev-parse --git-common-dir` returns relative `".git"` for normal repos; `Path.dirname(".git")` returns `"."` which resolves to cwd, not repo root; running `deft issue` from a subdirectory reads/writes `<subdir>/.deft/issues.jsonl` instead of the project root's file; same bug as project.ex had before fix (use `Path.expand/1` with working dir)
 - Call `setup_sigint_handler()` in `execute_command(:work, ...)` and `execute_command({:work_issue, ...}, ...)` (cli.ex:485, 503): currently only called in `execute_command(:work_loop, ...)` at line 467; without `:os.set_signal(:sigint, :handle)`, Ctrl+C kills the VM immediately instead of rolling back issue status to `:open`; issue left permanently stuck at `:in_progress`
 
