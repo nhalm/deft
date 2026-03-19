@@ -1,4 +1,5 @@
 # History
+- **orchestration v0.6 (2026-03-19):** Fix `/correct` command crash: `write_to_site_log/4` returns `:ok` but line 464 rebinds `data` to that atom; `send_user_message/2` at line 467 then crashes on `:ok.messages` (BadMapError); `write_to_site_log` must return the updated `data` struct, or line 464 must not rebind `data`
 - **observational-memory v0.3 (2026-03-19):** Fix `truncate_tool_result` guard to use `String.length` instead of `byte_size` (prompt.ex:279): multi-byte UTF-8 characters cause premature truncation; the guard `byte_size(content) > 2000` should be a character count check, matching the v0.3 spec clarification
 - **observational-memory v0.3 (2026-03-19):** Add `om_observer_temperature` and `om_reflector_temperature` fields to `Deft.Config` and wire through to Observer/Reflector (currently hardcoded to `0.0`)
 - **observational-memory v0.3 (2026-03-19):** Add `om_observer_provider` and `om_reflector_provider` fields to `Deft.Config` and wire through to Observer/Reflector (currently hardcoded to use main agent's `config.provider`)

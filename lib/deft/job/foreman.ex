@@ -461,7 +461,7 @@ defmodule Deft.Job.Foreman do
         # This is a correction - auto-promote to site log
         Logger.info("User correction received: #{correction_content}")
         metadata = %{source: "user", timestamp: DateTime.utc_now()}
-        data = write_to_site_log(:correction, correction_content, metadata, data)
+        write_to_site_log(:correction, correction_content, metadata, data)
 
         # Send acknowledgment message to user
         data = send_user_message("Correction recorded and promoted to site log.", data)

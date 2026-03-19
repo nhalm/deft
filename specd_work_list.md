@@ -23,5 +23,4 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.6
 
-- Fix `/correct` command crash: `write_to_site_log/4` returns `:ok` but line 464 rebinds `data` to that atom; `send_user_message/2` at line 467 then crashes on `:ok.messages` (BadMapError); `write_to_site_log` must return the updated `data` struct, or line 464 must not rebind `data`
 - Fix clause ordering: merge_resolution handler (foreman.ex:1031) matches `{:executing, _agent_state}` which swallows tool task results in `{:executing, :executing_tools}` state; `Map.pop(tasks, ref)` returns `{nil, _}` and handler returns `:keep_state_and_data`, preventing tool task handler (foreman.ex:1139) from ever firing; tool results are permanently lost and Foreman hangs
