@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## tui v0.2
 
-- Add catch-all error branch in `handle_slash_command` (chat.ex:785-817): `SlashCommand.dispatch/1` can return `{:error, reason, name}` for I/O errors (e.g., permission denied reading skill file); the `case` only handles `:not_found` and `:no_definition`, so I/O errors raise `CaseClauseError` and crash the Breeze view
 - Fix `render_node` for links without `href` (markdown.ex:244): `List.keyfind(attrs, "href", 0)` returns `nil` when `href` is absent; `elem(nil, 1)` raises `ArgumentError`; guard with a `nil` check or use `List.keyfind/4` with a default
 
 ## sessions v0.4
