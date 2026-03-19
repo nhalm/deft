@@ -17,6 +17,3 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## evals v0.3
-
-- Restore all eval test files (test/eval/ is empty again): previous restoration (commit ab28121, decision logged 2026-03-19T21:13:48Z) has regressed; all 26 component tests, fixtures, and support modules are missing; restore from git history and investigate which subsequent commit deleted them to prevent recurrence
