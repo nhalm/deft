@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## orchestration v0.3
-
-- Fix `determine_completed_deliverables` to return `deliverable.name` not raw site log metadata: on resume, `determine_completed_deliverables` (foreman.ex:2703) returns `get_in(entry, [:metadata, :deliverable])` which is the description string (set at lead.ex:890 from `data.deliverable`, which is `deliverable.description` per foreman.ex:2241); `get_ready_deliverables` (foreman.ex:2209) checks `MapSet.member?(data.started_leads, deliverable.name)` using the short name; description strings never match short names, so all deliverables are re-executed on resume
-
 ## git-strategy v0.1
 
 - Fix `data.config.job_keep_failed_branches` KeyError crash: Foreman accesses `data.config.job_keep_failed_branches` at foreman.ex:545 and foreman.ex:934; `data.config` is a plain map (built at cli.ex:2056-2066) that does not include `job_keep_failed_branches`; plain-map dot access on a missing key raises `KeyError`; Foreman crashes on every abort or verification failure

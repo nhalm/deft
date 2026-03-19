@@ -2699,8 +2699,14 @@ defmodule Deft.Job.Foreman do
         # Read the entry to get metadata instead of parsing the key
         case Store.read(tid, key) do
           {:ok, entry} ->
-            # The metadata contains :deliverable field from the Lead's completion message
-            get_in(entry, [:metadata, :deliverable])
+            # Extract deliverable name from lead_id (format: "#{session_id}-#{deliverable_name}")
+            lead_id = get_in(entry, [:metadata, :lead_id])
+
+            if lead_id do
+              String.replace_prefix(lead_id, "#{data.session_id}-", "")
+            else
+              nil
+            end
 
           _ ->
             nil
