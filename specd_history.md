@@ -1,4 +1,5 @@
 # History
+- **issues v0.2 (2026-03-18):** Implement Edit option in draft confirmation: currently prints "Edit mode not yet implemented" and returns :ok (cli.ex:1729-1731); spec section 5.1 requires reopening conversational flow with existing fields pre-populated
 - **orchestration v0.3 (2026-03-19):** Implement verification phase: after all Leads complete, Foreman spawns verification Runner (full test suite + reviews modified files); on pass, trigger squash-merge; on fail, identify responsible Lead and report
 - **issues v0.2 (2026-03-18):** Fix auto_approve config key mismatch and inversion: CLI writes `auto_approve_plans: !flags[:auto_approve_all]` (cli.ex:1965) but Foreman reads `Map.get(data.config, :auto_approve_all, false)` (foreman.ex:1174); key names don't match AND value is inverted; --auto-approve-all flag has no effect on plan approval
 - **git-strategy v0.1 (2026-03-18):** Fix merge_lead_branch to not checkout on main working tree: git checkout in File.cd!(working_dir) (job.ex:310-315) conflicts with worktrees that may have the job branch checked out; use `git merge` in a worktree or `git merge-tree` instead

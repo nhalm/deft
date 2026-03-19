@@ -1727,12 +1727,78 @@ defmodule Deft.CLI do
         save_issue_from_draft(draft, title, flags)
 
       answer when answer in ["e", "edit"] ->
-        IO.puts("(Edit mode not yet implemented - please re-run the command)")
-        :ok
+        edit_issue_draft(draft, title, flags)
 
       _ ->
         IO.puts("Issue creation cancelled.")
         :ok
+    end
+  end
+
+  # Edit the draft by restarting the elicitation session with pre-populated fields
+  defp edit_issue_draft(draft, title, flags) do
+    working_dir = flags[:working_dir] || File.cwd!()
+
+    # Verify API key and register provider
+    verify_api_key()
+    :ok = Deft.Provider.Registry.register("anthropic", Deft.Provider.Anthropic)
+
+    # Get open issues for context
+    open_issues = Issues.list(status: :open)
+
+    # Build elicitation prompt for editing with existing draft fields
+    elicitation_prompt = ElicitationPrompt.build_for_draft_edit(draft, title, open_issues)
+
+    # Create system message with elicitation instructions
+    system_message = %Deft.Message{
+      id: "elicit_sys_edit",
+      role: :system,
+      content: [%Deft.Message.Text{text: elicitation_prompt}],
+      timestamp: DateTime.utc_now()
+    }
+
+    # Create a temporary session for elicitation
+    session_id = generate_session_id()
+
+    # Build config for elicitation agent (lightweight, tools for issue_draft only)
+    agent_config = %{
+      model: flags[:model] || "claude-sonnet-4",
+      provider: Deft.Provider.Anthropic,
+      working_dir: working_dir,
+      turn_limit: 10,
+      tool_timeout: 30_000,
+      bash_timeout: 30_000,
+      max_turns: 10,
+      tools: [Deft.Tools.UseSkill, Deft.Tools.IssueDraft]
+    }
+
+    # Start the elicitation agent with the elicitation prompt as first message
+    {:ok, _worker_pid} =
+      Deft.Session.Supervisor.start_session(
+        session_id: session_id,
+        config: agent_config,
+        messages: [system_message],
+        project_dir: working_dir
+      )
+
+    # Look up the Agent PID from the registry
+    [{agent_pid, _}] = Registry.lookup(Deft.Registry, {:agent, session_id})
+
+    # Subscribe to agent events
+    Registry.register(Deft.Registry, {:session, session_id}, [])
+
+    IO.puts("\nLet's refine the issue draft...")
+    IO.puts("")
+
+    # Start the interactive elicitation loop
+    case run_elicitation_loop(agent_pid, title, flags) do
+      {:ok, updated_draft} ->
+        # Present the updated draft to the user
+        present_issue_draft(updated_draft, title, flags)
+
+      {:error, reason} ->
+        IO.puts(:stderr, "Error during issue elicitation: #{reason}")
+        exit({:shutdown, 1})
     end
   end
 
