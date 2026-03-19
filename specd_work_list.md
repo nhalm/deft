@@ -37,10 +37,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Fix run_post_merge_tests :timeout option: System.cmd/3 does not support a :timeout option (job.ex:418); the unsupported option causes FunctionClauseError or is silently ignored; post-merge test timeout is not enforced; use Task.async + Process.send_after pattern instead
 - Fix merge_lead_branch to not checkout on main working tree: git checkout in File.cd!(working_dir) (job.ex:310-315) conflicts with worktrees that may have the job branch checked out; use `git merge` in a worktree or `git merge-tree` instead
 
-## filesystem v0.3
-
-- Fix resolve_git_root to use --git-common-dir instead of --show-toplevel: project.ex:132 uses `git rev-parse --show-toplevel` which returns worktree root when running from a Lead worktree, causing different project_dir paths for Foreman vs Leads; use `--git-common-dir` + `Path.dirname/1` (this fix was previously implemented per specd_history but was lost to a regression)
-
 ## issues v0.2
 
 - Fix auto_approve config key mismatch and inversion: CLI writes `auto_approve_plans: !flags[:auto_approve_all]` (cli.ex:1965) but Foreman reads `Map.get(data.config, :auto_approve_all, false)` (foreman.ex:1174); key names don't match AND value is inverted; --auto-approve-all flag has no effect on plan approval
