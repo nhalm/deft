@@ -38,3 +38,8 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Fix `generate_site_log_key` to produce stable keys for overwritable entries: currently appends millisecond timestamp to every key (foreman.ex:1349-1354), making all keys unique; spec section 5.4 requires "same key replaces the previous entry" — semantic entries like contracts and decisions should use stable keys (e.g. `"contract-<deliverable_name>"`) so updates overwrite previous values
 - Use `File.realpath/1` (or `:file.read_link_all/1`) instead of `Path.expand/1` in `resolve_real_path` (project.ex:126-128): `Path.expand/1` normalizes `~` and relative paths but does not resolve symlinks; two symlinked paths to the same repo produce different encoded project directories, siloing sessions and cache
 
+## issues v0.2
+
+- Fix `resolve_file_path` to expand relative `.git` path before `Path.dirname` (issues.ex:443-448): `git rev-parse --git-common-dir` returns relative `".git"` for normal repos; `Path.dirname(".git")` returns `"."` which resolves to cwd, not repo root; running `deft issue` from a subdirectory reads/writes `<subdir>/.deft/issues.jsonl` instead of the project root's file; same bug as project.ex had before fix (use `Path.expand/1` with working dir)
+- Call `setup_sigint_handler()` in `execute_command(:work, ...)` and `execute_command({:work_issue, ...}, ...)` (cli.ex:485, 503): currently only called in `execute_command(:work_loop, ...)` at line 467; without `:os.set_signal(:sigint, :handle)`, Ctrl+C kills the VM immediately instead of rolling back issue status to `:open`; issue left permanently stuck at `:in_progress`
+
