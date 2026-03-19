@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## git-strategy v0.1
-
-- Add running-job check to `find_orphaned_branches` in orphan cleanup (git/job.ex:651-667): returns all `deft/*` branches unconditionally; if `cleanup_orphans` runs during an active job, it deletes branches belonging to the live job
-
 ## issues v0.3
 
 - Fix cycle detection in `detect_and_fix_cycles` (issues.ex:553-580) to only clear dependencies of cycle members, not issues that point into the cycle (spec v0.3): current implementation marks issues as affected if they traverse to a cycle member, destroying valid dependency data; should only flag and clear dependencies for issues whose own ID appears in a cycle

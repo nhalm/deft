@@ -660,18 +660,50 @@ defmodule Deft.Git.Job do
   defp find_orphaned_branches(git) do
     case git.cmd(["branch", "--list", "deft/*"]) do
       {output, 0} ->
-        branches =
+        all_branches =
           output
           |> String.split("\n", trim: true)
           |> Enum.map(&String.trim/1)
           |> Enum.map(&String.trim_leading(&1, "* "))
           |> Enum.filter(&String.starts_with?(&1, "deft/"))
 
-        {:ok, branches}
+        # Get running job IDs to filter out active branches
+        running_job_ids = get_running_job_ids()
+
+        orphaned_branches =
+          all_branches
+          |> Enum.reject(&branch_belongs_to_running_job?(&1, running_job_ids))
+
+        {:ok, orphaned_branches}
 
       {error_output, exit_code} ->
         Logger.error("Failed to list branches: #{error_output}")
         {:error, {:branch_list_failed, exit_code}}
+    end
+  end
+
+  # Get all running job IDs from the ProcessRegistry
+  defp get_running_job_ids do
+    # Query the Registry for all registered job supervisors
+    Registry.select(Deft.ProcessRegistry, [
+      {{{:job_supervisor, :"$1"}, :_, :_}, [], [:"$1"]}
+    ])
+  end
+
+  # Check if a branch belongs to a running job
+  defp branch_belongs_to_running_job?(branch, running_job_ids) do
+    case branch do
+      # Job branches: deft/job-<job_id>
+      "deft/job-" <> job_id ->
+        job_id in running_job_ids
+
+      # Lead branches: filter out ALL lead branches if ANY job is running
+      # (conservative approach since we can't determine which job a lead belongs to from the branch name)
+      "deft/lead-" <> _lead_id ->
+        not Enum.empty?(running_job_ids)
+
+      _ ->
+        false
     end
   end
 
