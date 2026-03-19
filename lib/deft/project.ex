@@ -126,9 +126,9 @@ defmodule Deft.Project do
   defp resolve_real_path(path) do
     abs_path = Path.expand(path)
 
-    case :file.read_link_all(String.to_charlist(abs_path)) do
-      {:ok, real_path_charlist} -> List.to_string(real_path_charlist)
-      {:error, _} -> abs_path
+    case System.cmd("realpath", [abs_path], stderr_to_stdout: true) do
+      {real_path, 0} -> String.trim(real_path)
+      _ -> abs_path
     end
   end
 

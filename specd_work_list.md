@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## filesystem v0.4
-
-- Fix `resolve_real_path` to use `File.realpath/1` instead of `:file.read_link_all/1` (project.ex:126-133): `:file.read_link_all/1` only resolves the final path component; if an intermediate directory is a symlink (e.g., `/home/nick` → `/Users/nick`), the symlink is not resolved; two paths to the same repo produce different project directories, siloing sessions and cache
-
 ## issues v0.5
 
 - Add explicit `handle_job_result({:error, :aborted}, ...)` clause in CLI (cli.ex:2304-2319): non-SIGINT Foreman aborts (`:shutdown` exit) produce `{:error, :aborted}` from `wait_for_job_completion`; this falls through to the generic `{:error, reason}` handler which calls `exit({:shutdown, 1})`; the work loop's graceful abort branch (print "Job aborted", report cost, return `:ok`) is unreachable for non-SIGINT aborts
