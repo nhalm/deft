@@ -39,6 +39,8 @@ defmodule Deft.Job.Foreman do
   alias Deft.Git.Job, as: GitJob
   alias Deft.Job.Lead
   alias Deft.Job.Runner
+  alias Deft.Job.RateLimiter
+  alias Deft.Provider.Anthropic
 
   require Logger
 
@@ -630,11 +632,35 @@ defmodule Deft.Job.Foreman do
     {:ok, "Tool result placeholder"}
   end
 
-  defp call_llm(_data) do
-    # Placeholder for LLM call
-    # In real implementation, this would use the rate limiter and provider
-    Logger.debug("Calling LLM")
-    {:ok, make_ref(), make_ref()}
+  defp call_llm(data) do
+    # Extract parameters from data
+    job_id = data.session_id
+    messages = data.messages
+    config = data.config
+    provider_name = Map.get(config, :provider_name, "anthropic")
+
+    # Request permission from rate limiter
+    case RateLimiter.request(job_id, provider_name, messages, :foreman) do
+      {:ok, _estimated_tokens} ->
+        # Foreman uses empty tools list - it delegates actual work to Runners
+        tools = []
+
+        # Start streaming from the provider
+        case Anthropic.stream(messages, tools, config) do
+          {:ok, stream_ref} ->
+            # Monitor the stream process
+            monitor_ref = Process.monitor(stream_ref)
+            {:ok, stream_ref, monitor_ref}
+
+          {:error, reason} ->
+            Logger.error("Foreman failed to start LLM stream: #{inspect(reason)}")
+            {:error, reason}
+        end
+
+      {:error, reason} ->
+        Logger.error("Foreman failed to get rate limiter permission: #{inspect(reason)}")
+        {:error, reason}
+    end
   end
 
   defp cancel_stream(_data) do

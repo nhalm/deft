@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.3
 
-- Wire Foreman call_llm to use LLM provider through RateLimiter: currently a no-op stub returning make_ref() (foreman.ex:633-638); Foreman planning/decomposition phases cannot produce real LLM output
 - Wire Lead call_llm to use LLM provider through RateLimiter: currently a no-op stub returning make_ref() (lead.ex:622-626); Lead steering cannot produce real LLM output
 - Add RateLimiter.reconcile call after Runner LLM response: Runner never calls reconcile/4 after getting API response; TPM bucket tokens are deducted but never credited back, causing bucket to drain faster than actual usage (runner.ex:157-172)
 - Implement verification phase: after all Leads complete, Foreman spawns verification Runner (full test suite + reviews modified files); on pass, trigger squash-merge; on fail, identify responsible Lead and report (blocked: Wire Foreman call_llm..., Wire Lead call_llm...)

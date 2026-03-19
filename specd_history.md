@@ -1,4 +1,5 @@
 # History
+- **orchestration v0.3 (2026-03-18):** Wire Foreman call_llm to use LLM provider through RateLimiter: currently a no-op stub returning make_ref() (foreman.ex:633-638); Foreman planning/decomposition phases cannot produce real LLM output
 - **evals v0.2 (2026-03-18):** Restore all deleted eval test files: test/eval/ is empty — all previously-implemented eval tests (foreman/, lead/, issues/, observer/, reflector/, actor/, spilling/, skills/, e2e/) and fixtures were deleted by subsequent implementation commits (849c993, f9c4c44, 37be534, etc.); restore from git history and verify tests compile
 - **orchestration v0.3 (2026-03-18):** Fix Runner request_llm_call pattern match: matches bare `:ok` but RateLimiter.request returns `{:ok, estimated_tokens}` (rate_limiter.ex:391); causes CaseClauseError on every Runner LLM call (runner.ex:230-233)
 - **filesystem v0.3 (2026-03-18):** Fix resolve_git_root to use --git-common-dir instead of --show-toplevel: project.ex:132 uses `git rev-parse --git-common-dir` + `Path.dirname/1` to find canonical repo root; fixes different project_dir paths for Foreman vs Leads in worktree environments
