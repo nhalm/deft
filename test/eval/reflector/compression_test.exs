@@ -16,12 +16,12 @@ defmodule Deft.Eval.Reflector.CompressionTest do
   # Number of iterations for statistical tests
   @iterations 20
 
-  # Pass rate threshold for compression (80% as per work item)
-  @compression_pass_rate 0.80
+  # Pass rate threshold for compression (90% as per spec)
+  @compression_pass_rate 0.90
 
   describe "compression target" do
     @tag timeout: 600_000
-    test "compresses observations to target size (20 iterations, 80% pass rate)" do
+    test "compresses observations to target size (20 iterations, 90% pass rate)" do
       fixture_path = "test/eval/fixtures/observation_sets/large_observations.txt"
       observations = File.read!(fixture_path)
 
