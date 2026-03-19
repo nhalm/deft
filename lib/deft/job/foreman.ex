@@ -405,6 +405,12 @@ defmodule Deft.Job.Foreman do
       Task.shutdown(task, :brutal_kill)
     end)
 
+    # Clean up all Lead worktrees
+    cleanup_all_lead_worktrees(data)
+
+    # Archive job files for debugging
+    archive_job_files(data.session_id, data.working_dir, :aborted)
+
     # Transition to complete phase
     {:next_state, {:complete, :idle},
      %{data | stream_ref: nil, stream_monitor_ref: nil, tool_tasks: []}}
@@ -697,10 +703,24 @@ defmodule Deft.Job.Foreman do
            ) do
         {:ok, :completed} ->
           Logger.info("Job completed successfully - squash-merge done")
+
+          # Clean up any remaining Lead worktrees
+          cleanup_all_lead_worktrees(data)
+
+          # Archive job files for debugging
+          archive_job_files(data.session_id, data.working_dir, :completed)
+
           {:next_state, {:complete, :idle}, data}
 
         {:error, reason} ->
           Logger.error("Failed to complete job: #{inspect(reason)}")
+
+          # Clean up any remaining Lead worktrees even on merge failure
+          cleanup_all_lead_worktrees(data)
+
+          # Archive job files for debugging
+          archive_job_files(data.session_id, data.working_dir, :merge_failed)
+
           # Report error to user
           error_message = """
           Verification passed but failed to merge changes: #{inspect(reason)}
@@ -713,6 +733,12 @@ defmodule Deft.Job.Foreman do
       end
     else
       Logger.warning("Verification failed")
+
+      # Clean up all Lead worktrees
+      cleanup_all_lead_worktrees(data)
+
+      # Archive job files for debugging
+      archive_job_files(data.session_id, data.working_dir, :verification_failed)
 
       # Identify responsible Lead based on test failures
       responsible_lead = identify_responsible_lead(results, data)
@@ -1270,6 +1296,53 @@ defmodule Deft.Job.Foreman do
           {:error, output}
       end
     end)
+  end
+
+  # Cleans up all remaining Lead worktrees on job completion, failure, or abort.
+  # Iterates through all Leads tracked in data.leads and removes their worktrees.
+  defp cleanup_all_lead_worktrees(data) do
+    if map_size(data.leads) == 0 do
+      Logger.debug("No Lead worktrees to clean up")
+    else
+      Logger.info("Cleaning up #{map_size(data.leads)} Lead worktree(s)")
+
+      Enum.each(data.leads, fn {lead_id, lead_info} ->
+        worktree_path = lead_info.worktree_path
+        Logger.info("Cleaning up worktree for Lead #{lead_id}: #{worktree_path}")
+        cleanup_worktree(worktree_path, data.working_dir)
+      end)
+
+      Logger.info("All Lead worktrees cleaned up")
+    end
+
+    :ok
+  end
+
+  # Archives job files for debugging by writing a status file.
+  # Job files remain at ~/.deft/projects/<path-encoded-repo>/jobs/<job_id>/
+  # but are marked with their completion status for later reference.
+  defp archive_job_files(job_id, working_dir, status) do
+    jobs_dir = Project.jobs_dir(working_dir)
+    job_dir = Path.join(jobs_dir, job_id)
+
+    # Create a status file to mark this job as archived
+    status_file = Path.join(job_dir, "status.txt")
+
+    status_content = """
+    Job Status: #{status}
+    Archived At: #{DateTime.utc_now() |> DateTime.to_iso8601()}
+    Job ID: #{job_id}
+    """
+
+    case File.write(status_file, status_content) do
+      :ok ->
+        Logger.info("Archived job files for job #{job_id} with status: #{status}")
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("Failed to write status file for job #{job_id}: #{inspect(reason)}")
+        {:error, reason}
+    end
   end
 
   # Determine research tasks based on the prompt
