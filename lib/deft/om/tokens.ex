@@ -23,7 +23,7 @@ defmodule Deft.OM.Tokens do
   """
   @spec estimate(String.t(), float()) :: integer()
   def estimate(text, calibration_factor \\ 4.0) do
-    div(byte_size(text), trunc(calibration_factor))
+    div(String.length(text), trunc(calibration_factor))
   end
 
   @doc """
