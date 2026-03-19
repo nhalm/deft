@@ -2325,6 +2325,30 @@ defmodule Deft.CLI do
     {:error, :aborted}
   end
 
+  defp handle_job_result({:error, :aborted}, issue, job_id) do
+    # Non-SIGINT abort (e.g., Foreman :shutdown exit)
+    IO.puts("\nJob aborted.")
+
+    # Roll back the issue status to :open
+    case Issues.update(issue.id, %{status: :open}) do
+      {:ok, _issue} ->
+        IO.puts("Issue #{issue.id} status rolled back to open.")
+
+      {:error, reason} ->
+        IO.puts(
+          :stderr,
+          "Warning: Failed to rollback issue status: #{inspect(reason)}. Issue may be left at :in_progress."
+        )
+    end
+
+    # Report the job cost
+    cost = get_job_cost(job_id)
+    IO.puts("Job cost: $#{Float.round(cost, 2)}")
+
+    # Return aborted error to stop the work loop
+    {:error, :aborted}
+  end
+
   defp handle_job_result({:error, reason}, issue, _job_id) do
     # Job failed - revert issue to open
     case Issues.update(issue.id, %{status: :open}) do
