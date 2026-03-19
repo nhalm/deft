@@ -147,6 +147,7 @@ defmodule Deft.Job.Foreman do
   - `:session_id` — Required. Job identifier.
   - `:config` — Required. Configuration map.
   - `:rate_limiter_pid` — Required. PID of Deft.Job.RateLimiter.
+  - `:runner_supervisor` — Required. PID of the RunnerSupervisor.
   - `:working_dir` — Optional. Working directory for the project (defaults to File.cwd!()).
   """
   @spec resume(Keyword.t()) :: {:ok, pid()} | {:error, term()}
@@ -168,6 +169,7 @@ defmodule Deft.Job.Foreman do
               # Start Foreman with plan loaded
               config = Keyword.fetch!(opts, :config)
               rate_limiter_pid = Keyword.fetch!(opts, :rate_limiter_pid)
+              runner_supervisor = Keyword.fetch!(opts, :runner_supervisor)
 
               # Convert plan data to the expected format
               plan = parse_plan_from_json(plan_data)
@@ -178,6 +180,7 @@ defmodule Deft.Job.Foreman do
                 config: Map.put(config, :resume, true),
                 prompt: "Resuming job #{session_id}",
                 rate_limiter_pid: rate_limiter_pid,
+                runner_supervisor: runner_supervisor,
                 working_dir: working_dir,
                 resumed_plan: plan
               )

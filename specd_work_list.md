@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.3
 
-- Fix `Foreman.resume/1` to pass `runner_supervisor` to `start_link/1` (foreman.ex:176-183): `resume/1` calls `start_link` without `:runner_supervisor` but `start_link` calls `Keyword.fetch!(opts, :runner_supervisor)` at line 66; every resume attempt crashes with `KeyError`
 - Implement `process_provider_event/2` in Foreman to accumulate streaming text and tool calls into `data.current_message` (foreman.ex:1038-1042): currently a no-op that discards all LLM response events; planning, decomposition, and steering produce no output
 - Implement `finalize_streaming/1` in Foreman to build a complete assistant message from accumulated stream data (foreman.ex:1049-1056): currently just calls `save_unsaved_messages/1` which has nothing to save since events were never accumulated
 - Implement `add_tool_results/2` in Foreman to inject tool results into the message list (foreman.ex:1058-1062): currently a no-op; Foreman agent loop cannot complete tool execution cycles
