@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.3
 
-- Call `check_phase_transition` after Lead crash in Foreman DOWN handler (foreman.ex:680-686): after removing the crashed Lead from `data.leads`, check if `all_leads_complete?` is now true and transition to `:verifying` if so; currently returns `{:keep_state, data}` unconditionally, causing the job to hang in `:executing` if the last Lead crashes
 - Handle Lead start failure in Foreman `start_lead/2` (foreman.ex:2518-2525): when `LeadSupervisor.start_lead` or worktree creation fails, the deliverable name is never added to `started_leads`; `all_leads_complete?` requires `started_count == deliverables_count` which can never be satisfied; either add the deliverable to `started_leads` on failure (so the count matches) or use a different completion check that accounts for failed starts
 
 ## issues v0.4

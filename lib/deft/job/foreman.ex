@@ -1056,7 +1056,7 @@ defmodule Deft.Job.Foreman do
 
   defp handle_lead_crash(
          {:DOWN, monitor_ref, :process, _pid, reason},
-         _state,
+         {job_phase, _agent_state} = _state,
          %{leads: leads} = data
        ) do
     # Find crashed Lead by monitor ref
@@ -1085,7 +1085,14 @@ defmodule Deft.Job.Foreman do
         # TODO: Decide whether to retry or mark deliverable as failed
         # For now, just clean up and continue
 
-        {:keep_state, data}
+        # Check if all Leads are complete after crash
+        case check_phase_transition(:complete, job_phase, data) do
+          {:transition, new_phase} ->
+            {:next_state, {new_phase, :idle}, data}
+
+          :no_transition ->
+            {:keep_state, data}
+        end
     end
   end
 
