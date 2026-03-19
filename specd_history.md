@@ -1,4 +1,5 @@
 # History
+- **orchestration v0.3 (2026-03-19):** Implement `finalize_streaming/1` in Lead to build complete assistant message from stream (lead.ex:733-740): same placeholder as Foreman
 - **orchestration v0.3 (2026-03-19):** Implement `process_provider_event/2` in Lead to accumulate streaming text and tool calls (lead.ex:723-726): same no-op placeholder as Foreman; Lead cannot process LLM responses for task decomposition or steering
 - **orchestration v0.3 (2026-03-19):** Implement `add_tool_results/2` in Foreman to inject tool results into the message list (foreman.ex:1058-1062): currently a no-op; Foreman agent loop cannot complete tool execution cycles
 - **orchestration v0.3 (2026-03-19):** Implement `finalize_streaming/1` in Foreman to build a complete assistant message from accumulated stream data (foreman.ex:1049-1056): currently just calls `save_unsaved_messages/1` which has nothing to save since events were never accumulated

@@ -19,6 +19,5 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.3
 
-- Implement `finalize_streaming/1` in Lead to build complete assistant message from stream (lead.ex:733-740): same placeholder as Foreman
 - Implement `add_tool_results/2` in Lead to inject tool results into messages (lead.ex:742-746): same placeholder as Foreman
 
