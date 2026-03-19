@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## git-strategy v0.2
 
-- Add stash pop on job failure/abort path (git/job.ex): `pop_job_stash/2` is called only in `complete_job/1` (success path); if a job fails or is aborted, the user's stashed changes are permanently stranded; add stash pop to the failure/abort cleanup
 - Implement `abort_job/1` for failure cleanup (git/job.ex): spec Section 5 requires removing Lead worktrees, deleting the job branch (respecting `keep_failed_branches` config), and restoring the original branch; no abort/failure cleanup function exists; `keep_failed_branches` config is never read
 
 ## issues v0.5

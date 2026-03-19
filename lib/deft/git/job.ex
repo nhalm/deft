@@ -991,4 +991,42 @@ defmodule Deft.Git.Job do
     |> Enum.filter(&String.starts_with?(&1, "worktree "))
     |> length()
   end
+
+  @doc """
+  Cleans up after a job failure or abort.
+
+  Restores the user's stashed changes from job creation if they exist.
+  This ensures that user changes are not permanently stranded when a job fails.
+
+  ## Options
+
+  - `:job_id` - Required. Job identifier.
+  - `:git` - Optional. Git adapter module (defaults to Deft.Git).
+
+  ## Returns
+
+  - `:ok` - Cleanup completed (stash popped if it existed)
+
+  ## Examples
+
+      # Abort a job and restore stashed changes
+      Deft.Git.Job.abort_job(job_id: "abc123")
+      # => :ok
+
+  ## Notes
+
+  This is a minimal implementation that handles stash restoration.
+  Full cleanup (worktree removal, branch deletion) will be added in a future iteration.
+  """
+  @spec abort_job(keyword()) :: :ok
+  def abort_job(opts) do
+    job_id = Keyword.fetch!(opts, :job_id)
+    git = Keyword.get(opts, :git, Deft.Git)
+
+    # Restore user's stashed changes if they were stashed during job creation
+    pop_job_stash(git, job_id)
+
+    Logger.info("Job #{job_id} aborted - stash cleanup completed")
+    :ok
+  end
 end
