@@ -1,4 +1,5 @@
 # History
+- **evals v0.2 (2026-03-19):** Implement Lead eval suite: task planning, steering
 - **evals v0.2 (2026-03-18):** Implement Foreman eval suite: decomposition (20 iters, 75%), dependency, contract, constraint propagation, verification accuracy
 - **evals v0.2 (2026-03-18):** Implement issues eval suite: elicitation quality (20 iters, 80%), agent-created quality (20 iters, 80%)
 - **issues v0.2 (2026-03-18):** Implement SIGINT handling: catch Ctrl+C, send graceful shutdown to Foreman, wait for current issue status rollback to :open (5-second timeout), then exit; if timeout expires, issue left at :in_progress (detected as stale on next startup)
