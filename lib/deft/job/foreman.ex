@@ -1672,7 +1672,7 @@ defmodule Deft.Job.Foreman do
     Review both sides of the conflict, understand the intent of each change,
     and resolve the conflicts to integrate both changes correctly.
 
-    After resolving all conflicts, stage the resolved files using git add.
+    After resolving all conflicts, stage the resolved files using git add, then commit them with a merge commit message.
     """
 
     context = """
