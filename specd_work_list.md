@@ -27,3 +27,9 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Enforce `job.max_leads` config (default 5) in `get_ready_deliverables` or `start_ready_leads`: currently all ready deliverables are started simultaneously with no cap (foreman.ex:1992-2003)
 - Spawn merge-resolution Runner on merge conflict instead of discarding work: `handle_merge_conflict` (foreman.ex:1288-1303) sends a `:critical_finding` and deletes the Lead's worktree, permanently losing the Lead's work; spec section 3.4 requires spawning a merge-resolution Runner to resolve conflicts
 
+## git-strategy v0.1
+
+- Wire `GitJob.create_job_branch/1` into Foreman startup: function exists (job.ex:49) but is never called from foreman.ex or anywhere else; `create_lead_worktree` references `deft/job-<job_id>` branch that was never created, causing worktree creation to fail with "not a valid object name"
+- Read `job.squash_on_complete` config in Foreman verification-passed handler instead of hardcoding `squash: true` (foreman.ex:795): setting the config to `false` has no effect; users cannot preserve individual Lead commit history as the spec allows
+- Handle post-merge test failure by removing Lead from tracking and spawning fix-up Runner or flagging user: `handle_test_failure` (foreman.ex:1264-1273) sends a `:critical_finding` but leaves the Lead in `data.leads`, so `all_leads_complete?` never returns true and the job hangs in `:executing` permanently; spec section 3 step 4 requires fix-up Runner or user intervention
+
