@@ -508,7 +508,7 @@ defmodule Deft.Job.Foreman do
         SessionWorker.tool_runner_via_tuple(data.session_id),
         fn ->
           Runner.run(
-            :review,
+            :testing,
             verification_instructions,
             verification_context,
             data.session_id,
