@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## orchestration v0.5
-
-- Add `RateLimiter.reconcile/4` call after LLM response in Foreman `call_llm` (foreman.ex:1440+) and Lead `call_llm` (lead.ex:827+): both request tokens via `RateLimiter.request` but never credit back actual usage; TPM bucket is progressively drained without refund for Foreman and Lead calls
-
 ## providers v0.3
 
 - Fix Runner `collect_loop` to accumulate Usage events instead of replacing (runner.ex:316-319): `new_usage = %{input: input_tokens, output: output_tokens}` replaces previous usage; Anthropic sends `message_start` (input only) then `message_delta` (output only) as separate events; final usage has `input: 0`, causing `RateLimiter.reconcile` to credit back full estimated tokens and cost tracking to report $0 input cost; must sum token counts across all Usage events

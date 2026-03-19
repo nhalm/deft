@@ -456,8 +456,14 @@ defmodule Deft.Job.Foreman do
 
     # Start LLM call
     case call_llm(data) do
-      {:ok, stream_ref, monitor_ref} ->
-        data = %{data | stream_ref: stream_ref, stream_monitor_ref: monitor_ref}
+      {:ok, stream_ref, monitor_ref, estimated_tokens} ->
+        data = %{
+          data
+          | stream_ref: stream_ref,
+            stream_monitor_ref: monitor_ref,
+            estimated_tokens: estimated_tokens
+        }
+
         {:next_state, {job_phase, :calling}, data}
 
       {:error, reason} ->
@@ -485,8 +491,14 @@ defmodule Deft.Job.Foreman do
     data = %{data | messages: messages, turn_count: data.turn_count + 1}
 
     case call_llm(data) do
-      {:ok, stream_ref, monitor_ref} ->
-        data = %{data | stream_ref: stream_ref, stream_monitor_ref: monitor_ref}
+      {:ok, stream_ref, monitor_ref, estimated_tokens} ->
+        data = %{
+          data
+          | stream_ref: stream_ref,
+            stream_monitor_ref: monitor_ref,
+            estimated_tokens: estimated_tokens
+        }
+
         {:next_state, {:decomposing, :calling}, data}
 
       {:error, reason} ->
@@ -676,8 +688,14 @@ defmodule Deft.Job.Foreman do
 
     # Start LLM call for revision
     case call_llm(data) do
-      {:ok, stream_ref, monitor_ref} ->
-        data = %{data | stream_ref: stream_ref, stream_monitor_ref: monitor_ref}
+      {:ok, stream_ref, monitor_ref, estimated_tokens} ->
+        data = %{
+          data
+          | stream_ref: stream_ref,
+            stream_monitor_ref: monitor_ref,
+            estimated_tokens: estimated_tokens
+        }
+
         {:next_state, {:decomposing, :calling}, data}
 
       {:error, reason} ->
@@ -1096,8 +1114,14 @@ defmodule Deft.Job.Foreman do
       if should_continue_turn?(data) do
         # Make another LLM call
         case call_llm(data) do
-          {:ok, stream_ref, monitor_ref} ->
-            data = %{data | stream_ref: stream_ref, stream_monitor_ref: monitor_ref}
+          {:ok, stream_ref, monitor_ref, estimated_tokens} ->
+            data = %{
+              data
+              | stream_ref: stream_ref,
+                stream_monitor_ref: monitor_ref,
+                estimated_tokens: estimated_tokens
+            }
+
             {:next_state, {job_phase, :calling}, data}
 
           {:error, reason} ->
@@ -1487,7 +1511,7 @@ defmodule Deft.Job.Foreman do
 
     # Request permission from rate limiter
     case RateLimiter.request(job_id, provider_name, messages, :foreman) do
-      {:ok, _estimated_tokens} ->
+      {:ok, estimated_tokens} ->
         # Foreman uses empty tools list - it delegates actual work to Runners
         tools = []
 
@@ -1503,7 +1527,8 @@ defmodule Deft.Job.Foreman do
           {:ok, stream_ref} ->
             # Monitor the stream process
             monitor_ref = Process.monitor(stream_ref)
-            {:ok, stream_ref, monitor_ref}
+            # Store estimated_tokens for later reconciliation
+            {:ok, stream_ref, monitor_ref, estimated_tokens}
 
           {:error, reason} ->
             Logger.error("Foreman failed to start LLM stream: #{inspect(reason)}")
@@ -1684,6 +1709,31 @@ defmodule Deft.Job.Foreman do
         # Add the completed message to the messages list
         new_messages = data.messages ++ [current_message]
         data = %{data | messages: new_messages, current_message: nil}
+
+        # Reconcile token usage with rate limiter if we have estimated tokens
+        data =
+          if Map.has_key?(data, :estimated_tokens) do
+            job_id = data.session_id
+            provider_name = Map.get(data.config, :provider, "anthropic")
+            estimated_tokens = data.estimated_tokens
+
+            # Build usage map from accumulated tokens
+            usage = %{
+              input: Map.get(data, :total_input_tokens, 0),
+              output: Map.get(data, :total_output_tokens, 0)
+            }
+
+            # Call reconcile to credit back unused tokens
+            RateLimiter.reconcile(job_id, provider_name, estimated_tokens, usage)
+
+            # Clear estimated_tokens and reset token counters for next call
+            data
+            |> Map.delete(:estimated_tokens)
+            |> Map.put(:total_input_tokens, 0)
+            |> Map.put(:total_output_tokens, 0)
+          else
+            data
+          end
 
         # Save the new message to session
         save_unsaved_messages(data)
