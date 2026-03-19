@@ -5,6 +5,7 @@ defmodule Deft.Job.Supervisor do
   Supervision tree (one_for_one strategy with :temporary restart for all children):
   - Deft.Store (site log instance)
   - Deft.Job.RateLimiter
+  - Task.Supervisor (RunnerSupervisor for Foreman's research/verification/merge-resolution Runners)
   - Deft.Job.Foreman
   - Deft.Job.LeadSupervisor (DynamicSupervisor for Leads)
 
@@ -51,6 +52,10 @@ defmodule Deft.Job.Supervisor do
     # Build via_tuple for Foreman
     foreman_name = {:via, Registry, {Deft.ProcessRegistry, {:foreman, job_id}}}
 
+    # Build via_tuple for Foreman's RunnerSupervisor
+    runner_supervisor_name =
+      {:via, Registry, {Deft.ProcessRegistry, {:foreman_runner_supervisor, job_id}}}
+
     children = [
       # Store (site log instance)
       %{
@@ -75,6 +80,13 @@ defmodule Deft.Job.Supervisor do
         restart: :temporary
       },
 
+      # RunnerSupervisor for Foreman's Runners (research, verification, merge-resolution)
+      %{
+        id: :foreman_runner_supervisor,
+        start: {Task.Supervisor, :start_link, [[name: runner_supervisor_name]]},
+        type: :supervisor
+      },
+
       # Foreman
       %{
         id: Deft.Job.Foreman,
@@ -86,6 +98,7 @@ defmodule Deft.Job.Supervisor do
                config: config,
                prompt: prompt,
                rate_limiter_pid: rate_limiter_name,
+               runner_supervisor: runner_supervisor_name,
                working_dir: working_dir,
                resumed_plan: resumed_plan,
                name: foreman_name

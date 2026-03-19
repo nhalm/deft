@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## orchestration v0.3
-
-- Spawn Foreman research/verification/merge-resolution Runners under the job supervision tree instead of `SessionWorker.tool_runner_via_tuple` (foreman.ex:508,1436): Runners on the session supervisor are not terminated when the job is aborted, causing orphaned LLM calls
-
 ## git-strategy v0.1
 
 - Preserve merge-conflict temp worktree until merge-resolution Runner completes (git/job.ex:334): `cleanup_merge_worktree` runs unconditionally before `merge_lead_branch` returns `{:ok, :conflict, ...}`; the Foreman spawns a merge-resolution Runner pointing at `lead_info.worktree_path` which has no conflict markers; conflicts can never be resolved

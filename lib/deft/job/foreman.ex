@@ -55,6 +55,7 @@ defmodule Deft.Job.Foreman do
   - `:config` — Required. Configuration map.
   - `:prompt` — Required. Initial user prompt/issue.
   - `:rate_limiter_pid` — Required. PID of Deft.Job.RateLimiter.
+  - `:runner_supervisor` — Required. PID/name of Task.Supervisor for Foreman's Runners.
   - `:working_dir` — Optional. Working directory for the project (defaults to File.cwd!()).
   - `:name` — Optional. Name for the gen_statem process.
   """
@@ -63,6 +64,7 @@ defmodule Deft.Job.Foreman do
     config = Keyword.fetch!(opts, :config)
     prompt = Keyword.fetch!(opts, :prompt)
     rate_limiter_pid = Keyword.fetch!(opts, :rate_limiter_pid)
+    runner_supervisor = Keyword.fetch!(opts, :runner_supervisor)
     working_dir = Keyword.get(opts, :working_dir, File.cwd!())
     name = Keyword.get(opts, :name)
     resumed_plan = Keyword.get(opts, :resumed_plan)
@@ -76,6 +78,7 @@ defmodule Deft.Job.Foreman do
       config: config,
       prompt: prompt,
       rate_limiter_pid: rate_limiter_pid,
+      runner_supervisor: runner_supervisor,
       working_dir: working_dir,
       messages: [],
       leads: %{},
@@ -283,7 +286,7 @@ defmodule Deft.Job.Foreman do
       Enum.map(research_specs, fn %{instructions: instructions, context: context} ->
         task =
           Task.Supervisor.async_nolink(
-            SessionWorker.tool_runner_via_tuple(data.session_id),
+            data.runner_supervisor,
             fn ->
               # Get research runner model from config (defaults to same as lead model)
               research_model =
@@ -505,7 +508,7 @@ defmodule Deft.Job.Foreman do
     # Spawn verification Runner
     task =
       Task.Supervisor.async_nolink(
-        SessionWorker.tool_runner_via_tuple(data.session_id),
+        data.runner_supervisor,
         fn ->
           Runner.run(
             :testing,
@@ -1433,7 +1436,7 @@ defmodule Deft.Job.Foreman do
     # Spawn merge-resolution Runner
     task =
       Task.Supervisor.async_nolink(
-        SessionWorker.tool_runner_via_tuple(data.session_id),
+        data.runner_supervisor,
         fn ->
           Runner.run(
             :merge_resolution,

@@ -6,7 +6,7 @@ cd "$(dirname "$0")"
 export SPECD_LOOP=1
 
 # Defaults
-MAX_CYCLES=5
+MAX_CYCLES=10
 CYCLE=0
 AUDIT_MODE="ready"  # ready | full | skip
 MODEL_IMPLEMENT="claude-sonnet-4-5-20250929"

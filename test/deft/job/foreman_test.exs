@@ -16,16 +16,19 @@ defmodule Deft.Job.ForemanTest do
     original_cwd = File.cwd!()
     File.cd!(tmp_dir)
 
+    # Start a Task.Supervisor for Foreman runners in tests
+    {:ok, runner_supervisor} = Task.Supervisor.start_link()
+
     on_exit(fn ->
       File.cd!(original_cwd)
       File.rm_rf!(tmp_dir)
     end)
 
-    {:ok, tmp_dir: tmp_dir}
+    {:ok, tmp_dir: tmp_dir, runner_supervisor: runner_supervisor}
   end
 
   describe "site log instance creation" do
-    test "creates site log on init", %{tmp_dir: tmp_dir} do
+    test "creates site log on init", %{tmp_dir: tmp_dir, runner_supervisor: runner_supervisor} do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
 
       # Start a minimal Foreman (will fail in agent loop but site log should be created)
@@ -35,6 +38,7 @@ defmodule Deft.Job.ForemanTest do
           config: %{},
           prompt: "test prompt",
           rate_limiter_pid: self(),
+          runner_supervisor: runner_supervisor,
           working_dir: tmp_dir
         )
 
@@ -61,7 +65,10 @@ defmodule Deft.Job.ForemanTest do
       Process.sleep(50)
     end
 
-    test "site log is accessible to Foreman for writes", %{tmp_dir: tmp_dir} do
+    test "site log is accessible to Foreman for writes", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
 
       {:ok, foreman_pid} =
@@ -70,6 +77,7 @@ defmodule Deft.Job.ForemanTest do
           config: %{},
           prompt: "test prompt",
           rate_limiter_pid: self(),
+          runner_supervisor: runner_supervisor,
           working_dir: tmp_dir
         )
 
@@ -105,7 +113,10 @@ defmodule Deft.Job.ForemanTest do
   end
 
   describe "programmatic site log promotion" do
-    test "auto-promotes decision messages", %{tmp_dir: tmp_dir} do
+    test "auto-promotes decision messages", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
 
       {:ok, foreman_pid} =
@@ -114,6 +125,7 @@ defmodule Deft.Job.ForemanTest do
           config: %{},
           prompt: "test prompt",
           rate_limiter_pid: self(),
+          runner_supervisor: runner_supervisor,
           working_dir: tmp_dir
         )
 
@@ -138,7 +150,10 @@ defmodule Deft.Job.ForemanTest do
       Process.sleep(50)
     end
 
-    test "auto-promotes contract messages", %{tmp_dir: tmp_dir} do
+    test "auto-promotes contract messages", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
 
       {:ok, foreman_pid} =
@@ -147,6 +162,7 @@ defmodule Deft.Job.ForemanTest do
           config: %{},
           prompt: "test prompt",
           rate_limiter_pid: self(),
+          runner_supervisor: runner_supervisor,
           working_dir: tmp_dir
         )
 
@@ -174,7 +190,10 @@ defmodule Deft.Job.ForemanTest do
       Process.sleep(50)
     end
 
-    test "auto-promotes critical_finding messages", %{tmp_dir: tmp_dir} do
+    test "auto-promotes critical_finding messages", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
 
       {:ok, foreman_pid} =
@@ -183,6 +202,7 @@ defmodule Deft.Job.ForemanTest do
           config: %{},
           prompt: "test prompt",
           rate_limiter_pid: self(),
+          runner_supervisor: runner_supervisor,
           working_dir: tmp_dir
         )
 
@@ -207,7 +227,10 @@ defmodule Deft.Job.ForemanTest do
       Process.sleep(50)
     end
 
-    test "auto-promotes correction messages", %{tmp_dir: tmp_dir} do
+    test "auto-promotes correction messages", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
 
       {:ok, foreman_pid} =
@@ -216,6 +239,7 @@ defmodule Deft.Job.ForemanTest do
           config: %{},
           prompt: "test prompt",
           rate_limiter_pid: self(),
+          runner_supervisor: runner_supervisor,
           working_dir: tmp_dir
         )
 
@@ -240,7 +264,10 @@ defmodule Deft.Job.ForemanTest do
       Process.sleep(50)
     end
 
-    test "promotes finding messages only when tagged shared", %{tmp_dir: tmp_dir} do
+    test "promotes finding messages only when tagged shared", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
 
       {:ok, foreman_pid} =
@@ -249,6 +276,7 @@ defmodule Deft.Job.ForemanTest do
           config: %{},
           prompt: "test prompt",
           rate_limiter_pid: self(),
+          runner_supervisor: runner_supervisor,
           working_dir: tmp_dir
         )
 
@@ -286,7 +314,10 @@ defmodule Deft.Job.ForemanTest do
       Process.sleep(50)
     end
 
-    test "never promotes status messages", %{tmp_dir: tmp_dir} do
+    test "never promotes status messages", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
 
       {:ok, foreman_pid} =
@@ -295,6 +326,7 @@ defmodule Deft.Job.ForemanTest do
           config: %{},
           prompt: "test prompt",
           rate_limiter_pid: self(),
+          runner_supervisor: runner_supervisor,
           working_dir: tmp_dir
         )
 
@@ -319,7 +351,10 @@ defmodule Deft.Job.ForemanTest do
       Process.sleep(50)
     end
 
-    test "never promotes blocker messages", %{tmp_dir: tmp_dir} do
+    test "never promotes blocker messages", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
 
       {:ok, foreman_pid} =
@@ -328,6 +363,7 @@ defmodule Deft.Job.ForemanTest do
           config: %{},
           prompt: "test prompt",
           rate_limiter_pid: self(),
+          runner_supervisor: runner_supervisor,
           working_dir: tmp_dir
         )
 
@@ -354,7 +390,10 @@ defmodule Deft.Job.ForemanTest do
   end
 
   describe "Lead crash cleanup" do
-    test "cleans up worktree when Lead crashes", %{tmp_dir: tmp_dir} do
+    test "cleans up worktree when Lead crashes", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
       lead_id = "lead-1"
       worktree_path = "/tmp/test-worktree"
@@ -372,6 +411,7 @@ defmodule Deft.Job.ForemanTest do
           config: %{},
           prompt: "test prompt",
           rate_limiter_pid: self(),
+          runner_supervisor: runner_supervisor,
           working_dir: tmp_dir
         )
 
@@ -413,7 +453,10 @@ defmodule Deft.Job.ForemanTest do
       Process.sleep(50)
     end
 
-    test "handles worktree removal failure gracefully", %{tmp_dir: tmp_dir} do
+    test "handles worktree removal failure gracefully", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
       lead_id = "lead-2"
       worktree_path = "/tmp/test-worktree-fail"
@@ -431,6 +474,7 @@ defmodule Deft.Job.ForemanTest do
           config: %{},
           prompt: "test prompt",
           rate_limiter_pid: self(),
+          runner_supervisor: runner_supervisor,
           working_dir: tmp_dir
         )
 
@@ -474,7 +518,10 @@ defmodule Deft.Job.ForemanTest do
   end
 
   describe "research phase" do
-    test "enters researching phase after planning", %{tmp_dir: tmp_dir} do
+    test "enters researching phase after planning", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
 
       # Start Foreman
@@ -488,6 +535,7 @@ defmodule Deft.Job.ForemanTest do
           },
           prompt: "test prompt",
           rate_limiter_pid: self(),
+          runner_supervisor: runner_supervisor,
           working_dir: tmp_dir
         )
 
@@ -511,7 +559,10 @@ defmodule Deft.Job.ForemanTest do
       Process.sleep(50)
     end
 
-    test "spawns research runners in parallel", %{tmp_dir: tmp_dir} do
+    test "spawns research runners in parallel", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
 
       {:ok, foreman_pid} =
@@ -524,6 +575,7 @@ defmodule Deft.Job.ForemanTest do
           },
           prompt: "test prompt",
           rate_limiter_pid: self(),
+          runner_supervisor: runner_supervisor,
           working_dir: tmp_dir
         )
 
@@ -543,7 +595,10 @@ defmodule Deft.Job.ForemanTest do
       Process.sleep(50)
     end
 
-    test "collects research findings and transitions to decomposing", %{tmp_dir: tmp_dir} do
+    test "collects research findings and transitions to decomposing", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
 
       {:ok, foreman_pid} =
@@ -555,6 +610,7 @@ defmodule Deft.Job.ForemanTest do
           },
           prompt: "test prompt",
           rate_limiter_pid: self(),
+          runner_supervisor: runner_supervisor,
           working_dir: tmp_dir
         )
 
@@ -596,7 +652,7 @@ defmodule Deft.Job.ForemanTest do
       Process.sleep(50)
     end
 
-    test "handles research timeout", %{tmp_dir: tmp_dir} do
+    test "handles research timeout", %{tmp_dir: tmp_dir, runner_supervisor: runner_supervisor} do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
 
       {:ok, foreman_pid} =
@@ -609,6 +665,7 @@ defmodule Deft.Job.ForemanTest do
           },
           prompt: "test prompt",
           rate_limiter_pid: self(),
+          runner_supervisor: runner_supervisor,
           working_dir: tmp_dir
         )
 
@@ -654,7 +711,10 @@ defmodule Deft.Job.ForemanTest do
   end
 
   describe "decomposition phase" do
-    test "enters decomposition phase after research completes", %{tmp_dir: tmp_dir} do
+    test "enters decomposition phase after research completes", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
 
       {:ok, foreman_pid} =
@@ -663,6 +723,7 @@ defmodule Deft.Job.ForemanTest do
           config: %{},
           prompt: "test prompt",
           rate_limiter_pid: self(),
+          runner_supervisor: runner_supervisor,
           working_dir: tmp_dir
         )
 
@@ -687,7 +748,10 @@ defmodule Deft.Job.ForemanTest do
       Process.sleep(50)
     end
 
-    test "writes plan to site log on completion", %{tmp_dir: tmp_dir} do
+    test "writes plan to site log on completion", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
 
       {:ok, foreman_pid} =
@@ -696,6 +760,7 @@ defmodule Deft.Job.ForemanTest do
           config: %{auto_approve_all: false},
           prompt: "build a REST API",
           rate_limiter_pid: self(),
+          runner_supervisor: runner_supervisor,
           working_dir: tmp_dir
         )
 
@@ -734,7 +799,10 @@ defmodule Deft.Job.ForemanTest do
       Process.sleep(50)
     end
 
-    test "auto-approves plan when --auto-approve-all is set", %{tmp_dir: tmp_dir} do
+    test "auto-approves plan when --auto-approve-all is set", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
 
       {:ok, foreman_pid} =
@@ -743,6 +811,7 @@ defmodule Deft.Job.ForemanTest do
           config: %{auto_approve_all: true},
           prompt: "build a REST API",
           rate_limiter_pid: self(),
+          runner_supervisor: runner_supervisor,
           working_dir: tmp_dir
         )
 
@@ -810,7 +879,10 @@ defmodule Deft.Job.ForemanTest do
       Process.sleep(50)
     end
 
-    test "transitions to executing phase on user approval", %{tmp_dir: tmp_dir} do
+    test "transitions to executing phase on user approval", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
 
       {:ok, foreman_pid} =
@@ -819,6 +891,7 @@ defmodule Deft.Job.ForemanTest do
           config: %{auto_approve_all: false},
           prompt: "build a REST API",
           rate_limiter_pid: self(),
+          runner_supervisor: runner_supervisor,
           working_dir: tmp_dir
         )
 
@@ -846,7 +919,10 @@ defmodule Deft.Job.ForemanTest do
       Process.sleep(50)
     end
 
-    test "requests plan revision on user rejection", %{tmp_dir: tmp_dir} do
+    test "requests plan revision on user rejection", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
 
       {:ok, foreman_pid} =
@@ -855,6 +931,7 @@ defmodule Deft.Job.ForemanTest do
           config: %{auto_approve_all: false},
           prompt: "build a REST API",
           rate_limiter_pid: self(),
+          runner_supervisor: runner_supervisor,
           working_dir: tmp_dir
         )
 
