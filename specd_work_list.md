@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## observational-memory v0.3
-
-- Fix `calibrate_from_usage` to use `String.length` instead of `byte_size` (state.ex:1445): multi-byte characters (emoji priority markers 🔴🟡🟢 are 4 bytes each) inflate the calibration factor, causing threshold drift; `Tokens.estimate/2` was already fixed but the calibration path was missed
-
 ## orchestration v0.5
 
 - Fix Foreman `call_llm/1` to pass read-only tools to the provider (foreman.ex:1518): `tools = []` is hardcoded but `execute_tool/2` at line 1463 defines `[Read, Grep, Find, Ls]`; the LLM never generates tool calls because it receives no tool definitions; Foreman cannot read the codebase during planning or decomposition

@@ -1466,7 +1466,7 @@ defmodule Deft.OM.State do
   defp calibrate_from_usage(state, usage, content_text) do
     # Calibrate token estimation from provider usage data (spec section 7)
     if usage && usage.output_tokens > 0 do
-      actual_chars = byte_size(content_text)
+      actual_chars = String.length(content_text)
       actual_tokens = usage.output_tokens
       new_factor = Tokens.calibrate(state.calibration_factor, actual_chars, actual_tokens)
 
