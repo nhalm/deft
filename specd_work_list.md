@@ -16,3 +16,17 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
+
+## orchestration v0.3
+
+- Implement real tool execution in Lead `execute_tool/2` (lead.ex:694-698): delegate to `Deft.Tool.execute/3` with the Lead's `tool_context` instead of returning `"Tool result placeholder"`; Lead's LLM planning and verification turns currently get fake results for all Read/Grep/Find/Ls calls
+- Add `:contract` message sending logic to Lead: when a Runner completes work that satisfies a dependency interface, the Lead must send `{:lead_message, :contract, content, %{lead_id: data.lead_id}}` to the Foreman; currently no code path in lead.ex ever sends a `:contract` type message, making partial dependency unblocking (spec §3.3) dead code
+- Handle stream process DOWN in Lead and Foreman: add a handler for `{:DOWN, ref, :process, pid, reason}` where `ref == data.stream_monitor_ref`; on match, cancel streaming state, log error, and transition to `{current_phase, :idle}` with error handling; currently both Lead (lead.ex:542-548) and Foreman (foreman.ex:666-668) silently drop stream DOWN messages, causing permanent hang in `:calling`/`:streaming`
+- Handle verification Runner crash in Foreman: add a DOWN handler or task-ref-based crash handler for verification tasks stored in `data.tool_tasks`; currently if the verification Runner crashes, the `{:DOWN, ref, ...}` message hits the Lead crash handler (foreman.ex:654) which doesn't match and returns `:keep_state_and_data`; job hangs in `:verifying` permanently
+- Call `check_phase_transition` after Lead crash in Foreman DOWN handler (foreman.ex:680-686): after removing the crashed Lead from `data.leads`, check if `all_leads_complete?` is now true and transition to `:verifying` if so; currently returns `{:keep_state, data}` unconditionally, causing the job to hang in `:executing` if the last Lead crashes
+- Handle Lead start failure in Foreman `start_lead/2` (foreman.ex:2518-2525): when `LeadSupervisor.start_lead` or worktree creation fails, the deliverable name is never added to `started_leads`; `all_leads_complete?` requires `started_count == deliverables_count` which can never be satisfied; either add the deliverable to `started_leads` on failure (so the count matches) or use a different completion check that accounts for failed starts
+
+## issues v0.4
+
+- Add fallback clauses to `normalize_status/1` and `normalize_source/1` in Issue (issue.ex:134-142): unrecognized string values (e.g., from a bad git merge) raise `FunctionClauseError` which propagates through `decode/1` and crashes `Issues.init/1`; add `defp normalize_status(_), do: :open` and `defp normalize_source(_), do: :user` with a Logger.warning
+- Wire CLI plan approval flow for `deft work`: `wait_for_job_completion/2` (cli.ex:2136-2180) has no mechanism to detect when the Foreman is waiting for plan approval in `{:decomposing, :idle}` state; add a message-based protocol (e.g., Foreman sends `{:plan_approval_needed, plan}` to a registered CLI process) so the CLI can display the plan and call `Foreman.approve_plan/1`; without `--auto-approve-all`, the Foreman hangs in decomposing indefinitely
