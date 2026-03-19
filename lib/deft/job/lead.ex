@@ -1072,6 +1072,16 @@ defmodule Deft.Job.Lead do
   Returns: {:ok, task_ref, monitor_ref}
   """
   def spawn_runner(data, runner_type, task_description, instructions, context) do
+    # Build proper runner_config with provider module instead of string
+    provider_name = Map.get(data.config, :provider, "anthropic")
+    runner_model = Map.get(data.config, :job_runner_model, "claude-sonnet-4")
+
+    runner_config = %{
+      provider: get_provider(data),
+      provider_name: provider_name,
+      model: runner_model
+    }
+
     # Spawn Runner via async_nolink
     task =
       Task.Supervisor.async_nolink(data.runner_supervisor, fn ->
@@ -1080,7 +1090,7 @@ defmodule Deft.Job.Lead do
           instructions,
           context,
           data.session_id,
-          data.config,
+          runner_config,
           data.worktree_path
         )
       end)
