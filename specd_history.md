@@ -1,4 +1,5 @@
 # History
+- **observational-memory v0.3 (2026-03-19):** Fix `truncate_tool_result` guard to use `String.length` instead of `byte_size` (prompt.ex:279): multi-byte UTF-8 characters cause premature truncation; the guard `byte_size(content) > 2000` should be a character count check, matching the v0.3 spec clarification
 - **observational-memory v0.3 (2026-03-19):** Add `om_observer_temperature` and `om_reflector_temperature` fields to `Deft.Config` and wire through to Observer/Reflector (currently hardcoded to `0.0`)
 - **observational-memory v0.3 (2026-03-19):** Add `om_observer_provider` and `om_reflector_provider` fields to `Deft.Config` and wire through to Observer/Reflector (currently hardcoded to use main agent's `config.provider`)
 - **evals v0.3 (2026-03-19):** Restore eval test files: test/eval/ contains only results/ — all component eval test files (observer/, reflector/, actor/, foreman/, lead/, spilling/, skills/, issues/, e2e/), fixtures, and support modules are missing; previous restore (specd_history) regressed

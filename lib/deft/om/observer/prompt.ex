@@ -276,12 +276,14 @@ defmodule Deft.OM.Observer.Prompt do
     |> Enum.join(", ")
   end
 
-  defp truncate_tool_result(content) when byte_size(content) > 2000 do
-    # Truncate to ~500 chars (roughly 125 tokens) for very long tool results
-    String.slice(content, 0, 500) <> "\n[... truncated ...]"
+  defp truncate_tool_result(content) do
+    if is_binary(content) and String.length(content) > 2000 do
+      # Truncate to ~500 chars (roughly 125 tokens) for very long tool results
+      String.slice(content, 0, 500) <> "\n[... truncated ...]"
+    else
+      content
+    end
   end
-
-  defp truncate_tool_result(content), do: content
 
   @doc """
   Truncates observations to fit within the token budget for the Observer input.
