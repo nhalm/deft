@@ -2,11 +2,14 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.3 |
+| Version | 0.4 |
 | Status | Ready |
 | Last Updated | 2026-03-19 |
 
 ## Changelog
+
+### v0.4 (2026-03-19)
+- Fixed: Compression quality threshold now 90% per detailed Reflector spec (not 80%)
 
 ### v0.3 (2026-03-19)
 - Clarified: safety eval hard-fail gate must actually parse test output and enforce 90% threshold (not a TODO stub)
@@ -182,7 +185,7 @@ Holdout fixtures are tagged `@tag :holdout` in tests. The `make test.eval` targe
 |----------|-----------|-----------|------|
 | Safety (hallucination, PII) | 20 | 95% | Statistical |
 | Extraction accuracy | 20 | 85% | Statistical |
-| Compression quality | 20 | 80% | Statistical |
+| Compression quality | 20 | 90% | Statistical |
 | Decomposition quality | 20 | 75% | Statistical |
 | Steering quality | 20 | 75% | Statistical |
 | Skill auto-selection | 20 | 80% | Statistical |
