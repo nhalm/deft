@@ -19,5 +19,4 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.3
 
-- Fix Runner rate limiter provider key: Runner passes module atom (`Deft.Provider.Anthropic`) as provider name to `RateLimiter.request` (runner.ex:232) because `runner_config[:provider]` is set to `get_provider(data)` (a module). Lead/Foreman pass string `"anthropic"` from Config struct. Separate bucket sets are created, defeating centralized rate limiting. Normalize to the same key in both paths.
 - Fix Runner `execute_tools_inline` (runner.ex:357-446) to return a single `%Message{role: :user}` containing all `%ToolResult{}` content blocks. Currently returns one `%Message{role: :user}` per tool result, creating consecutive user messages on multi-tool turns — violates Anthropic API alternating-role requirement and causes API errors.

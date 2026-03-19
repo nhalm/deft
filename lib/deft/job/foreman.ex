@@ -312,8 +312,11 @@ defmodule Deft.Job.Foreman do
                   Map.get(data.config, :job_lead_model)
                 )
 
+              provider_name = Map.get(data.config, :provider, "anthropic")
+
               runner_config = %{
                 provider: get_provider(data),
+                provider_name: provider_name,
                 model: research_model
               }
 
@@ -530,8 +533,11 @@ defmodule Deft.Job.Foreman do
     Test command: #{test_command}
     """
 
+    provider_name = Map.get(data.config, :provider, "anthropic")
+
     runner_config = %{
       provider: get_provider(data),
+      provider_name: provider_name,
       model: runner_model
     }
 
@@ -1776,8 +1782,11 @@ defmodule Deft.Job.Foreman do
     # Get runner model from config
     runner_model = Map.get(data.config, :job_runner_model, Map.get(data.config, :job_lead_model))
 
+    provider_name = Map.get(data.config, :provider, "anthropic")
+
     runner_config = %{
       provider: get_provider(data),
+      provider_name: provider_name,
       model: runner_model
     }
 

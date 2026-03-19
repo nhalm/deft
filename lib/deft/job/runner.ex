@@ -229,7 +229,7 @@ defmodule Deft.Job.Runner do
 
   # Request permission from rate limiter to make LLM call
   defp request_llm_call(job_id, messages, _tools, _provider, config) do
-    provider_name = Map.get(config, :provider, "anthropic")
+    provider_name = Map.get(config, :provider_name, "anthropic")
 
     case RateLimiter.request(job_id, provider_name, messages, :runner) do
       {:ok, estimated_tokens} -> {:ok, estimated_tokens}
