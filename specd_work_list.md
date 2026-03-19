@@ -17,7 +17,3 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## filesystem v0.3
-
-- Use `File.realpath/1` (or `:file.read_link_all/1`) instead of `Path.expand/1` in `resolve_real_path` (project.ex:126-128): `Path.expand/1` normalizes `~` and relative paths but does not resolve symlinks; two symlinked paths to the same repo produce different encoded project directories, siloing sessions and cache
-

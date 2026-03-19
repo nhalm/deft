@@ -124,7 +124,12 @@ defmodule Deft.Project do
 
   # Resolve symlinks to real path
   defp resolve_real_path(path) do
-    Path.expand(path)
+    abs_path = Path.expand(path)
+
+    case :file.read_link_all(String.to_charlist(abs_path)) do
+      {:ok, real_path_charlist} -> List.to_string(real_path_charlist)
+      {:error, _} -> abs_path
+    end
   end
 
   # Resolve to git repository root if inside a git repo
