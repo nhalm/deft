@@ -12,6 +12,7 @@ defmodule Deft.Tools.IssueCreate do
 
   @behaviour Deft.Tool
 
+  alias Deft.Config
   alias Deft.Issues
   alias Deft.Message.Text
   alias Deft.Tool.Context
@@ -170,7 +171,11 @@ defmodule Deft.Tools.IssueCreate do
     case Process.whereis(Issues) do
       nil ->
         # Not running, start it
-        case Issues.start_link() do
+        # Load config to get compaction_days setting
+        working_dir = File.cwd!()
+        config = Config.load(%{}, working_dir)
+
+        case Issues.start_link(compaction_days: config.issues_compaction_days) do
           {:ok, _pid} ->
             Logger.debug("Started Issues GenServer from issue_create tool")
             :ok
