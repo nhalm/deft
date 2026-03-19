@@ -2355,7 +2355,7 @@ defmodule Deft.Job.Foreman do
     )
 
     # Retry the merge now that conflicts are resolved
-    new_data = handle_lead_merge_with_retry(lead_id, lead_info, data, retry_count)
+    new_data = handle_lead_merge_with_retry(lead_id, lead_info, data, retry_count + 1)
 
     # Check if all Leads are complete after merge
     transition_or_keep_state(new_data, :complete, :executing)

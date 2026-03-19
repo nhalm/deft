@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.5
 
-- Fix merge-resolution retry counter to increment on each attempt (foreman.ex:2358): `handle_merge_retry_attempt` passes `retry_count` unchanged to `handle_lead_merge_with_retry`; should pass `retry_count + 1`; the retry cap of 3 is never enforced, allowing infinite merge-resolution loops
 - Add `terminate/3` callback to Foreman for DETS cleanup (foreman.ex): in isolated startup (test, resume), the Foreman starts the site log Store directly without a supervisor; on Foreman exit, the Store is never stopped and the DETS file is not flushed; risk of DETS corruption on abnormal exit
 
 ## git-strategy v0.2
