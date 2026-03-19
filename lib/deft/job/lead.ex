@@ -731,18 +731,22 @@ defmodule Deft.Job.Lead do
     tool_map = Map.new(tools, fn tool_module -> {tool_module.name(), tool_module} end)
 
     # Look up the tool module and execute
-    case Map.get(tool_map, tool_call.name) do
-      nil ->
-        {:error, "Tool '#{tool_call.name}' not found"}
+    result =
+      case Map.get(tool_map, tool_call.name) do
+        nil ->
+          {:error, "Tool '#{tool_call.name}' not found"}
 
-      tool_module ->
-        try do
-          tool_module.execute(tool_call.args, tool_context)
-        rescue
-          exception ->
-            {:error, "Tool execution error: #{Exception.message(exception)}"}
-        end
-    end
+        tool_module ->
+          try do
+            tool_module.execute(tool_call.args, tool_context)
+          rescue
+            exception ->
+              {:error, "Tool execution error: #{Exception.message(exception)}"}
+          end
+      end
+
+    # Return tuple of {tool_call.id, result} for build_tool_result_blocks
+    {tool_call.id, result}
   end
 
   defp build_tool_context(data) do

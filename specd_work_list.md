@@ -19,5 +19,4 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.4
 
-- Fix Lead `execute_tool/2` to return `{tool_call.id, result}` tuple instead of bare `{:ok, content}` or `{:error, reason}`: `build_tool_result_blocks/2` (lead.ex:1004) pattern-matches `{tool_use_id, tool_result}` but `execute_tool` returns `{:ok, content}`, so `:ok` becomes the `tool_use_id` in the ToolResult block; Anthropic API rejects the malformed tool results, breaking the Lead's tool execution cycle
 - Fix Foreman lead message handler to transition to `{new_phase, :idle}` instead of `{new_phase, agent_state}`: foreman.ex:653 preserves the current `agent_state` on phase transition, but the `:verifying` enter handler (foreman.ex:388) and `:start_verification` cast handler (foreman.ex:505) only match `{:verifying, :idle}`; if the last Lead completes while Foreman is in `:calling`/`:streaming`, verification never starts and the job hangs
