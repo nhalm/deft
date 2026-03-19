@@ -502,7 +502,7 @@ defmodule Deft.Job.Lead do
         Process.demonitor(runner_info.monitor_ref, [:flush])
 
         # Kill the runner task
-        Task.Supervisor.terminate_child(data.runner_supervisor, task_ref)
+        Task.Supervisor.terminate_child(data.runner_supervisor, runner_info.pid)
 
         # Remove timed-out runner from tracking
         runner_tasks = Map.delete(runner_tasks, task_ref)
@@ -780,6 +780,7 @@ defmodule Deft.Job.Lead do
     runner_info = %{
       task_description: task_description,
       runner_type: runner_type,
+      pid: task.pid,
       monitor_ref: monitor_ref,
       timeout_ref: timeout_ref,
       started_at: System.monotonic_time(:millisecond)

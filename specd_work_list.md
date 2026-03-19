@@ -19,8 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.3
 
-- Fix `Task.Supervisor.terminate_child` call in Lead runner timeout handler (lead.ex:505): passes `task_ref` (a reference) but the function expects a PID; runner processes are never killed on timeout
-- Store `task.pid` in `runner_info` map in `spawn_runner` (lead.ex:780-786): PID is needed for `terminate_child` but is not saved; only `monitor_ref` and `timeout_ref` are stored
 - Change verification Runner type from `:review` to `:testing` (foreman.ex:511): `:review` type has no `bash` tool so the verification Runner cannot execute the test suite; spec requires full test suite execution
 - Give Lead non-empty tools list or implement site log reading via context injection (lead.ex:698-699): Lead passes `tools = []` to every LLM call, preventing it from reading the codebase or site log during planning
 - Fix `analyze_verification_results` to unwrap Runner `{:ok, output}` tuple (foreman.ex:2523-2544): Runner.run returns `{:ok, string}` but the function pattern-matches against maps and binaries; the tuple falls through to catch-all `_ -> false`, so verification always reports failure
