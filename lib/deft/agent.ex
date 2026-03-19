@@ -293,7 +293,8 @@ defmodule Deft.Agent do
             current_message: nil,
             tool_call_buffers: %{},
             retry_count: 0,
-            retry_delay: 1000
+            retry_delay: 1000,
+            turn_count: 1
         }
 
         broadcast_event(data.session_id, {:state_change, :calling})

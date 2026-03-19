@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## harness v0.2
-
-- Fix `inject_skill` handler to set `turn_count: 1` on transition to `:calling` (agent.ex:289-296): the regular prompt path sets `turn_count: 1` at line 235, but `inject_skill` in `:idle` state never sets it; skill-triggered conversations get one extra turn before the limit fires
-
 ## tools v0.2
 
 - Fix bash tool to stream-truncate output instead of buffering all in memory (bash.ex:112-137): `collect_output/6` accumulates entire output via `new_acc = acc <> data` before truncation; a command producing hundreds of MB will OOM the agent process; should truncate during collection or stream only to the temp file and read back the tail
