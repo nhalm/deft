@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## tools v0.2
-
-- Fix find tool `fd` exit code 1 handling (find.ex:96-98): `fd` v8+ uses exit code 0 for success (including zero results) and exit code 1 for errors; current code treats exit code 1 as "no results", silently swallowing real errors (bad patterns, invalid paths); check `fd` version or treat exit code 1 as an error
-
 ## tui v0.2
 
 - Add catch-all error branch in `handle_slash_command` (chat.ex:785-817): `SlashCommand.dispatch/1` can return `{:error, reason, name}` for I/O errors (e.g., permission denied reading skill file); the `case` only handles `:not_found` and `:no_definition`, so I/O errors raise `CaseClauseError` and crash the Breeze view

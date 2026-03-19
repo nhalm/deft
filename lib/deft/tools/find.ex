@@ -89,16 +89,17 @@ defmodule Deft.Tools.Find do
 
     case System.cmd("fd", args, stderr_to_stdout: true) do
       {output, 0} ->
-        # Found matches
+        # Success (fd v8+ uses exit code 0 for success including zero results)
         files = String.split(output, "\n", trim: true)
-        {:ok, [%Text{text: format_output(files, pattern)}]}
 
-      {_output, 1} ->
-        # No matches found (fd uses exit code 1 for no results in some versions)
-        {:ok, [%Text{text: "No files found matching pattern: #{pattern}"}]}
+        if Enum.empty?(files) do
+          {:ok, [%Text{text: "No files found matching pattern: #{pattern}"}]}
+        else
+          {:ok, [%Text{text: format_output(files, pattern)}]}
+        end
 
-      {output, _} ->
-        # Error occurred
+      {output, _exit_code} ->
+        # Error occurred (fd v8+ uses exit code 1 for errors: bad patterns, invalid paths, etc.)
         {:error, "fd error: #{String.trim(output)}"}
     end
   end
