@@ -541,7 +541,7 @@ defmodule Deft.Job.Foreman do
     cleanup_all_lead_worktrees(data)
 
     # Delete job branch unless configured to keep it
-    unless data.config.job_keep_failed_branches do
+    unless Map.get(data.config, :job_keep_failed_branches, false) do
       delete_job_branch_on_failure(data.session_id, data.working_dir)
     end
 
@@ -931,7 +931,7 @@ defmodule Deft.Job.Foreman do
       cleanup_all_lead_worktrees(data)
 
       # Delete job branch unless configured to keep it
-      keep_branch = data.config.job_keep_failed_branches
+      keep_branch = Map.get(data.config, :job_keep_failed_branches, false)
 
       unless keep_branch do
         delete_job_branch_on_failure(data.session_id, data.working_dir)

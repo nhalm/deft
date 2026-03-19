@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## git-strategy v0.1
 
-- Fix `data.config.job_keep_failed_branches` KeyError crash: Foreman accesses `data.config.job_keep_failed_branches` at foreman.ex:545 and foreman.ex:934; `data.config` is a plain map (built at cli.ex:2056-2066) that does not include `job_keep_failed_branches`; plain-map dot access on a missing key raises `KeyError`; Foreman crashes on every abort or verification failure
 - Fix orphan cleanup to parse job_id from lead branch names: `branch_belongs_to_running_job?` (git/job.ex:700-703) preserves ALL `deft/lead-*` branches when any job is running; lead branch names contain the job_id (`deft/lead-<job_id>-<deliverable>`); should extract job_id prefix and check against `running_job_ids` so orphaned lead branches from prior crashed jobs are cleaned up
 
 ## issues v0.3
