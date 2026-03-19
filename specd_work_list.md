@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## harness v0.2
-
-- Fix turn counter off-by-one (agent.ex:1430): the initial prompt-triggered LLM call is never counted in `turn_count` (only incremented in `continue_after_tools`); with `max_turns: 25`, 26 LLM calls happen; either increment `turn_count` on the initial call or start `turn_count` at 1 when entering `:calling`
-
 ## observational-memory v0.3
 
 - Fix `Tokens.estimate/2` to use `String.length` instead of `byte_size` (tokens.ex:26): `byte_size` returns bytes not characters; multi-byte UTF-8 characters (emoji priority markers 🔴🟡🟢 are 4 bytes each) inflate token estimates by up to 4x; causes observation/reflection cycles to trigger prematurely

@@ -232,7 +232,7 @@ defmodule Deft.Agent do
             stream_monitor_ref: monitor_ref,
             retry_count: 0,
             retry_delay: 1000,
-            turn_count: 0
+            turn_count: 1
         }
 
         {:next_state, :calling, new_data}
@@ -1045,7 +1045,7 @@ defmodule Deft.Agent do
             stream_monitor_ref: monitor_ref,
             retry_count: 0,
             retry_delay: 1000,
-            turn_count: 0
+            turn_count: 1
         }
 
         broadcast_event(compacted_data.session_id, {:state_change, :calling})
@@ -1436,7 +1436,7 @@ defmodule Deft.Agent do
     # Check turn limit (default: 25)
     max_turns = Map.get(data.config, :max_turns, 25)
 
-    if new_turn_count >= max_turns do
+    if new_turn_count > max_turns do
       # Turn limit reached - pause and ask user to continue
       broadcast_event(data.session_id, {:turn_limit_reached, new_turn_count, max_turns})
       # Stay in :executing_tools state and wait for user response via continue_turn/2
