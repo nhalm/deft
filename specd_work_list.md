@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## evals v0.2
 
-- Implement issues eval suite: elicitation quality (20 iters, 80%), agent-created quality (20 iters, 80%)
 - Implement Foreman eval suite: decomposition (20 iters, 75%), dependency, contract, constraint propagation, verification accuracy
 - Implement Lead eval suite: task planning, steering
 - Implement issue→plan diagnostic eval: verify that structured issue fields (context, acceptance_criteria, constraints) flow correctly into Foreman research/planning/verification phases; 20 iterations, 75% pass rate
