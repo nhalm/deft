@@ -32,7 +32,6 @@ defmodule Deft.Job.Foreman do
   @behaviour :gen_statem
 
   alias Deft.Message
-  alias Deft.Session.Worker, as: SessionWorker
   alias Deft.Store
   alias Deft.Project
   alias Deft.Git
@@ -371,7 +370,7 @@ defmodule Deft.Job.Foreman do
       tasks =
         Enum.map(tool_calls, fn tool_call ->
           Task.Supervisor.async_nolink(
-            SessionWorker.tool_runner_via_tuple(data.session_id),
+            data.runner_supervisor,
             fn ->
               execute_tool(tool_call, data)
             end

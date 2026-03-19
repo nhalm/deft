@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.3
 
-- Fix Foreman `executing_tools` handler to use `data.runner_supervisor` instead of `SessionWorker.tool_runner_via_tuple(data.session_id)` (foreman.ex:374): the SessionWorker ToolRunner is not started for job sessions; `Task.Supervisor.async_nolink` raises when the via-tuple resolves to no registered process; Foreman crashes whenever it tries to execute tools
 - Fix `determine_completed_deliverables` to return `deliverable.name` not raw site log metadata: on resume, `determine_completed_deliverables` (foreman.ex:2703) returns `get_in(entry, [:metadata, :deliverable])` which is the description string (set at lead.ex:890 from `data.deliverable`, which is `deliverable.description` per foreman.ex:2241); `get_ready_deliverables` (foreman.ex:2209) checks `MapSet.member?(data.started_leads, deliverable.name)` using the short name; description strings never match short names, so all deliverables are re-executed on resume
 
 ## git-strategy v0.1
