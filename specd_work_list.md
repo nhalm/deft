@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## evals v0.4
 
-- Fix `scoring.ex` compile path: `test/eval/support/scoring.ex` is not under `elixirc_paths(:test)` (`["lib", "test/support"]`); `Deft.Eval.Scoring` will not be compiled; either move to `test/support/eval/scoring.ex` or add `"test/eval/support"` to `elixirc_paths`
 - Rewrite `cache_retrieval_test.exs` helper functions (lines 171-208) to actually test agent behavior: `agent_retrieves_cache?/3`, `agent_retrieves_cache_with_filter?/4`, and `agent_retrieves_cache_with_grep_filter?/4` are tautologies that check fixture string patterns (never start an agent); always return true giving 100% pass rate regardless of actual agent behavior (blocked: agent loop testability)
 
 ## evals v0.3
