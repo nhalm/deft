@@ -80,7 +80,7 @@ Decision reasoning is logged in [specd_decisions.jsonl](../specd_decisions.jsonl
 
 | Spec | Version | Status | Description |
 |------|---------|--------|-------------|
-| [filesystem](filesystem.md) | v0.3 | Ready | Deft.Store GenServer — ETS+DETS for cache and site log, cache_read tool, per-tool spilling thresholds |
+| [filesystem](filesystem.md) | v0.3 | Implemented | Deft.Store GenServer — ETS+DETS for cache and site log, cache_read tool, per-tool spilling thresholds |
 | [skills](skills.md) | v0.3 | Implemented | Skills (agent-selected YAML) and commands (markdown prompts), three-level cascade |
 | [issues](issues.md) | v0.2 | Ready | Persistent issue tracker — JSONL+git, interactive creation, approve-every-plan `deft work` loop |
 

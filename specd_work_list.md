@@ -17,3 +17,22 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
+## orchestration v0.3
+
+- Pass `foreman_pid` to RateLimiter in `Job.Supervisor.init/1` (supervisor.ex:74): RateLimiter is started with only `[job_id: job_id]`, so `foreman_pid` defaults to `nil` and all cost-reporting functions no-op; Foreman never receives cost messages
+- Fix `Task.Supervisor.terminate_child` call in Lead runner timeout handler (lead.ex:505): passes `task_ref` (a reference) but the function expects a PID; runner processes are never killed on timeout
+- Store `task.pid` in `runner_info` map in `spawn_runner` (lead.ex:780-786): PID is needed for `terminate_child` but is not saved; only `monitor_ref` and `timeout_ref` are stored
+- Change verification Runner type from `:review` to `:testing` (foreman.ex:511): `:review` type has no `bash` tool so the verification Runner cannot execute the test suite; spec requires full test suite execution
+- Give Lead non-empty tools list or implement site log reading via context injection (lead.ex:698-699): Lead passes `tools = []` to every LLM call, preventing it from reading the codebase or site log during planning
+- Fix `analyze_verification_results` to unwrap Runner `{:ok, output}` tuple (foreman.ex:2523-2544): Runner.run returns `{:ok, string}` but the function pattern-matches against maps and binaries; the tuple falls through to catch-all `_ -> false`, so verification always reports failure
+- Spawn Foreman research/verification/merge-resolution Runners under the job supervision tree instead of `SessionWorker.tool_runner_via_tuple` (foreman.ex:508,1436): Runners on the session supervisor are not terminated when the job is aborted, causing orphaned LLM calls
+
+## git-strategy v0.1
+
+- Preserve merge-conflict temp worktree until merge-resolution Runner completes (git/job.ex:334): `cleanup_merge_worktree` runs unconditionally before `merge_lead_branch` returns `{:ok, :conflict, ...}`; the Foreman spawns a merge-resolution Runner pointing at `lead_info.worktree_path` which has no conflict markers; conflicts can never be resolved
+- Add running-job check to `find_orphaned_branches` in orphan cleanup (git/job.ex:651-667): returns all `deft/*` branches unconditionally; if `cleanup_orphans` runs during an active job, it deletes branches belonging to the live job
+
+## issues v0.2
+
+- Send structured JSON to Foreman instead of Markdown in `build_issue_prompt` (cli.ex:2108-2121): spec section 6.1 requires structured JSON with `id`, `title`, `priority`, `context`, `acceptance_criteria`, `constraints`; code builds freeform Markdown text; `id` and `priority` are omitted entirely; Foreman cannot programmatically use `acceptance_criteria` as verification targets
+- Remove duplicate prompt send in `run_work_on_issue` (cli.ex:2069,2081 + foreman.ex:267): `Foreman.start_link` stores prompt in initial data, and the `:enter` handler for `{:planning, :idle}` casts `{:prompt, data.prompt}` to self; then `Foreman.prompt(foreman_pid, issue_prompt)` sends it again; Foreman receives the same task description twice
