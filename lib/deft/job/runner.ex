@@ -314,8 +314,19 @@ defmodule Deft.Job.Runner do
         end
 
       {:provider_event, %Usage{input: input_tokens, output: output_tokens}} ->
-        # Capture usage for reconciliation
-        new_usage = %{input: input_tokens, output: output_tokens}
+        # Accumulate usage across multiple events (message_start has input only, message_delta has output only)
+        new_usage =
+          case usage do
+            nil ->
+              %{input: input_tokens, output: output_tokens}
+
+            existing ->
+              %{
+                input: existing.input + input_tokens,
+                output: existing.output + output_tokens
+              }
+          end
+
         collect_loop(stream_ref, current_message, tool_call_buffers, new_usage, timeout)
 
       {:provider_event, %Done{}} ->

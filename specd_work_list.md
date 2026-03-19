@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## providers v0.3
-
-- Fix Runner `collect_loop` to accumulate Usage events instead of replacing (runner.ex:316-319): `new_usage = %{input: input_tokens, output: output_tokens}` replaces previous usage; Anthropic sends `message_start` (input only) then `message_delta` (output only) as separate events; final usage has `input: 0`, causing `RateLimiter.reconcile` to credit back full estimated tokens and cost tracking to report $0 input cost; must sum token counts across all Usage events
-
 ## tools v0.2
 
 - Fix edit tool `find_changes` to use a real diff algorithm (edit.ex:295-324): current positional line comparison produces wrong diffs when edits insert or delete lines — all subsequent lines appear as delete+add pairs even when identical; implement LCS or Myers diff to produce correct unified diff output
