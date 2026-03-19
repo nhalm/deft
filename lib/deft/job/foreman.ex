@@ -88,7 +88,8 @@ defmodule Deft.Job.Foreman do
       plan: nil,
       blocked_leads: %{},
       started_leads: MapSet.new(),
-      cost_ceiling_reached: false
+      cost_ceiling_reached: false,
+      decisions: []
     }
 
     gen_statem_opts = if name, do: [name: name], else: []
@@ -672,10 +673,43 @@ defmodule Deft.Job.Foreman do
   end
 
   defp process_lead_message(:decision, content, metadata, data) do
-    Logger.info("Lead decision: #{content}")
+    lead_id = Map.get(metadata, :lead_id)
+    Logger.info("Lead #{lead_id} decision: #{content}")
+
     # Auto-promote to site log
     write_to_site_log(:decision, content, metadata, data)
-    data
+
+    # Record decision with timestamp
+    decision = %{
+      lead_id: lead_id,
+      content: content,
+      metadata: metadata,
+      timestamp: DateTime.utc_now()
+    }
+
+    decisions = [decision | data.decisions]
+
+    # Detect conflicts with recent decisions from other Leads
+    conflicts = detect_decision_conflicts(decision, data.decisions, data.leads)
+
+    if Enum.empty?(conflicts) do
+      # No conflicts, store decision and continue
+      %{data | decisions: decisions}
+    else
+      # Conflict detected
+      Logger.warning(
+        "Decision conflict detected for Lead #{lead_id} with Leads: #{inspect(Enum.map(conflicts, & &1.lead_id))}"
+      )
+
+      # Pause all affected Leads (conflicting Lead + current Lead)
+      affected_lead_ids = [lead_id | Enum.map(conflicts, & &1.lead_id)] |> Enum.uniq()
+      data = pause_leads(affected_lead_ids, data)
+
+      # Resolve conflict or escalate to user
+      data = resolve_conflict(decision, conflicts, affected_lead_ids, data)
+
+      %{data | decisions: decisions}
+    end
   end
 
   defp process_lead_message(:contract, content, metadata, data) do
@@ -1695,5 +1729,217 @@ defmodule Deft.Job.Foreman do
           false
       end
     end)
+  end
+
+  # Detect conflicts between a new decision and existing decisions from other Leads
+  defp detect_decision_conflicts(new_decision, existing_decisions, leads) do
+    # Only compare with decisions from other Leads that are still running
+    active_lead_ids = leads |> Map.keys() |> MapSet.new()
+
+    # Filter to decisions from other active Leads made in the last 5 minutes
+    cutoff_time = DateTime.add(DateTime.utc_now(), -300, :second)
+
+    recent_decisions =
+      existing_decisions
+      |> Enum.filter(fn d ->
+        d.lead_id != new_decision.lead_id and
+          d.lead_id in active_lead_ids and
+          DateTime.compare(d.timestamp, cutoff_time) == :gt
+      end)
+
+    # Check for conflicts using heuristics
+    Enum.filter(recent_decisions, fn existing_decision ->
+      decisions_conflict?(new_decision, existing_decision)
+    end)
+  end
+
+  # Determine if two decisions conflict
+  defp decisions_conflict?(decision1, decision2) do
+    content1 = String.downcase(decision1.content)
+    content2 = String.downcase(decision2.content)
+
+    # Extract file paths from both decisions
+    files1 = extract_file_paths(content1)
+    files2 = extract_file_paths(content2)
+
+    # Check if they mention the same files
+    file_overlap = MapSet.intersection(files1, files2) |> MapSet.size() > 0
+
+    # Check for contradictory keywords
+    contradictory = has_contradictory_keywords?(content1, content2)
+
+    file_overlap or contradictory
+  end
+
+  # Extract file paths from decision content
+  defp extract_file_paths(content) do
+    # Match common file path patterns: lib/foo/bar.ex, src/file.js, etc.
+    ~r/\b\w+\/[\w\/]+\.\w+\b/
+    |> Regex.scan(content)
+    |> Enum.map(fn [match] -> match end)
+    |> MapSet.new()
+  end
+
+  # Check for contradictory keywords between two decision contents
+  defp has_contradictory_keywords?(content1, content2) do
+    # Extract libraries/technologies mentioned with action verbs
+    use_in_1 = extract_keywords(content1, ~r/\buse\s+(\w+)/i)
+    use_in_2 = extract_keywords(content2, ~r/\buse\s+(\w+)/i)
+    avoid_in_1 = extract_keywords(content1, ~r/\bavoid\s+(\w+)/i)
+    avoid_in_2 = extract_keywords(content2, ~r/\bavoid\s+(\w+)/i)
+    not_use_in_1 = extract_keywords(content1, ~r/\bnot\s+use\s+(\w+)/i)
+    not_use_in_2 = extract_keywords(content2, ~r/\bnot\s+use\s+(\w+)/i)
+
+    # Check if one Lead wants to use something the other wants to avoid
+    use_avoid_conflict =
+      not MapSet.disjoint?(use_in_1, avoid_in_2) or
+        not MapSet.disjoint?(use_in_2, avoid_in_1) or
+        not MapSet.disjoint?(use_in_1, not_use_in_2) or
+        not MapSet.disjoint?(use_in_2, not_use_in_1)
+
+    # Check for add/remove conflicts
+    add_in_1 = extract_keywords(content1, ~r/\badd\s+(\w+)/i)
+    add_in_2 = extract_keywords(content2, ~r/\badd\s+(\w+)/i)
+    remove_in_1 = extract_keywords(content1, ~r/\bremove\s+(\w+)/i)
+    remove_in_2 = extract_keywords(content2, ~r/\bremove\s+(\w+)/i)
+
+    add_remove_conflict =
+      not MapSet.disjoint?(add_in_1, remove_in_2) or
+        not MapSet.disjoint?(add_in_2, remove_in_1)
+
+    use_avoid_conflict or add_remove_conflict
+  end
+
+  # Extract keywords from content using a regex pattern with one capture group
+  defp extract_keywords(content, pattern) do
+    pattern
+    |> Regex.scan(content)
+    |> Enum.map(fn [_full, keyword] -> String.downcase(keyword) end)
+    |> MapSet.new()
+  end
+
+  # Pause affected Leads by updating their status and sending steering messages
+  defp pause_leads(lead_ids, data) do
+    Enum.reduce(lead_ids, data, fn lead_id, acc_data ->
+      case Map.get(acc_data.leads, lead_id) do
+        nil ->
+          Logger.warning("Cannot pause Lead #{lead_id} - not found")
+          acc_data
+
+        lead_info ->
+          # Update Lead status to paused
+          updated_lead_info = %{lead_info | status: :paused}
+          updated_leads = Map.put(acc_data.leads, lead_id, updated_lead_info)
+
+          # Send steering message to pause the Lead
+          send(lead_info.pid, {:foreman_steering, build_pause_message()})
+
+          Logger.info("Paused Lead #{lead_id} due to decision conflict")
+
+          %{acc_data | leads: updated_leads}
+      end
+    end)
+  end
+
+  # Build a pause message for steering
+  defp build_pause_message do
+    """
+    DECISION CONFLICT DETECTED
+
+    Your recent decision conflicts with a decision from another parallel Lead.
+    Please pause your work while the Foreman resolves this conflict.
+
+    You will receive further instructions shortly.
+    """
+  end
+
+  # Resolve a decision conflict or escalate to user
+  defp resolve_conflict(new_decision, conflicting_decisions, affected_lead_ids, data) do
+    # For now, log the conflict details and escalate to user
+    # In a future enhancement, this could use an LLM to attempt automatic resolution
+
+    conflict_summary =
+      build_conflict_summary(new_decision, conflicting_decisions, affected_lead_ids)
+
+    Logger.warning("Decision conflict requiring resolution:\n#{conflict_summary}")
+
+    # Store conflict for user to review
+    # For MVP, send steering to affected Leads asking them to coordinate
+    Enum.each(affected_lead_ids, fn lead_id ->
+      case Map.get(data.leads, lead_id) do
+        nil ->
+          :ok
+
+        lead_info ->
+          steering_content =
+            build_conflict_resolution_message(
+              lead_id,
+              new_decision,
+              conflicting_decisions,
+              affected_lead_ids
+            )
+
+          send(lead_info.pid, {:foreman_steering, steering_content})
+      end
+    end)
+
+    data
+  end
+
+  # Build a summary of the conflict for logging
+  defp build_conflict_summary(new_decision, conflicting_decisions, affected_lead_ids) do
+    """
+    Affected Leads: #{Enum.join(affected_lead_ids, ", ")}
+
+    New decision from #{new_decision.lead_id}:
+    #{new_decision.content}
+
+    Conflicting with:
+    #{Enum.map_join(conflicting_decisions, "\n", fn d -> "- #{d.lead_id}: #{d.content}" end)}
+    """
+  end
+
+  # Build a steering message for conflict resolution
+  defp build_conflict_resolution_message(
+         lead_id,
+         new_decision,
+         conflicting_decisions,
+         affected_lead_ids
+       ) do
+    other_leads = Enum.reject(affected_lead_ids, &(&1 == lead_id))
+
+    """
+    DECISION CONFLICT RESOLUTION NEEDED
+
+    Your deliverable has a decision that conflicts with decision(s) from parallel Lead(s): #{Enum.join(other_leads, ", ")}
+
+    Your decision:
+    #{if(lead_id == new_decision.lead_id, do: new_decision.content, else: "See site log for details")}
+
+    Conflicting decisions:
+    #{Enum.map_join(conflicting_decisions, "\n", fn d -> if d.lead_id == lead_id do
+        "Your decision: #{d.content}"
+      else
+        "#{d.lead_id}: #{d.content}"
+      end end)}
+
+    #{if lead_id == new_decision.lead_id do
+      """
+
+      Since this is a new conflict involving your recent decision, please review the conflicting
+      decisions above and either:
+      1. Revise your approach to align with the other Lead's decision
+      2. Justify why your approach is correct and should take precedence
+
+      Respond with your resolution plan.
+      """
+    else
+      """
+
+      Please review this conflict and coordinate with the other Lead(s). Check the site log
+      for full context of all decisions. Respond with your resolution plan.
+      """
+    end}
+    """
   end
 end
