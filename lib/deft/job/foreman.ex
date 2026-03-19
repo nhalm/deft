@@ -807,7 +807,8 @@ defmodule Deft.Job.Foreman do
           {:ok, _output} ->
             Logger.info("Merge-resolution Runner succeeded for Lead #{lead_id}, retrying merge")
             # Retry the merge now that conflicts are resolved
-            handle_lead_merge(lead_id, lead_info, data)
+            new_data = handle_lead_merge(lead_id, lead_info, data)
+            {:keep_state, new_data}
 
           {:error, reason} ->
             Logger.error("Merge-resolution Runner failed for Lead #{lead_id}: #{inspect(reason)}")

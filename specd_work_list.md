@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.3
 
-- Fix `handle_lead_merge` return from merge-resolution handler: `handle_event` at foreman.ex:810 returns `handle_lead_merge(lead_id, lead_info, data)` directly as the gen_statem callback return; `handle_lead_merge` returns a plain `data` map (via `handle_test_success`/`handle_test_failure`/`handle_merge_conflict`), not a valid `{:keep_state, data}` tuple; gen_statem crashes the Foreman on every successful merge-resolution
 - Fix Foreman `executing_tools` handler to use `data.runner_supervisor` instead of `SessionWorker.tool_runner_via_tuple(data.session_id)` (foreman.ex:374): the SessionWorker ToolRunner is not started for job sessions; `Task.Supervisor.async_nolink` raises when the via-tuple resolves to no registered process; Foreman crashes whenever it tries to execute tools
 - Fix `determine_completed_deliverables` to return `deliverable.name` not raw site log metadata: on resume, `determine_completed_deliverables` (foreman.ex:2703) returns `get_in(entry, [:metadata, :deliverable])` which is the description string (set at lead.ex:890 from `data.deliverable`, which is `deliverable.description` per foreman.ex:2241); `get_ready_deliverables` (foreman.ex:2209) checks `MapSet.member?(data.started_leads, deliverable.name)` using the short name; description strings never match short names, so all deliverables are re-executed on resume
 
