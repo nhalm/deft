@@ -1318,7 +1318,8 @@ defmodule Deft.Job.Foreman do
   defp generate_site_log_key(category, metadata) do
     # Generate a human-readable key with timestamp for uniqueness
     timestamp = System.system_time(:millisecond)
-    base_key = Map.get(metadata, :key, "entry")
+    # For completion messages, use lead_id; otherwise fall back to explicit key or "entry"
+    base_key = Map.get(metadata, :lead_id) || Map.get(metadata, :key, "entry")
     "#{category}-#{base_key}-#{timestamp}"
   end
 

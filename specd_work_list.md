@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.3
 
-- Fix `determine_completed_deliverables` site log key parsing: `generate_site_log_key(:complete, metadata)` uses `Map.get(metadata, :key, "entry")` as base_key, but completion metadata has `:lead_id` and `:deliverable` — not `:key`; all completion entries get key `"complete-entry-<ts>"`, so resume always parses `lead_id = "entry"` and finds zero completed deliverables (foreman.ex:1318-1323, 2430-2457)
 - Fix merge conflict/error paths to remove Lead from tracking and clean up worktree: `handle_lead_merge` returns unchanged `data` on `{:ok, :conflict, ...}` and `{:error, reason}` (foreman.ex:1201-1208); Lead stays in `data.leads`, worktree is leaked, `all_leads_complete?` never returns true, job hangs in `:executing` permanently
 
 ## git-strategy v0.1
