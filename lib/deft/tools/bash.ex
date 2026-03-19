@@ -103,13 +103,21 @@ defmodule Deft.Tools.Bash do
     {:ok, file} = File.open(temp_path, [:write, :binary])
 
     try do
-      collect_output(port, file, emit, timeout, <<>>, :os.system_time(:millisecond))
+      case collect_output(port, file, emit, timeout, :os.system_time(:millisecond)) do
+        {:ok, exit_code} ->
+          # Read back the tail of the temp file after command completes
+          output = read_tail_from_file(temp_path)
+          {:ok, output, exit_code}
+
+        {:error, reason} ->
+          {:error, reason}
+      end
     after
       File.close(file)
     end
   end
 
-  defp collect_output(port, file, emit, timeout, acc, start_time) do
+  defp collect_output(port, file, emit, timeout, start_time) do
     timeout_remaining = calculate_remaining_timeout(start_time, timeout)
 
     if timeout_remaining <= 0 do
@@ -120,19 +128,58 @@ defmodule Deft.Tools.Bash do
         {^port, {:data, data}} ->
           # Emit to TUI in real-time
           emit.(data)
-          # Write to temp file
+          # Write to temp file (stream-only, no memory accumulation)
           IO.binwrite(file, data)
-          # Accumulate in memory
-          new_acc = acc <> data
-          collect_output(port, file, emit, timeout, new_acc, start_time)
+          collect_output(port, file, emit, timeout, start_time)
 
         {^port, {:exit_status, exit_code}} ->
-          {:ok, acc, exit_code}
+          {:ok, exit_code}
       after
         timeout_remaining ->
           Port.close(port)
           {:error, :timeout}
       end
+    end
+  end
+
+  defp read_tail_from_file(path) do
+    case File.stat(path) do
+      {:ok, %{size: size}} when size == 0 ->
+        ""
+
+      {:ok, %{size: size}} when size <= @max_output_bytes ->
+        read_entire_file(path)
+
+      {:ok, %{size: size}} ->
+        read_file_tail(path, size)
+
+      {:error, _} ->
+        ""
+    end
+  end
+
+  defp read_entire_file(path) do
+    case File.read(path) do
+      {:ok, content} -> content
+      {:error, _} -> ""
+    end
+  end
+
+  defp read_file_tail(path, size) do
+    offset = size - @max_output_bytes
+
+    case :file.open(path, [:read, :binary]) do
+      {:ok, io_device} ->
+        try do
+          :file.position(io_device, offset)
+          {:ok, data} = :file.read(io_device, @max_output_bytes)
+          data
+        after
+          :file.close(io_device)
+        end
+
+      {:error, _} ->
+        ""
     end
   end
 

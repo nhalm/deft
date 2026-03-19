@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## tools v0.2
 
-- Fix bash tool to stream-truncate output instead of buffering all in memory (bash.ex:112-137): `collect_output/6` accumulates entire output via `new_acc = acc <> data` before truncation; a command producing hundreds of MB will OOM the agent process; should truncate during collection or stream only to the temp file and read back the tail
 - Fix edit tool line-range deletion with empty `new_content` (edit.ex:224): `String.split("", "\n")` returns `[""]` not `[]`; replacing a line range with `new_content: ""` inserts a spurious blank line instead of cleanly deleting
 
 ## observational-memory v0.3
