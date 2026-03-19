@@ -1,4 +1,5 @@
 # History
+- **orchestration v0.3 (2026-03-19):** Enforce Runner timeout in Lead: after spawning a Runner via `spawn_runner`, call `Process.send_after(self(), {:runner_timeout, task_ref}, timeout)` using the `job.runner_timeout` config value (default 300_000ms per spec section 8); currently no timeout is enforced (lead.ex:703-733)
 - **orchestration v0.3 (2026-03-18):** Implement per-Lead `Deft.Job.Lead.Supervisor` (one_for_one) containing the Lead gen_statem and RunnerSupervisor as siblings per spec section 1; currently `Task.Supervisor.start_link` is called directly in `start_lead` (foreman.ex:2022), leaving the RunnerSupervisor as an orphaned process
 - **orchestration v0.3 (2026-03-18):** Start Leads via `LeadSupervisor.start_lead/2` instead of calling `Lead.start_link/1` directly (foreman.ex:2041): Leads currently bypass the DynamicSupervisor and run unsupervised
 - **git-strategy v0.1 (2026-03-18):** Read `job.squash_on_complete` config in Foreman verification-passed handler instead of hardcoding `squash: true` (foreman.ex:795): setting the config to `false` has no effect; users cannot preserve individual Lead commit history as the spec allows

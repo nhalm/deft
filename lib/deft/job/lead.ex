@@ -403,6 +403,11 @@ defmodule Deft.Job.Lead do
       runner_info ->
         Logger.info("Lead #{data.lead_id} runner completed: #{runner_info.task_description}")
 
+        # Cancel the timeout timer since the runner completed
+        if runner_info.timeout_ref do
+          Process.cancel_timer(runner_info.timeout_ref)
+        end
+
         # Remove completed runner from tracking
         runner_tasks = Map.delete(runner_tasks, ref)
         data = %{data | runner_tasks: runner_tasks}
@@ -451,6 +456,11 @@ defmodule Deft.Job.Lead do
           "Lead #{data.lead_id} runner crashed: #{runner_info.task_description}, reason: #{inspect(reason)}"
         )
 
+        # Cancel the timeout timer since the runner crashed
+        if runner_info.timeout_ref do
+          Process.cancel_timer(runner_info.timeout_ref)
+        end
+
         # Remove crashed runner
         runner_tasks = Map.delete(runner_tasks, task_ref)
         data = %{data | runner_tasks: runner_tasks}
@@ -461,6 +471,51 @@ defmodule Deft.Job.Lead do
           :error,
           "Runner crashed: #{runner_info.task_description}",
           %{reason: inspect(reason)}
+        )
+
+        # If agent is idle, resume work (potentially retry or skip)
+        if agent_state == :idle do
+          continue_work(chunk_phase, data)
+        else
+          {:keep_state, data}
+        end
+    end
+  end
+
+  # Runner timeout - kill the runner if it's still running
+  def handle_event(
+        :info,
+        {:runner_timeout, task_ref},
+        {chunk_phase, agent_state},
+        %{runner_tasks: runner_tasks} = data
+      ) do
+    # Check if the runner is still running (it might have completed already)
+    case Map.get(runner_tasks, task_ref) do
+      nil ->
+        # Runner already completed or crashed, ignore the timeout
+        :keep_state_and_data
+
+      runner_info ->
+        Logger.error("Lead #{data.lead_id} runner timed out: #{runner_info.task_description}")
+
+        # Demonitor the task process to prevent DOWN message
+        Process.demonitor(runner_info.monitor_ref, [:flush])
+
+        # Kill the runner task
+        Task.Supervisor.terminate_child(data.runner_supervisor, task_ref)
+
+        # Remove timed-out runner from tracking
+        runner_tasks = Map.delete(runner_tasks, task_ref)
+        data = %{data | runner_tasks: runner_tasks}
+
+        # Send error to Foreman
+        timeout_ms = Map.get(data.config, :runner_timeout, 300_000)
+
+        send_lead_message(
+          data.foreman_pid,
+          :error,
+          "Runner timed out after #{timeout_ms}ms: #{runner_info.task_description}",
+          %{timeout_ms: timeout_ms}
         )
 
         # If agent is idle, resume work (potentially retry or skip)
@@ -717,11 +772,16 @@ defmodule Deft.Job.Lead do
     # CRITICAL: Must explicitly monitor since we used async_nolink
     monitor_ref = Process.monitor(task.pid)
 
+    # Enforce runner timeout (default 300_000ms = 5 minutes)
+    timeout = Map.get(data.config, :runner_timeout, 300_000)
+    timeout_ref = Process.send_after(self(), {:runner_timeout, task.ref}, timeout)
+
     # Store runner info for tracking
     runner_info = %{
       task_description: task_description,
       runner_type: runner_type,
       monitor_ref: monitor_ref,
+      timeout_ref: timeout_ref,
       started_at: System.monotonic_time(:millisecond)
     }
 
