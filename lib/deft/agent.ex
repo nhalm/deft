@@ -1545,7 +1545,7 @@ defmodule Deft.Agent do
   defp maybe_compact_messages(data) do
     # Check if compaction is needed
     # Compaction is only enabled when OM is disabled
-    om_enabled = Map.get(data.config, :om_enabled, false)
+    om_enabled = Map.get(data.config, :om_enabled, true)
     threshold = trunc(data.context_window * 0.7)
 
     # Skip if compaction is already in progress
