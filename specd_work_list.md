@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## evals v0.3
-
-- Restore eval test files: test/eval/ contains only results/ — all component eval test files (observer/, reflector/, actor/, foreman/, lead/, spilling/, skills/, issues/, e2e/), fixtures, and support modules are missing; previous restore (specd_history) regressed
-
 ## observational-memory v0.3
 
 - Add `om_observer_provider` and `om_reflector_provider` fields to `Deft.Config` and wire through to Observer/Reflector (currently hardcoded to use main agent's `config.provider`)
