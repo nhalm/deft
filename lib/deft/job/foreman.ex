@@ -207,18 +207,29 @@ defmodule Deft.Job.Foreman do
     # Register ourselves for site log access control
     {:ok, _} = Registry.register(Deft.ProcessRegistry, foreman_name, nil)
 
-    # Build path to site log DETS file
-    jobs_dir = Project.jobs_dir(initial_data.working_dir)
-    sitelog_path = Path.join([jobs_dir, initial_data.session_id, "sitelog.dets"])
+    # Look up the already-started site log instance (started by Deft.Job.Supervisor)
+    # In tests, the Store may not be started yet (Foreman started in isolation), so start it if needed
+    site_log_via = {:via, Registry, {Deft.ProcessRegistry, site_log_name}}
+    site_log_pid = GenServer.whereis(site_log_via)
 
-    # Start the site log instance
-    {:ok, site_log_pid} =
-      Store.start_link(
-        name: site_log_name,
-        type: :sitelog,
-        dets_path: sitelog_path,
-        owner_name: foreman_name
-      )
+    site_log_pid =
+      if site_log_pid == nil do
+        # Store not started yet (e.g., in tests) - start it now
+        jobs_dir = Project.jobs_dir(initial_data.working_dir)
+        sitelog_path = Path.join([jobs_dir, initial_data.session_id, "sitelog.dets"])
+
+        {:ok, pid} =
+          Store.start_link(
+            name: site_log_name,
+            type: :sitelog,
+            dets_path: sitelog_path,
+            owner_name: foreman_name
+          )
+
+        pid
+      else
+        site_log_pid
+      end
 
     data = %{initial_data | site_log_pid: site_log_pid}
 
