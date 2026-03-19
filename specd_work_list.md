@@ -20,4 +20,3 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 ## orchestration v0.3
 
 - Fix Lead crash falsely satisfying `all_leads_complete?`: when a Lead crashes (foreman.ex:1059-1098), it is removed from `data.leads` but remains in `data.started_leads`; `all_leads_complete?` checks `started_count == deliverables_count and remaining_leads == 0`, which is satisfied even though the crashed Lead's deliverable is incomplete; Foreman transitions to `:verifying` with missing work; either track failed deliverables separately or check that all started deliverables have a corresponding merge/completion record
-- Fix `provider_name` key mismatch in Foreman and Lead `call_llm`: `Map.get(config, :provider_name, "anthropic")` at foreman.ex:1127 and lead.ex:776 reads a non-existent key from the Config struct (which has `:provider`); always falls to "anthropic" default; user-configured provider name is ignored in RateLimiter calls

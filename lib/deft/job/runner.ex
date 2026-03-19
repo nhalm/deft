@@ -157,7 +157,7 @@ defmodule Deft.Job.Runner do
     with {:ok, estimated_tokens} <- request_llm_call(job_id, messages, tools, provider, config),
          {:ok, assistant_message, usage} <- call_provider(messages, tools, provider, config) do
       # Reconcile estimated vs actual token usage
-      provider_name = Map.get(config, :provider_name, "anthropic")
+      provider_name = Map.get(config, :provider, "anthropic")
       RateLimiter.reconcile(job_id, provider_name, estimated_tokens, usage)
 
       handle_assistant_message(
@@ -229,7 +229,7 @@ defmodule Deft.Job.Runner do
 
   # Request permission from rate limiter to make LLM call
   defp request_llm_call(job_id, messages, _tools, _provider, config) do
-    provider_name = Map.get(config, :provider_name, "anthropic")
+    provider_name = Map.get(config, :provider, "anthropic")
 
     case RateLimiter.request(job_id, provider_name, messages, :runner) do
       {:ok, estimated_tokens} -> {:ok, estimated_tokens}

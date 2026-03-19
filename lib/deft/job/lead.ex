@@ -773,7 +773,7 @@ defmodule Deft.Job.Lead do
     job_id = data.session_id
     messages = data.messages
     config = data.config
-    provider_name = Map.get(config, :provider_name, "anthropic")
+    provider_name = Map.get(config, :provider, "anthropic")
 
     # Request permission from rate limiter
     case RateLimiter.request(job_id, provider_name, messages, :lead) do
