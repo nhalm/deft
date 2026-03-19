@@ -17,6 +17,12 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
+## evals v0.4
+
+- Fix `scoring.ex` line 42-43: `reflector.compression` threshold is `0.80` but spec section 1.5 requires `0.90`; `format_result` and `determine_status` will misclassify compression runs between 80-90% as PASS when they should be WARN/FAIL
+- Add `foreman.verification_accuracy` clause to `scoring.ex` `threshold/1`: currently falls through to default `{:statistical, 0.75}` but foreman.md section 5.4 specifies 90% over 20 iterations; highest-priority safety eval gets the wrong gate
+- Rewrite `cache_retrieval_test.exs` helper functions (lines 171-208) to actually test agent behavior: `agent_retrieves_cache?/3`, `agent_retrieves_cache_with_filter?/4`, and `agent_retrieves_cache_with_grep_filter?/4` are tautologies that check fixture string patterns (never start an agent); always return true giving 100% pass rate regardless of actual agent behavior (blocked: agent loop testability)
+
 ## evals v0.3
 
 - Create missing e2e test files: `test/eval/e2e/single_task_test.exs`, `test/eval/e2e/multi_agent_test.exs`, `test/eval/e2e/verification_circuit_breaker_test.exs` per spec section 1.2 (blocked: fixtures/codebase_snapshots need synthetic repos)
