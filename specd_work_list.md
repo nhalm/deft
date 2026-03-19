@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## git-strategy v0.2
 
-- Add git stash pop after job completion (git/job.ex): if the user's uncommitted changes were stashed before job creation (line 133-134), the stash is never popped after `complete_job`; user's working state is not restored; add `git stash pop` on the success path of `complete_job` and warn on failure
 - Add retry cap for merge-resolution Runner (foreman.ex:1000-1012): when a merge-resolution Runner succeeds but `handle_lead_merge` still returns `:conflict`, another merge-resolution Runner is spawned with no cap; infinite loop possible; add a max retry count (e.g., 3) and fail the merge after exhausting retries
 
 ## evals v0.3

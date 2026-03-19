@@ -54,7 +54,7 @@ defmodule Deft.Git.Job do
     branch_name = "deft/job-#{job_id}"
 
     with {:ok, original_branch} <- get_current_branch(git),
-         :ok <- verify_clean_working_tree(git, auto_approve),
+         :ok <- verify_clean_working_tree(git, auto_approve, job_id),
          :ok <- create_branch(git, branch_name) do
       Logger.info("Created job branch: #{branch_name} from #{original_branch}")
       {:ok, branch_name, original_branch}
@@ -74,7 +74,7 @@ defmodule Deft.Git.Job do
   end
 
   # Verify working tree is clean, prompting user to stash if needed
-  defp verify_clean_working_tree(git, auto_approve) do
+  defp verify_clean_working_tree(git, auto_approve, job_id) do
     case git.cmd(["status", "--porcelain"]) do
       {"", 0} ->
         # Working tree is clean
@@ -82,7 +82,7 @@ defmodule Deft.Git.Job do
 
       {output, 0} when byte_size(output) > 0 ->
         # Working tree has uncommitted changes
-        handle_dirty_working_tree(git, output, auto_approve)
+        handle_dirty_working_tree(git, output, auto_approve, job_id)
 
       {error_output, exit_code} ->
         Logger.error("Failed to check git status: #{error_output}")
@@ -91,7 +91,7 @@ defmodule Deft.Git.Job do
   end
 
   # Handle dirty working tree by prompting user or auto-failing
-  defp handle_dirty_working_tree(git, status_output, auto_approve) do
+  defp handle_dirty_working_tree(git, status_output, auto_approve, job_id) do
     if auto_approve do
       # In auto-approve mode, we can't stash - fail immediately
       Logger.error("""
@@ -116,12 +116,12 @@ defmodule Deft.Git.Job do
 
       IO.write("Stash changes and continue? [y/N]: ")
       response = IO.gets("")
-      handle_stash_response(git, response)
+      handle_stash_response(git, response, job_id)
     end
   end
 
   # Handle user response to stash prompt
-  defp handle_stash_response(git, response) do
+  defp handle_stash_response(git, response, job_id) do
     case response do
       :eof ->
         # Non-interactive environment (e.g., tests with no stdin)
@@ -131,7 +131,7 @@ defmodule Deft.Git.Job do
       input when is_binary(input) ->
         case String.trim(input) |> String.downcase() do
           answer when answer in ["y", "yes"] ->
-            perform_stash(git)
+            perform_stash(git, job_id)
 
           _ ->
             IO.puts("\nJob creation cancelled.\n")
@@ -140,11 +140,12 @@ defmodule Deft.Git.Job do
     end
   end
 
-  # Perform the actual git stash operation
-  defp perform_stash(git) do
+  # Perform the actual git stash operation with a message to identify it later
+  defp perform_stash(git, job_id) do
     IO.puts("\nStashing changes...")
+    stash_message = "Deft job creation: #{job_id}"
 
-    case git.cmd(["stash"]) do
+    case git.cmd(["stash", "push", "-m", stash_message]) do
       {output, 0} ->
         IO.puts(output)
         IO.puts("Changes stashed successfully. Continuing with job creation.\n")
@@ -804,6 +805,53 @@ defmodule Deft.Git.Job do
     :ok
   end
 
+  # Pop the stash created during job creation, if it exists
+  defp pop_job_stash(git, job_id) do
+    stash_message = "Deft job creation: #{job_id}"
+
+    # List stashes and check if our stash exists
+    case git.cmd(["stash", "list"]) do
+      {output, 0} ->
+        # Check if any stash has our message
+        stash_index =
+          output
+          |> String.split("\n", trim: true)
+          |> Enum.find_index(&String.contains?(&1, stash_message))
+
+        if stash_index do
+          # Pop the stash
+          case git.cmd(["stash", "pop", "stash@{#{stash_index}}"]) do
+            {_output, 0} ->
+              Logger.info("Restored user's stashed changes from job creation")
+              IO.puts("Your previously stashed changes have been restored.\n")
+              :ok
+
+            {error_output, _exit_code} ->
+              Logger.warning("""
+              Failed to restore stashed changes from job creation.
+              You may need to manually restore them with: git stash pop stash@{#{stash_index}}
+
+              Error: #{error_output}
+              """)
+
+              IO.puts("""
+              Warning: Failed to automatically restore your stashed changes.
+              Please manually restore them with: git stash pop stash@{#{stash_index}}
+              """)
+
+              :ok
+          end
+        else
+          # No stash found - this is normal if working tree was clean
+          :ok
+        end
+
+      {error_output, _exit_code} ->
+        Logger.warning("Failed to list stashes: #{error_output}")
+        :ok
+    end
+  end
+
   @doc """
   Completes a job by merging the job branch into the original branch and cleaning up.
 
@@ -811,6 +859,7 @@ defmodule Deft.Git.Job do
   1. Squash-merges (or regular merges) `deft/job-<job_id>` into the original branch
   2. Deletes the job branch
   3. Verifies no worktrees remain
+  4. Restores any stashed changes from job creation
 
   ## Options
 
@@ -854,6 +903,8 @@ defmodule Deft.Git.Job do
            {:ok, :merged} <- merge_job_branch(git, job_branch, squash),
            {:ok, :deleted} <- delete_job_branch(git, job_branch),
            :ok <- verify_no_worktrees(git) do
+        # Restore user's stashed changes if they were stashed during job creation
+        pop_job_stash(git, job_id)
         Logger.info("Job #{job_id} completed successfully")
         {:ok, :completed}
       end
