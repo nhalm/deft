@@ -1,4 +1,5 @@
 # History
+- **orchestration v0.3 (2026-03-19):** Fix `analyze_verification_results` to unwrap Runner `{:ok, output}` tuple (foreman.ex:2523-2544): Runner.run returns `{:ok, string}` but the function pattern-matches against maps and binaries; the tuple falls through to catch-all `_ -> false`, so verification always reports failure
 - **orchestration v0.3 (2026-03-19):** Give Lead non-empty tools list or implement site log reading via context injection (lead.ex:698-699): Lead passes `tools = []` to every LLM call, preventing it from reading the codebase or site log during planning
 - **orchestration v0.3 (2026-03-19):** Change verification Runner type from `:review` to `:testing` (foreman.ex:511): `:review` type has no `bash` tool so the verification Runner cannot execute the test suite; spec requires full test suite execution
 - **orchestration v0.3 (2026-03-19):** Store `task.pid` in `runner_info` map (lead.ex:783) and fix `Task.Supervisor.terminate_child` call to use PID instead of reference (lead.ex:505): timeout handler passed `task_ref` but `terminate_child/2` expects a PID; runner processes were never killed on timeout

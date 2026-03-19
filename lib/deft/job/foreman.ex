@@ -2522,8 +2522,12 @@ defmodule Deft.Job.Foreman do
 
   defp analyze_verification_results(results) do
     # Results from the verification Runner - check for test failures or quality issues
-    # The Runner returns a map with findings
+    # The Runner returns {:ok, output} tuple
     case results do
+      # Unwrap {:ok, output} tuple from Runner.run
+      {:ok, inner_results} ->
+        analyze_verification_results(inner_results)
+
       %{success: true} ->
         true
 
