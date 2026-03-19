@@ -695,8 +695,9 @@ defmodule Deft.Job.Lead do
     # Request permission from rate limiter
     case RateLimiter.request(job_id, provider_name, messages, :lead) do
       {:ok, _estimated_tokens} ->
-        # Lead uses empty tools list - it delegates actual work to Runners
-        tools = []
+        # Lead uses read-only tools to read codebase and site log during planning
+        # Delegates actual implementation work to Runners
+        tools = [Deft.Tools.Read, Deft.Tools.Grep, Deft.Tools.Find, Deft.Tools.Ls]
 
         # Start streaming from the provider
         case Anthropic.stream(messages, tools, config) do

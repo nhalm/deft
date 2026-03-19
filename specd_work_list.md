@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.3
 
-- Give Lead non-empty tools list or implement site log reading via context injection (lead.ex:698-699): Lead passes `tools = []` to every LLM call, preventing it from reading the codebase or site log during planning
 - Fix `analyze_verification_results` to unwrap Runner `{:ok, output}` tuple (foreman.ex:2523-2544): Runner.run returns `{:ok, string}` but the function pattern-matches against maps and binaries; the tuple falls through to catch-all `_ -> false`, so verification always reports failure
 - Spawn Foreman research/verification/merge-resolution Runners under the job supervision tree instead of `SessionWorker.tool_runner_via_tuple` (foreman.ex:508,1436): Runners on the session supervisor are not terminated when the job is aborted, causing orphaned LLM calls
 
