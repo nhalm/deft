@@ -132,7 +132,7 @@ defmodule Deft.Provider.Anthropic do
          ) do
       {:ok, %Req.Response{} = response} ->
         # Start receiving chunks with SSE parser state
-        receive_chunks(caller, response.body, "", %{})
+        receive_chunks(caller, response.body.ref, "", %{})
 
       {:error, reason} ->
         send(

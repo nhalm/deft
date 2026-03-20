@@ -35,10 +35,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Fix `abort_job` to skip branch checkout when `original_branch` is not set (foreman.ex:667): abort handler fires in any state (line 650); `original_branch` is only stored after `create_job_branch` succeeds (line 397); early abort (during planning/decomposing) defaults to `"main"` and incorrectly checks out main regardless of user's actual branch; should either store original branch at Foreman init time or skip checkout when no job branch was created
 - Move stash prompt from Foreman to CLI/TUI layer before Foreman.start_link: Foreman hardcodes `auto_approve: true` when calling `GitJob.create_job_branch` (foreman.ex:393), making the stash-prompt path unreachable; dirty working trees always fail with `{:error, :dirty_working_tree}`; spec section 1 requires "warn the user and ask to stash" but GenServers cannot do interactive I/O; must move the stash check and prompt to the CLI/TUI layer before starting the Foreman so the working tree is clean before `create_job_branch` runs
 
-## providers v0.3
-
-- Fix `receive_chunks` pattern match in Anthropic provider (anthropic.ex:148): pins `response.body` (a `%Req.Response.Async{}` struct) but Finch sends messages keyed on `response.body.ref` (a bare reference); `receive` never matches, every streaming call blocks for 120s then returns `%Error{message: "Stream timeout"}`; must use `response.body.ref` as the match key
-
 ## evals v0.4
 
 - Rewrite `cache_retrieval_test.exs` helper functions (lines 171-208) to actually test agent behavior: `agent_retrieves_cache?/3`, `agent_retrieves_cache_with_filter?/4`, and `agent_retrieves_cache_with_grep_filter?/4` are tautologies that check fixture string patterns (never start an agent); always return true giving 100% pass rate regardless of actual agent behavior (blocked: agent loop testability)
