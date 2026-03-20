@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## git-strategy v0.2
 
-- Wire `job_test_command` and `job_squash_on_complete` from `Config` through CLI `agent_config` map: `start_job_and_wait` (cli.ex:2240-2261) omits both fields; Foreman falls back to hardcoded defaults via `Map.get(data.config, :job_test_command, "mix test")` and `Map.get(data.config, :job_squash_on_complete, true)`, making user `.deft/config.yaml` settings for these fields no-ops
 - Fix misleading error message in Foreman when `verify_no_worktrees` fails after successful merge: `complete_job` returns `{:error, {:worktrees_remain, n}}` after merge succeeds and job branch is deleted; Foreman (foreman.ex:1236-1257) shows "failed to merge changes" and tells user to "manually merge the job branch" which no longer exists; should report orphan worktrees as a warning, not a merge failure
 
 ## tools v0.2

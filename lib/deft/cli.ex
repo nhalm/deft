@@ -2257,7 +2257,9 @@ defmodule Deft.CLI do
       job_lead_model: config.job_lead_model,
       job_runner_model: config.job_runner_model,
       job_research_runner_model: config.job_research_runner_model,
-      job_max_duration: config.job_max_duration
+      job_max_duration: config.job_max_duration,
+      job_test_command: config.job_test_command,
+      job_squash_on_complete: config.job_squash_on_complete
     }
 
     case Deft.Job.Supervisor.start_link(
