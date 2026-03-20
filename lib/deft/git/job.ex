@@ -899,14 +899,29 @@ defmodule Deft.Git.Job do
     job_branch = "deft/job-#{job_id}"
 
     File.cd!(working_dir, fn ->
-      with {:ok, :checkout} <- checkout_branch(git, original_branch),
-           {:ok, :merged} <- merge_job_branch(git, job_branch, squash),
-           {:ok, :deleted} <- delete_job_branch(git, job_branch),
-           :ok <- verify_no_worktrees(git) do
-        # Restore user's stashed changes if they were stashed during job creation
-        pop_job_stash(git, job_id)
-        Logger.info("Job #{job_id} completed successfully")
-        {:ok, :completed}
+      result =
+        with {:ok, :checkout} <- checkout_branch(git, original_branch),
+             {:ok, :merged} <- merge_job_branch(git, job_branch, squash),
+             {:ok, :deleted} <- delete_job_branch(git, job_branch) do
+          :ok
+        end
+
+      # Always restore user's stashed changes, even if worktree verification fails
+      pop_job_stash(git, job_id)
+
+      case result do
+        :ok ->
+          case verify_no_worktrees(git) do
+            :ok ->
+              Logger.info("Job #{job_id} completed successfully")
+              {:ok, :completed}
+
+            error ->
+              error
+          end
+
+        error ->
+          error
       end
     end)
   end
