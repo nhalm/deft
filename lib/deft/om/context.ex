@@ -136,7 +136,7 @@ defmodule Deft.OM.Context do
       end)
 
     # Return in original order (oldest to newest)
-    Enum.reverse(kept)
+    kept
   end
 
   # Estimates token count for a message

@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## observational-memory v0.3
 
-- Fix `keep_tail` reverse order (context.ex:139): `Enum.reverse(kept)` reverses already-correct oldest-to-newest order to newest-to-oldest; tail messages are delivered to LLM in wrong chronological order; remove the final `Enum.reverse` call
 - Fix BufferedChunk epoch stamp to use spawn-time epoch (state.ex:558): chunk is stamped with `state.activation_epoch` at `handle_info` time, which may be post-activation epoch; Observer task computed results with pre-activation data; chunk passes stale-epoch filter incorrectly → duplicate message_ids merged, pending_message_tokens double-subtracted → stuck at 0, future observation cycles never trigger
 
 ## orchestration v0.6
