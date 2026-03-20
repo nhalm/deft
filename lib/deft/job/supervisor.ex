@@ -69,7 +69,7 @@ defmodule Deft.Job.Supervisor do
                name: {:sitelog, job_id},
                type: :sitelog,
                dets_path: sitelog_path,
-               owner_name: foreman_name
+               owner_name: {:foreman, job_id}
              ]
            ]},
         restart: :temporary
