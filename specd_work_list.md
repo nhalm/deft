@@ -23,6 +23,19 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Rewrite `agent_created_quality_test.exs` to be a statistical eval: currently constructs Issue structs directly from fixture data via `build_issue_from_fixture/1` and asserts on fixture fields — never calls an LLM or agent; spec section 1.5 requires 80% over 20 iterations as a statistical eval that detects model quality regressions (blocked: agent loop testability)
 - Fix `loop_safety_test.exs` stub: `run_loop_with_monitoring/2` (line 207) returns hardcoded `%{success: true, issues_processed: 0, ...}` and discards CLI args; when `:skip` tag is removed, all safety assertions (`assert_no_false_closes`, `assert_no_cost_anomalies`, etc.) pass trivially on empty data; must invoke actual CLI or agent loop (blocked: CLI invocation mechanism in test env)
 
+## rate-limiter v0.2
+
+- Fix `check_scale_down/2` to fire once per rate-limit episode, not every check cycle: currently (rate_limiter.ex:872-889) decrements `current_concurrency` by 1 on every `:check_queue` tick (every 1 second) while `count_429s > 2`; a burst of 3 429s drains concurrency from max to 1 in seconds; must gate on a cooldown or clear the 429 window after scale-down
+
+## git-strategy v0.2
+
+- Fix merge-resolution retry cap off-by-one (foreman.ex:2384): condition `retry_count > max_retries - 1` with `max_retries = 3` fires at retry_count=3, allowing 4 runner invocations; previous fix (changed from `>= max_retries`) was a no-op since `>= 3` == `> 2`; change to `retry_count >= max_retries - 1` to cap at 3 runners
+
+## issues v0.5
+
+- Fix `build_updated_issue/2` to clear `closed_at` when reopening a closed issue (issues.ex:429-434): condition only sets `closed_at` when transitioning TO `:closed`; when `new_status == :open` and `issue.status == :closed`, `closed_at` retains the old timestamp; violates schema contract (`closed_at` must be nil when not closed)
+- Fix work loop abort handling to include aborted job cost in cumulative total (cli.ex:2146-2149): `{:error, :aborted}` branch prints `Total cost: $#{cumulative_cost}` without adding the aborted job's partial cost; `handle_job_result` returns `{:error, :aborted}` discarding the cost; total shown to user is incorrect
+
 ## evals v0.3
 
 - Create missing e2e test files: `test/eval/e2e/single_task_test.exs`, `test/eval/e2e/multi_agent_test.exs`, `test/eval/e2e/verification_circuit_breaker_test.exs` per spec section 1.2 (blocked: fixtures/codebase_snapshots need synthetic repos)
