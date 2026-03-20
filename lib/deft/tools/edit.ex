@@ -285,8 +285,8 @@ defmodule Deft.Tools.Edit do
 
     # Generate hunk output with headers
     hunk_output =
-      Enum.map(hunks, fn hunk ->
-        generate_hunk_with_header(hunk)
+      Enum.map(hunks, fn {hunk_changes, old_start, new_start} ->
+        generate_hunk_with_header(hunk_changes, old_start, new_start)
       end)
 
     Enum.join(diff_header ++ hunk_output, "\n")
@@ -326,11 +326,28 @@ defmodule Deft.Tools.Edit do
         end)
         |> merge_overlapping_ranges()
 
-      # Extract hunks
+      # Extract hunks with starting line numbers
       Enum.map(hunk_ranges, fn {start_idx, end_idx} ->
-        Enum.slice(changes, start_idx..end_idx)
+        hunk_changes = Enum.slice(changes, start_idx..end_idx)
+        {old_start, new_start} = calculate_starting_lines(changes, start_idx)
+        {hunk_changes, old_start, new_start}
       end)
     end
+  end
+
+  # Calculate the starting line numbers for a hunk by counting through all preceding changes
+  defp calculate_starting_lines(changes, start_idx) do
+    # Count how many old and new lines precede this hunk
+    {old_line, new_line} =
+      changes
+      |> Enum.take(start_idx)
+      |> Enum.reduce({1, 1}, fn
+        {:context, _}, {old, new} -> {old + 1, new + 1}
+        {:delete, _}, {old, new} -> {old + 1, new}
+        {:add, _}, {old, new} -> {old, new + 1}
+      end)
+
+    {old_line, new_line}
   end
 
   # Merge overlapping or adjacent ranges
@@ -354,9 +371,10 @@ defmodule Deft.Tools.Edit do
   end
 
   # Generate a hunk with its @@ header
-  defp generate_hunk_with_header(hunk_changes) do
+  defp generate_hunk_with_header(hunk_changes, old_start_line, new_start_line) do
     # Calculate line numbers and counts for old and new files
-    {old_start, old_count, new_start, new_count} = calculate_hunk_header(hunk_changes)
+    {old_start, old_count, new_start, new_count} =
+      calculate_hunk_header(hunk_changes, old_start_line, new_start_line)
 
     # Format hunk header
     header = "@@ -#{old_start},#{old_count} +#{new_start},#{new_count} @@"
@@ -373,10 +391,10 @@ defmodule Deft.Tools.Edit do
   end
 
   # Calculate the line numbers and counts for a hunk header
-  defp calculate_hunk_header(hunk_changes) do
-    # Track line numbers in old and new files
+  defp calculate_hunk_header(hunk_changes, old_start_line, new_start_line) do
+    # Track line numbers in old and new files, starting from the provided positions
     {old_start, old_count, new_start, new_count, _} =
-      Enum.reduce(hunk_changes, {nil, 0, nil, 0, {1, 1}}, fn
+      Enum.reduce(hunk_changes, {nil, 0, nil, 0, {old_start_line, new_start_line}}, fn
         {:context, _}, {old_s, old_c, new_s, new_c, {old_line, new_line}} ->
           {
             old_s || old_line,
@@ -405,7 +423,7 @@ defmodule Deft.Tools.Edit do
           }
       end)
 
-    {old_start || 1, old_count, new_start || 1, new_count}
+    {old_start || old_start_line, old_count, new_start || new_start_line, new_count}
   end
 
   defp find_changes(old_lines, new_lines) do
