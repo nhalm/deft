@@ -64,7 +64,7 @@ defmodule Deft.TUI.Chat do
         max_turns: Map.get(config, :turn_limit, 25),
         # OM state (memory tracking)
         memory_tokens: nil,
-        memory_threshold: 40_000,
+        memory_threshold: config.om_observation_token_threshold,
         om_active: false,
         om_sync_fallback: false,
         # Scroll state

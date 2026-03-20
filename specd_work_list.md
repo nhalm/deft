@@ -30,10 +30,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Fix foreman verification accuracy eval to call actual Foreman module instead of hardcoded rule: `verification_accuracy_test.exs` defines its own `make_foreman_decision/2` (line 264) that uses a pure boolean formula; must invoke the real Foreman verification logic (LLM-based) and run statistically (20 iterations, 90% pass rate per spec) (blocked: call_llm_judge implementation)
 - Fix `summary_quality_test.exs` to use actual LLM judge: `judge_summary_quality/3` (line 264) uses heuristic checks (size reduction, regex matches) that deterministically pass on well-formed summaries; spec section 1.6 requires LLM-as-judge validated to >85% precision and recall (blocked: call_llm_judge implementation)
 
-## tui v0.2
-
-- Fix hardcoded `memory_threshold: 40_000` in Chat view (chat.ex:67): value is never read from OM config at mount time; status bar always shows `/40k` regardless of actual OM reflection threshold configuration
-
 ## orchestration v0.6
 
 - Fix Lead `task_list` never populated (lead.ex:111): initialized as `[]` but no code parses LLM planning output to extract tasks; `continue_work` (lead.ex:1355-1376) always finds pending_tasks empty, skips `:executing` phase entirely, and transitions directly to `:verifying`; Lead never spawns implementation Runners
