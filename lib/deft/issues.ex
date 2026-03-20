@@ -424,6 +424,15 @@ defmodule Deft.Issues do
 
   # Builds an updated issue from existing issue and new attributes
   defp build_updated_issue(issue, attrs) do
+    new_status = Map.get(attrs, :status, issue.status)
+
+    closed_at =
+      if new_status == :closed and issue.status != :closed do
+        Issue.timestamp()
+      else
+        issue.closed_at
+      end
+
     %{
       issue
       | title: Map.get(attrs, :title, issue.title),
@@ -432,7 +441,8 @@ defmodule Deft.Issues do
         constraints: Map.get(attrs, :constraints, issue.constraints),
         priority: Map.get(attrs, :priority, issue.priority),
         dependencies: Map.get(attrs, :dependencies, issue.dependencies),
-        status: Map.get(attrs, :status, issue.status),
+        status: new_status,
+        closed_at: closed_at,
         updated_at: Issue.timestamp()
     }
   end
