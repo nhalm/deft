@@ -353,7 +353,8 @@ defmodule Deft.Job.RateLimiter do
       current_concurrency: initial_concurrency,
       max_concurrency: max_concurrency,
       scale_up_eligible_since: nil,
-      recent_429s: []
+      recent_429s: [],
+      last_scale_down_at: nil
     }
 
     # Schedule periodic queue processing and starvation check
@@ -869,11 +870,20 @@ defmodule Deft.Job.RateLimiter do
     %{state | recent_429s: new_recent_429s}
   end
 
-  defp check_scale_down(state, _now) do
+  defp check_scale_down(state, now) do
     # Count 429s in the last minute
     count_429s = length(state.recent_429s)
 
-    if count_429s > @scale_down_429_threshold and state.current_concurrency > 1 do
+    # Check if we should scale down:
+    # 1. Too many 429s in the window
+    # 2. Still have concurrency to reduce
+    # 3. Either never scaled down OR cooldown period has elapsed
+    cooldown_elapsed =
+      state.last_scale_down_at == nil or
+        now - state.last_scale_down_at >= @scale_down_window_ms
+
+    if count_429s > @scale_down_429_threshold and state.current_concurrency > 1 and
+         cooldown_elapsed do
       new_concurrency = state.current_concurrency - 1
 
       Logger.info(
@@ -882,8 +892,13 @@ defmodule Deft.Job.RateLimiter do
 
       notify_concurrency_change(state, new_concurrency)
 
-      # Reset scale-up tracking when scaling down
-      %{state | current_concurrency: new_concurrency, scale_up_eligible_since: nil}
+      # Reset scale-up tracking and record scale-down time
+      %{
+        state
+        | current_concurrency: new_concurrency,
+          scale_up_eligible_since: nil,
+          last_scale_down_at: now
+      }
     else
       state
     end
@@ -916,8 +931,13 @@ defmodule Deft.Job.RateLimiter do
 
             notify_concurrency_change(state, new_concurrency)
 
-            # Reset tracking after scaling up
-            %{state | current_concurrency: new_concurrency, scale_up_eligible_since: nil}
+            # Reset tracking after scaling up (including scale-down cooldown)
+            %{
+              state
+              | current_concurrency: new_concurrency,
+                scale_up_eligible_since: nil,
+                last_scale_down_at: nil
+            }
           else
             state
           end
