@@ -2382,21 +2382,24 @@ defmodule Deft.CLI do
     {:error, :aborted}
   end
 
-  defp handle_job_result({:error, reason}, issue, _job_id, _cost) do
+  defp handle_job_result({:error, reason}, issue, _job_id, cost) do
     # Job failed - revert issue to open
     case Issues.update(issue.id, %{status: :open}) do
       {:ok, _issue} ->
         IO.puts(:stderr, "\nJob failed: #{inspect(reason)}")
         IO.puts(:stderr, "Issue #{issue.id} status reverted to open.")
-        exit({:shutdown, 1})
 
       {:error, update_reason} ->
         IO.puts(
           :stderr,
           "Error: Job failed and failed to revert issue status: #{inspect(update_reason)}"
         )
-
-        exit({:shutdown, 1})
     end
+
+    # Report the job cost
+    IO.puts("Job cost: $#{Float.round(cost, 2)}")
+
+    # Return error to stop the work loop
+    {:error, reason}
   end
 end
