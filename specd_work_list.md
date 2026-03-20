@@ -17,6 +17,10 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
+## tools v0.2
+
+- Fix `calculate_hunk_header` multi-hunk line numbers (edit.ex:379): line counter initializes at `{1, 1}` for every hunk; `group_into_hunks` doesn't pass the starting file position; all hunks after the first get wrong `@@` headers (e.g., `@@ -1,... @@` instead of `@@ -40,... @@`); must propagate each hunk's starting index from `group_into_hunks` to `generate_hunk_with_header`
+
 ## git-strategy v0.2
 
 - Fix `abort_job` to skip branch checkout when `original_branch` is not set (foreman.ex:667): abort handler fires in any state (line 650); `original_branch` is only stored after `create_job_branch` succeeds (line 397); early abort (during planning/decomposing) defaults to `"main"` and incorrectly checks out main regardless of user's actual branch; should either store original branch at Foreman init time or skip checkout when no job branch was created
