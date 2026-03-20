@@ -73,8 +73,8 @@ Decision reasoning is logged in [specd_decisions.jsonl](../specd_decisions.jsonl
 |------|---------|--------|-------------|
 | [observational-memory](observational-memory.md) | v0.3 | Implemented | Observer/Reflector with sectioned observations, two-level compression |
 | [orchestration](orchestration.md) | v0.6 | Implemented | Foreman/Lead/Runner hierarchy, OTP coordination protocol, Deft.Store site log |
-| [rate-limiter](rate-limiter.md) | v0.2 | Ready | Dual token-bucket rate limiting, priority queue, adaptive concurrency, cost tracking |
-| [git-strategy](git-strategy.md) | v0.2 | Ready | Git worktree strategy, merge protocol, conflict resolution, orphan cleanup |
+| [rate-limiter](rate-limiter.md) | v0.2 | Implemented | Dual token-bucket rate limiting, priority queue, adaptive concurrency, cost tracking |
+| [git-strategy](git-strategy.md) | v0.2 | Implemented | Git worktree strategy, merge protocol, conflict resolution, orphan cleanup |
 
 ## Infrastructure
 
@@ -82,7 +82,7 @@ Decision reasoning is logged in [specd_decisions.jsonl](../specd_decisions.jsonl
 |------|---------|--------|-------------|
 | [filesystem](filesystem.md) | v0.4 | Implemented | Deft.Store GenServer — ETS+DETS for cache and site log, cache_read tool, per-tool spilling thresholds |
 | [skills](skills.md) | v0.4 | Implemented | Skills (agent-selected YAML) and commands (markdown prompts), three-level cascade |
-| [issues](issues.md) | v0.5 | Ready | Persistent issue tracker — JSONL+git, interactive creation, approve-every-plan `deft work` loop |
+| [issues](issues.md) | v0.5 | Implemented | Persistent issue tracker — JSONL+git, interactive creation, approve-every-plan `deft work` loop |
 
 ## Future
 
