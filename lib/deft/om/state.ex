@@ -1686,8 +1686,8 @@ defmodule Deft.OM.State do
           # Can keep this line
           {:cont, {[line | kept], tokens_so_far + line_tokens}}
         else
-          # Exceeded budget, halt processing
-          {:halt, {kept, tokens_so_far}}
+          # Line too large, skip it and continue with older lines
+          {:cont, {kept, tokens_so_far}}
         end
       end)
 

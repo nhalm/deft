@@ -32,7 +32,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## observational-memory v0.3
 
-- Fix `truncate_session_history_to_target` halt on first oversized line (state.ex:1682-1692): `Enum.reduce_while` with `{:halt, ...}` stops iteration entirely when a single line exceeds remaining budget; all older lines (which may individually fit) are dropped; should use `{:cont, ...}` to skip oversized lines and continue, keeping as many newest entries as possible
 - Fix `current_task` from Observer silently discarded (state.ex:314-317, agent/context.ex:51-58): Observer extracts `current_task` (observer.ex:104) but it is never stored in State and `get_context/1` does not return it; `build_current_task_block/1` in context.ex always receives nil; spec section 3.5 requires current_task to be folded into `## Current State`
 
 ## skills v0.4
