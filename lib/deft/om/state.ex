@@ -555,7 +555,7 @@ defmodule Deft.OM.State do
             token_count: Tokens.estimate(result.observations, state.calibration_factor),
             message_ids: result.message_ids,
             message_tokens: result.message_tokens,
-            epoch: state.activation_epoch,
+            epoch: result.spawn_epoch,
             continuation_hint: result.continuation_hint
           }
 
@@ -1076,16 +1076,24 @@ defmodule Deft.OM.State do
 
       task_supervisor = Supervisor.task_supervisor_name(state.session_id)
 
+      # Capture the activation epoch at spawn time (not handle_info time)
+      # so chunks are stamped with the epoch they were computed against
+      spawn_epoch = state.activation_epoch
+
       # Spawn Observer Task with retry wrapper (3 retries per spec section 6.3)
       task =
         Task.Supervisor.async_nolink(task_supervisor, fn ->
-          run_observer_with_retry(
-            state.config,
-            unobserved_messages,
-            state.active_observations,
-            state.calibration_factor,
-            3
-          )
+          observer_result =
+            run_observer_with_retry(
+              state.config,
+              unobserved_messages,
+              state.active_observations,
+              state.calibration_factor,
+              3
+            )
+
+          # Include the spawn-time epoch in the result
+          Map.put(observer_result, :spawn_epoch, spawn_epoch)
         end)
 
       %{

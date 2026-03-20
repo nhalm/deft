@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## observational-memory v0.3
-
-- Fix BufferedChunk epoch stamp to use spawn-time epoch (state.ex:558): chunk is stamped with `state.activation_epoch` at `handle_info` time, which may be post-activation epoch; Observer task computed results with pre-activation data; chunk passes stale-epoch filter incorrectly → duplicate message_ids merged, pending_message_tokens double-subtracted → stuck at 0, future observation cycles never trigger
-
 ## orchestration v0.6
 
 - Fix `research_timeout` handler to match all `{:researching, _}` substates (foreman.ex:937): currently matches only `{:researching, :idle}`; if user sends a prompt during research, Foreman transitions to `{:researching, :calling}` and timeout message falls to catch-all → silently dropped → research phase hangs permanently
