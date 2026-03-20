@@ -1043,7 +1043,7 @@ defmodule Deft.Git.Job do
   @spec abort_job(keyword()) :: :ok | {:error, term()}
   def abort_job(opts) do
     job_id = Keyword.fetch!(opts, :job_id)
-    original_branch = Keyword.fetch!(opts, :original_branch)
+    original_branch = Keyword.get(opts, :original_branch)
     git = Keyword.get(opts, :git, Deft.Git)
     working_dir = Keyword.get(opts, :working_dir, File.cwd!())
     keep_failed_branches = Keyword.get(opts, :keep_failed_branches, false)
@@ -1056,29 +1056,11 @@ defmodule Deft.Git.Job do
       # Step 1: Remove all Lead worktrees for this job
       remove_lead_worktrees(git, working_dir, job_id)
 
-      # Step 2: Restore the original branch
-      case checkout_branch(git, original_branch) do
-        {:ok, :checkout} ->
-          Logger.info("Restored original branch: #{original_branch}")
+      # Step 2: Restore the original branch (skip if job branch was never created)
+      restore_original_branch(git, original_branch)
 
-        {:error, reason} ->
-          Logger.warning(
-            "Failed to checkout original branch #{original_branch}: #{inspect(reason)}"
-          )
-      end
-
-      # Step 3: Delete the job branch if not keeping failed branches
-      if keep_failed_branches do
-        Logger.info("Keeping job branch #{job_branch} for debugging")
-      else
-        case delete_job_branch_force(git, job_branch) do
-          {:ok, :deleted} ->
-            Logger.info("Deleted job branch: #{job_branch}")
-
-          {:error, reason} ->
-            Logger.warning("Failed to delete job branch #{job_branch}: #{inspect(reason)}")
-        end
-      end
+      # Step 3: Delete the job branch if not keeping failed branches (skip if never created)
+      cleanup_job_branch(git, job_branch, original_branch, keep_failed_branches)
 
       # Step 4: Restore user's stashed changes if they were stashed during job creation
       pop_job_stash(git, job_id)
@@ -1086,6 +1068,41 @@ defmodule Deft.Git.Job do
       Logger.info("Job #{job_id} aborted - cleanup completed")
       :ok
     end)
+  end
+
+  defp restore_original_branch(_git, nil) do
+    Logger.info("Skipping branch checkout - job branch was never created")
+  end
+
+  defp restore_original_branch(git, original_branch) do
+    case checkout_branch(git, original_branch) do
+      {:ok, :checkout} ->
+        Logger.info("Restored original branch: #{original_branch}")
+
+      {:error, reason} ->
+        Logger.warning(
+          "Failed to checkout original branch #{original_branch}: #{inspect(reason)}"
+        )
+    end
+  end
+
+  defp cleanup_job_branch(_git, _job_branch, nil, _keep_failed_branches) do
+    # Job branch was never created, nothing to clean up
+    :ok
+  end
+
+  defp cleanup_job_branch(_git, job_branch, _original_branch, true) do
+    Logger.info("Keeping job branch #{job_branch} for debugging")
+  end
+
+  defp cleanup_job_branch(git, job_branch, _original_branch, false) do
+    case delete_job_branch_force(git, job_branch) do
+      {:ok, :deleted} ->
+        Logger.info("Deleted job branch: #{job_branch}")
+
+      {:error, reason} ->
+        Logger.warning("Failed to delete job branch #{job_branch}: #{inspect(reason)}")
+    end
   end
 
   # Remove all Lead worktrees associated with a job

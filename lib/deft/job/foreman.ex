@@ -664,7 +664,7 @@ defmodule Deft.Job.Foreman do
     # - Original branch restoration
     # - Job branch deletion (respecting keep_failed_branches config)
     # - Stash pop to restore user's uncommitted changes
-    original_branch = Map.get(data.config, :original_branch, "main")
+    original_branch = Map.get(data.config, :original_branch, nil)
     keep_failed_branches = Map.get(data.config, :job_keep_failed_branches, false)
 
     GitJob.abort_job(
