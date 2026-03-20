@@ -934,7 +934,7 @@ defmodule Deft.Job.Foreman do
   end
 
   # Research timeout
-  def handle_event(:info, :research_timeout, {:researching, :idle}, data) do
+  def handle_event(:info, :research_timeout, {:researching, _agent_state}, data) do
     Logger.warning(
       "Research timeout reached, proceeding with #{length(data.research_findings)} findings"
     )

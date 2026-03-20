@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.6
 
-- Fix `research_timeout` handler to match all `{:researching, _}` substates (foreman.ex:937): currently matches only `{:researching, :idle}`; if user sends a prompt during research, Foreman transitions to `{:researching, :calling}` and timeout message falls to catch-all → silently dropped → research phase hangs permanently
 - Fix Lead `continue_work(:verifying, data)` to check verification Runner result (lead.ex:1365-1389): reports `:complete` to Foreman whenever `runner_tasks` is empty regardless of test pass/fail; `process_runner_result` correctly marks tasks `:failed` but `continue_work` never inspects task statuses; failed deliverables get merged
 - Implement `/correct` job correction production path: Foreman expects `"__JOB_CORRECTION__: "` sentinel in prompt text (foreman.ex:459) but nothing in the codebase produces it; `Deft.Tools.Correct` handles OM corrections only; no CLI/TUI code transforms `/correct <msg>` into the sentinel or sends `{:lead_message, :correction, ...}`; user corrections during a job are silently ignored
 
