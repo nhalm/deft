@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## sessions v0.4
 
-- Add OM config fields to `agent_config` map in CLI `start_agent` (cli.ex:902-911): map has only 8 keys and is missing `om_message_token_threshold`, `om_observation_token_threshold`, `om_buffer_interval`, `om_buffer_tail_retention`, `om_hard_threshold_multiplier`, and `om_enabled`; OM State helpers (state.ex:88-94) and Agent Context (context.ex:56-57,143) use dot notation to access these → `KeyError` crash when OM is active
 - Fix `Store.resume` `{:error, _}` branch to fall back to `state.om_state` (store.ex:156): when `_om.jsonl` exists but is unreadable, `load_latest_snapshot` returns `{:error, reason}`; code maps this to `nil`, discarding observation entries already recovered from main JSONL; should fall back to `state.om_state` like the `{:ok, nil}` branch does
 
 ## tools v0.2
