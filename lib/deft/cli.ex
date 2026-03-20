@@ -1146,6 +1146,93 @@ defmodule Deft.CLI do
     end
   end
 
+  # Ensure working tree is clean before starting a job
+  # Prompts user to stash if dirty (unless auto_approve is true)
+  # Per git-strategy spec section 1
+  defp ensure_clean_working_tree(job_id, auto_approve) do
+    case Git.cmd(["status", "--porcelain"]) do
+      {"", 0} ->
+        # Working tree is clean
+        :ok
+
+      {output, 0} when byte_size(output) > 0 ->
+        # Working tree has uncommitted changes
+        handle_dirty_working_tree_cli(job_id, output, auto_approve)
+
+      {error_output, exit_code} ->
+        IO.puts(:stderr, "Failed to check git status: #{error_output}")
+        {:error, {:git_status_failed, exit_code}}
+    end
+  end
+
+  # Handle dirty working tree by prompting user or failing in auto mode
+  defp handle_dirty_working_tree_cli(job_id, status_output, auto_approve) do
+    if auto_approve do
+      # In auto-approve mode, we can't stash - fail immediately
+      IO.puts(:stderr, """
+      Working tree has uncommitted changes (--auto-approve-all mode):
+
+      #{status_output}
+
+      Please commit or stash your changes before starting a job.
+      """)
+
+      {:error, :dirty_working_tree}
+    else
+      # Interactive mode - prompt user
+      IO.puts("""
+      Warning: Working tree has uncommitted changes:
+
+      #{status_output}
+
+      You should stash your changes before starting a job.
+      This prevents conflicts with the job's work.
+      """)
+
+      IO.write("Stash changes and continue? [y/N]: ")
+      response = IO.gets("")
+      handle_stash_response_cli(job_id, response)
+    end
+  end
+
+  # Handle user response to stash prompt
+  defp handle_stash_response_cli(job_id, response) do
+    case response do
+      :eof ->
+        # Non-interactive environment (e.g., tests with no stdin)
+        IO.puts("\nJob creation cancelled (no input available).\n")
+        {:error, :dirty_working_tree}
+
+      input when is_binary(input) ->
+        case String.trim(input) |> String.downcase() do
+          answer when answer in ["y", "yes"] ->
+            perform_stash_cli(job_id)
+
+          _ ->
+            IO.puts("\nJob creation cancelled.\n")
+            {:error, :dirty_working_tree}
+        end
+    end
+  end
+
+  # Perform the actual git stash operation
+  defp perform_stash_cli(job_id) do
+    IO.puts("\nStashing changes...")
+    stash_message = "Deft job creation: #{job_id}"
+
+    case Git.cmd(["stash", "push", "-m", stash_message]) do
+      {output, 0} ->
+        IO.puts(output)
+        IO.puts("Changes stashed successfully. Continuing with job creation.\n")
+        :ok
+
+      {error_output, _exit_code} ->
+        IO.puts(:stderr, "Failed to stash changes: #{error_output}")
+        IO.puts("\nFailed to stash changes. Please resolve manually and restart the job.\n")
+        {:error, :stash_failed}
+    end
+  end
+
   # Detect if stdin is piped (not a TTY)
   defp stdin_piped? do
     !IO.ANSI.enabled?() or :io.columns() == {:error, :enoent}
@@ -2103,6 +2190,21 @@ defmodule Deft.CLI do
     :ok = Deft.Provider.Registry.register("anthropic", Deft.Provider.Anthropic)
 
     # Set issue status to in_progress
+    set_issue_in_progress(issue)
+
+    # Generate job ID
+    job_id = "job_" <> (:crypto.strong_rand_bytes(8) |> Base.encode16(case: :lower))
+
+    # Verify working tree is clean before starting the job
+    # This is required by git-strategy spec section 1 - prompt user to stash if dirty
+    verify_clean_tree_or_abort(job_id, issue, flags[:auto_approve_all])
+
+    # Start the job supervisor and wait for completion
+    start_job_and_wait(job_id, issue, working_dir, config, flags)
+  end
+
+  # Set issue status to in_progress
+  defp set_issue_in_progress(issue) do
     case Issues.update(issue.id, %{status: :in_progress}) do
       {:ok, _issue} ->
         IO.puts("Issue #{issue.id} status set to in_progress")
@@ -2111,14 +2213,30 @@ defmodule Deft.CLI do
         IO.puts(:stderr, "Error: Failed to update issue status: #{inspect(reason)}")
         exit({:shutdown, 1})
     end
+  end
 
-    # Generate job ID
-    job_id = "job_" <> (:crypto.strong_rand_bytes(8) |> Base.encode16(case: :lower))
+  # Verify working tree is clean or abort job creation
+  defp verify_clean_tree_or_abort(job_id, issue, auto_approve) do
+    case ensure_clean_working_tree(job_id, auto_approve) do
+      :ok ->
+        :ok
 
-    # Build issue prompt from structured fields
+      {:error, :dirty_working_tree} ->
+        Issues.update(issue.id, %{status: :open})
+        IO.puts(:stderr, "Job creation cancelled - working tree has uncommitted changes")
+        exit({:shutdown, 1})
+
+      {:error, reason} ->
+        Issues.update(issue.id, %{status: :open})
+        IO.puts(:stderr, "Error: Failed to verify working tree: #{inspect(reason)}")
+        exit({:shutdown, 1})
+    end
+  end
+
+  # Start Job Supervisor and wait for completion
+  defp start_job_and_wait(job_id, issue, working_dir, config, flags) do
     issue_prompt = build_issue_prompt(issue)
 
-    # Build agent config for Foreman
     agent_config = %{
       model: config.model,
       provider: Deft.Provider.Anthropic,
@@ -2142,8 +2260,6 @@ defmodule Deft.CLI do
       job_max_duration: config.job_max_duration
     }
 
-    # Start Job Supervisor (which starts Foreman with runner_supervisor)
-    # Pass current process PID so Foreman can send plan approval messages
     case Deft.Job.Supervisor.start_link(
            job_id: job_id,
            config: agent_config,

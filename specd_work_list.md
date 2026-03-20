@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## git-strategy v0.2
-
-- Move stash prompt from Foreman to CLI/TUI layer before Foreman.start_link: Foreman hardcodes `auto_approve: true` when calling `GitJob.create_job_branch` (foreman.ex:393), making the stash-prompt path unreachable; dirty working trees always fail with `{:error, :dirty_working_tree}`; spec section 1 requires "warn the user and ask to stash" but GenServers cannot do interactive I/O; must move the stash check and prompt to the CLI/TUI layer before starting the Foreman so the working tree is clean before `create_job_branch` runs
-
 ## evals v0.4
 
 - Rewrite `cache_retrieval_test.exs` helper functions (lines 171-208) to actually test agent behavior: `agent_retrieves_cache?/3`, `agent_retrieves_cache_with_filter?/4`, and `agent_retrieves_cache_with_grep_filter?/4` are tautologies that check fixture string patterns (never start an agent); always return true giving 100% pass rate regardless of actual agent behavior (blocked: agent loop testability)
