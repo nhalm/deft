@@ -32,7 +32,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.6
 
-- Fix `inspect/1` on research findings in decomposition prompt (foreman.ex:2759): `inspect(finding)` wraps strings in double-quotes with escaped chars; LLM receives Elixir term syntax instead of raw text; use `finding` directly
 - Fix Foreman `cancel_stream/1` no-op (foreman.ex:1585-1589): placeholder that logs and returns `:ok` without calling `provider.cancel_stream(data.stream_ref)`; streams continue running after abort/timeout, sending events to a transitioned state machine
 
 ## rate-limiter v0.1

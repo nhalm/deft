@@ -2756,7 +2756,7 @@ defmodule Deft.Job.Foreman do
         data.research_findings
         |> Enum.with_index(1)
         |> Enum.map_join("\n\n", fn {finding, idx} ->
-          "## Research Finding #{idx}\n\n#{inspect(finding)}"
+          "## Research Finding #{idx}\n\n#{finding}"
         end)
       end
 
