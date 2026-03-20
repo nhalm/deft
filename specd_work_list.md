@@ -30,10 +30,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Fix foreman verification accuracy eval to call actual Foreman module instead of hardcoded rule: `verification_accuracy_test.exs` defines its own `make_foreman_decision/2` (line 264) that uses a pure boolean formula; must invoke the real Foreman verification logic (LLM-based) and run statistically (20 iterations, 90% pass rate per spec) (blocked: call_llm_judge implementation)
 - Fix `summary_quality_test.exs` to use actual LLM judge: `judge_summary_quality/3` (line 264) uses heuristic checks (size reduction, regex matches) that deterministically pass on well-formed summaries; spec section 1.6 requires LLM-as-judge validated to >85% precision and recall (blocked: call_llm_judge implementation)
 
-## providers v0.3
-
-- Fix Observer and Reflector `collect_stream_text_loop` to accumulate Usage events instead of replacing (observer.ex:192-194, reflector.ex:236-238): both set `usage_data = %{input_tokens: input, output_tokens: output}` on each Usage event, discarding previous values; Anthropic sends `message_start` with input tokens and `message_delta` with output tokens separately; final usage has only the last event's counts; spec v0.3 requires accumulation
-
 ## tools v0.2
 
 - Fix `generate_unified_diff/3` to emit `@@ -start,count +start,count @@` hunk headers (edit.ex:274-292): currently outputs `--- file` / `+++ file` header then raw `+`/`-`/` ` lines with no hunk markers; the output is not a valid unified diff — cannot be parsed by diff consumers and provides no line-number information

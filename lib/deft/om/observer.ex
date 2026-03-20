@@ -190,7 +190,18 @@ defmodule Deft.OM.Observer do
         collect_stream_text_loop(stream_ref, acc <> delta, usage, start_time, timeout)
 
       {:provider_event, %Usage{input: input_tokens, output: output_tokens}} ->
-        usage_data = %{input_tokens: input_tokens, output_tokens: output_tokens}
+        usage_data =
+          case usage do
+            nil ->
+              %{input_tokens: input_tokens, output_tokens: output_tokens}
+
+            existing ->
+              %{
+                input_tokens: existing.input_tokens + input_tokens,
+                output_tokens: existing.output_tokens + output_tokens
+              }
+          end
+
         collect_stream_text_loop(stream_ref, acc, usage_data, start_time, timeout)
 
       {:provider_event, %Done{}} ->
