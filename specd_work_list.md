@@ -23,6 +23,10 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Rewrite `agent_created_quality_test.exs` to be a statistical eval: currently constructs Issue structs directly from fixture data via `build_issue_from_fixture/1` and asserts on fixture fields — never calls an LLM or agent; spec section 1.5 requires 80% over 20 iterations as a statistical eval that detects model quality regressions (blocked: agent loop testability)
 - Fix `loop_safety_test.exs` stub: `run_loop_with_monitoring/2` (line 207) returns hardcoded `%{success: true, issues_processed: 0, ...}` and discards CLI args; when `:skip` tag is removed, all safety assertions (`assert_no_false_closes`, `assert_no_cost_anomalies`, etc.) pass trivially on empty data; must invoke actual CLI or agent loop (blocked: CLI invocation mechanism in test env)
 
+## rate-limiter v0.2
+
+- Pass `max_leads` config to RateLimiter in `Job.Supervisor.init/1` (supervisor.ex:83): RateLimiter receives only `job_id`, `foreman_pid`, `cost_ceiling`; its `max_concurrency` defaults to 10 while Foreman's `job_max_leads` defaults to 5; RateLimiter must receive `max_leads` from config so its adaptive concurrency ceiling matches the Foreman's actual Lead cap
+
 ## evals v0.3
 
 - Create missing e2e test files: `test/eval/e2e/single_task_test.exs`, `test/eval/e2e/multi_agent_test.exs`, `test/eval/e2e/verification_circuit_breaker_test.exs` per spec section 1.2 (blocked: fixtures/codebase_snapshots need synthetic repos)

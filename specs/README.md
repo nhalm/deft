@@ -73,7 +73,7 @@ Decision reasoning is logged in [specd_decisions.jsonl](../specd_decisions.jsonl
 |------|---------|--------|-------------|
 | [observational-memory](observational-memory.md) | v0.3 | Ready | Observer/Reflector with sectioned observations, two-level compression |
 | [orchestration](orchestration.md) | v0.6 | Ready | Foreman/Lead/Runner hierarchy, OTP coordination protocol, Deft.Store site log |
-| [rate-limiter](rate-limiter.md) | v0.1 | Ready | Dual token-bucket rate limiting, priority queue, adaptive concurrency, cost tracking |
+| [rate-limiter](rate-limiter.md) | v0.2 | Ready | Dual token-bucket rate limiting, priority queue, adaptive concurrency, cost tracking |
 | [git-strategy](git-strategy.md) | v0.2 | Ready | Git worktree strategy, merge protocol, conflict resolution, orphan cleanup |
 
 ## Infrastructure

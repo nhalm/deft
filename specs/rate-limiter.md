@@ -2,11 +2,14 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.1 |
+| Version | 0.2 |
 | Status | Ready |
 | Last Updated | 2026-03-17 |
 
 ## Changelog
+
+### v0.2 (2026-03-20)
+- Added `job.max_leads` to configuration table — was referenced in section 5 but missing from section 7
 
 ### v0.1 (2026-03-17)
 - Extracted from orchestration.md v0.2 — centralized rate limiting, priority queue, adaptive concurrency, cost tracking
@@ -97,6 +100,7 @@ Reads `usage` (input_tokens, output_tokens) from API responses. Multiplies by pe
 | `job.cost_ceiling` | `10.00` | Job pauses and asks user approval before exceeding ($) |
 | `job.cost_warning` | `5.00` | Display warning in TUI when reached ($) |
 | `job.initial_concurrency` | `2` | Starting number of concurrent Leads (adaptive scaling) |
+| `job.max_leads` | `5` | Maximum concurrent Lead slots (upper bound for adaptive scaling) |
 
 Provider-specific RPM/TPM limits are configured in [providers.md](providers.md).
 
