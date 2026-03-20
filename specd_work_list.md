@@ -23,10 +23,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Rewrite `agent_created_quality_test.exs` to be a statistical eval: currently constructs Issue structs directly from fixture data via `build_issue_from_fixture/1` and asserts on fixture fields — never calls an LLM or agent; spec section 1.5 requires 80% over 20 iterations as a statistical eval that detects model quality regressions (blocked: agent loop testability)
 - Fix `loop_safety_test.exs` stub: `run_loop_with_monitoring/2` (line 207) returns hardcoded `%{success: true, issues_processed: 0, ...}` and discards CLI args; when `:skip` tag is removed, all safety assertions (`assert_no_false_closes`, `assert_no_cost_anomalies`, etc.) pass trivially on empty data; must invoke actual CLI or agent loop (blocked: CLI invocation mechanism in test env)
 
-## git-strategy v0.2
-
-- Fix merge-resolution retry cap off-by-one (foreman.ex:2384): condition `retry_count > max_retries - 1` with `max_retries = 3` fires at retry_count=3, allowing 4 runner invocations; previous fix (changed from `>= max_retries`) was a no-op since `>= 3` == `> 2`; change to `retry_count >= max_retries - 1` to cap at 3 runners
-
 ## issues v0.5
 
 - Fix `build_updated_issue/2` to clear `closed_at` when reopening a closed issue (issues.ex:429-434): condition only sets `closed_at` when transitioning TO `:closed`; when `new_status == :open` and `issue.status == :closed`, `closed_at` retains the old timestamp; violates schema contract (`closed_at` must be nil when not closed)
