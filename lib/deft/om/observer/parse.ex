@@ -60,9 +60,17 @@ defmodule Deft.OM.Observer.Parse do
         # Strip unknown sections per spec section 3.5
         cleaned_observations = strip_unknown_sections(observations)
 
+        # Fold current_task into ## Current State section per spec section 3.5
+        final_observations =
+          if current_task && current_task != "" do
+            fold_current_task_into_observations(cleaned_observations, current_task)
+          else
+            cleaned_observations
+          end
+
         {:ok,
          %{
-           observations: cleaned_observations,
+           observations: final_observations,
            current_task: current_task,
            continuation_hint: continuation_hint
          }}
@@ -220,6 +228,37 @@ defmodule Deft.OM.Observer.Parse do
     @section_order
     |> Enum.map(fn section_name ->
       case Map.get(sections, section_name) do
+        nil -> nil
+        content -> "## #{section_name}\n#{content}"
+      end
+    end)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join("\n\n")
+  end
+
+  # Fold current_task into ## Current State section per spec section 3.5
+  # The <current-task> XML block should be merged into Current State, not kept separate
+  defp fold_current_task_into_observations(observations, current_task) do
+    sections = parse_sections(observations)
+
+    # Get existing Current State content (if any)
+    current_state_content = Map.get(sections, "Current State", "")
+
+    # Prepend current_task as "Active task: ..." to the Current State section
+    updated_current_state =
+      if current_state_content == "" do
+        "- Active task: #{current_task}"
+      else
+        "- Active task: #{current_task}\n#{current_state_content}"
+      end
+
+    # Update the sections map with the modified Current State
+    updated_sections = Map.put(sections, "Current State", updated_current_state)
+
+    # Reconstruct observations in canonical order
+    @section_order
+    |> Enum.map(fn section_name ->
+      case Map.get(updated_sections, section_name) do
         nil -> nil
         content -> "## #{section_name}\n#{content}"
       end

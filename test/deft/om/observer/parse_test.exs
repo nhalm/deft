@@ -75,6 +75,70 @@ defmodule Deft.OM.Observer.ParseTest do
       assert {:error, reason} = Parse.parse_output(bad_input)
       assert reason =~ "Could not parse"
     end
+
+    test "folds current_task into ## Current State section per spec 3.5" do
+      xml = """
+      <observations>
+      ## User Preferences
+      - (14:32) 🔴 User prefers minimal dependencies
+      </observations>
+
+      <current-task>
+      Implementing JWT authentication in src/auth.ex
+      </current-task>
+      """
+
+      assert {:ok, result} = Parse.parse_output(xml)
+      # current_task should be folded into Current State section
+      assert result.observations =~ "## Current State"
+      assert result.observations =~ "Active task: Implementing JWT authentication in src/auth.ex"
+      assert result.observations =~ "## User Preferences"
+      # Current State should come first in canonical order
+      [first_section | _] = String.split(result.observations, "##", trim: true)
+      assert first_section =~ "Current State"
+    end
+
+    test "folds current_task into existing ## Current State section" do
+      xml = """
+      <observations>
+      ## Current State
+      - (14:55) Last action: Runner created User migration
+      - (14:52) Blocking error: none
+
+      ## User Preferences
+      - (14:32) 🔴 User prefers minimal dependencies
+      </observations>
+
+      <current-task>
+      Implementing JWT authentication
+      </current-task>
+      """
+
+      assert {:ok, result} = Parse.parse_output(xml)
+      # current_task should be prepended to existing Current State content
+      assert result.observations =~ "Active task: Implementing JWT authentication"
+      assert result.observations =~ "Last action: Runner created User migration"
+      assert result.observations =~ "Blocking error: none"
+      # Verify Current State comes first
+      assert result.observations =~ ~r/## Current State.*Active task.*Last action/s
+    end
+
+    test "handles empty current_task gracefully" do
+      xml = """
+      <observations>
+      ## Current State
+      - (14:55) Last action: test
+
+      </observations>
+
+      <current-task></current-task>
+      """
+
+      assert {:ok, result} = Parse.parse_output(xml)
+      # Empty current_task should not be folded in
+      refute result.observations =~ "Active task:"
+      assert result.observations =~ "Last action: test"
+    end
   end
 
   describe "merge_observations/2" do
