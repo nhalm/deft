@@ -37,6 +37,7 @@ defmodule Deft.OM.StateTest do
       job_test_command: "mix test",
       job_keep_failed_branches: false,
       job_squash_on_complete: true,
+      job_initial_concurrency: 2,
       job_max_leads: 5,
       job_max_runners_per_lead: 3,
       job_research_timeout: 120_000,

@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## rate-limiter v0.2
-
-- Wire `initial_concurrency` config: add `job_initial_concurrency` field to `Deft.Config`, pass it from `Job.Supervisor` to `RateLimiter.start_link/1` opts; currently always defaults to 2 regardless of user configuration (spec section 7 defines `job.initial_concurrency` as configurable)
-
 ## evals v0.4 (new)
 
 - Fix PII safety eval crash-fallback in tier1-evals.yml: hallucination check (lines 94-97) sets `SAFETY_FAILURE=1` when tests exit non-zero without "Pass rate:" output; PII check (lines 104-129) has no equivalent fallback — a crashing PII test silently passes the safety gate

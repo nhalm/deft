@@ -85,6 +85,7 @@ defmodule Deft.Job.Supervisor do
                job_id: job_id,
                foreman_pid: foreman_name,
                cost_ceiling: config.work_cost_ceiling,
+               initial_concurrency: config.job_initial_concurrency,
                max_concurrency: config.job_max_leads
              ]
            ]},
