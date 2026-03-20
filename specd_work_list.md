@@ -17,6 +17,35 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
+## providers v0.3
+
+- Fix duplicate `%Done{}` event: `receive_chunks/4` sends `%Done{}` both when `message_stop` SSE event is parsed (line 190 → 323 → 260) and when HTTP stream closes (`{^req_stream, :done}` at line 155); the gen_statem Agent transitions to `:executing_tools` on the first Done, then crashes on the second with no matching handler
+
+## orchestration v0.6
+
+- Replace `determine_research_tasks/1` stub with LLM-based research planning: currently (foreman.ex:2658-2675) always returns two hardcoded generic tasks ("Analyze codebase structure" and "Identify existing patterns") regardless of prompt; spec section 3.1 requires the Foreman to analyze the request during `:planning` and determine what research is needed; the planning phase LLM call response is currently discarded
+
+## issues v0.5
+
+- Fix `build_updated_issue/2` to set `closed_at` when `status` changes to `:closed`: currently (issues.ex:426-438) only updates the `status` field without setting `closed_at`; issues closed via `deft issue update <id> --status closed` get `closed_at: nil`, making them immune to compaction (line 513 requires `closed_at != nil`)
+
+## git-strategy v0.2
+
+- Wire `job_test_command` and `job_squash_on_complete` from `Config` through CLI `agent_config` map: `start_job_and_wait` (cli.ex:2240-2261) omits both fields; Foreman falls back to hardcoded defaults via `Map.get(data.config, :job_test_command, "mix test")` and `Map.get(data.config, :job_squash_on_complete, true)`, making user `.deft/config.yaml` settings for these fields no-ops
+- Fix misleading error message in Foreman when `verify_no_worktrees` fails after successful merge: `complete_job` returns `{:error, {:worktrees_remain, n}}` after merge succeeds and job branch is deleted; Foreman (foreman.ex:1236-1257) shows "failed to merge changes" and tells user to "manually merge the job branch" which no longer exists; should report orphan worktrees as a warning, not a merge failure
+
+## tools v0.2
+
+- Fix `find` tool: add `--glob` flag to `fd` invocation in `execute_fd/2` (line 79-88); without it, `fd` interprets the pattern as regex instead of glob — `*.ex` matches "zero or more `e`s followed by `x`" instead of all `.ex` files, producing wrong/empty results silently
+
+## rate-limiter v0.2
+
+- Wire `initial_concurrency` config: add `job_initial_concurrency` field to `Deft.Config`, pass it from `Job.Supervisor` to `RateLimiter.start_link/1` opts; currently always defaults to 2 regardless of user configuration (spec section 7 defines `job.initial_concurrency` as configurable)
+
+## evals v0.4 (new)
+
+- Fix PII safety eval crash-fallback in tier1-evals.yml: hallucination check (lines 94-97) sets `SAFETY_FAILURE=1` when tests exit non-zero without "Pass rate:" output; PII check (lines 104-129) has no equivalent fallback — a crashing PII test silently passes the safety gate
+
 ## evals v0.4
 
 - Rewrite `cache_retrieval_test.exs` helper functions (lines 171-208) to actually test agent behavior: `agent_retrieves_cache?/3`, `agent_retrieves_cache_with_filter?/4`, and `agent_retrieves_cache_with_grep_filter?/4` are tautologies that check fixture string patterns (never start an agent); always return true giving 100% pass rate regardless of actual agent behavior (blocked: agent loop testability)
