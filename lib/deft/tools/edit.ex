@@ -275,21 +275,137 @@ defmodule Deft.Tools.Edit do
     old_lines = String.split(old_content, "\n")
     new_lines = String.split(new_content, "\n")
 
-    # Simple unified diff generation
-    # This is a basic implementation - could be enhanced with proper diff algorithm
-    diff_lines = ["--- #{file_path}", "+++ #{file_path}"]
+    diff_header = ["--- #{file_path}", "+++ #{file_path}"]
 
     # Find changed regions
     changes = find_changes(old_lines, new_lines)
 
-    diff_body =
-      Enum.map(changes, fn
+    # Group changes into hunks with context
+    hunks = group_into_hunks(changes, 3)
+
+    # Generate hunk output with headers
+    hunk_output =
+      Enum.map(hunks, fn hunk ->
+        generate_hunk_with_header(hunk)
+      end)
+
+    Enum.join(diff_header ++ hunk_output, "\n")
+  end
+
+  # Group diff operations into hunks with context lines
+  defp group_into_hunks(changes, context_lines) do
+    # First pass: identify hunk boundaries
+    # A hunk includes all changes plus context_lines before and after
+    changes_with_indices =
+      changes
+      |> Enum.with_index()
+      |> Enum.map(fn {{op, line}, idx} -> {op, line, idx} end)
+
+    # Find indices of all changes (non-context lines)
+    change_indices =
+      changes_with_indices
+      |> Enum.filter(fn {op, _, _} -> op != :context end)
+      |> Enum.map(fn {_, _, idx} -> idx end)
+
+    if change_indices == [] do
+      # No changes, return empty hunks
+      []
+    else
+      # Group nearby changes into hunks
+      # Two changes are in the same hunk if they're within 2*context_lines of each other
+      hunk_ranges =
+        change_indices
+        |> Enum.chunk_by(fn idx -> div(idx, context_lines * 2 + 1) end)
+        |> Enum.map(fn group ->
+          first = Enum.min(group)
+          last = Enum.max(group)
+          # Expand to include context
+          start_idx = max(0, first - context_lines)
+          end_idx = min(length(changes) - 1, last + context_lines)
+          {start_idx, end_idx}
+        end)
+        |> merge_overlapping_ranges()
+
+      # Extract hunks
+      Enum.map(hunk_ranges, fn {start_idx, end_idx} ->
+        Enum.slice(changes, start_idx..end_idx)
+      end)
+    end
+  end
+
+  # Merge overlapping or adjacent ranges
+  defp merge_overlapping_ranges([]), do: []
+  defp merge_overlapping_ranges([range]), do: [range]
+
+  defp merge_overlapping_ranges([{s1, e1} | rest]) do
+    merge_overlapping_ranges(rest, [{s1, e1}])
+  end
+
+  defp merge_overlapping_ranges([], acc), do: Enum.reverse(acc)
+
+  defp merge_overlapping_ranges([{s2, e2} | rest], [{s1, e1} | acc]) do
+    if s2 <= e1 + 1 do
+      # Overlapping or adjacent - merge
+      merge_overlapping_ranges(rest, [{s1, max(e1, e2)} | acc])
+    else
+      # Not overlapping - keep separate
+      merge_overlapping_ranges(rest, [{s2, e2}, {s1, e1} | acc])
+    end
+  end
+
+  # Generate a hunk with its @@ header
+  defp generate_hunk_with_header(hunk_changes) do
+    # Calculate line numbers and counts for old and new files
+    {old_start, old_count, new_start, new_count} = calculate_hunk_header(hunk_changes)
+
+    # Format hunk header
+    header = "@@ -#{old_start},#{old_count} +#{new_start},#{new_count} @@"
+
+    # Format hunk body
+    body =
+      Enum.map(hunk_changes, fn
         {:context, line} -> " #{line}"
         {:delete, line} -> "-#{line}"
         {:add, line} -> "+#{line}"
       end)
 
-    Enum.join(diff_lines ++ diff_body, "\n")
+    Enum.join([header | body], "\n")
+  end
+
+  # Calculate the line numbers and counts for a hunk header
+  defp calculate_hunk_header(hunk_changes) do
+    # Track line numbers in old and new files
+    {old_start, old_count, new_start, new_count, _} =
+      Enum.reduce(hunk_changes, {nil, 0, nil, 0, {1, 1}}, fn
+        {:context, _}, {old_s, old_c, new_s, new_c, {old_line, new_line}} ->
+          {
+            old_s || old_line,
+            old_c + 1,
+            new_s || new_line,
+            new_c + 1,
+            {old_line + 1, new_line + 1}
+          }
+
+        {:delete, _}, {old_s, old_c, new_s, new_c, {old_line, new_line}} ->
+          {
+            old_s || old_line,
+            old_c + 1,
+            new_s || new_line,
+            new_c,
+            {old_line + 1, new_line}
+          }
+
+        {:add, _}, {old_s, old_c, new_s, new_c, {old_line, new_line}} ->
+          {
+            old_s || old_line,
+            old_c,
+            new_s || new_line,
+            new_c + 1,
+            {old_line, new_line + 1}
+          }
+      end)
+
+    {old_start || 1, old_count, new_start || 1, new_count}
   end
 
   defp find_changes(old_lines, new_lines) do
