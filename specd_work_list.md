@@ -30,10 +30,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Fix foreman verification accuracy eval to call actual Foreman module instead of hardcoded rule: `verification_accuracy_test.exs` defines its own `make_foreman_decision/2` (line 264) that uses a pure boolean formula; must invoke the real Foreman verification logic (LLM-based) and run statistically (20 iterations, 90% pass rate per spec) (blocked: call_llm_judge implementation)
 - Fix `summary_quality_test.exs` to use actual LLM judge: `judge_summary_quality/3` (line 264) uses heuristic checks (size reduction, regex matches) that deterministically pass on well-formed summaries; spec section 1.6 requires LLM-as-judge validated to >85% precision and recall (blocked: call_llm_judge implementation)
 
-## skills v0.4
-
-- Fix CLI `handle_user_input` missing catch-all for slash command I/O errors (cli.ex:1006-1027): `case` only handles `{:error, :not_found, _}` and `{:error, :no_definition, _}`; `SlashCommand.dispatch/1` can return `{:error, reason, name}` for POSIX errors (`:enoent`, `:eacces`); raises `CaseClauseError` at runtime; TUI (chat.ex:813) correctly handles this with a catch-all
-
 ## issues v0.5
 
 - Fix `Issue.from_map/1` to handle missing required fields without raising (issue.ex:117-133): uses dot notation (`data.id`, `data.title`, etc.) which raises `KeyError` on incomplete JSONL; `load_issues/1` (issues.ex:472-481) only catches `{:error, reason}` returns, not exceptions; GenServer init crashes on structurally incomplete (but JSON-valid) lines instead of skipping with a warning

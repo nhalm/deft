@@ -1013,28 +1013,35 @@ defmodule Deft.CLI do
         {:ok, text}
 
       {:command, name, args} ->
-        case SlashCommand.dispatch(name) do
-          {:ok, :command, definition} ->
-            # Commands: inject markdown content as user message
-            # If args provided, append them to the definition
-            text = if args == "", do: definition, else: "#{definition}\n\n#{args}"
-            {:ok, text}
+        handle_command_dispatch(name, args)
+    end
+  end
 
-          {:ok, :skill, definition} ->
-            # Skills: inject definition as system-level instruction per spec section 2.4
-            # If args provided, append them to the definition
-            text =
-              if args == "", do: definition, else: "#{definition}\n\nAdditional context: #{args}"
+  defp handle_command_dispatch(name, args) do
+    case SlashCommand.dispatch(name) do
+      {:ok, :command, definition} ->
+        # Commands: inject markdown content as user message
+        # If args provided, append them to the definition
+        text = if args == "", do: definition, else: "#{definition}\n\n#{args}"
+        {:ok, text}
 
-            {:inject_skill, text}
+      {:ok, :skill, definition} ->
+        # Skills: inject definition as system-level instruction per spec section 2.4
+        # If args provided, append them to the definition
+        text =
+          if args == "", do: definition, else: "#{definition}\n\nAdditional context: #{args}"
 
-          {:error, :not_found, cmd_name} ->
-            {:error, "Unknown command: /#{cmd_name}"}
+        {:inject_skill, text}
 
-          {:error, :no_definition, cmd_name} ->
-            {:error,
-             "Skill '/#{cmd_name}' exists but has no definition (manifest-only, missing --- separator)"}
-        end
+      {:error, :not_found, cmd_name} ->
+        {:error, "Unknown command: /#{cmd_name}"}
+
+      {:error, :no_definition, cmd_name} ->
+        {:error,
+         "Skill '/#{cmd_name}' exists but has no definition (manifest-only, missing --- separator)"}
+
+      {:error, reason, cmd_name} ->
+        {:error, "Error loading command /#{cmd_name}: #{reason}"}
     end
   end
 
