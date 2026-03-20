@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## orchestration v0.6
-
-- Implement `/correct` job correction production path: Foreman expects `"__JOB_CORRECTION__: "` sentinel in prompt text (foreman.ex:459) but nothing in the codebase produces it; `Deft.Tools.Correct` handles OM corrections only; no CLI/TUI code transforms `/correct <msg>` into the sentinel or sends `{:lead_message, :correction, ...}`; user corrections during a job are silently ignored
-
 ## sessions v0.4
 
 - Add OM config fields to `agent_config` map in CLI `start_agent` (cli.ex:902-911): map has only 8 keys and is missing `om_message_token_threshold`, `om_observation_token_threshold`, `om_buffer_interval`, `om_buffer_tail_retention`, `om_hard_threshold_multiplier`, and `om_enabled`; OM State helpers (state.ex:88-94) and Agent Context (context.ex:56-57,143) use dot notation to access these → `KeyError` crash when OM is active

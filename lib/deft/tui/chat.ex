@@ -769,6 +769,10 @@ defmodule Deft.TUI.Chat do
         new_term = assign(term, messages: term.assigns.messages ++ [inspect_msg])
         {:command_handled, new_term}
 
+      # Handle /correct command for job corrections
+      String.starts_with?(input, "/correct ") ->
+        handle_correct_command(input, term)
+
       # Other slash commands are dispatched via SlashCommand module
       String.starts_with?(input, "/") ->
         handle_slash_command(input, term)
@@ -823,6 +827,23 @@ defmodule Deft.TUI.Chat do
       {:not_slash, text} ->
         # This shouldn't happen since we already checked for "/" prefix
         {:submit, text}
+    end
+  end
+
+  defp handle_correct_command(input, term) do
+    # Extract message from `/correct <message>`
+    message = String.slice(input, 9..-1//1)
+
+    # Check if this is a job correction (no → separator) and job is active
+    # Job corrections get the __JOB_CORRECTION__ prefix for the Foreman
+    # OM corrections (with →) go through the normal command dispatch
+    if term.assigns.job_active and not String.contains?(message, "→") do
+      # Job correction - add sentinel prefix and submit to Foreman
+      corrected_text = "__JOB_CORRECTION__: " <> message
+      {:submit, corrected_text}
+    else
+      # OM correction or no job active - use regular slash command dispatch
+      handle_slash_command(input, term)
     end
   end
 
