@@ -389,27 +389,7 @@ defmodule Deft.Job.RateLimiter do
           end
 
         state = put_in(state, [:providers, provider], buckets)
-
-        # Try to deduct from both buckets
-        with {:ok, rpm_bucket} <- Bucket.deduct(buckets.rpm, 1),
-             {:ok, tpm_bucket} <- Bucket.deduct(buckets.tpm, estimated_tokens) do
-          # Both buckets have capacity - update state and grant permission
-          # Note: consecutive_429s is NOT reset here - only after 60s grace period
-          new_buckets = %{
-            buckets
-            | rpm: rpm_bucket,
-              tpm: tpm_bucket
-          }
-
-          new_state = put_in(state, [:providers, provider], new_buckets)
-
-          {:reply, {:ok, estimated_tokens}, new_state}
-        else
-          {:error, :insufficient} ->
-            # Not enough capacity - enqueue the request
-            new_state = enqueue_request(state, provider, estimated_tokens, priority, from)
-            {:noreply, new_state}
-        end
+        try_request_or_enqueue(state, provider, buckets, estimated_tokens, priority, from)
       end
     end
   end
@@ -525,6 +505,29 @@ defmodule Deft.Job.RateLimiter do
   end
 
   # Private helpers
+
+  defp try_request_or_enqueue(state, provider, buckets, estimated_tokens, priority, from) do
+    # Check if there are queued requests - if so, maintain FIFO ordering
+    if :gb_trees.is_empty(state.queue) do
+      # Queue is empty - try to serve immediately if capacity available
+      case {Bucket.deduct(buckets.rpm, 1), Bucket.deduct(buckets.tpm, estimated_tokens)} do
+        {{:ok, rpm_bucket}, {:ok, tpm_bucket}} ->
+          # Both buckets have capacity - update state and grant permission
+          new_buckets = %{buckets | rpm: rpm_bucket, tpm: tpm_bucket}
+          new_state = put_in(state, [:providers, provider], new_buckets)
+          {:reply, {:ok, estimated_tokens}, new_state}
+
+        _ ->
+          # Not enough capacity - enqueue the request
+          new_state = enqueue_request(state, provider, estimated_tokens, priority, from)
+          {:noreply, new_state}
+      end
+    else
+      # Queue is non-empty - enqueue this request to maintain FIFO
+      new_state = enqueue_request(state, provider, estimated_tokens, priority, from)
+      {:noreply, new_state}
+    end
+  end
 
   # Cost tracking threshold ($0.50 increments)
   @cost_report_threshold 0.50

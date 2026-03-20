@@ -30,10 +30,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Fix foreman verification accuracy eval to call actual Foreman module instead of hardcoded rule: `verification_accuracy_test.exs` defines its own `make_foreman_decision/2` (line 264) that uses a pure boolean formula; must invoke the real Foreman verification logic (LLM-based) and run statistically (20 iterations, 90% pass rate per spec) (blocked: call_llm_judge implementation)
 - Fix `summary_quality_test.exs` to use actual LLM judge: `judge_summary_quality/3` (line 264) uses heuristic checks (size reduction, regex matches) that deterministically pass on well-formed summaries; spec section 1.6 requires LLM-as-judge validated to >85% precision and recall (blocked: call_llm_judge implementation)
 
-## rate-limiter v0.1
-
-- Fix queue bypass in `handle_call({:request, ...})` (rate_limiter.ex:393-406): when bucket capacity is available, new requests are granted immediately without checking if queued requests exist; violates FIFO ordering within same priority level; queued requests from before a backoff period wait up to an extra second while new same-priority requests are served inline
-
 ## git-strategy v0.2
 
 - Fix merge-resolution retry off-by-one (foreman.ex:1103-1104): `max_retries = 3` with check `retry_count >= max_retries` allows 4 runner invocations (retry_count 0, 1, 2, 3) instead of 3; fix to `retry_count >= max_retries - 1` or start retry_count at 1
