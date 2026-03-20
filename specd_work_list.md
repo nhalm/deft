@@ -25,7 +25,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## issues v0.5
 
-- Fix `build_updated_issue/2` to clear `closed_at` when reopening a closed issue (issues.ex:429-434): condition only sets `closed_at` when transitioning TO `:closed`; when `new_status == :open` and `issue.status == :closed`, `closed_at` retains the old timestamp; violates schema contract (`closed_at` must be nil when not closed)
 - Fix work loop abort handling to include aborted job cost in cumulative total (cli.ex:2146-2149): `{:error, :aborted}` branch prints `Total cost: $#{cumulative_cost}` without adding the aborted job's partial cost; `handle_job_result` returns `{:error, :aborted}` discarding the cost; total shown to user is incorrect
 
 ## evals v0.3

@@ -427,10 +427,10 @@ defmodule Deft.Issues do
     new_status = Map.get(attrs, :status, issue.status)
 
     closed_at =
-      if new_status == :closed and issue.status != :closed do
-        Issue.timestamp()
-      else
-        issue.closed_at
+      cond do
+        new_status == :closed and issue.status != :closed -> Issue.timestamp()
+        new_status == :closed -> issue.closed_at
+        true -> nil
       end
 
     %{
