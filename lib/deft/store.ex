@@ -279,9 +279,14 @@ defmodule Deft.Store do
 
   @impl true
   def handle_info(:flush_buffer, state) do
-    new_state = flush_buffer(state)
-    new_state = %{new_state | flush_timer: schedule_flush_timer(state.type)}
-    {:noreply, new_state}
+    # Ignore flush if already closed - message may arrive after cleanup
+    if state.closed do
+      {:noreply, state}
+    else
+      new_state = flush_buffer(state)
+      new_state = %{new_state | flush_timer: schedule_flush_timer(state.type)}
+      {:noreply, new_state}
+    end
   end
 
   @impl true

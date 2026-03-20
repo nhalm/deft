@@ -70,10 +70,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Fix `truncate_session_history_to_target` halt on first oversized line (state.ex:1682-1692): `Enum.reduce_while` with `{:halt, ...}` stops iteration entirely when a single line exceeds remaining budget; all older lines (which may individually fit) are dropped; should use `{:cont, ...}` to skip oversized lines and continue, keeping as many newest entries as possible
 - Fix `current_task` from Observer silently discarded (state.ex:314-317, agent/context.ex:51-58): Observer extracts `current_task` (observer.ex:104) but it is never stored in State and `get_context/1` does not return it; `build_current_task_block/1` in context.ex always receives nil; spec section 3.5 requires current_task to be folded into `## Current State`
 
-## filesystem v0.4
-
-- Fix `handle_info(:flush_buffer)` missing `closed` guard (store.ex:261-265): no check for `state.closed` before flushing; if a `:flush_buffer` message is in the mailbox when `cleanup/1` runs, handler fires on closed DETS and crashes the process; must guard on `state.closed`
-
 ## skills v0.4
 
 - Fix CLI `handle_user_input` missing catch-all for slash command I/O errors (cli.ex:1006-1027): `case` only handles `{:error, :not_found, _}` and `{:error, :no_definition, _}`; `SlashCommand.dispatch/1` can return `{:error, reason, name}` for POSIX errors (`:enoent`, `:eacces`); raises `CaseClauseError` at runtime; TUI (chat.ex:813) correctly handles this with a catch-all
