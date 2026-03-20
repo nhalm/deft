@@ -1367,21 +1367,44 @@ defmodule Deft.Job.Lead do
     # and decide whether to report completion or go back to executing
     if Enum.empty?(data.runner_tasks) do
       # No runners active - check verification results
-      # For now, assume if we reached here without errors, verification passed
-      Logger.info("Lead #{data.lead_id} verification complete, reporting to Foreman")
+      failed_tasks = Enum.filter(data.task_list, fn task -> task.status == :failed end)
 
-      send_lead_message(
-        data.foreman_pid,
-        :complete,
-        "Deliverable complete and verified",
-        %{
-          lead_id: data.lead_id,
-          deliverable: data.deliverable,
-          tasks_completed: length(Enum.filter(data.task_list, &(&1.status == :done)))
-        }
-      )
+      if Enum.empty?(failed_tasks) do
+        # Verification passed
+        Logger.info("Lead #{data.lead_id} verification complete, reporting to Foreman")
 
-      {:next_state, {:complete, :idle}, data}
+        send_lead_message(
+          data.foreman_pid,
+          :complete,
+          "Deliverable complete and verified",
+          %{
+            lead_id: data.lead_id,
+            deliverable: data.deliverable,
+            tasks_completed: length(Enum.filter(data.task_list, &(&1.status == :done)))
+          }
+        )
+
+        {:next_state, {:complete, :idle}, data}
+      else
+        # Verification failed
+        Logger.error(
+          "Lead #{data.lead_id} verification failed with #{length(failed_tasks)} failed task(s)"
+        )
+
+        failed_descriptions = Enum.map(failed_tasks, & &1.description) |> Enum.join(", ")
+
+        send_lead_message(
+          data.foreman_pid,
+          :error,
+          "Verification failed. Failed tasks: #{failed_descriptions}",
+          %{
+            lead_id: data.lead_id,
+            failed_tasks: failed_tasks
+          }
+        )
+
+        {:next_state, {:blocked, :idle}, data}
+      end
     else
       # Verification still running
       {:keep_state, data}

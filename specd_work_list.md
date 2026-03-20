@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.6
 
-- Fix Lead `continue_work(:verifying, data)` to check verification Runner result (lead.ex:1365-1389): reports `:complete` to Foreman whenever `runner_tasks` is empty regardless of test pass/fail; `process_runner_result` correctly marks tasks `:failed` but `continue_work` never inspects task statuses; failed deliverables get merged
 - Implement `/correct` job correction production path: Foreman expects `"__JOB_CORRECTION__: "` sentinel in prompt text (foreman.ex:459) but nothing in the codebase produces it; `Deft.Tools.Correct` handles OM corrections only; no CLI/TUI code transforms `/correct <msg>` into the sentinel or sends `{:lead_message, :correction, ...}`; user corrections during a job are silently ignored
 
 ## sessions v0.4
