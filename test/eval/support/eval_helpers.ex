@@ -83,7 +83,7 @@ defmodule Deft.Eval.Helpers do
       |> Enum.reject(& &1.pass)
       |> Enum.map(fn result ->
         %{
-          iteration: result.iteration,
+          fixture: Map.get(result, :fixture, "unknown"),
           output: Map.get(result, :output, ""),
           reason: Map.get(result, :reason, "Unknown failure")
         }
