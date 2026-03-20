@@ -559,12 +559,29 @@ defmodule Deft.CLI do
         # Check if non-interactive continuation was requested
         case flags[:prompt] do
           nil ->
-            # No prompt flag - just show summary and exit
-            IO.puts(
-              "\nUse 'deft resume #{session_id} -p \"prompt\"' to continue non-interactively."
-            )
+            # No prompt flag - start interactive session
+            cli_flags = build_cli_flags(flags)
+            config = Config.load(cli_flags, state.working_dir)
 
-            :ok
+            verify_api_key()
+            :ok = Deft.Provider.Registry.register("anthropic", Deft.Provider.Anthropic)
+
+            agent_pid =
+              start_agent(
+                session_id,
+                state.working_dir,
+                config,
+                state.messages,
+                state.session_cost,
+                state.om_snapshot
+              )
+
+            Registry.register(Deft.Registry, {:session, session_id}, [])
+
+            IO.puts("Deft session #{session_id} resumed.")
+            IO.puts("Type /quit to exit.\n")
+
+            interactive_loop(agent_pid)
 
           prompt ->
             # Non-interactive continuation
