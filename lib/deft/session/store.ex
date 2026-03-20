@@ -153,7 +153,7 @@ defmodule Deft.Session.Store do
           case OMState.load_latest_snapshot(session_id, working_dir) do
             {:ok, nil} -> state.om_state
             {:ok, snapshot} -> snapshot
-            {:error, _reason} -> nil
+            {:error, _reason} -> state.om_state
           end
 
         # Replace om_state with om_snapshot from the separate file or observation entries from main JSONL

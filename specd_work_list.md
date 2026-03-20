@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## sessions v0.4
-
-- Fix `Store.resume` `{:error, _}` branch to fall back to `state.om_state` (store.ex:156): when `_om.jsonl` exists but is unreadable, `load_latest_snapshot` returns `{:error, reason}`; code maps this to `nil`, discarding observation entries already recovered from main JSONL; should fall back to `state.om_state` like the `{:ok, nil}` branch does
-
 ## tools v0.2
 
 - Fix `calculate_hunk_header` multi-hunk line numbers (edit.ex:379): line counter initializes at `{1, 1}` for every hunk; `group_into_hunks` doesn't pass the starting file position; all hunks after the first get wrong `@@` headers (e.g., `@@ -1,... @@` instead of `@@ -40,... @@`); must propagate each hunk's starting index from `group_into_hunks` to `generate_hunk_with_header`
