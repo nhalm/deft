@@ -166,8 +166,8 @@ defmodule Deft.OM.Reflector do
 
       {:error, reason} ->
         Logger.warning("Reflector: LLM call failed at level #{level}: #{inspect(reason)}")
-        # On error, return original observations
-        {:ok, observations, level, nil}
+        # On error, trigger retry with next compression level
+        {:retry, observations, level, nil}
     end
   end
 
