@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## evals v0.4 (new)
-
-- Fix PII safety eval crash-fallback in tier1-evals.yml: hallucination check (lines 94-97) sets `SAFETY_FAILURE=1` when tests exit non-zero without "Pass rate:" output; PII check (lines 104-129) has no equivalent fallback — a crashing PII test silently passes the safety gate
-
 ## evals v0.4
 
 - Rewrite `cache_retrieval_test.exs` helper functions (lines 171-208) to actually test agent behavior: `agent_retrieves_cache?/3`, `agent_retrieves_cache_with_filter?/4`, and `agent_retrieves_cache_with_grep_filter?/4` are tautologies that check fixture string patterns (never start an agent); always return true giving 100% pass rate regardless of actual agent behavior (blocked: agent loop testability)

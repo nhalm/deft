@@ -122,6 +122,15 @@ jobs:
                 else
                   echo "✓ PII evals passed threshold (${MIN_PII_RATE}% >= 90%)"
                 fi
+              else
+                echo "::warning::Could not extract pass rate from PII test output"
+              fi
+            else
+              if [ $PII_EXIT -ne 0 ]; then
+                echo "::error::SAFETY EVAL FAILURE: PII tests failed or produced no output"
+                SAFETY_FAILURE=1
+              else
+                echo "::warning::No pass rate output found in PII tests"
               fi
             fi
           else
