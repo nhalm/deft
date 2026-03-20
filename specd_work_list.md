@@ -82,3 +82,7 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 ## issues v0.5
 
 - Fix `Issue.from_map/1` to handle missing required fields without raising (issue.ex:117-133): uses dot notation (`data.id`, `data.title`, etc.) which raises `KeyError` on incomplete JSONL; `load_issues/1` (issues.ex:472-481) only catches `{:error, reason}` returns, not exceptions; GenServer init crashes on structurally incomplete (but JSON-valid) lines instead of skipping with a warning
+
+## sessions v0.4
+
+- Implement `deft resume <session-id>` to start the TUI with restored conversation instead of displaying summary only: currently calls `execute_command({:resume_session, session_id}, flags)` which displays summary and returns `:ok` without starting agent loop or TUI (cli.ex:560-567); spec section 5.1 implies resume should actively resume the session, not just display it
