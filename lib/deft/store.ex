@@ -174,9 +174,24 @@ defmodule Deft.Store do
     # Start async load task (monitored but not linked to GenServer)
     # Task collects entries and sends them to GenServer for insertion.
     # GenServer is ready immediately; reads return :miss for not-yet-loaded entries.
-    # Unlink to prevent task crash from killing GenServer (monitor preserved for {:DOWN, ...})
-    load_task = Task.async(fn -> collect_dets_entries(dets_file) end)
-    Process.unlink(load_task.pid)
+    # Create ref first, spawn unlinked, then monitor - avoids Task.async link race
+    ref = make_ref()
+    parent = self()
+
+    pid =
+      spawn(fn ->
+        result = collect_dets_entries(dets_file)
+        send(parent, {ref, result})
+      end)
+
+    monitor_ref = Process.monitor(pid)
+
+    load_task = %Task{
+      ref: ref,
+      pid: pid,
+      owner: parent,
+      mfa: {__MODULE__, :collect_dets_entries, [dets_file]}
+    }
 
     state = %{
       type: type,
@@ -186,6 +201,7 @@ defmodule Deft.Store do
       owner_name: owner_name,
       write_buffer: [],
       load_task: load_task,
+      monitor_ref: monitor_ref,
       closed: false,
       flush_timer: schedule_flush_timer(type)
     }
@@ -246,15 +262,19 @@ defmodule Deft.Store do
     Enum.each(entries, fn entry -> :ets.insert(state.tid, entry) end)
 
     # Demonitor and discard the DOWN message
-    Process.demonitor(ref, [:flush])
-    {:noreply, %{state | load_task: nil}}
+    if state.monitor_ref, do: Process.demonitor(state.monitor_ref, [:flush])
+    {:noreply, %{state | load_task: nil, monitor_ref: nil}}
   end
 
   @impl true
-  def handle_info({:DOWN, ref, :process, _pid, reason}, %{load_task: %Task{ref: ref}} = state) do
+  def handle_info(
+        {:DOWN, monitor_ref, :process, _pid, reason},
+        %{monitor_ref: monitor_ref} = state
+      )
+      when not is_nil(monitor_ref) do
     # Task failed - log warning, ETS stays partially populated
     Logger.warning("Deft.Store: DETS load task failed: #{inspect(reason)}")
-    {:noreply, %{state | load_task: nil}}
+    {:noreply, %{state | load_task: nil, monitor_ref: nil}}
   end
 
   @impl true

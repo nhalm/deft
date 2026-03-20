@@ -72,7 +72,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## filesystem v0.4
 
-- Fix Store async load REGRESSION: `Task.async` + `Process.unlink` instead of `Task.async_nolink` (store.ex:178-179): race window where task crash kills GenServer before unlink runs; spec and history (completed 2026-03-19) require `Task.async_nolink`; code has reverted to `Task.async`
 - Fix `handle_info(:flush_buffer)` missing `closed` guard (store.ex:261-265): no check for `state.closed` before flushing; if a `:flush_buffer` message is in the mailbox when `cleanup/1` runs, handler fires on closed DETS and crashes the process; must guard on `state.closed`
 
 ## skills v0.4
