@@ -2143,9 +2143,10 @@ defmodule Deft.CLI do
               # Continue the loop with updated cost
               run_work_loop(flags, config, new_cumulative_cost, iteration + 1)
 
-            {:error, :aborted} ->
+            {:error, :aborted, job_cost} ->
+              new_cumulative_cost = cumulative_cost + job_cost
               IO.puts("Job aborted by user.")
-              IO.puts("Total cost: $#{Float.round(cumulative_cost, 2)}")
+              IO.puts("Total cost: $#{Float.round(new_cumulative_cost, 2)}")
               :ok
 
             {:error, reason} ->
@@ -2502,8 +2503,8 @@ defmodule Deft.CLI do
     # Report the job cost
     IO.puts("Job cost: $#{Float.round(cost, 2)}")
 
-    # Return aborted error to stop the work loop
-    {:error, :aborted}
+    # Return aborted error with cost so the work loop can include it in cumulative total
+    {:error, :aborted, cost}
   end
 
   defp handle_job_result({:error, reason}, issue, _job_id, cost) do
