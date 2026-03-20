@@ -152,7 +152,8 @@ defmodule Deft.Provider.Anthropic do
         receive_chunks(caller, req_stream, remaining_buffer, new_tool_state)
 
       {^req_stream, :done} ->
-        send(caller, {:provider_event, %Done{}})
+        # Stream complete - Done event already sent via message_stop SSE event
+        :ok
 
       {^req_stream, {:error, reason}} ->
         send(caller, {:provider_event, %Error{message: "Stream error: #{inspect(reason)}"}})

@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## providers v0.3
-
-- Fix duplicate `%Done{}` event: `receive_chunks/4` sends `%Done{}` both when `message_stop` SSE event is parsed (line 190 → 323 → 260) and when HTTP stream closes (`{^req_stream, :done}` at line 155); the gen_statem Agent transitions to `:executing_tools` on the first Done, then crashes on the second with no matching handler
-
 ## orchestration v0.6
 
 - Replace `determine_research_tasks/1` stub with LLM-based research planning: currently (foreman.ex:2658-2675) always returns two hardcoded generic tasks ("Analyze codebase structure" and "Identify existing patterns") regardless of prompt; spec section 3.1 requires the Foreman to analyze the request during `:planning` and determine what research is needed; the planning phase LLM call response is currently discarded
