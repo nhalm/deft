@@ -83,6 +83,7 @@ defmodule Deft.Tools.Find do
       "#{@max_results}",
       "--color",
       "never",
+      "--glob",
       pattern,
       search_path
     ]

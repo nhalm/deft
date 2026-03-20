@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## tools v0.2
-
-- Fix `find` tool: add `--glob` flag to `fd` invocation in `execute_fd/2` (line 79-88); without it, `fd` interprets the pattern as regex instead of glob — `*.ex` matches "zero or more `e`s followed by `x`" instead of all `.ex` files, producing wrong/empty results silently
-
 ## rate-limiter v0.2
 
 - Wire `initial_concurrency` config: add `job_initial_concurrency` field to `Deft.Config`, pass it from `Job.Supervisor` to `RateLimiter.start_link/1` opts; currently always defaults to 2 regardless of user configuration (spec section 7 defines `job.initial_concurrency` as configurable)
