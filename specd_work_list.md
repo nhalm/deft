@@ -17,6 +17,10 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
+## git-strategy v0.2
+
+- Fix `abort_job` to skip branch checkout when `original_branch` is not set (foreman.ex:667): abort handler fires in any state (line 650); `original_branch` is only stored after `create_job_branch` succeeds (line 397); early abort (during planning/decomposing) defaults to `"main"` and incorrectly checks out main regardless of user's actual branch; should either store original branch at Foreman init time or skip checkout when no job branch was created
+
 ## providers v0.3
 
 - Fix `receive_chunks` pattern match in Anthropic provider (anthropic.ex:148): pins `response.body` (a `%Req.Response.Async{}` struct) but Finch sends messages keyed on `response.body.ref` (a bare reference); `receive` never matches, every streaming call blocks for 120s then returns `%Error{message: "Stream timeout"}`; must use `response.body.ref` as the match key
