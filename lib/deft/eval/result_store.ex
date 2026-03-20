@@ -144,11 +144,17 @@ defmodule Deft.Eval.ResultStore do
         files
         |> Enum.filter(&String.ends_with?(&1, ".jsonl"))
         |> Enum.map(&Path.basename(&1, ".jsonl"))
+        |> Enum.filter(&run_id_format?/1)
         |> Enum.sort(:desc)
 
       {:error, _} ->
         []
     end
+  end
+
+  # Filters for valid run ID format (YYYY-MM-DD-*), excluding archive files
+  defp run_id_format?(run_id) do
+    String.match?(run_id, ~r/^\d{4}-\d{2}-\d{2}-/)
   end
 
   @doc """

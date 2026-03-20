@@ -186,6 +186,33 @@ defmodule Deft.Eval.ResultStoreTest do
       # Should be sorted newest first
       assert runs == ["2026-03-17-cccccc", "2026-03-16-bbbbbb", "2026-03-15-aaaaaa"]
     end
+
+    test "excludes archive files from run list" do
+      # Create regular run results
+      run1 = create_test_result("2026-03-15-aaaaaa")
+      run2 = create_test_result("2026-03-16-bbbbbb")
+
+      ResultStore.store(run1)
+      ResultStore.store(run2)
+
+      # Create an archive file manually (simulating mix eval.export output)
+      archive_path = Path.join(@results_dir, "archive-20260316T120000Z.jsonl")
+      File.mkdir_p!(@results_dir)
+
+      File.write!(archive_path, """
+      {"run_id":"2026-03-01-archived","commit":"abc123","timestamp":"2026-03-01T10:00:00Z","model":"claude-sonnet-4-6","category":"test","pass_rate":0.9,"iterations":20,"cost_usd":0.5,"failures":[]}
+      """)
+
+      on_exit(fn ->
+        File.rm(archive_path)
+      end)
+
+      runs = ResultStore.list_runs()
+
+      # Should only include the two regular runs, not the archive file
+      assert runs == ["2026-03-16-bbbbbb", "2026-03-15-aaaaaa"]
+      assert "archive-20260316T120000Z" not in runs
+    end
   end
 
   describe "cleanup_old_runs/0" do
@@ -220,11 +247,12 @@ defmodule Deft.Eval.ResultStoreTest do
     end
 
     test "does nothing when less than 30 runs exist" do
-      # Create 5 runs
+      # Create 5 runs with proper date format
       Enum.each(1..5, fn i ->
-        result =
-          create_test_result("#{@test_run_prefix}-#{String.pad_leading(to_string(i), 3, "0")}")
+        run_id =
+          "2026-03-#{String.pad_leading(to_string(i), 2, "0")}-#{String.pad_leading(Integer.to_string(i, 16), 6, "0")}"
 
+        result = create_test_result(run_id)
         ResultStore.store(result)
       end)
 
@@ -233,15 +261,68 @@ defmodule Deft.Eval.ResultStoreTest do
       # All 5 should still exist
       assert length(ResultStore.list_runs()) == 5
     end
+
+    test "does not count archive files toward 30-run limit" do
+      # Create 32 regular runs
+      results =
+        Enum.map(1..32, fn i ->
+          day = rem(i - 1, 28) + 1
+
+          run_id =
+            "2026-03-#{String.pad_leading(to_string(day), 2, "0")}-#{String.pad_leading(Integer.to_string(i, 16), 6, "0")}"
+
+          create_test_result(run_id)
+        end)
+
+      Enum.each(results, &ResultStore.store/1)
+
+      # Create archive files (should not be counted)
+      archive_path1 = Path.join(@results_dir, "archive-20260301T120000Z.jsonl")
+      archive_path2 = Path.join(@results_dir, "archive-20260315T140000Z.jsonl")
+
+      File.write!(archive_path1, """
+      {"run_id":"2026-02-01-old","commit":"abc","timestamp":"2026-02-01T10:00:00Z","model":"claude-sonnet-4-6","category":"test","pass_rate":0.9,"iterations":20,"cost_usd":0.5,"failures":[]}
+      """)
+
+      File.write!(archive_path2, """
+      {"run_id":"2026-02-15-old","commit":"def","timestamp":"2026-02-15T10:00:00Z","model":"claude-sonnet-4-6","category":"test","pass_rate":0.9,"iterations":20,"cost_usd":0.5,"failures":[]}
+      """)
+
+      on_exit(fn ->
+        File.rm(archive_path1)
+        File.rm(archive_path2)
+      end)
+
+      # Run cleanup - should only consider the 32 regular runs
+      ResultStore.cleanup_old_runs()
+
+      remaining_runs = ResultStore.list_runs()
+
+      # Should keep 30 runs (not counting archives)
+      assert length(remaining_runs) == 30
+
+      # Archive files should still exist (not deleted by cleanup)
+      assert File.exists?(archive_path1)
+      assert File.exists?(archive_path2)
+
+      # Should keep the newest 30 regular runs
+      expected_runs =
+        results
+        |> Enum.map(& &1.run_id)
+        |> Enum.sort(:desc)
+        |> Enum.take(30)
+
+      assert remaining_runs == expected_runs
+    end
   end
 
   describe "export/1" do
     test "exports all results to a JSONL file" do
-      # Create a few results
+      # Create a few results with proper date format
       results = [
-        create_test_result("#{@test_run_prefix}-exp-001"),
-        create_test_result("#{@test_run_prefix}-exp-002"),
-        create_test_result("#{@test_run_prefix}-exp-003")
+        create_test_result("2026-03-10-aaa001"),
+        create_test_result("2026-03-11-aaa002"),
+        create_test_result("2026-03-12-aaa003")
       ]
 
       Enum.each(results, &ResultStore.store/1)
@@ -282,15 +363,15 @@ defmodule Deft.Eval.ResultStoreTest do
     end
 
     test "skips runs with corrupt data and exports valid runs" do
-      # Create two valid results
-      result1 = create_test_result("#{@test_run_prefix}-exp-valid-001")
-      result2 = create_test_result("#{@test_run_prefix}-exp-valid-002")
+      # Create two valid results with proper date format
+      result1 = create_test_result("2026-03-13-bbb001")
+      result2 = create_test_result("2026-03-14-bbb002")
 
       ResultStore.store(result1)
       ResultStore.store(result2)
 
       # Create a run with corrupt data
-      corrupt_run_id = "#{@test_run_prefix}-exp-corrupt"
+      corrupt_run_id = "2026-03-15-corrupt"
       file_path = Path.join(@results_dir, "#{corrupt_run_id}.jsonl")
       File.mkdir_p!(@results_dir)
       File.write!(file_path, "{invalid json\n")
