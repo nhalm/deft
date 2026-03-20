@@ -32,7 +32,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## git-strategy v0.2
 
-- Fix merge-resolution retry off-by-one (foreman.ex:1103-1104): `max_retries = 3` with check `retry_count >= max_retries` allows 4 runner invocations (retry_count 0, 1, 2, 3) instead of 3; fix to `retry_count >= max_retries - 1` or start retry_count at 1
 - Fix stash not restored when `complete_job` fails at worktree verification (git/job.ex:901-911): `with` chain short-circuits on `verify_no_worktrees` error after merge and branch deletion succeed; `pop_job_stash` is never called; user's pre-job changes are permanently stranded in stash
 
 ## observational-memory v0.3

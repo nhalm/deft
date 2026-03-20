@@ -2345,7 +2345,7 @@ defmodule Deft.Job.Foreman do
          data
        ) do
     cond do
-      retry_count >= max_retries ->
+      retry_count > max_retries - 1 ->
         handle_merge_retry_exhausted(lead_id, lead_info, conflicted_files, max_retries, data)
 
       true ->
