@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## git-strategy v0.2
-
-- Fix misleading error message in Foreman when `verify_no_worktrees` fails after successful merge: `complete_job` returns `{:error, {:worktrees_remain, n}}` after merge succeeds and job branch is deleted; Foreman (foreman.ex:1236-1257) shows "failed to merge changes" and tells user to "manually merge the job branch" which no longer exists; should report orphan worktrees as a warning, not a merge failure
-
 ## tools v0.2
 
 - Fix `find` tool: add `--glob` flag to `fd` invocation in `execute_fd/2` (line 79-88); without it, `fd` interprets the pattern as regex instead of glob — `*.ex` matches "zero or more `e`s followed by `x`" instead of all `.ex` files, producing wrong/empty results silently

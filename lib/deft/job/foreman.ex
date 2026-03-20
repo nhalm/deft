@@ -1243,6 +1243,32 @@ defmodule Deft.Job.Foreman do
 
           {:next_state, {:complete, :idle}, data}
 
+        {:error, {:worktrees_remain, count}} ->
+          # Merge succeeded and branch was deleted, but orphan worktrees remain
+          Logger.warning("Job completed but #{count} orphan worktrees remain")
+
+          # Clean up any remaining Lead worktrees
+          cleanup_all_lead_worktrees(data)
+
+          # Archive job files for debugging
+          archive_job_files(data.session_id, data.working_dir, :completed)
+
+          # Report as a warning, not a failure
+          warning_message = """
+          Job completed successfully, but #{count} orphan worktrees were detected.
+
+          These are likely from incomplete cleanup and can be removed with:
+            git worktree list
+            git worktree remove <path>
+          """
+
+          data = send_user_message(warning_message, data)
+
+          # Cancel job timeout timer
+          data = cancel_job_timeout(data)
+
+          {:next_state, {:complete, :idle}, data}
+
         {:error, reason} ->
           Logger.error("Failed to complete job: #{inspect(reason)}")
 
