@@ -28,3 +28,57 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Create missing e2e test files: `test/eval/e2e/single_task_test.exs`, `test/eval/e2e/multi_agent_test.exs`, `test/eval/e2e/verification_circuit_breaker_test.exs` per spec section 1.2 (blocked: fixtures/codebase_snapshots need synthetic repos)
 - Implement `call_llm_judge/2` in `test/eval/support/eval_helpers.ex`: currently returns `{:ok, "Pending implementation"}` unconditionally (line 39); all evals that depend on LLM-as-judge (spilling summary quality, cache retrieval, foreman decomposition) pass vacuously with 100% regardless of actual model quality (blocked: provider availability in test env)
 - Fix foreman verification accuracy eval to call actual Foreman module instead of hardcoded rule: `verification_accuracy_test.exs` defines its own `make_foreman_decision/2` (line 264) that uses a pure boolean formula; must invoke the real Foreman verification logic (LLM-based) and run statistically (20 iterations, 90% pass rate per spec) (blocked: call_llm_judge implementation)
+- Fix duplicate `Deft.Eval.JudgeCalibration` module: both `lib/deft/eval/judge_calibration.ex` and `test/eval/support/judge_calibration.ex` define the same module with incompatible APIs; in test builds the second silently replaces the first; consolidate to a single module
+- Fix `store_results/3` failure records in `test/eval/support/eval_helpers.ex` (line 86): uses `iteration` key instead of `fixture` per spec section 2.1; `mix eval.compare` reads `failure["fixture"]` which returns nil for all stored results
+- Fix `summary_quality_test.exs` to use actual LLM judge: `judge_summary_quality/3` (line 264) uses heuristic checks (size reduction, regex matches) that deterministically pass on well-formed summaries; spec section 1.6 requires LLM-as-judge validated to >85% precision and recall (blocked: call_llm_judge implementation)
+
+## sessions v0.4
+
+- Fix CLI `start_agent` to forward `om_snapshot` on session resume (cli.ex:887-893): `Store.resume/2` returns `state.om_snapshot` but `start_agent` never passes it to `Session.Supervisor.start_session`; `Session.Supervisor` accepts `:om_snapshot` (supervisor.ex:34) and `OM.Supervisor` accepts `:snapshot` (om/supervisor.ex:24); OM state is always lost on resume
+
+## providers v0.3
+
+- Fix Observer and Reflector `collect_stream_text_loop` to accumulate Usage events instead of replacing (observer.ex:192-194, reflector.ex:236-238): both set `usage_data = %{input_tokens: input, output_tokens: output}` on each Usage event, discarding previous values; Anthropic sends `message_start` with input tokens and `message_delta` with output tokens separately; final usage has only the last event's counts; spec v0.3 requires accumulation
+
+## tools v0.2
+
+- Fix `generate_unified_diff/3` to emit `@@ -start,count +start,count @@` hunk headers (edit.ex:274-292): currently outputs `--- file` / `+++ file` header then raw `+`/`-`/` ` lines with no hunk markers; the output is not a valid unified diff — cannot be parsed by diff consumers and provides no line-number information
+
+## tui v0.2
+
+- Fix hardcoded `memory_threshold: 40_000` in Chat view (chat.ex:67): value is never read from OM config at mount time; status bar always shows `/40k` regardless of actual OM reflection threshold configuration
+
+## orchestration v0.6
+
+- Fix Lead `task_list` never populated (lead.ex:111): initialized as `[]` but no code parses LLM planning output to extract tasks; `continue_work` (lead.ex:1355-1376) always finds pending_tasks empty, skips `:executing` phase entirely, and transitions directly to `:verifying`; Lead never spawns implementation Runners
+- Fix research task completion handler state guard (foreman.ex:896-902): handler only fires in `{:researching, :idle}`; if user sends a prompt during research, Foreman transitions to `{:researching, :calling}` and task `{ref, result}` messages are dropped by catch-all; job deadlocks since research phase never completes
+- Fix verification runner completion handler state guard (foreman.ex:1183-1189): same pattern — handler only fires in `{:verifying, :idle}`; user prompt during verification drops the result; job never transitions to `:complete`
+- Fix `inspect/1` on research findings in decomposition prompt (foreman.ex:2759): `inspect(finding)` wraps strings in double-quotes with escaped chars; LLM receives Elixir term syntax instead of raw text; use `finding` directly
+- Fix Foreman `cancel_stream/1` no-op (foreman.ex:1585-1589): placeholder that logs and returns `:ok` without calling `provider.cancel_stream(data.stream_ref)`; streams continue running after abort/timeout, sending events to a transitioned state machine
+
+## rate-limiter v0.1
+
+- Fix queue bypass in `handle_call({:request, ...})` (rate_limiter.ex:393-406): when bucket capacity is available, new requests are granted immediately without checking if queued requests exist; violates FIFO ordering within same priority level; queued requests from before a backoff period wait up to an extra second while new same-priority requests are served inline
+
+## git-strategy v0.2
+
+- Fix merge-resolution retry off-by-one (foreman.ex:1103-1104): `max_retries = 3` with check `retry_count >= max_retries` allows 4 runner invocations (retry_count 0, 1, 2, 3) instead of 3; fix to `retry_count >= max_retries - 1` or start retry_count at 1
+- Fix stash not restored when `complete_job` fails at worktree verification (git/job.ex:901-911): `with` chain short-circuits on `verify_no_worktrees` error after merge and branch deletion succeed; `pop_job_stash` is never called; user's pre-job changes are permanently stranded in stash
+
+## observational-memory v0.3
+
+- Fix `truncate_session_history_to_target` halt on first oversized line (state.ex:1682-1692): `Enum.reduce_while` with `{:halt, ...}` stops iteration entirely when a single line exceeds remaining budget; all older lines (which may individually fit) are dropped; should use `{:cont, ...}` to skip oversized lines and continue, keeping as many newest entries as possible
+- Fix `current_task` from Observer silently discarded (state.ex:314-317, agent/context.ex:51-58): Observer extracts `current_task` (observer.ex:104) but it is never stored in State and `get_context/1` does not return it; `build_current_task_block/1` in context.ex always receives nil; spec section 3.5 requires current_task to be folded into `## Current State`
+
+## filesystem v0.4
+
+- Fix Store async load REGRESSION: `Task.async` + `Process.unlink` instead of `Task.async_nolink` (store.ex:178-179): race window where task crash kills GenServer before unlink runs; spec and history (completed 2026-03-19) require `Task.async_nolink`; code has reverted to `Task.async`
+- Fix `handle_info(:flush_buffer)` missing `closed` guard (store.ex:261-265): no check for `state.closed` before flushing; if a `:flush_buffer` message is in the mailbox when `cleanup/1` runs, handler fires on closed DETS and crashes the process; must guard on `state.closed`
+
+## skills v0.4
+
+- Fix CLI `handle_user_input` missing catch-all for slash command I/O errors (cli.ex:1006-1027): `case` only handles `{:error, :not_found, _}` and `{:error, :no_definition, _}`; `SlashCommand.dispatch/1` can return `{:error, reason, name}` for POSIX errors (`:enoent`, `:eacces`); raises `CaseClauseError` at runtime; TUI (chat.ex:813) correctly handles this with a catch-all
+
+## issues v0.5
+
+- Fix `Issue.from_map/1` to handle missing required fields without raising (issue.ex:117-133): uses dot notation (`data.id`, `data.title`, etc.) which raises `KeyError` on incomplete JSONL; `load_issues/1` (issues.ex:472-481) only catches `{:error, reason}` returns, not exceptions; GenServer init crashes on structurally incomplete (but JSON-valid) lines instead of skipping with a warning
