@@ -104,8 +104,9 @@ defmodule Deft.Issue do
       "deft-a1b2"
   """
   def decode(json) when is_binary(json) do
-    with {:ok, data} <- Jason.decode(json, keys: :atoms) do
-      {:ok, from_map(data)}
+    with {:ok, data} <- Jason.decode(json, keys: :atoms),
+         {:ok, issue} <- from_map(data) do
+      {:ok, issue}
     end
   end
 
@@ -113,23 +114,48 @@ defmodule Deft.Issue do
   Converts a map (typically from JSON decoding) to an issue struct.
 
   Handles string-to-atom conversion for status and source fields.
+  Returns `{:ok, issue}` on success, `{:error, reason}` if required fields are missing.
   """
   def from_map(data) when is_map(data) do
-    %__MODULE__{
-      id: data.id,
-      title: data.title,
-      context: data.context,
-      acceptance_criteria: data.acceptance_criteria,
-      constraints: data.constraints,
-      status: normalize_status(data.status),
-      priority: data.priority,
-      dependencies: data.dependencies,
-      created_at: data.created_at,
-      updated_at: data.updated_at,
-      closed_at: data[:closed_at],
-      source: normalize_source(data.source),
-      job_id: data[:job_id]
-    }
+    required_fields = [
+      :id,
+      :title,
+      :context,
+      :acceptance_criteria,
+      :constraints,
+      :status,
+      :priority,
+      :dependencies,
+      :created_at,
+      :updated_at,
+      :source
+    ]
+
+    missing_fields =
+      Enum.reject(required_fields, fn field ->
+        Map.has_key?(data, field)
+      end)
+
+    if missing_fields == [] do
+      {:ok,
+       %__MODULE__{
+         id: data.id,
+         title: data.title,
+         context: data.context,
+         acceptance_criteria: data.acceptance_criteria,
+         constraints: data.constraints,
+         status: normalize_status(data.status),
+         priority: data.priority,
+         dependencies: data.dependencies,
+         created_at: data.created_at,
+         updated_at: data.updated_at,
+         closed_at: data[:closed_at],
+         source: normalize_source(data.source),
+         job_id: data[:job_id]
+       }}
+    else
+      {:error, {:missing_required_fields, missing_fields}}
+    end
   end
 
   # Normalize status field to atom if it's a string

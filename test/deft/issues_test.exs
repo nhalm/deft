@@ -883,6 +883,99 @@ defmodule Deft.IssuesTest do
     end
   end
 
+  describe "handling incomplete JSONL lines" do
+    test "skips lines with missing required fields during init", %{file_path: file_path} do
+      # Create valid issue
+      valid_issue = %{
+        id: "deft-valid",
+        title: "Valid Issue",
+        context: "",
+        acceptance_criteria: [],
+        constraints: [],
+        status: "open",
+        priority: 2,
+        dependencies: [],
+        created_at: "2026-03-17T10:00:00Z",
+        updated_at: "2026-03-17T10:00:00Z",
+        closed_at: nil,
+        source: "user",
+        job_id: nil
+      }
+
+      # Create incomplete issue (missing title and context)
+      incomplete_issue = %{
+        id: "deft-incomplete",
+        status: "open",
+        priority: 2,
+        dependencies: [],
+        created_at: "2026-03-17T10:00:00Z",
+        updated_at: "2026-03-17T10:00:00Z",
+        source: "user"
+      }
+
+      # Write both issues to JSONL file
+      File.mkdir_p!(Path.dirname(file_path))
+      line1 = Jason.encode!(valid_issue) <> "\n"
+      line2 = Jason.encode!(incomplete_issue) <> "\n"
+      File.write!(file_path, line1 <> line2)
+
+      # Start Issues GenServer and capture log output
+      log =
+        capture_log(fn ->
+          {:ok, _pid} = Issues.start_link(file_path: file_path)
+        end)
+
+      # Verify warning was logged for incomplete issue
+      assert log =~ "Skipping invalid JSON line"
+      assert log =~ "missing_required_fields"
+
+      # Verify valid issue was loaded
+      {:ok, loaded_issue} = Issues.get("deft-valid")
+      assert loaded_issue.title == "Valid Issue"
+
+      # Verify incomplete issue was skipped
+      assert {:error, :not_found} = Issues.get("deft-incomplete")
+    end
+
+    test "handles completely malformed JSON lines", %{file_path: file_path} do
+      # Create valid issue
+      valid_issue = %{
+        id: "deft-valid2",
+        title: "Valid Issue 2",
+        context: "",
+        acceptance_criteria: [],
+        constraints: [],
+        status: "open",
+        priority: 2,
+        dependencies: [],
+        created_at: "2026-03-17T10:00:00Z",
+        updated_at: "2026-03-17T10:00:00Z",
+        closed_at: nil,
+        source: "user",
+        job_id: nil
+      }
+
+      # Write valid issue and malformed JSON
+      File.mkdir_p!(Path.dirname(file_path))
+      line1 = Jason.encode!(valid_issue) <> "\n"
+      line2 = "not valid json at all\n"
+      File.write!(file_path, line1 <> line2)
+
+      # Start Issues GenServer and capture log output
+      log =
+        capture_log(fn ->
+          {:ok, _pid} = Issues.start_link(file_path: file_path)
+        end)
+
+      # Verify warning was logged for malformed line
+      assert log =~ "Skipping invalid JSON line"
+
+      # Verify valid issue was loaded
+      {:ok, loaded_issue} = Issues.get("deft-valid2")
+      assert loaded_issue.title == "Valid Issue 2"
+    end
+  end
+
   describe "remove_dependency/2" do
     test "removes a dependency from an issue", %{file_path: file_path} do
       {:ok, _pid} = Issues.start_link(file_path: file_path)
