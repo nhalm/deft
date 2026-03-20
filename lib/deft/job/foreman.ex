@@ -1582,9 +1582,13 @@ defmodule Deft.Job.Foreman do
     end
   end
 
-  defp cancel_stream(_data) do
-    # Placeholder for stream cancellation
-    Logger.debug("Cancelling stream")
+  defp cancel_stream(data) do
+    if data.stream_ref do
+      provider = get_provider(data)
+      provider.cancel_stream(data.stream_ref)
+      Logger.debug("Cancelled stream: #{inspect(data.stream_ref)}")
+    end
+
     :ok
   end
 
