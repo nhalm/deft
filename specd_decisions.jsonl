@@ -1,3 +1,18 @@
+{
+  "date_time": "2026-03-20T21:30:37Z",
+  "spec": "orchestration",
+  "version": "v0.6",
+  "source": "implement",
+  "decision_by": "claude",
+  "summary": "Implemented LLM-based research planning in Foreman planning phase",
+  "reasoning": "Replaced hardcoded research task generation with LLM analysis during planning phase. Added build_planning_prompt/1 to ask LLM to analyze request and determine research tasks in structured JSON format. Added extract_research_tasks_from_messages/1 and parse_research_tasks_json/1 to extract tasks from LLM response. Modified determine_next_phase(:planning, data) to extract and store tasks in data.research_task_specs. Modified researching phase entry handler to use stored tasks, falling back to determine_research_tasks/1 on extraction failure. This satisfies spec section 3.1 requirement that Foreman analyzes request during planning to determine research needs.",
+  "files": {
+    "specs": ["specs/orchestration.md"],
+    "source_code": ["lib/deft/job/foreman.ex"],
+    "other": ["specd_work_list.md", "specd_history.md"]
+  }
+}
+
 {"date_time":"2026-03-20T21:17:59Z","spec":"providers","version":"v0.3","source":"implement","decision_by":"claude","summary":"Removed duplicate Done event from HTTP stream close handler","reasoning":"receive_chunks/4 was sending Done event both when message_stop SSE event arrived (via parse_event -> handle_parsed_event) and when HTTP stream closed ({^req_stream, :done}). Per spec, message_stop is the authoritative Done signal. HTTP stream closure is just transport layer completion that happens after message_stop, so sending a second Done was incorrect and caused agent crashes due to unmatched events.","files":{"specs":["specs/providers.md"],"source_code":["lib/deft/provider/anthropic.ex"],"other":["specd_work_list.md","specd_history.md"]}}
 {"date_time":"2026-03-21T00:09:00Z","spec":"orchestration","version":"v0.6","source":"audit","decision_by":"claude","summary":"Confirmed hardcoded research stub; rejected 3 other findings","reasoning":"Finding 1 (tool_call_buffers leak): rejected, tool IDs are unique UUIDs, no practical incorrect behavior. Finding 2 (hardcoded research stub): confirmed, determine_research_tasks always returns 2 generic tasks regardless of prompt, spec requires LLM-based analysis. Finding 3 (DOWN ref mismatch): rejected, Task.Supervisor.async_nolink stores monitor ref as task.ref so the match is correct. Finding 4 (post-merge task not monitored): rejected, async_nolink automatically monitors.","files":{"specs":["specs/orchestration.md"],"source_code":["lib/deft/job/foreman.ex"],"other":["specd_work_list.md"]}}
 {"date_time":"2026-03-21T00:08:00Z","spec":"issues","version":"v0.5","source":"audit","decision_by":"claude","summary":"Confirmed closed_at not set in update path; rejected cycle detection and exit findings","reasoning":"Finding 1 confirmed: build_updated_issue never sets closed_at when status changes to :closed, causing compaction to skip these issues forever. Finding 2 rejected: cycle detection logic is correct on analysis. Finding 3 rejected: spec doesn't explicitly require continuing loop on job failure.","files":{"specs":["specs/issues.md"],"source_code":["lib/deft/issues.ex"],"other":["specd_work_list.md"]}}

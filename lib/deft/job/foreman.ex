@@ -303,9 +303,10 @@ defmodule Deft.Job.Foreman do
   @impl :gen_statem
   # State entry handlers
   def handle_event(:enter, _old_state, {:planning, :idle}, data) do
-    # When entering planning phase, send initial prompt as a cast (not next_event)
-    # next_event is not allowed in state_enter handlers in newer OTP versions
-    :gen_statem.cast(self(), {:prompt, data.prompt})
+    # When entering planning phase, build a structured planning prompt
+    # that asks the LLM to analyze the request and determine research tasks
+    planning_prompt = build_planning_prompt(data.prompt)
+    :gen_statem.cast(self(), {:prompt, planning_prompt})
     :keep_state_and_data
   end
 
@@ -313,8 +314,17 @@ defmodule Deft.Job.Foreman do
     # Spawn research Runners in parallel
     Logger.info("Foreman starting research phase")
 
-    # Determine research tasks (placeholder - real implementation would analyze prompt)
-    research_specs = determine_research_tasks(data.prompt)
+    # Use research task specs from planning phase if available, otherwise fall back to defaults
+    research_specs =
+      case Map.get(data, :research_task_specs) do
+        nil ->
+          Logger.info("No research tasks from planning, using defaults")
+          determine_research_tasks(data.prompt)
+
+        specs ->
+          Logger.info("Using #{length(specs)} research tasks from planning phase")
+          specs
+      end
 
     # Get research timeout from config (default 120s)
     research_timeout = Map.get(data.config, :job_research_timeout, 120_000)
@@ -2709,8 +2719,15 @@ defmodule Deft.Job.Foreman do
   # Determine the next phase after completing current agent loop
   # Returns {next_state, updated_data}
   defp determine_next_phase(:planning, data) do
-    # After planning completes, transition to researching
-    {{:researching, :idle}, data}
+    # After planning completes, extract research tasks from the LLM response
+    # and transition to researching
+    research_task_specs = extract_research_tasks_from_messages(data.messages)
+
+    # Store the research task specs in data for use in researching phase
+    # If extraction failed, research_task_specs will be nil and researching phase will use defaults
+    updated_data = Map.put(data, :research_task_specs, research_task_specs)
+
+    {{:researching, :idle}, updated_data}
   end
 
   defp determine_next_phase(:decomposing, data) do
@@ -2751,6 +2768,48 @@ defmodule Deft.Job.Foreman do
   end
 
   # Build decomposition prompt with research findings
+  defp build_planning_prompt(user_prompt) do
+    """
+    You are the Foreman for a software development job. Your first task is to analyze the user's request
+    and determine what research is needed before decomposing the work into deliverables.
+
+    # User Request
+
+    #{user_prompt}
+
+    # Your Task
+
+    Analyze this request and determine what research tasks are needed to gather the information necessary
+    for planning the implementation. Each research task will be executed by a research Runner with read-only
+    tools (Read, Grep, Find, Ls) that can explore the codebase.
+
+    Produce a list of 1-5 research tasks. For each task, provide:
+
+    1. **Instructions**: Clear, detailed instructions for the research Runner about what to investigate.
+       Be specific about what files to read, what patterns to grep for, or what directories to explore.
+
+    2. **Context**: Why this research is needed and what questions it should answer.
+
+    Format your response as a JSON array of research tasks:
+
+    ```json
+    [
+      {
+        "instructions": "Detailed instructions for the research Runner...",
+        "context": "Why this research is needed..."
+      },
+      ...
+    ]
+    ```
+
+    Think carefully about:
+    - What information is needed to understand the existing codebase structure
+    - What patterns, conventions, and technologies need to be identified
+    - What dependencies or interfaces need to be understood
+    - Keep research focused and actionable (each task should take < 2 minutes)
+    """
+  end
+
   defp build_decomposition_prompt(data) do
     # Format research findings
     findings_text =
@@ -2804,6 +2863,70 @@ defmodule Deft.Job.Foreman do
     - Clear interfaces (enables partial unblocking)
     - Single-agent fallback (if task is simple enough, recommend executing directly)
     """
+  end
+
+  # Extract research tasks from the last assistant message
+  # Returns a list of research task specs, or nil if parsing fails
+  defp extract_research_tasks_from_messages(messages) do
+    # Get the last assistant message
+    case Enum.reverse(messages) |> Enum.find(&(&1.role == :assistant)) do
+      nil ->
+        nil
+
+      message ->
+        # Extract text content from message
+        text_content =
+          message.content
+          |> Enum.filter(&match?(%Deft.Message.Text{}, &1))
+          |> Enum.map(& &1.text)
+          |> Enum.join("\n")
+
+        # Try to extract JSON array of research tasks
+        case parse_research_tasks_json(text_content) do
+          {:ok, tasks} when is_list(tasks) and length(tasks) > 0 ->
+            tasks
+
+          _ ->
+            Logger.warning(
+              "Failed to parse research tasks from planning response, using defaults"
+            )
+
+            nil
+        end
+    end
+  end
+
+  # Parse research tasks from JSON format
+  # Expects an array of {"instructions": "...", "context": "..."}
+  defp parse_research_tasks_json(text) do
+    # Extract JSON from code blocks if present
+    json_text =
+      case Regex.run(~r/```(?:json)?\s*\n(.*?)\n```/s, text) do
+        [_, json] -> json
+        nil -> text
+      end
+
+    case Jason.decode(json_text) do
+      {:ok, tasks} when is_list(tasks) ->
+        # Validate and transform each task
+        parsed_tasks =
+          Enum.map(tasks, fn task ->
+            %{
+              instructions: Map.get(task, "instructions", ""),
+              context: Map.get(task, "context", "")
+            }
+          end)
+          |> Enum.filter(fn %{instructions: inst} -> inst != "" end)
+
+        if Enum.empty?(parsed_tasks) do
+          :error
+        else
+          {:ok, parsed_tasks}
+        end
+
+      _ ->
+        :error
+    end
   end
 
   # Extract plan from the last assistant message

@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## orchestration v0.6
-
-- Replace `determine_research_tasks/1` stub with LLM-based research planning: currently (foreman.ex:2658-2675) always returns two hardcoded generic tasks ("Analyze codebase structure" and "Identify existing patterns") regardless of prompt; spec section 3.1 requires the Foreman to analyze the request during `:planning` and determine what research is needed; the planning phase LLM call response is currently discarded
-
 ## git-strategy v0.2
 
 - Wire `job_test_command` and `job_squash_on_complete` from `Config` through CLI `agent_config` map: `start_job_and_wait` (cli.ex:2240-2261) omits both fields; Foreman falls back to hardcoded defaults via `Map.get(data.config, :job_test_command, "mix test")` and `Map.get(data.config, :job_squash_on_complete, true)`, making user `.deft/config.yaml` settings for these fields no-ops
