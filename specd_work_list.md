@@ -32,7 +32,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.6
 
-- Fix Lead `task_list` never populated (lead.ex:111): initialized as `[]` but no code parses LLM planning output to extract tasks; `continue_work` (lead.ex:1355-1376) always finds pending_tasks empty, skips `:executing` phase entirely, and transitions directly to `:verifying`; Lead never spawns implementation Runners
 - Fix research task completion handler state guard (foreman.ex:896-902): handler only fires in `{:researching, :idle}`; if user sends a prompt during research, Foreman transitions to `{:researching, :calling}` and task `{ref, result}` messages are dropped by catch-all; job deadlocks since research phase never completes
 - Fix verification runner completion handler state guard (foreman.ex:1183-1189): same pattern — handler only fires in `{:verifying, :idle}`; user prompt during verification drops the result; job never transitions to `:complete`
 - Fix `inspect/1` on research findings in decomposition prompt (foreman.ex:2759): `inspect(finding)` wraps strings in double-quotes with escaped chars; LLM receives Elixir term syntax instead of raw text; use `finding` directly

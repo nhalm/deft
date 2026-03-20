@@ -224,14 +224,50 @@ defmodule Deft.Job.Lead do
 
   @impl :gen_statem
   # State entry handlers
-  def handle_event(:enter, _old_state, {:planning, :idle}, data) do
-    # When entering planning phase, start by decomposing deliverable into tasks
-    # Build initial planning prompt from deliverable assignment and site log
-    planning_prompt = build_planning_prompt(data)
+  def handle_event(:enter, old_state, {:planning, :idle}, data) do
+    case old_state do
+      {:planning, :executing_tools} ->
+        # Returning from LLM response - parse task list and transition to executing
+        case extract_task_list_from_messages(data.messages) do
+          [] ->
+            # No tasks found - report error to Foreman
+            Logger.error(
+              "Lead #{data.lead_id} failed to extract task list from planning response"
+            )
 
-    # Use cast instead of next_event - next_event is prohibited in state_enter callbacks
-    :gen_statem.cast(self(), {:prompt, planning_prompt})
-    :keep_state_and_data
+            send_lead_message(
+              data.foreman_pid,
+              :blocker,
+              "Unable to decompose deliverable into tasks",
+              %{lead_id: data.lead_id}
+            )
+
+            {:keep_state, data}
+
+          tasks ->
+            # Tasks extracted successfully - store and transition to executing
+            Logger.info("Lead #{data.lead_id} extracted #{length(tasks)} tasks from planning")
+
+            send_lead_message(
+              data.foreman_pid,
+              :status,
+              "Planning complete: #{length(tasks)} tasks identified",
+              %{task_count: length(tasks)}
+            )
+
+            data = %{data | task_list: tasks}
+            {:next_state, {:executing, :idle}, data}
+        end
+
+      _ ->
+        # Initial entry to planning phase - start by decomposing deliverable into tasks
+        # Build initial planning prompt from deliverable assignment and site log
+        planning_prompt = build_planning_prompt(data)
+
+        # Use cast instead of next_event - next_event is prohibited in state_enter callbacks
+        :gen_statem.cast(self(), {:prompt, planning_prompt})
+        :keep_state_and_data
+    end
   end
 
   def handle_event(:enter, _old_state, {:verifying, :idle}, data) do
@@ -1448,6 +1484,63 @@ defmodule Deft.Job.Lead do
         task
       end
     end)
+  end
+
+  # Extracts task list from LLM's planning response
+  # Looks for numbered lists (1., 2., etc.) or bullet points (-, *, •)
+  # Returns list of task maps with %{description: String.t(), status: :pending, result: nil}
+  defp extract_task_list_from_messages(messages) do
+    # Get the last assistant message
+    last_assistant_msg =
+      messages
+      |> Enum.reverse()
+      |> Enum.find(fn msg -> msg.role == :assistant end)
+
+    case last_assistant_msg do
+      nil ->
+        []
+
+      msg ->
+        # Extract text from all Text content blocks
+        text =
+          msg.content
+          |> Enum.filter(fn
+            %Text{} -> true
+            _ -> false
+          end)
+          |> Enum.map(fn %Text{text: t} -> t end)
+          |> Enum.join("\n")
+
+        # Parse task list from text
+        parse_task_list(text)
+    end
+  end
+
+  # Parses task descriptions from text
+  # Supports numbered lists (1., 2., etc.) and bullet points (-, *, •)
+  defp parse_task_list(text) do
+    text
+    |> String.split("\n")
+    |> Enum.map(&String.trim/1)
+    |> Enum.filter(fn line ->
+      # Match numbered lists: "1. Task", "2. Task", etc.
+      # or bullet points: "- Task", "* Task", "• Task"
+      String.match?(line, ~r/^(\d+\.|-|\*|•)\s+\S/)
+    end)
+    |> Enum.map(fn line ->
+      # Remove the number/bullet prefix
+      description =
+        line
+        |> String.replace(~r/^(\d+\.|-|\*|•)\s+/, "")
+        |> String.trim()
+
+      %{
+        description: description,
+        status: :pending,
+        result: nil
+      }
+    end)
+    |> Enum.reject(fn task -> String.length(task.description) < 10 end)
   end
 
   # Evaluates runner output to determine if task was completed correctly
