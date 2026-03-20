@@ -17,6 +17,10 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
+## filesystem v0.4
+
+- Fix site log `owner_name` to pass bare Registry key instead of via-tuple (supervisor.ex:72): passes `owner_name: {:via, Registry, {Deft.ProcessRegistry, {:foreman, job_id}}}` but `validate_site_log_writer` looks up this full tuple; Foreman registers under bare key `{:foreman, job_id}`; `Registry.lookup` returns `[]` → every site log write returns `{:error, :unauthorized}` in production; should pass `owner_name: {:foreman, job_id}`
+
 ## issues v0.5
 
 - Fix `Map.fetch!` in `handle_call({:create, ...})` to return error tuple instead of crashing (issues.ex:218,228): `Map.fetch!(attrs, :source)` and `Map.fetch!(attrs, :title)` raise `KeyError` inside handle_call, crashing the GenServer; should validate required fields and return `{:error, {:missing_required_fields, ...}}` matching the pattern from `from_map/1`
