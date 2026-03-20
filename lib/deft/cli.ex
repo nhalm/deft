@@ -734,8 +734,16 @@ defmodule Deft.CLI do
     verify_api_key()
     :ok = Deft.Provider.Registry.register("anthropic", Deft.Provider.Anthropic)
 
-    # Start agent with existing messages and cost from the session
-    agent_pid = start_agent(session_id, working_dir, config, state.messages, state.session_cost)
+    # Start agent with existing messages, cost, and OM snapshot from the session
+    agent_pid =
+      start_agent(
+        session_id,
+        working_dir,
+        config,
+        state.messages,
+        state.session_cost,
+        state.om_snapshot
+      )
 
     # Subscribe to agent events
     Registry.register(Deft.Registry, {:session, session_id}, [])
@@ -871,7 +879,8 @@ defmodule Deft.CLI do
          working_dir,
          config,
          initial_messages \\ [],
-         _initial_session_cost \\ 0.0
+         _initial_session_cost \\ 0.0,
+         om_snapshot \\ nil
        ) do
     agent_config = %{
       model: config.model,
@@ -889,6 +898,7 @@ defmodule Deft.CLI do
         session_id: session_id,
         config: agent_config,
         messages: initial_messages,
+        om_snapshot: om_snapshot,
         project_dir: working_dir
       )
 
