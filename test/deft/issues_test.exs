@@ -1033,4 +1033,33 @@ defmodule Deft.IssuesTest do
       assert {:error, :not_found} = Issues.remove_dependency("deft-nonexistent", issue.id)
     end
   end
+
+  describe "create validation" do
+    test "returns error when missing title field", %{file_path: file_path} do
+      {:ok, _pid} = Issues.start_link(file_path: file_path)
+
+      # Try to create issue without title
+      assert {:error, {:missing_required_fields, [:title]}} =
+               Issues.create(%{source: :user})
+    end
+
+    test "returns error when missing source field", %{file_path: file_path} do
+      {:ok, _pid} = Issues.start_link(file_path: file_path)
+
+      # Try to create issue without source
+      assert {:error, {:missing_required_fields, [:source]}} =
+               Issues.create(%{title: "Test Issue"})
+    end
+
+    test "returns error when missing both title and source fields", %{file_path: file_path} do
+      {:ok, _pid} = Issues.start_link(file_path: file_path)
+
+      # Try to create issue without title or source
+      assert {:error, {:missing_required_fields, fields}} = Issues.create(%{})
+      # Should contain both required fields (order may vary)
+      assert :title in fields
+      assert :source in fields
+      assert length(fields) == 2
+    end
+  end
 end

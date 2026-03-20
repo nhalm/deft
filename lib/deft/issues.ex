@@ -211,45 +211,59 @@ defmodule Deft.Issues do
 
   @impl true
   def handle_call({:create, attrs}, _from, state) do
-    timestamp = Issue.timestamp()
-    existing_ids = Enum.map(state.issues, & &1.id)
-    id = Id.generate(existing_ids)
+    # Validate required fields
+    required_fields = [:source, :title]
 
-    source = Map.fetch!(attrs, :source)
-    # Default priority depends on source: agent defaults to 3 (low), user defaults to 2 (medium)
-    default_priority = if source == :agent, do: 3, else: 2
+    missing_fields =
+      Enum.reject(required_fields, fn field ->
+        Map.has_key?(attrs, field)
+      end)
 
-    dependencies = Map.get(attrs, :dependencies, [])
+    if missing_fields != [] do
+      {:reply, {:error, {:missing_required_fields, missing_fields}}, state}
+    else
+      timestamp = Issue.timestamp()
+      existing_ids = Enum.map(state.issues, & &1.id)
+      id = Id.generate(existing_ids)
 
-    # Validate all blocker IDs exist
-    with :ok <- validate_all_blockers_exist(state.issues, dependencies) do
-      issue = %Issue{
-        id: id,
-        title: Map.fetch!(attrs, :title),
-        context: Map.get(attrs, :context, ""),
-        acceptance_criteria: Map.get(attrs, :acceptance_criteria, []),
-        constraints: Map.get(attrs, :constraints, []),
-        status: :open,
-        priority: Map.get(attrs, :priority, default_priority),
-        dependencies: dependencies,
-        created_at: timestamp,
-        updated_at: timestamp,
-        closed_at: nil,
-        source: source,
-        job_id: nil
-      }
+      # Extract validated required fields
+      source = attrs.source
+      title = attrs.title
+      # Default priority depends on source: agent defaults to 3 (low), user defaults to 2 (medium)
+      default_priority = if source == :agent, do: 3, else: 2
 
-      # Check for cycles
-      with {:ok, _} <- check_cycle(issue, state.issues),
-           new_issues = [issue | state.issues],
-           new_state = %{state | issues: new_issues},
-           :ok <- persist_issues(new_state) do
-        {:reply, {:ok, issue}, new_state}
+      dependencies = Map.get(attrs, :dependencies, [])
+
+      # Validate all blocker IDs exist
+      with :ok <- validate_all_blockers_exist(state.issues, dependencies) do
+        issue = %Issue{
+          id: id,
+          title: title,
+          context: Map.get(attrs, :context, ""),
+          acceptance_criteria: Map.get(attrs, :acceptance_criteria, []),
+          constraints: Map.get(attrs, :constraints, []),
+          status: :open,
+          priority: Map.get(attrs, :priority, default_priority),
+          dependencies: dependencies,
+          created_at: timestamp,
+          updated_at: timestamp,
+          closed_at: nil,
+          source: source,
+          job_id: nil
+        }
+
+        # Check for cycles
+        with {:ok, _} <- check_cycle(issue, state.issues),
+             new_issues = [issue | state.issues],
+             new_state = %{state | issues: new_issues},
+             :ok <- persist_issues(new_state) do
+          {:reply, {:ok, issue}, new_state}
+        else
+          {:error, reason} -> {:reply, {:error, reason}, state}
+        end
       else
         {:error, reason} -> {:reply, {:error, reason}, state}
       end
-    else
-      {:error, reason} -> {:reply, {:error, reason}, state}
     end
   end
 

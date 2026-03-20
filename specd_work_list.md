@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## issues v0.5
 
-- Fix `Map.fetch!` in `handle_call({:create, ...})` to return error tuple instead of crashing (issues.ex:218,228): `Map.fetch!(attrs, :source)` and `Map.fetch!(attrs, :title)` raise `KeyError` inside handle_call, crashing the GenServer; should validate required fields and return `{:error, {:missing_required_fields, ...}}` matching the pattern from `from_map/1`
 - Fix `handle_job_result({:error, reason}, ...)` to return error tuple instead of calling `exit/1` (cli.ex:2391,2399): generic error handler calls `exit({:shutdown, 1})` which terminates the OS process; in `--loop` mode this kills the loop without printing total cost summary; should return `{:error, reason}` to let the work loop handle it like the `:aborted` handler does
 
 ## observational-memory v0.3
