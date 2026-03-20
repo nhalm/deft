@@ -896,7 +896,7 @@ defmodule Deft.Job.Foreman do
   def handle_event(
         :info,
         {ref, result},
-        {:researching, :idle},
+        {:researching, _agent_state},
         %{research_tasks: tasks} = data
       )
       when is_reference(ref) do
@@ -1183,7 +1183,7 @@ defmodule Deft.Job.Foreman do
   def handle_event(
         :info,
         {ref, results},
-        {:verifying, :idle},
+        {:verifying, _agent_state},
         %{tool_tasks: tasks} = data
       )
       when is_reference(ref) do
