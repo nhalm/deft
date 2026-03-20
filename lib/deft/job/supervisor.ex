@@ -80,7 +80,14 @@ defmodule Deft.Job.Supervisor do
         id: Deft.Job.RateLimiter,
         start:
           {Deft.Job.RateLimiter, :start_link,
-           [[job_id: job_id, foreman_pid: foreman_name, cost_ceiling: config.work_cost_ceiling]]},
+           [
+             [
+               job_id: job_id,
+               foreman_pid: foreman_name,
+               cost_ceiling: config.work_cost_ceiling,
+               max_concurrency: config.job_max_leads
+             ]
+           ]},
         restart: :temporary
       },
 

@@ -28,10 +28,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Fix `loop_safety_test.exs` stub: `run_loop_with_monitoring/2` (line 207) returns hardcoded `%{success: true, issues_processed: 0, ...}` and discards CLI args; when `:skip` tag is removed, all safety assertions (`assert_no_false_closes`, `assert_no_cost_anomalies`, etc.) pass trivially on empty data; must invoke actual CLI or agent loop (blocked: CLI invocation mechanism in test env)
 - Fix `test.eval.check-structure` Makefile threshold (line 45): `-ge 0` is always true regardless of how many test files exist; should be `-ge 1` (or a meaningful minimum) so CI catches the empty test/eval/ directory
 
-## rate-limiter v0.2
-
-- Pass `max_leads` config to RateLimiter in `Job.Supervisor.init/1` (supervisor.ex:83): RateLimiter receives only `job_id`, `foreman_pid`, `cost_ceiling`; its `max_concurrency` defaults to 10 while Foreman's `job_max_leads` defaults to 5; RateLimiter must receive `max_leads` from config so its adaptive concurrency ceiling matches the Foreman's actual Lead cap
-
 ## evals v0.3
 
 - Create missing e2e test files: `test/eval/e2e/single_task_test.exs`, `test/eval/e2e/multi_agent_test.exs`, `test/eval/e2e/verification_circuit_breaker_test.exs` per spec section 1.2 (blocked: fixtures/codebase_snapshots need synthetic repos)
