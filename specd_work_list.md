@@ -19,5 +19,4 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## evals v0.4
 
-- Restore all 28 eval test files accidentally deleted by commit e5e4c4d (observer/, reflector/, actor/, foreman/, lead/, spilling/, skills/, issues/, e2e/ subdirectories under test/eval/)
 - Restore test/eval/support/eval_helpers.ex and test/eval/support/scoring.ex accidentally deleted by commit e5e4c4d
