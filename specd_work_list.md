@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## evals v0.3
 
-- Fix `summary_quality_test.exs` to use actual LLM judge: replace `judge_summary_quality/3` heuristic checks (line 264) with a call to `call_llm_judge/2`; spec section 1.6 requires LLM-as-judge validated to >85% precision and recall
 - Fix foreman verification accuracy eval to call actual Foreman module instead of hardcoded rule: replace `make_foreman_decision/2` (line 264) with the real Foreman verification logic (LLM-based) and run statistically (20 iterations, 90% pass rate per spec)
 - Create missing e2e test files: `test/eval/e2e/single_task_test.exs`, `test/eval/e2e/multi_agent_test.exs`, `test/eval/e2e/verification_circuit_breaker_test.exs` per spec section 1.2; create synthetic git repos in tmp dirs during test setup (use `System.cmd("git", ["init", ...])` in setup blocks); `test/support/git_mock.ex` already provides patterns for this
 
