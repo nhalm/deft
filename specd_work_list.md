@@ -19,13 +19,12 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## evals v0.3
 
-- Implement `call_llm_judge/2` in eval helpers: use `Deft.Provider.Anthropic.stream/3` to make a real LLM call, collect streamed text, return `{:ok, judgment}` or `{:error, reason}`; eval tests already require `ANTHROPIC_API_KEY` and are tagged `@tag :eval`; the provider infrastructure exists and works
-- Fix `summary_quality_test.exs` to use actual LLM judge: replace `judge_summary_quality/3` heuristic checks (line 264) with a call to `call_llm_judge/2`; spec section 1.6 requires LLM-as-judge validated to >85% precision and recall (blocked: call_llm_judge)
-- Fix foreman verification accuracy eval to call actual Foreman module instead of hardcoded rule: replace `make_foreman_decision/2` (line 264) with the real Foreman verification logic (LLM-based) and run statistically (20 iterations, 90% pass rate per spec) (blocked: call_llm_judge)
+- Fix `summary_quality_test.exs` to use actual LLM judge: replace `judge_summary_quality/3` heuristic checks (line 264) with a call to `call_llm_judge/2`; spec section 1.6 requires LLM-as-judge validated to >85% precision and recall
+- Fix foreman verification accuracy eval to call actual Foreman module instead of hardcoded rule: replace `make_foreman_decision/2` (line 264) with the real Foreman verification logic (LLM-based) and run statistically (20 iterations, 90% pass rate per spec)
 - Create missing e2e test files: `test/eval/e2e/single_task_test.exs`, `test/eval/e2e/multi_agent_test.exs`, `test/eval/e2e/verification_circuit_breaker_test.exs` per spec section 1.2; create synthetic git repos in tmp dirs during test setup (use `System.cmd("git", ["init", ...])` in setup blocks); `test/support/git_mock.ex` already provides patterns for this
 
 ## evals v0.4
 
 - Rewrite `cache_retrieval_test.exs` helpers to start a real agent with MockProvider (see pattern in `test/deft/agent_test.exs`): feed scripted LLM responses that should trigger `cache_read` tool calls; assert the agent actually invokes the tool rather than checking fixture string patterns
-- Rewrite `agent_created_quality_test.exs` as a statistical eval: start an agent with MockProvider, have it process a fixture scenario and create issues; run 20 iterations with real LLM calls, assert 80% pass rate per spec section 1.5 (blocked: call_llm_judge)
+- Rewrite `agent_created_quality_test.exs` as a statistical eval: start an agent with MockProvider, have it process a fixture scenario and create issues; run 20 iterations with real LLM calls, assert 80% pass rate per spec section 1.5
 - Fix `loop_safety_test.exs` stub: replace `run_loop_with_monitoring/2` with direct calls to CLI module functions (e.g., `Deft.CLI.execute_command/2`) or invoke the built escript via `System.cmd`; remove `:skip` tag once the real loop runs and produces meaningful data for safety assertions
