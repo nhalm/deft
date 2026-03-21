@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## evals v0.4
 
-- Fix `summary_quality_test.exs` setup crash: add `:type` and `:dets_path` options to `Store.start_link` call at line 34 (Store.init requires both via `Keyword.fetch!`)
 - Add `@moduletag :benchmark` to e2e tests or create benchmark wrapper so `make test.eval.benchmark` (`--only benchmark`) runs Tier 3 suite instead of zero tests
 - Replace `run_deft_work/3` stub in `single_task_test.exs` (line 347) with real CLI invocation via `System.cmd`
 - Replace `run_deft_with_strategy/4` and `run_synthetic_task/3` stubs in `multi_agent_test.exs` (lines 232, 295) with real CLI invocation

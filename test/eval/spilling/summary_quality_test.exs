@@ -30,9 +30,13 @@ defmodule Deft.Eval.Spilling.SummaryQualityTest do
     {:ok, registry_pid} =
       Registry.start_link(keys: :unique, name: :"registry_#{session_id}")
 
+    dets_path = Path.join(System.tmp_dir!(), "summary_quality_test_#{session_id}.dets")
+
     {:ok, store_pid} =
       Store.start_link(
-        name: {:via, Registry, {:"registry_#{session_id}", {:cache, session_id, "main"}}}
+        name: {:via, Registry, {:"registry_#{session_id}", {:cache, session_id, "main"}}},
+        type: :cache,
+        dets_path: dets_path
       )
 
     working_dir = File.cwd!()
@@ -54,6 +58,7 @@ defmodule Deft.Eval.Spilling.SummaryQualityTest do
     on_exit(fn ->
       if Process.alive?(store_pid), do: GenServer.stop(store_pid)
       if Process.alive?(registry_pid), do: GenServer.stop(registry_pid)
+      if File.exists?(dets_path), do: File.rm(dets_path)
     end)
 
     {:ok, context: context, session_id: session_id, registry_name: :"registry_#{session_id}"}
