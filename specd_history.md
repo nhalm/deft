@@ -1,4 +1,5 @@
 # History
+- **evals v0.4 (2026-03-21):** Create observer eval tests: `test/eval/observer/{extraction,priority,section_routing,anti_hallucination,dedup}_test.exs` per spec section 1.2
 - **evals v0.4 (2026-03-21):** Create `test/eval/support/scoring.ex` implementing confidence interval reporting per spec section 1.5 report format
 - **evals v0.4 (2026-03-21):** Implement scenario-specific repo setup in `single_task_test.exs`: `create_basic_project_structure/2` (line 284) ignores `_scenario` — each of the 8 benchmark tasks needs a distinct repo with the prerequisite code for that scenario
 - **evals v0.4 (2026-03-21):** Replace `run_deft_work/3` stub in `verification_circuit_breaker_test.exs` (line 320) with real CLI invocation

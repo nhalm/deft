@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## evals v0.4
 
-- Create observer eval tests: `test/eval/observer/{extraction,priority,section_routing,anti_hallucination,dedup}_test.exs` per spec section 1.2
 - Create reflector eval tests: `test/eval/reflector/{compression,preservation}_test.exs` per spec section 1.2
 - Create actor eval tests: `test/eval/actor/{observation_usage,continuation,tool_selection}_test.exs` per spec section 1.2
 - Create foreman eval tests: `test/eval/foreman/{decomposition,dependency,contract,constraint_propagation}_test.exs` per spec section 1.2
