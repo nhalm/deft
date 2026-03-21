@@ -60,7 +60,7 @@ Decision reasoning is logged in [specd_decisions.jsonl](../specd_decisions.jsonl
 | Spec | Version | Status | Description |
 |------|---------|--------|-------------|
 | [standards](standards.md) | v0.1 | Implemented | Elixir coding standards, Makefile, git hooks, testing strategy |
-| [evals](evals/README.md) | v0.4 | Ready | AI eval infrastructure, methodology, and component eval definitions |
+| [evals](evals/README.md) | v0.4 | Implemented | AI eval infrastructure, methodology, and component eval definitions |
 | [harness](harness.md) | v0.2 | Implemented | Agent loop (gen_statem), message format, process architecture, context assembly |
 | [tools](tools.md) | v0.2 | Implemented | Tool behaviour, 7 built-in tools, tool execution model |
 | [providers](providers.md) | v0.3 | Implemented | LLM provider behaviour, SSE streaming, Anthropic implementation |
