@@ -1,4 +1,5 @@
 # History
+- **evals v0.4 (2026-03-21):** Implement scenario-specific repo setup in `single_task_test.exs`: `create_basic_project_structure/2` (line 284) ignores `_scenario` — each of the 8 benchmark tasks needs a distinct repo with the prerequisite code for that scenario
 - **evals v0.4 (2026-03-21):** Replace `run_deft_work/3` stub in `verification_circuit_breaker_test.exs` (line 320) with real CLI invocation
 - **evals v0.4 (2026-03-21):** Replace `run_deft_with_strategy/4` and `run_synthetic_task/3` stubs in `multi_agent_test.exs` (lines 232, 295) with real CLI invocation
 - **evals v0.4 (2026-03-21):** Replace `run_deft_work/3` stub in `single_task_test.exs` (line 347) with real CLI invocation via `System.cmd`

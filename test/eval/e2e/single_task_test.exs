@@ -282,12 +282,27 @@ defmodule Deft.Eval.E2E.SingleTaskTest do
   end
 
   # Helper: Create basic project structure for different scenarios
-  defp create_basic_project_structure(repo_dir, _scenario) do
-    # Create mix.exs
+  defp create_basic_project_structure(repo_dir, scenario) do
     File.mkdir_p!(Path.join(repo_dir, "lib"))
     File.mkdir_p!(Path.join(repo_dir, "test"))
     File.mkdir_p!(Path.join(repo_dir, ".deft"))
 
+    File.write!(Path.join([repo_dir, "test", "test_helper.exs"]), "ExUnit.start()")
+
+    case scenario do
+      :failing_test -> create_failing_test_repo(repo_dir)
+      :add_schema_field -> create_ecto_schema_repo(repo_dir)
+      :add_controller_action -> create_phoenix_controller_repo(repo_dir)
+      :refactor_module -> create_refactor_module_repo(repo_dir)
+      :fix_bug_no_test -> create_bug_no_test_repo(repo_dir)
+      :implement_genserver -> create_genserver_repo(repo_dir)
+      :cross_file_behavior -> create_behavior_repo(repo_dir)
+      :constrained_refactor -> create_constrained_refactor_repo(repo_dir)
+    end
+  end
+
+  # Scenario 1: Failing test
+  defp create_failing_test_repo(repo_dir) do
     mix_content = """
     defmodule TestProject.MixProject do
       use Mix.Project
@@ -310,19 +325,438 @@ defmodule Deft.Eval.E2E.SingleTaskTest do
 
     File.write!(Path.join(repo_dir, "mix.exs"), mix_content)
 
-    # Create a simple test file
+    # Math module with a bug
+    math_content = """
+    defmodule Math do
+      def add(a, b), do: a + b - 1  # Bug: subtracts 1
+    end
+    """
+
+    File.write!(Path.join([repo_dir, "lib", "math.ex"]), math_content)
+
+    # Failing test
     test_content = """
-    defmodule TestProjectTest do
+    defmodule MathTest do
       use ExUnit.Case
 
-      test "placeholder passes" do
-        assert true
+      test "test_addition" do
+        assert Math.add(2, 3) == 5
       end
     end
     """
 
-    File.write!(Path.join([repo_dir, "test", "test_helper.exs"]), "ExUnit.start()")
-    File.write!(Path.join([repo_dir, "test", "test_project_test.exs"]), test_content)
+    File.write!(Path.join([repo_dir, "test", "math_test.exs"]), test_content)
+  end
+
+  # Scenario 2: Add Ecto schema field
+  defp create_ecto_schema_repo(repo_dir) do
+    mix_content = """
+    defmodule TestProject.MixProject do
+      use Mix.Project
+
+      def project do
+        [
+          app: :test_project,
+          version: "0.1.0",
+          elixir: "~> 1.14",
+          start_permanent: Mix.env() == :prod,
+          deps: deps()
+        ]
+      end
+
+      def application, do: [extra_applications: [:logger]]
+
+      defp deps do
+        [
+          {:ecto, "~> 3.10"},
+          {:ecto_sql, "~> 3.10"},
+          {:postgrex, "~> 0.17"}
+        ]
+      end
+    end
+    """
+
+    File.write!(Path.join(repo_dir, "mix.exs"), mix_content)
+
+    # User schema without email field
+    schema_content = """
+    defmodule TestProject.User do
+      use Ecto.Schema
+
+      schema "users" do
+        field :name, :string
+        timestamps()
+      end
+    end
+    """
+
+    File.mkdir_p!(Path.join([repo_dir, "lib", "test_project"]))
+    File.write!(Path.join([repo_dir, "lib", "test_project", "user.ex"]), schema_content)
+
+    # Create priv/repo/migrations directory
+    File.mkdir_p!(Path.join([repo_dir, "priv", "repo", "migrations"]))
+  end
+
+  # Scenario 3: Add Phoenix controller action
+  defp create_phoenix_controller_repo(repo_dir) do
+    mix_content = """
+    defmodule TestProject.MixProject do
+      use Mix.Project
+
+      def project do
+        [
+          app: :test_project,
+          version: "0.1.0",
+          elixir: "~> 1.14",
+          start_permanent: Mix.env() == :prod,
+          deps: deps()
+        ]
+      end
+
+      def application, do: [mod: {TestProject.Application, []}, extra_applications: [:logger]]
+
+      defp deps do
+        [
+          {:phoenix, "~> 1.7"},
+          {:plug_cowboy, "~> 2.6"}
+        ]
+      end
+    end
+    """
+
+    File.write!(Path.join(repo_dir, "mix.exs"), mix_content)
+
+    # UserController without the profile action
+    controller_content = """
+    defmodule TestProjectWeb.UserController do
+      use Phoenix.Controller
+
+      def index(conn, _params) do
+        json(conn, %{users: []})
+      end
+    end
+    """
+
+    File.mkdir_p!(Path.join([repo_dir, "lib", "test_project_web", "controllers"]))
+
+    File.write!(
+      Path.join([repo_dir, "lib", "test_project_web", "controllers", "user_controller.ex"]),
+      controller_content
+    )
+
+    # Router
+    router_content = """
+    defmodule TestProjectWeb.Router do
+      use Phoenix.Router
+
+      scope "/api", TestProjectWeb do
+        get "/users", UserController, :index
+      end
+    end
+    """
+
+    File.write!(
+      Path.join([repo_dir, "lib", "test_project_web", "router.ex"]),
+      router_content
+    )
+  end
+
+  # Scenario 4: Refactor module
+  defp create_refactor_module_repo(repo_dir) do
+    mix_content = """
+    defmodule TestProject.MixProject do
+      use Mix.Project
+
+      def project do
+        [
+          app: :test_project,
+          version: "0.1.0",
+          elixir: "~> 1.14",
+          start_permanent: Mix.env() == :prod,
+          deps: deps()
+        ]
+      end
+
+      def application, do: [extra_applications: [:logger]]
+
+      defp deps, do: []
+    end
+    """
+
+    File.write!(Path.join(repo_dir, "mix.exs"), mix_content)
+
+    # Calculator module with repetitive code
+    calculator_content = """
+    defmodule Calculator do
+      def add(a, b) do
+        result = a + b
+        if result < 0, do: 0, else: result
+      end
+
+      def subtract(a, b) do
+        result = a - b
+        if result < 0, do: 0, else: result
+      end
+
+      def multiply(a, b) do
+        result = a * b
+        if result < 0, do: 0, else: result
+      end
+    end
+    """
+
+    File.write!(Path.join([repo_dir, "lib", "calculator.ex"]), calculator_content)
+
+    # Tests for Calculator
+    test_content = """
+    defmodule CalculatorTest do
+      use ExUnit.Case
+
+      test "add returns non-negative" do
+        assert Calculator.add(5, 3) == 8
+        assert Calculator.add(-5, 3) == 0
+      end
+
+      test "subtract returns non-negative" do
+        assert Calculator.subtract(5, 3) == 2
+        assert Calculator.subtract(3, 5) == 0
+      end
+
+      test "multiply returns non-negative" do
+        assert Calculator.multiply(5, 3) == 15
+        assert Calculator.multiply(-5, 3) == 0
+      end
+    end
+    """
+
+    File.write!(Path.join([repo_dir, "test", "calculator_test.exs"]), test_content)
+  end
+
+  # Scenario 5: Fix bug without test
+  defp create_bug_no_test_repo(repo_dir) do
+    mix_content = """
+    defmodule TestProject.MixProject do
+      use Mix.Project
+
+      def project do
+        [
+          app: :test_project,
+          version: "0.1.0",
+          elixir: "~> 1.14",
+          start_permanent: Mix.env() == :prod,
+          deps: deps()
+        ]
+      end
+
+      def application, do: [extra_applications: [:logger]]
+
+      defp deps, do: []
+    end
+    """
+
+    File.write!(Path.join(repo_dir, "mix.exs"), mix_content)
+
+    # Comment module that allows empty comments
+    comment_content = """
+    defmodule Comment do
+      def create(text) do
+        # Bug: doesn't validate empty text
+        {:ok, %{text: text}}
+      end
+    end
+    """
+
+    File.write!(Path.join([repo_dir, "lib", "comment.ex"]), comment_content)
+  end
+
+  # Scenario 6: Implement GenServer
+  defp create_genserver_repo(repo_dir) do
+    mix_content = """
+    defmodule TestProject.MixProject do
+      use Mix.Project
+
+      def project do
+        [
+          app: :test_project,
+          version: "0.1.0",
+          elixir: "~> 1.14",
+          start_permanent: Mix.env() == :prod,
+          deps: deps()
+        ]
+      end
+
+      def application, do: [extra_applications: [:logger]]
+
+      defp deps, do: []
+    end
+    """
+
+    File.write!(Path.join(repo_dir, "mix.exs"), mix_content)
+
+    # Tests for CounterServer (but no implementation yet)
+    test_content = """
+    defmodule CounterServerTest do
+      use ExUnit.Case
+
+      test "increments counter" do
+        {:ok, pid} = CounterServer.start_link(0)
+        assert CounterServer.increment(pid) == 1
+        assert CounterServer.get(pid) == 1
+      end
+
+      test "decrements counter" do
+        {:ok, pid} = CounterServer.start_link(5)
+        assert CounterServer.decrement(pid) == 4
+        assert CounterServer.get(pid) == 4
+      end
+    end
+    """
+
+    File.write!(Path.join([repo_dir, "test", "counter_server_test.exs"]), test_content)
+  end
+
+  # Scenario 7: Cross-file behavior change
+  defp create_behavior_repo(repo_dir) do
+    mix_content = """
+    defmodule TestProject.MixProject do
+      use Mix.Project
+
+      def project do
+        [
+          app: :test_project,
+          version: "0.1.0",
+          elixir: "~> 1.14",
+          start_permanent: Mix.env() == :prod,
+          deps: deps()
+        ]
+      end
+
+      def application, do: [extra_applications: [:logger]]
+
+      defp deps, do: []
+    end
+    """
+
+    File.write!(Path.join(repo_dir, "mix.exs"), mix_content)
+
+    # Storage behavior
+    behavior_content = """
+    defmodule Storage do
+      @callback save(key :: String.t(), value :: any()) :: :ok
+      @callback load(key :: String.t()) :: {:ok, any()} | {:error, :not_found}
+    end
+    """
+
+    File.write!(Path.join([repo_dir, "lib", "storage.ex"]), behavior_content)
+
+    # FileStorage implementation
+    file_storage_content = """
+    defmodule FileStorage do
+      @behaviour Storage
+
+      @impl true
+      def save(_key, _value), do: :ok
+
+      @impl true
+      def load(_key), do: {:error, :not_found}
+    end
+    """
+
+    File.write!(Path.join([repo_dir, "lib", "file_storage.ex"]), file_storage_content)
+
+    # MemoryStorage implementation
+    memory_storage_content = """
+    defmodule MemoryStorage do
+      @behaviour Storage
+
+      @impl true
+      def save(_key, _value), do: :ok
+
+      @impl true
+      def load(_key), do: {:error, :not_found}
+    end
+    """
+
+    File.write!(Path.join([repo_dir, "lib", "memory_storage.ex"]), memory_storage_content)
+
+    # Tests
+    test_content = """
+    defmodule StorageTest do
+      use ExUnit.Case
+
+      test "FileStorage implements Storage" do
+        assert FileStorage.save("key", "value") == :ok
+      end
+
+      test "MemoryStorage implements Storage" do
+        assert MemoryStorage.save("key", "value") == :ok
+      end
+    end
+    """
+
+    File.write!(Path.join([repo_dir, "test", "storage_test.exs"]), test_content)
+  end
+
+  # Scenario 8: Constrained refactor
+  defp create_constrained_refactor_repo(repo_dir) do
+    mix_content = """
+    defmodule TestProject.MixProject do
+      use Mix.Project
+
+      def project do
+        [
+          app: :test_project,
+          version: "0.1.0",
+          elixir: "~> 1.14",
+          start_permanent: Mix.env() == :prod,
+          deps: deps()
+        ]
+      end
+
+      def application, do: [extra_applications: [:logger]]
+
+      defp deps, do: []
+    end
+    """
+
+    File.write!(Path.join(repo_dir, "mix.exs"), mix_content)
+
+    # UserQuery module with inefficient query
+    query_content = """
+    defmodule UserQuery do
+      # Public API - must not change
+      def find_active_users do
+        # Inefficient: fetches all then filters
+        all_users()
+        |> Enum.filter(&(&1.active))
+      end
+
+      defp all_users do
+        [
+          %{id: 1, name: "Alice", active: true},
+          %{id: 2, name: "Bob", active: false},
+          %{id: 3, name: "Charlie", active: true}
+        ]
+      end
+    end
+    """
+
+    File.write!(Path.join([repo_dir, "lib", "user_query.ex"]), query_content)
+
+    # Tests
+    test_content = """
+    defmodule UserQueryTest do
+      use ExUnit.Case
+
+      test "find_active_users returns active users" do
+        users = UserQuery.find_active_users()
+        assert length(users) == 2
+        assert Enum.all?(users, & &1.active)
+      end
+    end
+    """
+
+    File.write!(Path.join([repo_dir, "test", "user_query_test.exs"]), test_content)
   end
 
   # Helper: Write issue to .deft/issues.jsonl
