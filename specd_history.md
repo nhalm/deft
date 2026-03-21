@@ -1,4 +1,5 @@
 # History
+- **evals v0.4 (2026-03-21):** Create `test/eval/issues/elicitation_quality_test.exs` per spec section 1.2
 - **evals v0.4 (2026-03-21):** Create skills eval tests: `test/eval/skills/{suggestion,invocation_fidelity}_test.exs` per spec section 1.2
 - **evals v0.4 (2026-03-21):** Create `test/eval/spilling/threshold_calibration_test.exs` per spec section 1.2
 - **evals v0.4 (2026-03-21):** Create lead eval tests: `test/eval/lead/{task_planning,steering}_test.exs` per spec section 1.2
