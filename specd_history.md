@@ -1,4 +1,5 @@
 # History
+- **evals v0.4 (2026-03-21):** Add `@moduletag :benchmark` to e2e tests or create benchmark wrapper so `make test.eval.benchmark` (`--only benchmark`) runs Tier 3 suite instead of zero tests
 - **evals v0.4 (2026-03-21):** Fix `summary_quality_test.exs` setup crash: add `:type` and `:dets_path` options to `Store.start_link` call at line 34 (Store.init requires both via `Keyword.fetch!`)
 - **evals v0.4 (2026-03-21):** Fix `loop_safety_test.exs` stub: replace `run_loop_with_monitoring/2` with direct calls to CLI module functions (e.g., `Deft.CLI.execute_command/2`) or invoke the built escript via `System.cmd`; remove `:skip` tag once the real loop runs and produces meaningful data for safety assertions
 - **evals v0.4 (2026-03-21):** Rewrite `agent_created_quality_test.exs` as a statistical eval: start an agent with MockProvider, have it process a fixture scenario and create issues; run 20 iterations with real LLM calls, assert 80% pass rate per spec section 1.5

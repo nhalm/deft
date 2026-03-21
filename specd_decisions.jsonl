@@ -1,3 +1,27 @@
+{
+  "date_time": "2026-03-21T19:41:20Z",
+  "spec": "evals",
+  "version": "v0.4",
+  "source": "implement",
+  "decision_by": "claude",
+  "summary": "Added @moduletag :benchmark to e2e tests rather than creating wrapper",
+  "reasoning": "Work item offered two approaches: add moduletag or create wrapper. Chose moduletag as simpler and more idiomatic - ExUnit's tag system is designed for this use case. Wrapper would add indirection without benefit.",
+  "files": {
+    "specs": [
+      "specs/evals/README.md"
+    ],
+    "source_code": [
+      "test/eval/e2e/single_task_test.exs",
+      "test/eval/e2e/multi_agent_test.exs",
+      "test/eval/e2e/loop_safety_test.exs",
+      "test/eval/e2e/verification_circuit_breaker_test.exs"
+    ],
+    "other": [
+      "specd_work_list.md",
+      "specd_history.md"
+    ]
+  }
+}
 {"date_time":"2026-03-21T19:38:30Z","spec":"evals","version":"v0.4","source":"implement","decision_by":"claude","summary":"Added :type and :dets_path to Store.start_link in summary_quality_test.exs","reasoning":"Store.init requires both options via Keyword.fetch! - without them setup crashes. Used :cache type and temp file path for test isolation.","files":{"specs":["specs/evals/README.md"],"source_code":["test/eval/spilling/summary_quality_test.exs"],"other":["specd_work_list.md","specd_history.md"]}}
 {"date_time":"2026-03-21T22:00:00Z","spec":"evals","version":"v0.4","source":"audit","decision_by":"claude","summary":"Confirmed: summary_quality_test.exs crashes at setup — missing :type and :dets_path","reasoning":"Store.init calls Keyword.fetch! on both :type (line 159) and :dets_path (line 160). summary_quality_test.exs line 34 only passes :name. KeyError at setup, no tests run. Previous fix (specd_history) addressed the LLM judge but not the setup crash.","files":{"specs":["specs/evals/README.md"],"source_code":["test/eval/spilling/summary_quality_test.exs","lib/deft/store.ex"],"other":["specd_work_list.md"]}}
 {"date_time":"2026-03-21T22:00:01Z","spec":"evals","version":"v0.4","source":"audit","decision_by":"claude","summary":"Confirmed: e2e tests (single_task, multi_agent, verification_circuit_breaker) are random stubs","reasoning":"run_deft_work and run_deft_with_strategy use :rand.uniform() instead of real CLI invocation. Tests produce no meaningful signal about agent behavior. single_task always returns :success, multi_agent uses hardcoded 75%/65% probabilities, verification_circuit_breaker never modifies issue status.","files":{"specs":["specs/evals/README.md","specs/evals/e2e.md"],"source_code":["test/eval/e2e/single_task_test.exs","test/eval/e2e/multi_agent_test.exs","test/eval/e2e/verification_circuit_breaker_test.exs"],"other":["specd_work_list.md"]}}

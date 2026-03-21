@@ -22,6 +22,7 @@ defmodule Deft.Eval.E2E.LoopSafetyTest do
   @moduletag :expensive
   @moduletag :integration
   @moduletag :e2e
+  @moduletag :benchmark
 
   @cost_ceiling_per_issue 5.0
 

@@ -18,6 +18,7 @@ defmodule Deft.Eval.E2E.VerificationCircuitBreakerTest do
   @moduletag :expensive
   @moduletag :integration
   @moduletag :e2e
+  @moduletag :benchmark
 
   @iterations 20
   @pass_threshold 0.90

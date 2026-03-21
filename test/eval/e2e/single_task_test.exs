@@ -15,6 +15,7 @@ defmodule Deft.Eval.E2E.SingleTaskTest do
   @moduletag :expensive
   @moduletag :integration
   @moduletag :e2e
+  @moduletag :benchmark
 
   @cost_ceiling_default 5.0
 
