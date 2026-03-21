@@ -216,7 +216,7 @@ defmodule Deft.Eval.E2E.MultiAgentTest do
 
     start_time = System.monotonic_time(:second)
 
-    # Run deft work with strategy flag
+    # Run deft work with strategy configured via config file
     result = run_deft_with_strategy(repo_dir, issue_id, strategy, @cost_ceiling_default)
 
     end_time = System.monotonic_time(:second)
@@ -229,13 +229,54 @@ defmodule Deft.Eval.E2E.MultiAgentTest do
     }
   end
 
-  # Helper: Run synthetic task (placeholder)
-  defp run_synthetic_task(_tmp_dir, _task, _strategy) do
-    # Placeholder - would actually run the task
+  # Helper: Run synthetic task
+  defp run_synthetic_task(tmp_dir, task, strategy) do
+    # Create repo for the specific task
+    repo_dir = Path.join(tmp_dir, "#{task.name}_#{strategy}")
+    File.mkdir_p!(repo_dir)
+
+    # Initialize git
+    System.cmd("git", ["init"], cd: repo_dir)
+    System.cmd("git", ["config", "user.name", "Test"], cd: repo_dir)
+    System.cmd("git", ["config", "user.email", "test@example.com"], cd: repo_dir)
+
+    # Create basic structure
+    File.mkdir_p!(Path.join(repo_dir, "lib"))
+    File.mkdir_p!(Path.join(repo_dir, "test"))
+    File.mkdir_p!(Path.join(repo_dir, ".deft"))
+
+    # Write minimal mix.exs
+    mix_content = """
+    defmodule TestProject.MixProject do
+      use Mix.Project
+      def project, do: [app: :test_project, version: "0.1.0", elixir: "~> 1.14"]
+      def application, do: [extra_applications: [:logger]]
+    end
+    """
+
+    File.write!(Path.join(repo_dir, "mix.exs"), mix_content)
+
+    # Write strategy-specific config
+    write_strategy_config(repo_dir, strategy)
+
+    # Initial commit
+    System.cmd("git", ["add", "."], cd: repo_dir)
+    System.cmd("git", ["commit", "-m", "Initial"], cd: repo_dir)
+
+    # Write issue for this task
+    issue_id = "task_#{task.name}_#{:erlang.unique_integer([:positive])}"
+    task_spec = build_task_spec(task)
+    write_issue(repo_dir, Map.put(task_spec, :title, issue_id))
+
+    # Run deft work and measure time
+    start_time = System.monotonic_time(:second)
+    result = run_deft_work(repo_dir, issue_id, @cost_ceiling_default)
+    end_time = System.monotonic_time(:second)
+
     %{
-      status: if(:rand.uniform() > 0.3, do: :pass, else: :partial),
-      cost: :rand.uniform() * @cost_ceiling_default,
-      time: :rand.uniform(60)
+      status: result.status,
+      cost: result.cost,
+      time: end_time - start_time
     }
   end
 
@@ -267,6 +308,9 @@ defmodule Deft.Eval.E2E.MultiAgentTest do
 
     File.write!(Path.join(repo_dir, "mix.exs"), mix_content)
 
+    # Write strategy-specific config
+    write_strategy_config(repo_dir, strategy)
+
     # Initial commit
     System.cmd("git", ["add", "."], cd: repo_dir)
     System.cmd("git", ["commit", "-m", "Initial"], cd: repo_dir)
@@ -276,7 +320,7 @@ defmodule Deft.Eval.E2E.MultiAgentTest do
 
   # Helper: Write issue
   defp write_issue(repo_dir, task_spec) do
-    issue_id = "multi_#{:erlang.unique_integer([:positive])}"
+    issue_id = Map.get(task_spec, :id, "multi_#{:erlang.unique_integer([:positive])}")
     issues_file = Path.join([repo_dir, ".deft", "issues.jsonl"])
 
     issue = %{
@@ -292,17 +336,143 @@ defmodule Deft.Eval.E2E.MultiAgentTest do
     issue_id
   end
 
-  # Helper: Run deft with specific strategy (placeholder)
-  defp run_deft_with_strategy(_repo_dir, _issue_id, strategy, cost_ceiling) do
-    # Placeholder for actual CLI execution with strategy flag
-    # System.cmd("deft", ["work", issue_id, "--strategy", Atom.to_string(strategy)], cd: repo_dir)
+  # Helper: Run deft with specific strategy via config
+  defp run_deft_with_strategy(repo_dir, issue_id, _strategy, _cost_ceiling) do
+    # Strategy is already configured via write_strategy_config in setup_repo
+    run_deft_work(repo_dir, issue_id, @cost_ceiling_default)
+  end
 
-    # Simulate success/failure based on strategy
-    success_rate = if strategy == :multi_agent, do: 0.75, else: 0.65
+  # Helper: Write config to control single vs multi-agent mode
+  defp write_strategy_config(repo_dir, strategy) do
+    config_dir = Path.join(repo_dir, ".deft")
+    File.mkdir_p!(config_dir)
+    config_file = Path.join(config_dir, "config.yaml")
 
-    %{
-      status: if(:rand.uniform() < success_rate, do: :pass, else: :partial),
-      cost: :rand.uniform() * cost_ceiling
-    }
+    config_content =
+      case strategy do
+        :single_agent ->
+          # Force single-agent by preventing Lead spawning
+          """
+          job_max_leads: 0
+          """
+
+        :multi_agent ->
+          # Allow multi-agent orchestration (default behavior)
+          """
+          job_max_leads: 5
+          """
+      end
+
+    File.write!(config_file, config_content)
+  end
+
+  # Helper: Build task spec from task map
+  defp build_task_spec(task) do
+    case task.name do
+      "fix_test" ->
+        %{
+          title: "Fix failing test",
+          description: "Fix the failing test in math module",
+          acceptance_criteria: ["All tests pass"],
+          complexity: :low
+        }
+
+      "add_schema" ->
+        %{
+          title: "Add schema field",
+          description: "Add a new field to the User schema with migration",
+          acceptance_criteria: ["Migration exists", "Schema compiles"],
+          complexity: :low
+        }
+
+      "add_controller" ->
+        %{
+          title: "Add controller action",
+          description: "Add GET /api/users/:id endpoint with tests",
+          acceptance_criteria: [
+            "New action exists",
+            "Integration test passes",
+            "Route registered"
+          ],
+          complexity: :medium
+        }
+
+      "refactor" ->
+        %{
+          title: "Refactor module",
+          description: "Refactor the Parser module without breaking tests",
+          acceptance_criteria: ["Tests pass", "Structure changed"],
+          complexity: :medium
+        }
+
+      "fix_bug" ->
+        %{
+          title: "Fix bug",
+          description: "Fix the bug where users can't login with email",
+          acceptance_criteria: ["Bug fixed", "Test added"],
+          complexity: :medium
+        }
+
+      "genserver" ->
+        %{
+          title: "Implement GenServer",
+          description: "Implement a cache GenServer per spec",
+          acceptance_criteria: ["GenServer compiles", "Tests pass"],
+          complexity: :medium
+        }
+
+      "cross_file" ->
+        %{
+          title: "Update behavior and implementors",
+          description: "Add required callback to Storage behavior and update all implementors",
+          acceptance_criteria: [
+            "Behavior updated",
+            "All implementations compile",
+            "All tests pass"
+          ],
+          complexity: :high
+        }
+
+      "constrained" ->
+        %{
+          title: "Add feature with constraint",
+          description: "Add user deletion feature without changing public API",
+          acceptance_criteria: ["Feature works", "Public API unchanged"],
+          complexity: :high
+        }
+    end
+  end
+
+  # Helper: Run deft work command via System.cmd
+  defp run_deft_work(repo_dir, issue_id, _cost_ceiling) do
+    # Path to the built escript (should be in the project root)
+    escript_path = Path.join([File.cwd!(), "deft"])
+
+    # Run deft work command
+    case System.cmd(escript_path, ["work", issue_id], cd: repo_dir, stderr_to_stdout: true) do
+      {output, 0} ->
+        # Success - extract cost from output
+        cost = extract_cost_from_output(output)
+        %{status: :pass, cost: cost}
+
+      {output, _exit_code} ->
+        # Failed - extract cost if available
+        cost = extract_cost_from_output(output)
+        %{status: :error, cost: cost}
+    end
+  end
+
+  # Helper: Extract cost from deft work output
+  defp extract_cost_from_output(output) do
+    # Look for "Job cost: $X.XX" pattern in the output
+    case Regex.run(~r/Job cost: \$([0-9]+(?:\.[0-9]+)?)/, output) do
+      [_, cost_str] ->
+        {cost, _} = Float.parse(cost_str)
+        cost
+
+      nil ->
+        # If no explicit cost found, default to 0.0
+        0.0
+    end
   end
 end

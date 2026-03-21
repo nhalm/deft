@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## evals v0.4
 
-- Replace `run_deft_with_strategy/4` and `run_synthetic_task/3` stubs in `multi_agent_test.exs` (lines 232, 295) with real CLI invocation
 - Replace `run_deft_work/3` stub in `verification_circuit_breaker_test.exs` (line 320) with real CLI invocation
 - Implement scenario-specific repo setup in `single_task_test.exs`: `create_basic_project_structure/2` (line 284) ignores `_scenario` — each of the 8 benchmark tasks needs a distinct repo with the prerequisite code for that scenario
 - Create `test/eval/support/scoring.ex` implementing confidence interval reporting per spec section 1.5 report format
