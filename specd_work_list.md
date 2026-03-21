@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## evals v0.4
 
-- Create actor eval tests: `test/eval/actor/{observation_usage,continuation,tool_selection}_test.exs` per spec section 1.2
 - Create foreman eval tests: `test/eval/foreman/{decomposition,dependency,contract,constraint_propagation}_test.exs` per spec section 1.2
 - Create lead eval tests: `test/eval/lead/{task_planning,steering}_test.exs` per spec section 1.2
 - Create `test/eval/spilling/threshold_calibration_test.exs` per spec section 1.2
