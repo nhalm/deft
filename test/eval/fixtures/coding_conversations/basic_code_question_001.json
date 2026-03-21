@@ -1,0 +1,28 @@
+{
+  "id": "basic-code-question-001",
+  "spec_version": "0.4",
+  "description": "User asks a basic coding question",
+  "tags": ["actor", "conversation", "code-explanation"],
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "How do I read a JSON file in Elixir?"
+        }
+      ]
+    }
+  ],
+  "context": {},
+  "assertions": [
+    {
+      "type": "contains",
+      "value": "File.read"
+    },
+    {
+      "type": "contains",
+      "value": "Jason.decode"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "id": "observer-hallucination-temptation-001",
+  "spec_version": "0.4",
+  "description": "User mentions a technology but doesn't express preference - should not extract as preference",
+  "tags": ["observer", "anti-hallucination", "yellow-priority"],
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "I was reading about Redis caching today."
+        }
+      ]
+    }
+  ],
+  "context": {},
+  "assertions": [
+    {
+      "type": "refute_section_contains",
+      "section": "User Preferences",
+      "value": "Redis"
+    },
+    {
+      "type": "not_hallucinate",
+      "about": "technology preferences"
+    }
+  ]
+}

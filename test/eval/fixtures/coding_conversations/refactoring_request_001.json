@@ -1,0 +1,30 @@
+{
+  "id": "refactoring-request-001",
+  "spec_version": "0.4",
+  "description": "User requests a refactoring with specific constraints",
+  "tags": ["actor", "refactoring", "constraints"],
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Please refactor the authentication module to use dependency injection instead of global state."
+        }
+      ]
+    }
+  ],
+  "context": {
+    "files": ["lib/auth.ex"]
+  },
+  "assertions": [
+    {
+      "type": "tool_call",
+      "tool": "read_file"
+    },
+    {
+      "type": "not_contains",
+      "value": "Agent.start_link"
+    }
+  ]
+}
