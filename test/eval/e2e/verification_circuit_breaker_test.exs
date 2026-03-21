@@ -317,18 +317,39 @@ defmodule Deft.Eval.E2E.VerificationCircuitBreakerTest do
     issue_id
   end
 
-  # Run deft work command (placeholder)
-  defp run_deft_work(_repo_dir, _issue_id, cost_ceiling) do
-    # Placeholder for actual CLI execution
-    # System.cmd("deft", ["work", issue_id, "--cost-ceiling", to_string(cost_ceiling)], cd: repo_dir)
+  # Run deft work command
+  defp run_deft_work(repo_dir, issue_id, _cost_ceiling) do
+    # Path to the built escript (should be in the project root)
+    escript_path = Path.join([File.cwd!(), "deft"])
 
-    # Simulate agent attempting the work
     IO.puts("    Running deft work...")
 
-    %{
-      status: :attempted,
-      cost: :rand.uniform() * cost_ceiling
-    }
+    # Run deft work command
+    case System.cmd(escript_path, ["work", issue_id], cd: repo_dir, stderr_to_stdout: true) do
+      {output, 0} ->
+        # Success - extract cost from output
+        cost = extract_cost_from_output(output)
+        %{status: :success, cost: cost}
+
+      {output, _exit_code} ->
+        # Failed - extract cost if available
+        cost = extract_cost_from_output(output)
+        %{status: :error, cost: cost}
+    end
+  end
+
+  # Helper: Extract cost from deft work output
+  defp extract_cost_from_output(output) do
+    # Look for "Job cost: $X.XX" pattern in the output
+    case Regex.run(~r/Job cost: \$([0-9]+(?:\.[0-9]+)?)/, output) do
+      [_, cost_str] ->
+        {cost, _} = Float.parse(cost_str)
+        cost
+
+      nil ->
+        # If no explicit cost found, default to 0.0
+        0.0
+    end
   end
 
   # Check if issue was closed
