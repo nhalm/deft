@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## evals v0.3
-
-- Create missing e2e test files: `test/eval/e2e/single_task_test.exs`, `test/eval/e2e/multi_agent_test.exs`, `test/eval/e2e/verification_circuit_breaker_test.exs` per spec section 1.2; create synthetic git repos in tmp dirs during test setup (use `System.cmd("git", ["init", ...])` in setup blocks); `test/support/git_mock.ex` already provides patterns for this
-
 ## evals v0.4
 
 - Rewrite `cache_retrieval_test.exs` helpers to start a real agent with MockProvider (see pattern in `test/deft/agent_test.exs`): feed scripted LLM responses that should trigger `cache_read` tool calls; assert the agent actually invokes the tool rather than checking fixture string patterns
