@@ -1,4 +1,5 @@
 # History
+- **evals v0.4 (2026-03-21):** Restore test/eval/support/eval_helpers.ex and test/eval/support/scoring.ex accidentally deleted by commit e5e4c4d
 - **evals v0.4 (2026-03-21):** Restore all 28 eval test files accidentally deleted by commit e5e4c4d (observer/, reflector/, actor/, foreman/, lead/, spilling/, skills/, issues/, e2e/ subdirectories under test/eval/)
 - **evals v0.4 (2026-03-21):** Create `test/eval/fixtures/` directory structure with synthetic fixture JSON files per spec section 1.3
 - **evals v0.4 (2026-03-21):** Create `test/eval/issues/elicitation_quality_test.exs` per spec section 1.2
