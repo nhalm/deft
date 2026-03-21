@@ -19,5 +19,4 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## evals v0.4
 
-- Rewrite `agent_created_quality_test.exs` as a statistical eval: start an agent with MockProvider, have it process a fixture scenario and create issues; run 20 iterations with real LLM calls, assert 80% pass rate per spec section 1.5
 - Fix `loop_safety_test.exs` stub: replace `run_loop_with_monitoring/2` with direct calls to CLI module functions (e.g., `Deft.CLI.execute_command/2`) or invoke the built escript via `System.cmd`; remove `:skip` tag once the real loop runs and produces meaningful data for safety assertions
