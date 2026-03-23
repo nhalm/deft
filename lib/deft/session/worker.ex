@@ -101,21 +101,21 @@ defmodule Deft.Session.Worker do
   Returns the Registry via tuple for the session worker.
   """
   def via_tuple(session_id) do
-    {:via, Registry, {Deft.Registry, {:session_worker, session_id}}}
+    {:via, Registry, {Deft.ProcessRegistry, {:session_worker, session_id}}}
   end
 
   @doc """
   Returns the Registry via tuple for the agent process.
   """
   def agent_via_tuple(session_id) do
-    {:via, Registry, {Deft.Registry, {:agent, session_id}}}
+    {:via, Registry, {Deft.ProcessRegistry, {:agent, session_id}}}
   end
 
   @doc """
   Returns the Registry via tuple for the ToolRunner supervisor.
   """
   def tool_runner_via_tuple(session_id) do
-    {:via, Registry, {Deft.Registry, {:tool_runner, session_id}}}
+    {:via, Registry, {Deft.ProcessRegistry, {:tool_runner, session_id}}}
   end
 
   @doc """

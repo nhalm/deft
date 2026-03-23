@@ -41,7 +41,7 @@ defmodule Deft.Provider.AnthropicTest do
       System.put_env("ANTHROPIC_API_KEY", "test-key")
 
       # This will fail to connect but should return a PID
-      result = Anthropic.stream([], [], %{model: "claude-sonnet-4"})
+      result = Anthropic.stream([], [], %{model: "claude-sonnet-4-20250514"})
 
       case result do
         {:ok, pid} ->
@@ -550,7 +550,7 @@ defmodule Deft.Provider.AnthropicTest do
                max_output: 16_000,
                input_price_per_mtok: 3.00,
                output_price_per_mtok: 15.00
-             } = Anthropic.model_config("claude-sonnet-4")
+             } = Anthropic.model_config("claude-sonnet-4-20250514")
     end
 
     test "returns config for claude-opus-4" do

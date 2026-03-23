@@ -37,7 +37,7 @@ defmodule Deft.ConfigTest do
     test "returns expected default values" do
       config = Config.defaults()
 
-      assert config.model == "claude-sonnet-4"
+      assert config.model == "claude-sonnet-4-20250514"
       assert config.provider == "anthropic"
       assert config.turn_limit == 25
       assert config.tool_timeout == 120_000
@@ -52,7 +52,7 @@ defmodule Deft.ConfigTest do
     test "loads defaults when no config files exist" do
       config = Config.load(%{}, @working_dir, user_home: @user_home)
 
-      assert config.model == "claude-sonnet-4"
+      assert config.model == "claude-sonnet-4-20250514"
       assert config.provider == "anthropic"
       assert config.turn_limit == 25
       assert config.tool_timeout == 120_000
@@ -160,14 +160,14 @@ defmodule Deft.ConfigTest do
       cli_flags = %{
         om_enabled: false,
         om_observer_model: "claude-opus-4",
-        om_reflector_model: "claude-sonnet-4"
+        om_reflector_model: "claude-sonnet-4-20250514"
       }
 
       config = Config.load(cli_flags, @working_dir, user_home: @user_home)
 
       assert config.om_enabled == false
       assert config.om_observer_model == "claude-opus-4"
-      assert config.om_reflector_model == "claude-sonnet-4"
+      assert config.om_reflector_model == "claude-sonnet-4-20250514"
     end
 
     test "handles nested om config from YAML" do
@@ -198,7 +198,7 @@ defmodule Deft.ConfigTest do
 
       # Should fall back to defaults when YAML parsing fails
       config = Config.load(%{}, @working_dir, user_home: @user_home)
-      assert config.model == "claude-sonnet-4"
+      assert config.model == "claude-sonnet-4-20250514"
     end
 
     test "handles empty YAML file" do
@@ -206,7 +206,7 @@ defmodule Deft.ConfigTest do
       File.write!(project_config_path, "")
 
       config = Config.load(%{}, @working_dir, user_home: @user_home)
-      assert config.model == "claude-sonnet-4"
+      assert config.model == "claude-sonnet-4-20250514"
     end
 
     test "handles partial om config override" do

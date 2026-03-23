@@ -10,7 +10,7 @@ defmodule Deft.Tools.ObservationsTest do
 
     # Start OM.State with some observations
     config = %Deft.Config{
-      model: "claude-sonnet-4",
+      model: "claude-sonnet-4-20250514",
       provider: "anthropic",
       turn_limit: 25,
       tool_timeout: 120_000,
@@ -43,10 +43,10 @@ defmodule Deft.Tools.ObservationsTest do
       job_max_runners_per_lead: 3,
       job_research_timeout: 120_000,
       job_runner_timeout: 300_000,
-      job_foreman_model: "claude-sonnet-4",
-      job_lead_model: "claude-sonnet-4",
-      job_runner_model: "claude-sonnet-4",
-      job_research_runner_model: "claude-sonnet-4",
+      job_foreman_model: "claude-sonnet-4-20250514",
+      job_lead_model: "claude-sonnet-4-20250514",
+      job_runner_model: "claude-sonnet-4-20250514",
+      job_research_runner_model: "claude-sonnet-4-20250514",
       job_max_duration: 1_800_000
     }
 

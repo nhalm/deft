@@ -898,7 +898,7 @@ defmodule Deft.Job.Lead do
         provider_module = get_provider(data)
 
         # Use Lead's model instead of session model
-        lead_model = Map.get(config, :job_lead_model, "claude-sonnet-4")
+        lead_model = Map.get(config, :job_lead_model, "claude-sonnet-4-20250514")
         llm_config = Map.put(config, :model, lead_model)
 
         # Start streaming from the provider
@@ -928,7 +928,7 @@ defmodule Deft.Job.Lead do
     # Normalize provider to string (CLI sets it as atom, Registry expects string)
     provider_name = normalize_provider_name(provider_value)
     # Use Lead's model for resolving provider
-    model_name = Map.get(data.config, :job_lead_model, "claude-sonnet-4")
+    model_name = Map.get(data.config, :job_lead_model, "claude-sonnet-4-20250514")
 
     case Deft.Provider.Registry.resolve(provider_name, model_name) do
       {:ok, {provider_module, _model_config}} ->
@@ -937,7 +937,7 @@ defmodule Deft.Job.Lead do
       {:error, _} ->
         # Fallback to anthropic
         {:ok, {provider_module, _}} =
-          Deft.Provider.Registry.resolve("anthropic", "claude-sonnet-4")
+          Deft.Provider.Registry.resolve("anthropic", "claude-sonnet-4-20250514")
 
         provider_module
     end
@@ -1222,7 +1222,7 @@ defmodule Deft.Job.Lead do
   def spawn_runner(data, runner_type, task_description, instructions, context) do
     # Build proper runner_config with provider module instead of string
     provider_name = Map.get(data.config, :provider, "anthropic")
-    runner_model = Map.get(data.config, :job_runner_model, "claude-sonnet-4")
+    runner_model = Map.get(data.config, :job_runner_model, "claude-sonnet-4-20250514")
 
     runner_config = %{
       provider: get_provider(data),

@@ -150,7 +150,7 @@ defmodule Deft.Provider do
 
   ## Parameters
 
-  - `model_name` - String identifier for the model (e.g., "claude-sonnet-4")
+  - `model_name` - String identifier for the model (e.g., "claude-sonnet-4-20250514")
 
   ## Returns
 

@@ -225,7 +225,7 @@ defmodule Deft.Job.RateLimiter do
   - opts: Keyword list with required :job_id and optional configuration
     - :job_id - Required job identifier
     - :foreman_pid - Optional Foreman process PID for cost reporting
-    - :model - Optional model name for cost tracking (default: "claude-sonnet-4")
+    - :model - Optional model name for cost tracking (default: "claude-sonnet-4-20250514")
     - :time_source - Optional time source function for testing
     - :initial_concurrency - Starting number of concurrent Leads (default: 2)
     - :max_concurrency - Maximum number of concurrent Leads (default: 10)
@@ -330,7 +330,7 @@ defmodule Deft.Job.RateLimiter do
   def init(opts) do
     time_source = Keyword.get(opts, :time_source, &System.monotonic_time/1)
     foreman_pid = Keyword.get(opts, :foreman_pid)
-    model = Keyword.get(opts, :model, "claude-sonnet-4")
+    model = Keyword.get(opts, :model, "claude-sonnet-4-20250514")
     initial_concurrency = Keyword.get(opts, :initial_concurrency, 2)
     max_concurrency = Keyword.get(opts, :max_concurrency, 10)
     cost_ceiling = Keyword.get(opts, :cost_ceiling, 10.0)

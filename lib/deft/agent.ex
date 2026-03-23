@@ -76,6 +76,16 @@ defmodule Deft.Agent do
   - `:session_cost` — Optional. Initial session cost from resumed session (default: 0.0).
   - `:name` — Optional. Name for the gen_statem process.
   """
+  def child_spec(opts) do
+    %{
+      id: __MODULE__,
+      start: {__MODULE__, :start_link, [opts]},
+      type: :worker,
+      restart: :temporary,
+      shutdown: 5000
+    }
+  end
+
   def start_link(opts) do
     session_id = Keyword.fetch!(opts, :session_id)
     config = Keyword.fetch!(opts, :config)
@@ -111,8 +121,11 @@ defmodule Deft.Agent do
       pending_compaction_data: nil
     }
 
-    start_opts = if name, do: [name: name], else: []
-    :gen_statem.start_link(__MODULE__, initial_data, start_opts)
+    if name do
+      :gen_statem.start_link(name, __MODULE__, initial_data, [])
+    else
+      :gen_statem.start_link(__MODULE__, initial_data, [])
+    end
   end
 
   @doc """
@@ -634,7 +647,7 @@ defmodule Deft.Agent do
   defp get_context_window(config) do
     # Get context window from provider's model config
     provider = Map.get(config, :provider)
-    model = Map.get(config, :model, "claude-sonnet-4")
+    model = Map.get(config, :model, "claude-sonnet-4-20250514")
 
     if provider && function_exported?(provider, :model_config, 1) do
       case provider.model_config(model) do
@@ -650,7 +663,7 @@ defmodule Deft.Agent do
   defp calculate_cost(config, input_tokens, output_tokens) do
     # Calculate cost from usage tokens using model pricing
     provider = Map.get(config, :provider)
-    model = Map.get(config, :model, "claude-sonnet-4")
+    model = Map.get(config, :model, "claude-sonnet-4-20250514")
 
     if provider && function_exported?(provider, :model_config, 1) do
       case provider.model_config(model) do

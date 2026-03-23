@@ -907,7 +907,17 @@ defmodule Deft.CLI do
       tool_timeout: config.tool_timeout,
       bash_timeout: config.bash_timeout,
       max_turns: config.turn_limit,
-      tools: [Deft.Tools.UseSkill, Deft.Tools.IssueCreate],
+      tools: [
+        Deft.Tools.Read,
+        Deft.Tools.Write,
+        Deft.Tools.Edit,
+        Deft.Tools.Bash,
+        Deft.Tools.Grep,
+        Deft.Tools.Find,
+        Deft.Tools.Ls,
+        Deft.Tools.UseSkill,
+        Deft.Tools.IssueCreate
+      ],
       om_enabled: config.om_enabled,
       om_message_token_threshold: config.om_message_token_threshold,
       om_observation_token_threshold: config.om_observation_token_threshold,
@@ -926,7 +936,7 @@ defmodule Deft.CLI do
       )
 
     # Look up the Agent PID from the registry
-    [{agent_pid, _}] = Registry.lookup(Deft.Registry, {:agent, session_id})
+    [{agent_pid, _}] = Registry.lookup(Deft.ProcessRegistry, {:agent, session_id})
     agent_pid
   end
 
@@ -1583,7 +1593,7 @@ defmodule Deft.CLI do
 
     # Build config for elicitation agent (lightweight, tools for issue_draft only)
     agent_config = %{
-      model: flags[:model] || "claude-sonnet-4",
+      model: flags[:model] || "claude-sonnet-4-20250514",
       provider: Deft.Provider.Anthropic,
       working_dir: working_dir,
       turn_limit: 10,
@@ -1603,7 +1613,7 @@ defmodule Deft.CLI do
       )
 
     # Look up the Agent PID from the registry
-    [{agent_pid, _}] = Registry.lookup(Deft.Registry, {:agent, session_id})
+    [{agent_pid, _}] = Registry.lookup(Deft.ProcessRegistry, {:agent, session_id})
 
     # Subscribe to agent events
     Registry.register(Deft.Registry, {:session, session_id}, [])
@@ -1656,7 +1666,7 @@ defmodule Deft.CLI do
 
         # Build config for elicitation agent (lightweight, tools for issue_draft only)
         agent_config = %{
-          model: flags[:model] || "claude-sonnet-4",
+          model: flags[:model] || "claude-sonnet-4-20250514",
           provider: Deft.Provider.Anthropic,
           working_dir: working_dir,
           turn_limit: 10,
@@ -1676,7 +1686,7 @@ defmodule Deft.CLI do
           )
 
         # Look up the Agent PID from the registry
-        [{agent_pid, _}] = Registry.lookup(Deft.Registry, {:agent, session_id})
+        [{agent_pid, _}] = Registry.lookup(Deft.ProcessRegistry, {:agent, session_id})
 
         # Subscribe to agent events
         Registry.register(Deft.Registry, {:session, session_id}, [])
@@ -1937,7 +1947,7 @@ defmodule Deft.CLI do
 
     # Build config for elicitation agent (lightweight, tools for issue_draft only)
     agent_config = %{
-      model: flags[:model] || "claude-sonnet-4",
+      model: flags[:model] || "claude-sonnet-4-20250514",
       provider: Deft.Provider.Anthropic,
       working_dir: working_dir,
       turn_limit: 10,
@@ -1957,7 +1967,7 @@ defmodule Deft.CLI do
       )
 
     # Look up the Agent PID from the registry
-    [{agent_pid, _}] = Registry.lookup(Deft.Registry, {:agent, session_id})
+    [{agent_pid, _}] = Registry.lookup(Deft.ProcessRegistry, {:agent, session_id})
 
     # Subscribe to agent events
     Registry.register(Deft.Registry, {:session, session_id}, [])

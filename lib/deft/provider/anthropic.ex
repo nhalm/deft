@@ -49,7 +49,7 @@ defmodule Deft.Provider.Anthropic do
       {:error, :missing_api_key}
     else
       caller = self()
-      model = Map.get(config, :model, "claude-sonnet-4")
+      model = Map.get(config, :model, "claude-sonnet-4-20250514")
       max_tokens = Map.get(config, :max_tokens, 8192)
       temperature = Map.get(config, :temperature, 1.0)
       thinking = Map.get(config, :thinking, false)
@@ -512,7 +512,7 @@ defmodule Deft.Provider.Anthropic do
   @impl Deft.Provider
   def model_config(model_name) do
     case model_name do
-      "claude-sonnet-4" ->
+      "claude-sonnet-4-20250514" ->
         %{
           context_window: 200_000,
           max_output: 16_000,

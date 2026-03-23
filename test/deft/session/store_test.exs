@@ -37,7 +37,7 @@ defmodule Deft.Session.StoreTest do
   describe "append/2" do
     test "creates session file and appends SessionStart entry" do
       session_id = "test-session-1"
-      entry = SessionStart.new(session_id, "/tmp", "claude-sonnet-4", %{om: true})
+      entry = SessionStart.new(session_id, "/tmp", "claude-sonnet-4-20250514", %{om: true})
 
       # Temporarily patch the module attribute
       assert :ok = append_with_dir(session_id, entry)
@@ -55,7 +55,7 @@ defmodule Deft.Session.StoreTest do
     test "appends multiple entries to the same session" do
       session_id = "test-session-2"
 
-      entry1 = SessionStart.new(session_id, "/tmp", "claude-sonnet-4", %{})
+      entry1 = SessionStart.new(session_id, "/tmp", "claude-sonnet-4-20250514", %{})
       entry2 = Cost.new(0.05)
 
       assert :ok = append_with_dir(session_id, entry1)
@@ -81,9 +81,9 @@ defmodule Deft.Session.StoreTest do
     test "loads all entries from a session file" do
       session_id = "test-session-load"
 
-      entry1 = SessionStart.new(session_id, "/tmp/project", "claude-sonnet-4", %{})
+      entry1 = SessionStart.new(session_id, "/tmp/project", "claude-sonnet-4-20250514", %{})
       entry2 = Cost.new(0.02)
-      entry3 = ModelChange.new("claude-sonnet-4", "claude-opus-4")
+      entry3 = ModelChange.new("claude-sonnet-4-20250514", "claude-opus-4")
 
       append_with_dir(session_id, entry1)
       append_with_dir(session_id, entry2)
@@ -94,7 +94,7 @@ defmodule Deft.Session.StoreTest do
 
       assert %SessionStart{session_id: ^session_id} = Enum.at(entries, 0)
       assert %Cost{cumulative_cost: 0.02} = Enum.at(entries, 1)
-      assert %ModelChange{from_model: "claude-sonnet-4"} = Enum.at(entries, 2)
+      assert %ModelChange{from_model: "claude-sonnet-4-20250514"} = Enum.at(entries, 2)
     end
 
     test "returns error when session file does not exist" do
@@ -129,7 +129,7 @@ defmodule Deft.Session.StoreTest do
       session1 = "session-1"
 
       entry1_start =
-        SessionStart.new(session1, "/tmp/project1", "claude-sonnet-4", %{})
+        SessionStart.new(session1, "/tmp/project1", "claude-sonnet-4-20250514", %{})
 
       append_with_dir(session1, entry1_start)
       # Simulate some time passing
@@ -155,7 +155,7 @@ defmodule Deft.Session.StoreTest do
       session_id = "session-meta"
 
       start_entry =
-        SessionStart.new(session_id, "/tmp/workspace", "claude-sonnet-4", %{})
+        SessionStart.new(session_id, "/tmp/workspace", "claude-sonnet-4-20250514", %{})
 
       # Create a message entry
       msg_entry = %Message{
@@ -183,7 +183,7 @@ defmodule Deft.Session.StoreTest do
 
     test "handles sessions with no messages" do
       session_id = "session-no-messages"
-      start_entry = SessionStart.new(session_id, "/tmp", "claude-sonnet-4", %{})
+      start_entry = SessionStart.new(session_id, "/tmp", "claude-sonnet-4-20250514", %{})
 
       append_with_dir(session_id, start_entry)
 
@@ -197,8 +197,8 @@ defmodule Deft.Session.StoreTest do
   describe "entry type deserialization" do
     test "deserializes SessionStart correctly" do
       session_id = "test-deserialize-start"
-      config = %{om: true, model: "claude-sonnet-4"}
-      entry = SessionStart.new(session_id, "/tmp/work", "claude-sonnet-4", config)
+      config = %{om: true, model: "claude-sonnet-4-20250514"}
+      entry = SessionStart.new(session_id, "/tmp/work", "claude-sonnet-4-20250514", config)
 
       append_with_dir(session_id, entry)
       assert {:ok, [loaded]} = load_with_dir(session_id)
@@ -206,7 +206,7 @@ defmodule Deft.Session.StoreTest do
       assert %SessionStart{} = loaded
       assert loaded.session_id == session_id
       assert loaded.working_dir == "/tmp/work"
-      assert loaded.model == "claude-sonnet-4"
+      assert loaded.model == "claude-sonnet-4-20250514"
       assert loaded.config == config
     end
 
@@ -250,13 +250,13 @@ defmodule Deft.Session.StoreTest do
 
     test "deserializes ModelChange correctly" do
       session_id = "test-deserialize-model"
-      entry = ModelChange.new("claude-sonnet-4", "claude-opus-4")
+      entry = ModelChange.new("claude-sonnet-4-20250514", "claude-opus-4")
 
       append_with_dir(session_id, entry)
       assert {:ok, [loaded]} = load_with_dir(session_id)
 
       assert %ModelChange{} = loaded
-      assert loaded.from_model == "claude-sonnet-4"
+      assert loaded.from_model == "claude-sonnet-4-20250514"
       assert loaded.to_model == "claude-opus-4"
     end
 

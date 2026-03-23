@@ -40,7 +40,7 @@ defmodule Deft.Provider.Registry do
   ## Parameters
 
   - `provider_name` - String identifier for the provider (e.g., "anthropic")
-  - `model_name` - String identifier for the model (e.g., "claude-sonnet-4")
+  - `model_name` - String identifier for the model (e.g., "claude-sonnet-4-20250514")
 
   ## Returns
 
@@ -50,7 +50,7 @@ defmodule Deft.Provider.Registry do
 
   ## Examples
 
-      iex> Deft.Provider.Registry.resolve("anthropic", "claude-sonnet-4")
+      iex> Deft.Provider.Registry.resolve("anthropic", "claude-sonnet-4-20250514")
       {:ok, {Deft.Provider.Anthropic, %{context_window: 200_000, ...}}}
 
       iex> Deft.Provider.Registry.resolve("unknown", "model")

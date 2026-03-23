@@ -97,7 +97,7 @@ defmodule Deft.TUI.Chat do
   def render(assigns) do
     assigns =
       assign(assigns,
-        model_name: assigns.config[:model] || "claude-sonnet-4",
+        model_name: assigns.config[:model] || "claude-sonnet-4-20250514",
         agent_state_display:
           format_agent_state(assigns.agent_state, assigns.om_active, assigns.om_sync_fallback),
         streaming_rendered: calculate_streaming_rendered(assigns),
@@ -1061,7 +1061,7 @@ defmodule Deft.TUI.Chat do
     # Opus: $15/MTok input, $75/MTok output
     # Haiku: $0.25/MTok input, $1.25/MTok output
 
-    model = config[:model] || "claude-sonnet-4"
+    model = config[:model] || "claude-sonnet-4-20250514"
 
     {input_price, output_price} =
       cond do

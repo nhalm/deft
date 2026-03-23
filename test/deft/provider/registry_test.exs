@@ -106,7 +106,7 @@ defmodule Deft.Provider.RegistryTest do
     end
 
     test "resolves claude-sonnet-4" do
-      assert {:ok, {module, config}} = Registry.resolve("anthropic", "claude-sonnet-4")
+      assert {:ok, {module, config}} = Registry.resolve("anthropic", "claude-sonnet-4-20250514")
       assert module == Deft.Provider.Anthropic
       assert config.context_window == 200_000
       assert config.max_output == 16_000

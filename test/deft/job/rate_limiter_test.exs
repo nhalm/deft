@@ -587,7 +587,8 @@ defmodule Deft.Job.RateLimiterTest do
 
       {:ok, _pid} =
         start_supervised(
-          {RateLimiter, [job_id: job_id, foreman_pid: foreman_pid, model: "claude-sonnet-4"]},
+          {RateLimiter,
+           [job_id: job_id, foreman_pid: foreman_pid, model: "claude-sonnet-4-20250514"]},
           id: {RateLimiter, job_id}
         )
 
@@ -707,7 +708,7 @@ defmodule Deft.Job.RateLimiterTest do
            [
              job_id: job_id,
              foreman_pid: foreman_pid,
-             model: "claude-sonnet-4",
+             model: "claude-sonnet-4-20250514",
              cost_ceiling: 2.0
            ]},
           id: {RateLimiter, job_id}
@@ -886,7 +887,7 @@ defmodule Deft.Job.RateLimiterTest do
            [
              job_id: job_id,
              foreman_pid: foreman_pid,
-             model: "claude-sonnet-4",
+             model: "claude-sonnet-4-20250514",
              cost_warning: 0.5,
              cost_ceiling: 10.0
            ]},

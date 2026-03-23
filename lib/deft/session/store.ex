@@ -27,7 +27,7 @@ defmodule Deft.Session.Store do
 
   ## Examples
 
-      iex> entry = Entry.SessionStart.new("abc123", "/tmp", "claude-sonnet-4", %{})
+      iex> entry = Entry.SessionStart.new("abc123", "/tmp", "claude-sonnet-4-20250514", %{})
       iex> Store.append("abc123", entry, "/tmp")
       :ok
   """
@@ -58,7 +58,7 @@ defmodule Deft.Session.Store do
 
   ## Examples
 
-      iex> entry = Entry.SessionStart.new("abc123", "/tmp", "claude-sonnet-4", %{})
+      iex> entry = Entry.SessionStart.new("abc123", "/tmp", "claude-sonnet-4-20250514", %{})
       iex> Store.append_to_path("/tmp/job_123/foreman_session.jsonl", entry)
       :ok
   """
@@ -131,7 +131,7 @@ defmodule Deft.Session.Store do
         messages: [%Deft.Message{}, ...],
         config: %{},
         working_dir: "/tmp",
-        model: "claude-sonnet-4",
+        model: "claude-sonnet-4-20250514",
         om_snapshot: nil,
         session_cost: 0.05,
         session_metadata: %Entry.SessionStart{}
@@ -363,7 +363,7 @@ defmodule Deft.Session.Store do
 
     case latest_change do
       %Entry.ModelChange{to_model: model} -> model
-      nil -> (session_start && session_start.model) || "claude-sonnet-4"
+      nil -> (session_start && session_start.model) || "claude-sonnet-4-20250514"
     end
   end
 
