@@ -1,4 +1,5 @@
 # History
+- **tui v0.3 (2026-03-23):** Show model name in header in solo mode only (`model: claude-sonnet-4`); omit in orchestration mode
 - **tui v0.3 (2026-03-23):** Show agent identity in header — "Solo" in solo mode, "Foreman" during orchestration
 - **tui v0.3 (2026-03-23):** Redesign header line to include repo name: resolve `working_dir` to git root, use basename, truncate to 20 chars with `…` suffix if needed
 - **tui v0.3 (2026-03-23):** Support multiple thinking blocks per assistant turn — when `:thinking_delta` arrives after tool results, start a new thinking block; persist all thinking blocks in message history so they remain visible in scrollback

@@ -19,9 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## tui v0.3
 
-### Header
-- Show model name in header in solo mode only (`model: claude-sonnet-4`); omit in orchestration mode
-
 ### Agent roster
 - Add `{:job_status, agent_statuses}` broadcast from Foreman: emit via Registry whenever an agent's state changes (Lead started, Lead completed, Runner spawned, etc.) — payload is a list of `%{id, type, state, label}`
 - Subscribe TUI to `{:job_status, ...}` broadcasts and store `agent_statuses` in assigns (blocked: Add `{:job_status, agent_statuses}` broadcast...)
