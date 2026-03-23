@@ -101,6 +101,7 @@ defmodule Deft.TUI.Chat do
     assigns =
       assign(assigns,
         model_name: assigns.config[:model] || "claude-sonnet-4-20250514",
+        repo_name: extract_repo_name(assigns.config[:working_dir] || File.cwd!()),
         agent_state_display:
           format_agent_state(assigns.agent_state, assigns.om_active, assigns.om_sync_fallback),
         streaming_rendered: calculate_streaming_rendered(assigns),
@@ -109,7 +110,7 @@ defmodule Deft.TUI.Chat do
 
     ~H"""
     <box>
-      <box style="bold border">Deft - <%= @model_name %></box>
+      <box style="bold border">Deft ─ <%= @repo_name %> ─ <%= @model_name %></box>
 
       <box style="border height-20">
         <%= for message <- @visible_messages do %>
@@ -1522,5 +1523,36 @@ defmodule Deft.TUI.Chat do
     |> Enum.sort()
     |> Enum.map(&"  - #{&1}")
     |> Enum.join("\n")
+  end
+
+  # Extract repo name from working directory
+  # Resolves to git root if in a git repo, then takes basename and truncates to 20 chars
+  defp extract_repo_name(working_dir) do
+    repo_root = resolve_git_root(working_dir)
+    basename = Path.basename(repo_root)
+
+    if String.length(basename) > 20 do
+      String.slice(basename, 0, 19) <> "…"
+    else
+      basename
+    end
+  end
+
+  # Resolve to git repository root if inside a git repo
+  defp resolve_git_root(path) do
+    case System.cmd("git", ["rev-parse", "--git-common-dir"],
+           cd: path,
+           stderr_to_stdout: true
+         ) do
+      {output, 0} ->
+        output
+        |> String.trim()
+        |> then(&Path.expand(&1, path))
+        |> Path.dirname()
+
+      {_output, _exit_code} ->
+        # Not a git repo, use the path as-is
+        path
+    end
   end
 end
