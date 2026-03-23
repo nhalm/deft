@@ -38,8 +38,8 @@ defmodule Deft.TUI.Chat do
     # Subscribe to agent events via Registry
     Registry.register(Deft.Registry, {:session, session_id}, [])
 
-    # Subscribe to Foreman job_status broadcasts via ProcessRegistry
-    Registry.register(Deft.ProcessRegistry, {:foreman, session_id}, [])
+    # Subscribe to Foreman job_status broadcasts via Registry (duplicate keys for pub/sub)
+    Registry.register(Deft.Registry, {:job_status, session_id}, [])
 
     # Initialize state
     term =

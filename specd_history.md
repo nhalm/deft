@@ -1,4 +1,5 @@
 # History
+- **tui v0.3 (2026-03-23):** Fix TUI job_status subscription by switching to Deft.Registry with distinct key {:job_status, session_id} to avoid collision with Foreman's {:foreman, session_id} registration
 - **tui v0.3 (2026-03-23):** Wrap conversation text to avoid the roster area (~30 rightmost columns) during orchestration; collapse roster to header-only when terminal width < 80 columns
 - **tui v0.3 (2026-03-23):** Collapse multiple active Runners into a single `Runners (N)` row instead of listing each individually
 - **tui v0.3 (2026-03-23):** Hide agent roster in solo mode; only render when a Job is active

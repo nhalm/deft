@@ -4042,9 +4042,9 @@ defmodule Deft.Job.Foreman do
   # Broadcasts job status via Registry for TUI consumption.
   defp broadcast_job_status(state, data) do
     agent_statuses = build_agent_statuses(state, data)
-    foreman_name = {:foreman, data.session_id}
+    job_status_key = {:job_status, data.session_id}
 
-    Registry.dispatch(Deft.ProcessRegistry, foreman_name, fn entries ->
+    Registry.dispatch(Deft.Registry, job_status_key, fn entries ->
       for {pid, _} <- entries do
         send(pid, {:job_status, agent_statuses})
       end
