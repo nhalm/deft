@@ -26,11 +26,6 @@ defmodule Deft.CLI do
   - `--version` - Show version
   """
 
-  alias Breeze.Server
-
-  # Suppress warning for Breeze.Terminal.restore/0 - we check for its existence at runtime
-  @compile {:no_warn_undefined, Breeze.Terminal}
-
   alias Deft.Config
   alias Deft.Git
   alias Deft.Git.Job, as: GitJob
@@ -542,32 +537,9 @@ defmodule Deft.CLI do
 
       {:ok, _sessions} ->
         # Start Breeze with SessionPicker view
-        cli_pid = self()
-
-        try do
-          GenServer.start_link(
-            Server,
-            [
-              view: Deft.TUI.SessionPicker,
-              start_opts: %{
-                working_dir: working_dir,
-                on_select: fn session_id -> send(cli_pid, {:session_selected, session_id}) end
-              }
-            ],
-            name: :deft_tui
-          )
-
-          # Wait for session selection or exit
-          receive do
-            {:session_selected, session_id} ->
-              # Reconstruct the selected session and start Chat view
-              execute_command({:resume_session, session_id}, flags)
-          end
-        catch
-          :exit, reason ->
-            restore_terminal()
-            exit(reason)
-        end
+        # TODO: Implement session picker with Phoenix LiveView
+        IO.puts(:stderr, "Error: Interactive session picker not yet implemented in web UI")
+        exit({:shutdown, 1})
 
       {:error, reason} ->
         IO.puts(:stderr, "Error listing sessions: #{inspect(reason)}")
@@ -596,7 +568,7 @@ defmodule Deft.CLI do
             verify_api_key()
             :ok = Deft.Provider.Registry.register("anthropic", Deft.Provider.Anthropic)
 
-            agent_pid =
+            _agent_pid =
               start_agent(
                 session_id,
                 state.working_dir,
@@ -609,29 +581,10 @@ defmodule Deft.CLI do
             Registry.register(Deft.Registry, {:session, session_id}, [])
 
             IO.puts("Deft session #{session_id} resumed.")
-            IO.puts("Type /quit to exit.\n")
 
-            try do
-              GenServer.start_link(
-                Server,
-                [
-                  view: Deft.TUI.Chat,
-                  start_opts: %{
-                    session_id: session_id,
-                    agent_pid: agent_pid,
-                    config: config,
-                    working_dir: working_dir
-                  }
-                ],
-                name: :deft_tui
-              )
-
-              Process.sleep(:infinity)
-            catch
-              :exit, reason ->
-                restore_terminal()
-                exit(reason)
-            end
+            # TODO: Implement chat UI with Phoenix LiveView
+            IO.puts(:stderr, "Error: Interactive chat UI not yet implemented in web UI")
+            exit({:shutdown, 1})
 
           prompt ->
             # Non-interactive continuation
@@ -661,34 +614,15 @@ defmodule Deft.CLI do
 
     session_id = generate_session_id()
     create_session(session_id, working_dir, config)
-    agent_pid = start_agent(session_id, working_dir, config)
+    _agent_pid = start_agent(session_id, working_dir, config)
 
     Registry.register(Deft.Registry, {:session, session_id}, [])
 
     IO.puts("Deft session #{session_id} started.")
-    IO.puts("Type /quit to exit.\n")
 
-    try do
-      GenServer.start_link(
-        Server,
-        [
-          view: Deft.TUI.Chat,
-          start_opts: %{
-            session_id: session_id,
-            agent_pid: agent_pid,
-            config: config,
-            working_dir: working_dir
-          }
-        ],
-        name: :deft_tui
-      )
-
-      Process.sleep(:infinity)
-    catch
-      :exit, reason ->
-        restore_terminal()
-        exit(reason)
-    end
+    # TODO: Implement chat UI with Phoenix LiveView
+    IO.puts(:stderr, "Error: Interactive chat UI not yet implemented in web UI")
+    exit({:shutdown, 1})
   end
 
   defp execute_command({:non_interactive, prompt}, flags) do
@@ -986,23 +920,18 @@ defmodule Deft.CLI do
   defp close_output_handle(handle), do: File.close(handle)
 
   # Restore terminal state on crash
-  defp restore_terminal do
-    # Try to call Breeze.Terminal.restore/0 if it exists
-    if Code.ensure_loaded?(Breeze.Terminal) and function_exported?(Breeze.Terminal, :restore, 0) do
-      # credo:disable-for-next-line Credo.Check.Design.AliasUsage
-      Breeze.Terminal.restore()
-    else
-      # Fallback: emit raw ANSI reset sequences
-      IO.write([
-        # Exit alt screen
-        "\e[?1049l",
-        # Show cursor
-        "\e[?25h",
-        # Reset attributes
-        "\e[0m"
-      ])
-    end
-  end
+  # Terminal restoration no longer needed with web UI
+  # defp restore_terminal do
+  #   # Fallback: emit raw ANSI reset sequences
+  #   IO.write([
+  #     # Exit alt screen
+  #     "\e[?1049l",
+  #     # Show cursor
+  #     "\e[?25h",
+  #     # Reset attributes
+  #     "\e[0m"
+  #   ])
+  # end
 
   # Event loop for non-interactive mode
   defp non_interactive_loop(output_handle) do

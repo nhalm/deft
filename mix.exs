@@ -42,14 +42,18 @@ defmodule Deft.MixProject do
       {:yaml_elixir, "~> 2.11"},
       # SSE parsing
       {:server_sent_events, "~> 0.2"},
-      # TUI framework (pulls in back_breeze, termite)
-      {:breeze, "~> 0.2"},
-      # Markdown parser for TUI rendering
+      # Phoenix web framework
+      {:phoenix, "~> 1.7"},
+      {:phoenix_live_view, "~> 0.20"},
+      {:phoenix_html, "~> 4.0"},
+      {:bandit, "~> 1.0"},
+      # Markdown parser for web UI rendering
       {:earmark_parser, "~> 1.4"},
       # Single-binary distribution
       {:burrito, "~> 1.0"},
 
       # Dev/Test only
+      {:phoenix_live_reload, "~> 1.5", only: [:dev]},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev], runtime: false},
       {:stream_data, "~> 1.0", only: [:test]},

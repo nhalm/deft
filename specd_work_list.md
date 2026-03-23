@@ -20,11 +20,8 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 ## web-ui v0.1
 
 ### Phoenix setup
-- Add Phoenix deps to mix.exs: `phoenix`, `phoenix_live_view`, `phoenix_html`, `phoenix_live_reload` (dev only), `bandit`. Remove `{:breeze, "~> 0.2"}`. Run `mix deps.get`.
-- Create `lib/deft_web/endpoint.ex` — Phoenix.Endpoint on localhost:4000, LiveView socket at `/live`, static asset serving. Add `config/` entries for endpoint and live_view signing salt. (blocked: Add Phoenix deps to mix.exs...)
-- Create `lib/deft_web/router.ex` — `live "/", DeftWeb.ChatLive` and `live "/sessions", DeftWeb.SessionsLive`. Standard browser pipeline with `fetch_session` and `put_root_layout`. (blocked: Create `lib/deft_web/endpoint.ex`...)
-- Create `lib/deft_web/layouts/root.html.heex` and `lib/deft_web/layouts/app.html.heex` — minimal layout shell with LiveView container, CSS link, JS hook. No nav chrome. (blocked: Create `lib/deft_web/router.ex`...)
-- Add `Phoenix.PubSub` and `DeftWeb.Endpoint` to `Deft.Application` supervision tree children (blocked: Create `lib/deft_web/endpoint.ex`...)
+- Create `lib/deft_web/layouts/root.html.heex` and `lib/deft_web/layouts/app.html.heex` — minimal layout shell with LiveView container, CSS link, JS hook. No nav chrome.
+- Add `Phoenix.PubSub` and `DeftWeb.Endpoint` to `Deft.Application` supervision tree children
 
 ### Styles
 - Create `assets/css/app.css` — CSS Grid layout for chat (header, conversation+roster, input, status bar), responsive breakpoints (desktop >1024px full sidebar, tablet 768-1024px overlay roster, mobile <768px single column), thinking block styling (light gray, italic), tool call styling (spinner animation, ✓/✗), status bar, vim mode indicator, dark theme default with `prefers-color-scheme` support (blocked: Create `lib/deft_web/layouts/root.html.heex`...)
@@ -52,7 +49,7 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Create `lib/deft_web/components/roster.ex` — function component for agent roster sidebar: list of agents with colored dot + state label, CSS transition for show/hide (blocked: Create `lib/deft_web/live/chat_live.ex`...)
 
 ### Session picker
-- Create `lib/deft_web/live/sessions_live.ex` — LiveView listing sessions from `Deft.Session.Store.list/0`, keyboard navigation (`j`/`k` to move, Enter to select), redirects to `"/?session=<id>"` on selection (blocked: Create `lib/deft_web/router.ex`...)
+- Create `lib/deft_web/live/sessions_live.ex` — LiveView listing sessions from `Deft.Session.Store.list/0`, keyboard navigation (`j`/`k` to move, Enter to select), redirects to `"/?session=<id>"` on selection
 
 ### CLI integration
 - Update `lib/deft/cli.ex` — remove `alias Breeze.Server` and `@compile {:no_warn_undefined, Breeze.Terminal}`, replace Breeze startup in `execute_command(:new_session, ...)` and `execute_command({:resume_session, ...}, ...)` with starting `DeftWeb.Endpoint` (if not already running) and opening browser via `System.cmd("open", ["http://localhost:4000?session=<id>"])`. Print URL as fallback. Block until shutdown. (blocked: Create `assets/js/app.js`...)
