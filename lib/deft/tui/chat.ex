@@ -115,7 +115,11 @@ defmodule Deft.TUI.Chat do
         model_name: assigns.config[:model] || "claude-sonnet-4-20250514",
         repo_name: extract_repo_name(assigns.config[:working_dir] || File.cwd!()),
         agent_state_display:
-          format_agent_state(assigns.agent_state, assigns.om_active, assigns.om_sync_fallback),
+          if assigns.job_active do
+            format_job_phase(assigns.job_phase)
+          else
+            format_agent_state(assigns.agent_state, assigns.om_active, assigns.om_sync_fallback)
+          end,
         streaming_rendered: calculate_streaming_rendered(assigns),
         visible_messages: calculate_visible_messages(assigns),
         agent_roster: render_agent_roster(assigns.agent_statuses, terminal_width),

@@ -1,4 +1,5 @@
 # History
+- **tui v0.3 (2026-03-23):** Fix orchestration mode header to show job phase instead of agent loop state: header line (chat.ex:129) displays `format_agent_state(assigns.agent_state)` which only produces loop states (`:idle`, `:streaming`, `:calling`, `:executing_tools`); should use `assigns.job_phase` to show orchestration phases (`:planning`, `:executing`, etc.) as specified in spec §3
 - **tui v0.3 (2026-03-23):** Fix thinking-only turns dropped from history: `commit_streaming_message` (chat.ex:734) guards on `current_text != ""` and discards `completed_thinking_blocks` + `current_thinking` when no text was produced; turns with thinking + tool calls but no text lose their thinking blocks from scrollback (violates spec §5.4)
 - **tui v0.3 (2026-03-23):** Fix TUI job_status subscription by switching to Deft.Registry with distinct key {:job_status, session_id} to avoid collision with Foreman's {:foreman, session_id} registration
 - **tui v0.3 (2026-03-23):** Wrap conversation text to avoid the roster area (~30 rightmost columns) during orchestration; collapse roster to header-only when terminal width < 80 columns
