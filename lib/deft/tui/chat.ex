@@ -103,6 +103,13 @@ defmodule Deft.TUI.Chat do
   - Status bar
   """
   def render(assigns) do
+    # Get terminal width for roster rendering and text wrapping
+    terminal_width =
+      case :io.columns() do
+        {:ok, cols} -> cols
+        _ -> 80
+      end
+
     assigns =
       assign(assigns,
         model_name: assigns.config[:model] || "claude-sonnet-4-20250514",
@@ -111,7 +118,8 @@ defmodule Deft.TUI.Chat do
           format_agent_state(assigns.agent_state, assigns.om_active, assigns.om_sync_fallback),
         streaming_rendered: calculate_streaming_rendered(assigns),
         visible_messages: calculate_visible_messages(assigns),
-        agent_roster: render_agent_roster(assigns.agent_statuses)
+        agent_roster: render_agent_roster(assigns.agent_statuses, terminal_width),
+        terminal_width: terminal_width
       )
 
     ~H"""
@@ -1580,8 +1588,9 @@ defmodule Deft.TUI.Chat do
 
   # Render agent roster (orchestration mode only)
   # Returns a list of right-aligned text rows showing agent status
-  defp render_agent_roster(agent_statuses, terminal_width \\ 80) when is_list(agent_statuses) do
-    if length(agent_statuses) == 0 do
+  # Collapses to header-only (empty list) when terminal width < 80
+  defp render_agent_roster(agent_statuses, terminal_width) when is_list(agent_statuses) do
+    if length(agent_statuses) == 0 or terminal_width < 80 do
       []
     else
       # Group by type to collapse multiple Runners

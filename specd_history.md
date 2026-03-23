@@ -1,4 +1,5 @@
 # History
+- **tui v0.3 (2026-03-23):** Wrap conversation text to avoid the roster area (~30 rightmost columns) during orchestration; collapse roster to header-only when terminal width < 80 columns
 - **tui v0.3 (2026-03-23):** Collapse multiple active Runners into a single `Runners (N)` row instead of listing each individually
 - **tui v0.3 (2026-03-23):** Hide agent roster in solo mode; only render when a Job is active
 - **tui v0.3 (2026-03-23):** Color the `◉` indicator by state: green (planning, researching, executing, implementing, testing, merging, verifying), yellow (waiting), white (idle, complete), red (error)
