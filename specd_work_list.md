@@ -17,7 +17,3 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## web-ui v0.1
-
-### Tests
-- Create `test/deft_web/live/sessions_live_test.exs` — tests for: mount lists sessions, `j`/`k` navigation changes selected index, Enter redirects to chat with session_id
