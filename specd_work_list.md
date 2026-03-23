@@ -20,5 +20,4 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 ## tui v0.3
 
 ### Agent roster
-- Collapse multiple active Runners into a single `Runners (N)` row instead of listing each individually
 - Wrap conversation text to avoid the roster area (~30 rightmost columns) during orchestration; collapse roster to header-only when terminal width < 80 columns

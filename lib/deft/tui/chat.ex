@@ -1584,8 +1584,40 @@ defmodule Deft.TUI.Chat do
     if length(agent_statuses) == 0 do
       []
     else
+      # Group by type to collapse multiple Runners
+      {runners, non_runners} =
+        Enum.split_with(agent_statuses, fn status ->
+          Map.get(status, :type) == :runner
+        end)
+
+      # Collapse multiple runners into a single entry
+      collapsed_statuses =
+        case runners do
+          [] ->
+            non_runners
+
+          [single_runner] ->
+            # Single runner, show as-is
+            non_runners ++ [single_runner]
+
+          multiple_runners ->
+            # Multiple runners, collapse into "Runners (N)"
+            runner_count = length(multiple_runners)
+            # Use the first runner's state as representative
+            first_runner_state = Map.get(hd(multiple_runners), :state, :idle)
+
+            collapsed_runner = %{
+              id: "runners",
+              type: :runner,
+              state: first_runner_state,
+              label: "Runners (#{runner_count})"
+            }
+
+            non_runners ++ [collapsed_runner]
+        end
+
       # Format each agent as "Label  ◉ state"
-      agent_statuses
+      collapsed_statuses
       |> Enum.map(fn status ->
         label = Map.get(status, :label, "Unknown")
         state = Map.get(status, :state, :idle)
