@@ -1,4 +1,6 @@
 # History
+- **web-ui v0.1 (2026-03-23):** Delete `lib/deft/tui/` directory entirely (chat.ex, session_picker.ex, breeze_poc.ex, markdown.ex) after web UI is confirmed working
+- **web-ui v0.1 (2026-03-23):** Update `lib/deft/cli.ex` — replace TODO placeholders in `execute_command(:new_session, ...)` and `execute_command({:resume_session, ...}, ...)` with `start_web_ui/1` function that opens browser at `http://localhost:4000?session=<id>`, prints URL as fallback, sets up SIGINT handler, and blocks until shutdown
 - **web-ui v0.1 (2026-03-23):** Create `lib/deft_web/live/sessions_live.ex` — LiveView listing sessions from `Deft.Session.Store.list/0`, keyboard navigation (`j`/`k` to move, Enter to select), redirects to `"/?session=<id>"` on selection
 - **web-ui v0.1 (2026-03-23):** Create `lib/deft_web/components/roster.ex` — function component for agent roster sidebar: list of agents with colored dot + state label, CSS transition for show/hide
 - **web-ui v0.1 (2026-03-23):** Create `lib/deft_web/components/status_bar.ex` — function component for status bar: solo mode (tokens, memory, cost, turn, state) and orchestration mode (leads, complete, cost, elapsed, state)

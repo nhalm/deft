@@ -19,12 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## web-ui v0.1
 
-### CLI integration
-- Update `lib/deft/cli.ex` — remove `alias Breeze.Server` and `@compile {:no_warn_undefined, Breeze.Terminal}`, replace Breeze startup in `execute_command(:new_session, ...)` and `execute_command({:resume_session, ...}, ...)` with starting `DeftWeb.Endpoint` (if not already running) and opening browser via `System.cmd("open", ["http://localhost:4000?session=<id>"])`. Print URL as fallback. Block until shutdown.
-
-### Cleanup
-- Delete `lib/deft/tui/` directory entirely (chat.ex, session_picker.ex, breeze_poc.ex, markdown.ex) after web UI is confirmed working (blocked: Update `lib/deft/cli.ex`...)
-
 ### Tests
 - Create `test/deft_web/live/chat_live_test.exs` — tests for: mount renders header with repo name, text_delta event updates conversation, thinking_delta renders thinking block with styling, tool_call_start shows spinner, tool_call_done shows ✓/✗, Esc switches to normal mode, `i` in normal switches to insert, Enter submits prompt, slash command `/quit` handled, agent roster appears on job_status event, status bar shows token count and cost
 - Create `test/deft_web/live/sessions_live_test.exs` — tests for: mount lists sessions, `j`/`k` navigation changes selected index, Enter redirects to chat with session_id

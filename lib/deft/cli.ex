@@ -582,9 +582,8 @@ defmodule Deft.CLI do
 
             IO.puts("Deft session #{session_id} resumed.")
 
-            # TODO: Implement chat UI with Phoenix LiveView
-            IO.puts(:stderr, "Error: Interactive chat UI not yet implemented in web UI")
-            exit({:shutdown, 1})
+            # Start interactive web UI
+            start_web_ui(session_id)
 
           prompt ->
             # Non-interactive continuation
@@ -620,9 +619,8 @@ defmodule Deft.CLI do
 
     IO.puts("Deft session #{session_id} started.")
 
-    # TODO: Implement chat UI with Phoenix LiveView
-    IO.puts(:stderr, "Error: Interactive chat UI not yet implemented in web UI")
-    exit({:shutdown, 1})
+    # Start interactive web UI
+    start_web_ui(session_id)
   end
 
   defp execute_command({:non_interactive, prompt}, flags) do
@@ -1963,6 +1961,41 @@ defmodule Deft.CLI do
     # The :handle option causes the BEAM to send {:signal, :sigint} messages
     # to this process when SIGINT is received
     :os.set_signal(:sigint, :handle)
+  end
+
+  # Start the web UI and block until shutdown
+  defp start_web_ui(session_id) do
+    url = "http://localhost:4000?session=#{session_id}"
+
+    # Open browser (macOS)
+    case System.cmd("open", [url], stderr_to_stdout: true) do
+      {_, 0} ->
+        # Successfully opened browser
+        :ok
+
+      _ ->
+        # Failed to open browser (not on macOS or 'open' command failed)
+        # Try xdg-open for Linux
+        case System.cmd("xdg-open", [url], stderr_to_stdout: true) do
+          {_, 0} -> :ok
+          # Ignore errors - user can manually open URL
+          _ -> :ok
+        end
+    end
+
+    # Print URL as fallback
+    IO.puts("\nDeft running at #{url}")
+    IO.puts("Press Ctrl+C to stop.\n")
+
+    # Set up SIGINT handler
+    setup_sigint_handler()
+
+    # Block until shutdown signal
+    receive do
+      {:signal, :sigint} ->
+        IO.puts("\nShutting down...")
+        :ok
+    end
   end
 
   # Run the work loop - keeps picking and running ready issues
