@@ -19,10 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## tui v0.3
 
-### Thinking display
-- Support multiple thinking blocks per assistant turn — when `:thinking_delta` arrives after tool results, start a new thinking block at the current position in the conversation flow
-- Thinking blocks persist in scrollback as part of conversation history (not ephemeral)
-
 ### Header
 - Redesign header line to include repo name: resolve `working_dir` to git root, use basename, truncate to 20 chars with `…` suffix if needed
 - Show agent identity in header — "Solo" in solo mode, "Foreman" during orchestration (blocked: Redesign header line...)

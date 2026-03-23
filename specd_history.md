@@ -1,4 +1,5 @@
 # History
+- **tui v0.3 (2026-03-23):** Support multiple thinking blocks per assistant turn — when `:thinking_delta` arrives after tool results, start a new thinking block; persist all thinking blocks in message history so they remain visible in scrollback
 - **tui v0.3 (2026-03-23):** Render thinking blocks inline with dim (`\e[2m`) + italic (`\e[3m`) ANSI styling, prefixed with `[thinking: ` and closed with `]`
 - **tui v0.3 (2026-03-23):** Handle `:thinking_delta` provider events in `handle_info` — accumulate tokens into a thinking block in assigns, same pattern as `:text_delta` handling
 - **evals v0.4 (2026-03-21):** Restore test/eval/support/eval_helpers.ex and test/eval/support/scoring.ex accidentally deleted by commit e5e4c4d

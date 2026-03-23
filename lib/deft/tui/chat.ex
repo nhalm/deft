@@ -48,6 +48,8 @@ defmodule Deft.TUI.Chat do
         messages: [],
         current_text: "",
         current_thinking: "",
+        completed_thinking_blocks: [],
+        had_non_thinking_event: false,
         streaming: false,
         agent_state: :idle,
         input: "",
@@ -410,7 +412,14 @@ defmodule Deft.TUI.Chat do
 
   def handle_event(_event, %{"key" => "ctrl-l"}, term) do
     # Clear screen - reset messages
-    {:noreply, assign(term, messages: [], current_text: "", current_thinking: "")}
+    {:noreply,
+     assign(term,
+       messages: [],
+       current_text: "",
+       current_thinking: "",
+       completed_thinking_blocks: [],
+       had_non_thinking_event: false
+     )}
   end
 
   def handle_event(_event, %{"key" => "ctrl-r"}, term) do
@@ -509,17 +518,29 @@ defmodule Deft.TUI.Chat do
     new_term =
       term
       |> assign(current_text: new_text)
+      |> assign(had_non_thinking_event: true)
       |> assign(streaming: true)
 
     {:noreply, new_term}
   end
 
   defp handle_thinking_delta(delta, term) do
-    new_thinking = term.assigns.current_thinking <> delta
+    # If we had tool or text events since the last thinking block,
+    # commit the current thinking block and start a new one
+    {new_completed_blocks, new_current_thinking} =
+      if term.assigns.had_non_thinking_event and term.assigns.current_thinking != "" do
+        # Commit current thinking block and start new one
+        {term.assigns.completed_thinking_blocks ++ [term.assigns.current_thinking], delta}
+      else
+        # Continue current thinking block
+        {term.assigns.completed_thinking_blocks, term.assigns.current_thinking <> delta}
+      end
 
     new_term =
       term
-      |> assign(current_thinking: new_thinking)
+      |> assign(current_thinking: new_current_thinking)
+      |> assign(completed_thinking_blocks: new_completed_blocks)
+      |> assign(had_non_thinking_event: false)
       |> assign(streaming: true)
 
     {:noreply, new_term}
@@ -567,7 +588,13 @@ defmodule Deft.TUI.Chat do
           |> Map.put(:duration, duration)
 
         new_active_tools = Map.put(term.assigns.active_tools, id, updated_tool)
-        {:noreply, assign(term, active_tools: new_active_tools)}
+
+        new_term =
+          term
+          |> assign(active_tools: new_active_tools)
+          |> assign(had_non_thinking_event: true)
+
+        {:noreply, new_term}
     end
   end
 
@@ -618,6 +645,8 @@ defmodule Deft.TUI.Chat do
       |> assign(streaming: false)
       |> assign(current_text: "")
       |> assign(current_thinking: "")
+      |> assign(completed_thinking_blocks: [])
+      |> assign(had_non_thinking_event: false)
 
     {:noreply, new_term}
   end
@@ -663,6 +692,8 @@ defmodule Deft.TUI.Chat do
       |> assign(streaming: false)
       |> assign(current_text: "")
       |> assign(current_thinking: "")
+      |> assign(completed_thinking_blocks: [])
+      |> assign(had_non_thinking_event: false)
       |> assign(active_tools: %{})
 
     {:noreply, new_term}
@@ -670,10 +701,19 @@ defmodule Deft.TUI.Chat do
 
   defp commit_streaming_message(term) do
     if term.assigns.current_text != "" do
-      # Create assistant message with the accumulated text
+      # Collect all thinking blocks (completed + current)
+      all_thinking_blocks =
+        if term.assigns.current_thinking != "" do
+          term.assigns.completed_thinking_blocks ++ [term.assigns.current_thinking]
+        else
+          term.assigns.completed_thinking_blocks
+        end
+
+      # Create assistant message with the accumulated text and thinking blocks
       message = %{
         role: :assistant,
         content: term.assigns.current_text,
+        thinking_blocks: all_thinking_blocks,
         timestamp: DateTime.utc_now()
       }
 
@@ -681,12 +721,16 @@ defmodule Deft.TUI.Chat do
       |> assign(messages: term.assigns.messages ++ [message])
       |> assign(current_text: "")
       |> assign(current_thinking: "")
+      |> assign(completed_thinking_blocks: [])
+      |> assign(had_non_thinking_event: false)
       |> assign(streaming: false)
       |> assign(active_tools: %{})
     else
       term
       |> assign(streaming: false)
       |> assign(current_thinking: "")
+      |> assign(completed_thinking_blocks: [])
+      |> assign(had_non_thinking_event: false)
       |> assign(active_tools: %{})
     end
   end
@@ -752,7 +796,15 @@ defmodule Deft.TUI.Chat do
 
       # Handle /clear command directly in TUI
       input == "/clear" ->
-        new_term = assign(term, messages: [], current_text: "", current_thinking: "")
+        new_term =
+          assign(term,
+            messages: [],
+            current_text: "",
+            current_thinking: "",
+            completed_thinking_blocks: [],
+            had_non_thinking_event: false
+          )
+
         {:command_handled, new_term}
 
       # Handle /help command directly in TUI
@@ -869,31 +921,42 @@ defmodule Deft.TUI.Chat do
   # Rendering helpers
 
   defp calculate_streaming_rendered(assigns) do
-    thinking_part = render_thinking_block(assigns.current_thinking)
+    thinking_part = render_all_thinking_blocks(assigns)
+    text_part = render_streaming_text(assigns)
 
-    text_part =
-      if assigns.streaming and assigns.current_text != "" do
-        # If raw mode is enabled, show raw text
-        if assigns.raw_mode do
-          assigns.current_text
-        else
-          # Use Markdown.render_streaming/1 to buffer incomplete lines
-          # and only render complete blocks
-          {rendered, _buffer} = Markdown.render_streaming(assigns.current_text)
-          rendered
-        end
+    combine_rendered_parts(thinking_part, text_part)
+  end
+
+  defp render_all_thinking_blocks(assigns) do
+    # Render all completed thinking blocks
+    completed =
+      assigns.completed_thinking_blocks
+      |> Enum.map(&render_thinking_block/1)
+      |> Enum.join("\n\n")
+
+    # Render current thinking block
+    current = render_thinking_block(assigns.current_thinking)
+
+    combine_rendered_parts(completed, current)
+  end
+
+  defp render_streaming_text(assigns) do
+    if assigns.streaming and assigns.current_text != "" do
+      if assigns.raw_mode do
+        assigns.current_text
       else
-        ""
+        {rendered, _buffer} = Markdown.render_streaming(assigns.current_text)
+        rendered
       end
-
-    # Combine thinking and text, with newlines as separators if both exist
-    case {thinking_part, text_part} do
-      {"", ""} -> ""
-      {thinking, ""} -> thinking
-      {"", text} -> text
-      {thinking, text} -> thinking <> "\n\n" <> text
+    else
+      ""
     end
   end
+
+  defp combine_rendered_parts("", ""), do: ""
+  defp combine_rendered_parts(part1, ""), do: part1
+  defp combine_rendered_parts("", part2), do: part2
+  defp combine_rendered_parts(part1, part2), do: part1 <> "\n\n" <> part2
 
   defp render_thinking_block(""), do: ""
 
@@ -954,10 +1017,27 @@ defmodule Deft.TUI.Chat do
     """
   end
 
-  defp render_message(%{role: :assistant, content: content}, raw_mode) do
+  defp render_message(%{role: :assistant, content: content} = message, raw_mode) do
+    # Render thinking blocks if present
+    thinking_blocks = Map.get(message, :thinking_blocks, [])
+
+    thinking_rendered =
+      thinking_blocks
+      |> Enum.map(&render_thinking_block/1)
+      |> Enum.join("\n\n")
+
     # Render markdown for assistant messages unless raw_mode is enabled
-    rendered = if raw_mode, do: content, else: Markdown.render(content)
-    assigns = %{content: rendered}
+    content_rendered = if raw_mode, do: content, else: Markdown.render(content)
+
+    # Combine thinking blocks and content
+    full_content =
+      case {thinking_rendered, content_rendered} do
+        {"", text} -> text
+        {thinking, ""} -> thinking
+        {thinking, text} -> thinking <> "\n\n" <> text
+      end
+
+    assigns = %{content: full_content}
 
     ~H"""
     <box>
