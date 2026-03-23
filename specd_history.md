@@ -1,4 +1,8 @@
 # History
+- **web-ui v0.1 (2026-03-23):** Create `lib/deft_web/live/sessions_live.ex` — LiveView listing sessions from `Deft.Session.Store.list/0`, keyboard navigation (`j`/`k` to move, Enter to select), redirects to `"/?session=<id>"` on selection
+- **web-ui v0.1 (2026-03-23):** Create `lib/deft_web/components/roster.ex` — function component for agent roster sidebar: list of agents with colored dot + state label, CSS transition for show/hide
+- **web-ui v0.1 (2026-03-23):** Create `lib/deft_web/components/status_bar.ex` — function component for status bar: solo mode (tokens, memory, cost, turn, state) and orchestration mode (leads, complete, cost, elapsed, state)
+- **web-ui v0.1 (2026-03-23):** Create `lib/deft_web/components/tool_call.ex` — function component for tool execution display: tool name + key arg, CSS spinner while running, ✓/✗ + duration on complete, expandable detail
 - **web-ui v0.1 (2026-03-23):** Create `lib/deft_web/components/thinking.ex` — function component for thinking blocks: gray background, italic, collapsible with `phx-click` toggle, `thinking:` label
 - **web-ui v0.1 (2026-03-23):** Add `handle_info` for `{:agent_event, {:job_status, statuses}}` — update `agent_statuses` and `job_active` assigns, roster sidebar becomes visible
 - **web-ui v0.1 (2026-03-23):** Create `assets/js/app.js` — LiveView JS hooks for scroll control (auto-scroll during streaming, freeze on user scroll, resume on scroll-to-bottom) and input focus management (focus input on insert mode, blur on normal mode)

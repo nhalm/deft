@@ -19,14 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## web-ui v0.1
 
-### Components
-- Create `lib/deft_web/components/tool_call.ex` — function component for tool execution display: tool name + key arg, CSS spinner while running, ✓/✗ + duration on complete, expandable detail
-- Create `lib/deft_web/components/status_bar.ex` — function component for status bar: solo mode (tokens, memory, cost, turn, state) and orchestration mode (leads, complete, cost, elapsed, state)
-- Create `lib/deft_web/components/roster.ex` — function component for agent roster sidebar: list of agents with colored dot + state label, CSS transition for show/hide
-
-### Session picker
-- Create `lib/deft_web/live/sessions_live.ex` — LiveView listing sessions from `Deft.Session.Store.list/0`, keyboard navigation (`j`/`k` to move, Enter to select), redirects to `"/?session=<id>"` on selection
-
 ### CLI integration
 - Update `lib/deft/cli.ex` — remove `alias Breeze.Server` and `@compile {:no_warn_undefined, Breeze.Terminal}`, replace Breeze startup in `execute_command(:new_session, ...)` and `execute_command({:resume_session, ...}, ...)` with starting `DeftWeb.Endpoint` (if not already running) and opening browser via `System.cmd("open", ["http://localhost:4000?session=<id>"])`. Print URL as fallback. Block until shutdown.
 
@@ -35,4 +27,4 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ### Tests
 - Create `test/deft_web/live/chat_live_test.exs` — tests for: mount renders header with repo name, text_delta event updates conversation, thinking_delta renders thinking block with styling, tool_call_start shows spinner, tool_call_done shows ✓/✗, Esc switches to normal mode, `i` in normal switches to insert, Enter submits prompt, slash command `/quit` handled, agent roster appears on job_status event, status bar shows token count and cost
-- Create `test/deft_web/live/sessions_live_test.exs` — tests for: mount lists sessions, `j`/`k` navigation changes selected index, Enter redirects to chat with session_id (blocked: Create `lib/deft_web/live/sessions_live.ex`...)
+- Create `test/deft_web/live/sessions_live_test.exs` — tests for: mount lists sessions, `j`/`k` navigation changes selected index, Enter redirects to chat with session_id
