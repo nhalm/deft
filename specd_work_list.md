@@ -20,10 +20,7 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 ## web-ui v0.1
 
 ### Chat LiveView — input and keybindings
-- Add `handle_event` for input submission: `"submit"` event takes input value, dispatches slash commands or sends prompt to agent via `Deft.Agent.prompt/2`, clears input, adds user message to conversation
-- Add `handle_event("keydown", ...)` for vim mode switching: Esc → :normal, `i`/`a` in normal → :insert, `:`/`/` in normal → :command. Track vim_mode in assigns, show `[NOR]`/`[INS]`/`[CMD]` in input area. (blocked: Add `handle_event` for input submission...)
-- Add `handle_event("keydown", ...)` for normal mode navigation: `j`/`k` scroll conversation, `G` scroll to bottom, `gg` scroll to top, `Ctrl+u`/`Ctrl+d` half-page scroll. Track scroll_offset in assigns. (blocked: Add `handle_event("keydown", ...)` for vim mode switching...)
-- Add `handle_event("keydown", ...)` for tmux pane keys: `Ctrl+b` sets a prefix flag in assigns, next key dispatches — `%` toggles roster panel visibility, `z` toggles zoom. Track `tmux_prefix: false`, `roster_visible: true` in assigns. (blocked: Add `handle_event("keydown", ...)` for normal mode navigation...)
+- Add `handle_event("keydown", ...)` for tmux pane keys: `Ctrl+b` sets a prefix flag in assigns, next key dispatches — `%` toggles roster panel visibility, `z` toggles zoom. Track `tmux_prefix: false`, `roster_visible: true` in assigns.
 - Create `assets/js/app.js` — LiveView JS hooks for scroll control (auto-scroll during streaming, freeze on user scroll, resume on scroll-to-bottom) and input focus management (focus input on insert mode, blur on normal mode) (blocked: Add `handle_event("keydown", ...)` for tmux pane keys...)
 
 ### Chat LiveView — orchestration
