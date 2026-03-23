@@ -302,17 +302,19 @@ defmodule Deft.Job.Foreman do
 
   @impl :gen_statem
   # State entry handlers
-  def handle_event(:enter, _old_state, {:planning, :idle}, data) do
+  def handle_event(:enter, _old_state, {:planning, :idle} = state, data) do
     # When entering planning phase, build a structured planning prompt
     # that asks the LLM to analyze the request and determine research tasks
+    broadcast_job_status(state, data)
     planning_prompt = build_planning_prompt(data.prompt)
     :gen_statem.cast(self(), {:prompt, planning_prompt})
     :keep_state_and_data
   end
 
-  def handle_event(:enter, _old_state, {:researching, :idle}, data) do
+  def handle_event(:enter, _old_state, {:researching, :idle} = state, data) do
     # Spawn research Runners in parallel
     Logger.info("Foreman starting research phase")
+    broadcast_job_status(state, data)
 
     # Use research task specs from planning phase if available, otherwise fall back to defaults
     research_specs =
@@ -379,19 +381,24 @@ defmodule Deft.Job.Foreman do
         research_timeout_ref: timeout_ref
     }
 
+    # Broadcast updated status with Runners
+    broadcast_job_status(state, data)
+
     {:keep_state, data}
   end
 
-  def handle_event(:enter, _old_state, {:decomposing, :idle}, _data) do
+  def handle_event(:enter, _old_state, {:decomposing, :idle} = state, data) do
     # When entering decomposing phase, prompt the Foreman to create a work plan
     Logger.info("Foreman starting decomposition phase")
+    broadcast_job_status(state, data)
     :gen_statem.cast(self(), :start_decomposition)
     :keep_state_and_data
   end
 
-  def handle_event(:enter, _old_state, {:executing, :idle}, data) do
+  def handle_event(:enter, _old_state, {:executing, :idle} = state, data) do
     # When entering executing phase, create job branch first (unless resuming), then start all ready Leads
     Logger.info("Foreman starting execution phase")
+    broadcast_job_status(state, data)
 
     # Check if we're resuming - if so, skip branch creation (branch already exists)
     if Map.get(data.config, :resume) do
@@ -427,9 +434,10 @@ defmodule Deft.Job.Foreman do
     {:next_state, {job_phase, :idle}, data}
   end
 
-  def handle_event(:enter, _old_state, {:verifying, :idle}, _data) do
+  def handle_event(:enter, _old_state, {:verifying, :idle} = state, data) do
     # When entering verification phase, spawn verification Runner
     Logger.info("Foreman starting verification phase")
+    broadcast_job_status(state, data)
     :gen_statem.cast(self(), :start_verification)
     :keep_state_and_data
   end
@@ -582,6 +590,9 @@ defmodule Deft.Job.Foreman do
         Enum.reduce(deliverables_to_start, data, fn deliverable, acc_data ->
           start_lead(deliverable, acc_data)
         end)
+
+      # Broadcast updated status with new Leads
+      broadcast_job_status({:executing, :idle}, updated_data)
 
       {:keep_state, updated_data}
     end
@@ -757,20 +768,24 @@ defmodule Deft.Job.Foreman do
   def handle_event(
         :info,
         {:lead_message, type, content, metadata},
-        {job_phase, _agent_state},
+        {job_phase, _agent_state} = state,
         data
       ) do
     Logger.info("Foreman received lead message: #{type}")
 
-    # Process the lead message
+    # Process the lead message (may update Lead state)
     data = process_lead_message(type, content, metadata, data)
 
     # Check if this message triggers a phase transition
     case check_phase_transition(type, job_phase, data) do
       {:transition, new_phase} ->
-        {:next_state, {new_phase, :idle}, data}
+        new_state = {new_phase, :idle}
+        broadcast_job_status(new_state, data)
+        {:next_state, new_state, data}
 
       :no_transition ->
+        # Broadcast even without phase transition, as Lead state may have changed
+        broadcast_job_status(state, data)
         {:keep_state, data}
     end
   end
@@ -1337,6 +1352,11 @@ defmodule Deft.Job.Foreman do
 
       {:next_state, {:complete, :idle}, data}
     end
+  end
+
+  # Ignore job_status broadcasts (these are for TUI subscribers, not the Foreman itself)
+  def handle_event(:info, {:job_status, _agent_statuses}, _state, _data) do
+    :keep_state_and_data
   end
 
   # Catch-all for unhandled events
@@ -2032,10 +2052,12 @@ defmodule Deft.Job.Foreman do
     data
   end
 
-  defp process_lead_message(:blocker, content, _metadata, data) do
+  defp process_lead_message(:blocker, content, metadata, data) do
     Logger.info("Lead blocker: #{content}")
     # Never promote blocker messages (coordination, not knowledge)
-    data
+    # Update Lead state to :waiting
+    lead_id = Map.get(metadata, :lead_id)
+    update_lead_state(lead_id, :waiting, data)
   end
 
   defp process_lead_message(:artifact, content, _metadata, data) do
@@ -2107,11 +2129,13 @@ defmodule Deft.Job.Foreman do
     data
   end
 
-  defp process_lead_message(:error, content, _metadata, data) do
+  defp process_lead_message(:error, content, metadata, data) do
     Logger.error("Lead error: #{content}")
     # Log the error but don't auto-promote to site log
     # Errors are handled in Lead crash recovery, not promoted as knowledge
-    data
+    # Update Lead state to :error
+    lead_id = Map.get(metadata, :lead_id)
+    update_lead_state(lead_id, :error, data)
   end
 
   defp process_lead_message(:complete, _content, metadata, data) do
@@ -2119,6 +2143,9 @@ defmodule Deft.Job.Foreman do
     deliverable_name = Map.get(metadata, :deliverable)
 
     Logger.info("Lead #{lead_id} completed deliverable: #{deliverable_name}")
+
+    # Update Lead state to :complete
+    data = update_lead_state(lead_id, :complete, data)
 
     # Get Lead info for worktree cleanup
     lead_info = Map.get(data.leads, lead_id)
@@ -3374,7 +3401,8 @@ defmodule Deft.Job.Foreman do
               status: :running,
               pid: lead_pid,
               monitor_ref: monitor_ref,
-              runner_supervisor: runner_supervisor_name
+              runner_supervisor: runner_supervisor_name,
+              agent_state: :implementing
             }
 
             leads = Map.put(data.leads, lead_id, lead_info)
@@ -3920,5 +3948,108 @@ defmodule Deft.Job.Foreman do
       metadata,
       data
     )
+  end
+
+  # Job status broadcasting for TUI agent roster
+
+  # Updates the agent_state for a specific Lead in the data.leads map.
+  defp update_lead_state(lead_id, new_state, data)
+       when is_binary(lead_id) and is_atom(new_state) do
+    case Map.get(data.leads, lead_id) do
+      nil ->
+        Logger.warning("Cannot update state for Lead #{lead_id}: not found in leads map")
+        data
+
+      lead_info ->
+        updated_lead_info = Map.put(lead_info, :agent_state, new_state)
+        updated_leads = Map.put(data.leads, lead_id, updated_lead_info)
+        %{data | leads: updated_leads}
+    end
+  end
+
+  defp update_lead_state(_lead_id, _new_state, data), do: data
+
+  # Builds the agent_statuses list for broadcasting to the TUI.
+  # Returns a list of `%{id: String.t(), type: atom(), state: atom(), label: String.t()}`.
+  defp build_agent_statuses({job_phase, _agent_state}, data) do
+    # Foreman status
+    foreman_state = map_job_phase_to_state(job_phase)
+
+    foreman_status = %{
+      id: "foreman",
+      type: :foreman,
+      state: foreman_state,
+      label: "Foreman"
+    }
+
+    # Lead statuses
+    lead_statuses =
+      data.leads
+      |> Enum.map(fn {lead_id, lead_info} ->
+        %{
+          id: lead_id,
+          type: :lead,
+          state: Map.get(lead_info, :agent_state, :implementing),
+          label: "Lead #{lead_id}"
+        }
+      end)
+      |> Enum.sort_by(& &1.id)
+
+    # Runner status (aggregate count)
+    runner_count = count_active_runners(data)
+
+    runner_statuses =
+      if runner_count > 0 do
+        runner_state = infer_runner_state(job_phase)
+
+        [
+          %{
+            id: "runners",
+            type: :runner,
+            state: runner_state,
+            label: if(runner_count == 1, do: "Runner", else: "Runners (#{runner_count})")
+          }
+        ]
+      else
+        []
+      end
+
+    [foreman_status | lead_statuses] ++ runner_statuses
+  end
+
+  # Maps Foreman job_phase to display state for the TUI.
+  defp map_job_phase_to_state(:planning), do: :planning
+  defp map_job_phase_to_state(:researching), do: :researching
+  defp map_job_phase_to_state(:decomposing), do: :planning
+  defp map_job_phase_to_state(:executing), do: :executing
+  defp map_job_phase_to_state(:verifying), do: :verifying
+  defp map_job_phase_to_state(:complete), do: :complete
+
+  # Counts active Runners across all task collections.
+  defp count_active_runners(data) do
+    research_count = length(Map.get(data, :research_tasks, []))
+    merge_count = map_size(Map.get(data, :merge_resolution_tasks, %{}))
+    test_count = map_size(Map.get(data, :post_merge_test_tasks, %{}))
+    research_count + merge_count + test_count
+  end
+
+  # Infers Runner state based on job phase.
+  defp infer_runner_state(:researching), do: :researching
+  defp infer_runner_state(:verifying), do: :testing
+  defp infer_runner_state(:executing), do: :implementing
+  defp infer_runner_state(_), do: :implementing
+
+  # Broadcasts job status via Registry for TUI consumption.
+  defp broadcast_job_status(state, data) do
+    agent_statuses = build_agent_statuses(state, data)
+    foreman_name = {:foreman, data.session_id}
+
+    Registry.dispatch(Deft.ProcessRegistry, foreman_name, fn entries ->
+      for {pid, _} <- entries do
+        send(pid, {:job_status, agent_statuses})
+      end
+    end)
+
+    :ok
   end
 end
