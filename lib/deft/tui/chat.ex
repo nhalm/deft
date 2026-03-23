@@ -110,7 +110,8 @@ defmodule Deft.TUI.Chat do
         agent_state_display:
           format_agent_state(assigns.agent_state, assigns.om_active, assigns.om_sync_fallback),
         streaming_rendered: calculate_streaming_rendered(assigns),
-        visible_messages: calculate_visible_messages(assigns)
+        visible_messages: calculate_visible_messages(assigns),
+        agent_roster: render_agent_roster(assigns.agent_statuses)
       )
 
     ~H"""
@@ -124,6 +125,11 @@ defmodule Deft.TUI.Chat do
       </box>
 
       <box style="border height-20">
+        <%= if @job_active and length(@agent_roster) > 0 do %>
+          <%= for roster_line <- @agent_roster do %>
+            <box><%= roster_line %></box>
+          <% end %>
+        <% end %>
         <%= for message <- @visible_messages do %>
           <%= render_message(message, @raw_mode) %>
         <% end %>
@@ -1570,5 +1576,67 @@ defmodule Deft.TUI.Chat do
         # Not a git repo, use the path as-is
         path
     end
+  end
+
+  # Render agent roster (orchestration mode only)
+  # Returns a list of right-aligned text rows showing agent status
+  defp render_agent_roster(agent_statuses, terminal_width \\ 80) when is_list(agent_statuses) do
+    if length(agent_statuses) == 0 do
+      []
+    else
+      # Format each agent as "Label  ◉ state"
+      agent_statuses
+      |> Enum.map(fn status ->
+        label = Map.get(status, :label, "Unknown")
+        state = Map.get(status, :state, :idle)
+        state_text = format_agent_roster_state(state)
+
+        # Build the roster line: "Label  ◉ state"
+        roster_line = "#{label}  #{state_text}"
+
+        # Right-align by padding with spaces
+        # Roster occupies rightmost ~30 columns
+        line_length = String.length(roster_line)
+        padding = max(0, terminal_width - line_length - 1)
+
+        String.duplicate(" ", padding) <> roster_line
+      end)
+    end
+  end
+
+  # Format agent state with colored indicator for roster display
+  defp format_agent_roster_state(state) do
+    indicator = colorize_state_indicator(state)
+    "#{indicator} #{state}"
+  end
+
+  # Colorize the ◉ indicator based on agent state
+  defp colorize_state_indicator(state)
+       when state in [
+              :planning,
+              :researching,
+              :executing,
+              :implementing,
+              :testing,
+              :merging,
+              :verifying
+            ] do
+    # Green for active states
+    "\e[32m◉\e[39m"
+  end
+
+  defp colorize_state_indicator(:waiting) do
+    # Yellow for waiting
+    "\e[33m◉\e[39m"
+  end
+
+  defp colorize_state_indicator(:error) do
+    # Red for error
+    "\e[31m◉\e[39m"
+  end
+
+  defp colorize_state_indicator(_) do
+    # White for idle/complete/other
+    "\e[37m◉\e[39m"
   end
 end
