@@ -20,7 +20,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 ## tui v0.3
 
 ### Thinking display
-- Handle `:thinking_delta` provider events in `handle_info` — accumulate tokens into a thinking block in assigns, same pattern as `:text_delta` handling
 - Render thinking blocks inline with dim (`\e[2m`) + italic (`\e[3m`) ANSI styling, prefixed with `[thinking: ` and closed with `]`
 - Support multiple thinking blocks per assistant turn — when `:thinking_delta` arrives after tool results, start a new thinking block at the current position in the conversation flow
 - Thinking blocks persist in scrollback as part of conversation history (not ephemeral)

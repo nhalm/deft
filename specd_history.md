@@ -1,4 +1,5 @@
 # History
+- **tui v0.3 (2026-03-23):** Handle `:thinking_delta` provider events in `handle_info` — accumulate tokens into a thinking block in assigns, same pattern as `:text_delta` handling
 - **evals v0.4 (2026-03-21):** Restore test/eval/support/eval_helpers.ex and test/eval/support/scoring.ex accidentally deleted by commit e5e4c4d
 - **evals v0.4 (2026-03-21):** Restore all 28 eval test files accidentally deleted by commit e5e4c4d (observer/, reflector/, actor/, foreman/, lead/, spilling/, skills/, issues/, e2e/ subdirectories under test/eval/)
 - **evals v0.4 (2026-03-21):** Create `test/eval/fixtures/` directory structure with synthetic fixture JSON files per spec section 1.3

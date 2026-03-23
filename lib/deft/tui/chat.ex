@@ -47,6 +47,7 @@ defmodule Deft.TUI.Chat do
         config: config,
         messages: [],
         current_text: "",
+        current_thinking: "",
         streaming: false,
         agent_state: :idle,
         input: "",
@@ -155,6 +156,10 @@ defmodule Deft.TUI.Chat do
   """
   def handle_info({:agent_event, {:text_delta, delta}}, term) do
     handle_text_delta(delta, term)
+  end
+
+  def handle_info({:agent_event, {:thinking_delta, delta}}, term) do
+    handle_thinking_delta(delta, term)
   end
 
   def handle_info({:agent_event, {:tool_call_start, %{id: id, name: name}}}, term) do
@@ -273,7 +278,6 @@ defmodule Deft.TUI.Chat do
   end
 
   # Ignore events that don't need display updates
-  def handle_info({:agent_event, {:thinking_delta, _delta}}, term), do: {:noreply, term}
   def handle_info({:agent_event, {:tool_call_delta, _}}, term), do: {:noreply, term}
   def handle_info({:agent_event, _event}, term), do: {:noreply, term}
   def handle_info({:om_event, _event}, term), do: {:noreply, term}
@@ -505,6 +509,17 @@ defmodule Deft.TUI.Chat do
     new_term =
       term
       |> assign(current_text: new_text)
+      |> assign(streaming: true)
+
+    {:noreply, new_term}
+  end
+
+  defp handle_thinking_delta(delta, term) do
+    new_thinking = term.assigns.current_thinking <> delta
+
+    new_term =
+      term
+      |> assign(current_thinking: new_thinking)
       |> assign(streaming: true)
 
     {:noreply, new_term}
