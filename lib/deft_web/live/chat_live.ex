@@ -95,6 +95,7 @@ defmodule DeftWeb.ChatLive do
       |> assign(:tokens_input, socket.assigns.tokens_input + input_tokens)
       |> assign(:tokens_output, socket.assigns.tokens_output + output_tokens)
       |> assign(:cost, socket.assigns.cost + turn_cost)
+      |> assign(:turn_count, socket.assigns.turn_count + 1)
 
     {:noreply, socket}
   end
