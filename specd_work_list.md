@@ -20,11 +20,10 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 ## tui v0.3
 
 ### Header
-- Show agent identity in header — "Solo" in solo mode, "Foreman" during orchestration
-- Show model name in header in solo mode only (`model: claude-sonnet-4`); omit in orchestration mode (blocked: Show agent identity in header...)
+- Show model name in header in solo mode only (`model: claude-sonnet-4`); omit in orchestration mode
 
 ### Agent roster
-- Add `{:job_status, agent_statuses}` broadcast from Foreman: emit via Registry whenever an agent's state changes (Lead started, Lead completed, Runner spawned, etc.) — payload is a list of `%{id, type, state, label}` (blocked: Show agent identity in header...)
+- Add `{:job_status, agent_statuses}` broadcast from Foreman: emit via Registry whenever an agent's state changes (Lead started, Lead completed, Runner spawned, etc.) — payload is a list of `%{id, type, state, label}`
 - Subscribe TUI to `{:job_status, ...}` broadcasts and store `agent_statuses` in assigns (blocked: Add `{:job_status, agent_statuses}` broadcast...)
 - Render agent roster as right-aligned text rows in the top-right of the conversation area — one row per agent (Foreman, each Lead, Runners) with `◉ <state>` indicator (blocked: Subscribe TUI to `{:job_status, ...}` broadcasts...)
 - Color the `◉` indicator by state: green (planning, researching, executing, implementing, testing, merging, verifying), yellow (waiting), white (idle, complete), red (error) (blocked: Render agent roster as right-aligned text rows...)

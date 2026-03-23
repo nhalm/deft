@@ -110,7 +110,13 @@ defmodule Deft.TUI.Chat do
 
     ~H"""
     <box>
-      <box style="bold border">Deft ─ <%= @repo_name %> ─ <%= @model_name %></box>
+      <box style="bold border">
+        <%= if @job_active do %>
+          Deft ─ <%= @repo_name %> ─ Foreman <%= @agent_state_display %>
+        <% else %>
+          Deft ─ <%= @repo_name %> ─ model: <%= @model_name %> ─ Solo
+        <% end %>
+      </box>
 
       <box style="border height-20">
         <%= for message <- @visible_messages do %>
