@@ -848,7 +848,11 @@ defmodule Deft.Agent do
     working_dir = Map.get(data.config, :working_dir, File.cwd!())
     Store.append(data.session_id, cost_entry, working_dir)
 
-    broadcast_event(data.session_id, {:usage, %{input: input_tokens, output: output_tokens}})
+    broadcast_event(
+      data.session_id,
+      {:usage, %{input: input_tokens, output: output_tokens, cost: turn_cost}}
+    )
+
     {:keep_state, new_data}
   end
 

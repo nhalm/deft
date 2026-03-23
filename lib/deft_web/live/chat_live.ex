@@ -82,11 +82,15 @@ defmodule DeftWeb.ChatLive do
     {:noreply, assign(socket, :agent_state, state)}
   end
 
-  def handle_info({:agent_event, {:usage, %{input: input_tokens, output: output_tokens}}}, socket) do
+  def handle_info(
+        {:agent_event, {:usage, %{input: input_tokens, output: output_tokens, cost: turn_cost}}},
+        socket
+      ) do
     socket =
       socket
       |> assign(:tokens_input, socket.assigns.tokens_input + input_tokens)
       |> assign(:tokens_output, socket.assigns.tokens_output + output_tokens)
+      |> assign(:cost, socket.assigns.cost + turn_cost)
 
     {:noreply, socket}
   end

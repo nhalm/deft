@@ -19,18 +19,15 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## web-ui v0.1
 
-### Chat LiveView — agent event handling
-- Add `handle_info` clauses to ChatLive for agent events: `{:agent_event, {:text_delta, delta}}` appends to streaming text assign, `{:agent_event, {:thinking_delta, delta}}` appends to thinking block, `{:agent_event, {:tool_call_start, %{id, name}}}` adds to active_tools map, `{:agent_event, {:tool_call_done, %{id, status, duration}}}` updates tool, `{:agent_event, {:state_change, state}}` updates agent_state, `{:agent_event, {:usage, %{input, output}}}` updates token/cost counters
-
 ### Chat LiveView — input and keybindings
-- Add `handle_event` for input submission: `"submit"` event takes input value, dispatches slash commands or sends prompt to agent via `Deft.Agent.prompt/2`, clears input, adds user message to conversation (blocked: Add `handle_info` clauses to ChatLive for agent events...)
+- Add `handle_event` for input submission: `"submit"` event takes input value, dispatches slash commands or sends prompt to agent via `Deft.Agent.prompt/2`, clears input, adds user message to conversation
 - Add `handle_event("keydown", ...)` for vim mode switching: Esc → :normal, `i`/`a` in normal → :insert, `:`/`/` in normal → :command. Track vim_mode in assigns, show `[NOR]`/`[INS]`/`[CMD]` in input area. (blocked: Add `handle_event` for input submission...)
 - Add `handle_event("keydown", ...)` for normal mode navigation: `j`/`k` scroll conversation, `G` scroll to bottom, `gg` scroll to top, `Ctrl+u`/`Ctrl+d` half-page scroll. Track scroll_offset in assigns. (blocked: Add `handle_event("keydown", ...)` for vim mode switching...)
 - Add `handle_event("keydown", ...)` for tmux pane keys: `Ctrl+b` sets a prefix flag in assigns, next key dispatches — `%` toggles roster panel visibility, `z` toggles zoom. Track `tmux_prefix: false`, `roster_visible: true` in assigns. (blocked: Add `handle_event("keydown", ...)` for normal mode navigation...)
 - Create `assets/js/app.js` — LiveView JS hooks for scroll control (auto-scroll during streaming, freeze on user scroll, resume on scroll-to-bottom) and input focus management (focus input on insert mode, blur on normal mode) (blocked: Add `handle_event("keydown", ...)` for tmux pane keys...)
 
 ### Chat LiveView — orchestration
-- Add `handle_info` for `{:agent_event, {:job_status, statuses}}` — update `agent_statuses` and `job_active` assigns, roster sidebar becomes visible (blocked: Add `handle_info` clauses to ChatLive for agent events...)
+- Add `handle_info` for `{:agent_event, {:job_status, statuses}}` — update `agent_statuses` and `job_active` assigns, roster sidebar becomes visible
 
 ### Components
 - Create `lib/deft_web/components/thinking.ex` — function component for thinking blocks: gray background, italic, collapsible with `phx-click` toggle, `thinking:` label
