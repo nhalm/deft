@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## web-ui v0.1
 
-- Add `handle_info` clause for `{:agent_event, {:error, reason}}` in `ChatLive` — currently caught by the catch-all and silently dropped. Display error message in conversation stream.
 - Increment `turn_count` in `ChatLive` — initialized to 0 but never updated. Increment on each `:usage` event so the status bar shows the correct turn number.
 - Replace `<input type="text">` with `<textarea>` in `chat_live.html.heex` for multi-line input support (Shift+Enter for newline, Enter to submit per spec §4).
 - Add collapsible thinking blocks: inline thinking template in `chat_live.html.heex` has no click-to-collapse. Either use the existing `DeftWeb.Components.Thinking` component (which has `phx-click="toggle_thinking"`) or add collapse logic inline, and add corresponding `handle_event("toggle_thinking", ...)` in `ChatLive`.

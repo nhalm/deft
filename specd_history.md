@@ -1,4 +1,5 @@
 # History
+- **web-ui v0.1 (2026-03-23):** Add `handle_info` clause for `{:agent_event, {:error, reason}}` in `ChatLive` — currently caught by the catch-all and silently dropped. Display error message in conversation stream.
 - **web-ui v0.1 (2026-03-23):** Fix `phx-window="true"` on chat container: `chat_live.html.heex` line 1 uses `phx-keydown="keydown" phx-window="true"` — `phx-window` is not a valid LiveView attribute. Change to `phx-window-keydown="keydown"` so keyboard events fire at the window level.
 - **web-ui v0.1 (2026-03-23):** Fix root layout: `DeftWeb.Layouts` embeds `components/layouts/*` which has a bare `root.html.heex` missing CSRF token, JS scripts, and CSS link. The correct layout at `lib/deft_web/layouts/root.html.heex` is unused. Either point `embed_templates` to the correct directory or copy the content. LiveView WebSocket cannot connect without this.
 - **web-ui v0.1 (2026-03-23):** Create `test/deft_web/live/sessions_live_test.exs` — tests for: mount lists sessions, `j`/`k` navigation changes selected index, Enter redirects to chat with session_id

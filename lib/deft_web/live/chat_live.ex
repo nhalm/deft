@@ -109,6 +109,17 @@ defmodule DeftWeb.ChatLive do
     {:noreply, socket}
   end
 
+  def handle_info({:agent_event, {:error, reason}}, socket) do
+    # Display error message in conversation stream
+    message = %{
+      id: System.unique_integer([:positive, :monotonic]),
+      role: :error,
+      content: "Error: #{inspect(reason)}"
+    }
+
+    {:noreply, stream_insert(socket, :conversation, message)}
+  end
+
   def handle_info({:agent_event, _other}, socket) do
     # Ignore unknown events
     {:noreply, socket}
