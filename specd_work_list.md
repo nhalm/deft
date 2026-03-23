@@ -20,10 +20,8 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 ## tui v0.4
 
 ### Breeze startup integration
-- Replace `interactive_loop(agent_pid)` call in `execute_command({:resume_session, session_id}, flags)` with the same Breeze startup after session reconstruction
-- Wire up `deft resume` (no session ID) to start Breeze with `Deft.TUI.SessionPicker` — when the user selects a session, the picker returns the session ID, then CLI reconstructs that session and starts a new Breeze server with `Deft.TUI.Chat` (blocked: Replace `interactive_loop(agent_pid)` call in `execute_command({:resume_session`...)
+- Wire up `deft resume` (no session ID) to start Breeze with `Deft.TUI.SessionPicker` — when the user selects a session, the picker returns the session ID, then CLI reconstructs that session and starts a new Breeze server with `Deft.TUI.Chat`
 
 ### Shutdown and terminal safety
 - Add `try/catch` wrapper around the Breeze server call in CLI to guarantee terminal restoration on crash — catch `:exit` reason, call `Breeze.Terminal.restore/0` if available, otherwise emit raw ANSI reset sequences (`\e[?1049l`, `\e[?25h`, `\e[0m`)
 - Implement double Ctrl+C behavior in `Deft.TUI.Chat`: first press while agent is working sends abort to Agent and stays open; second press (or first press while idle) returns `{:stop, term}` to exit Breeze
-- Remove the old stdio REPL functions (`interactive_loop/1`, `interactive_response_loop/0`, `process_prompt/2`, `send_to_agent/2`) from cli.ex after Breeze integration is confirmed working (blocked: Implement double Ctrl+C behavior...)

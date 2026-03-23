@@ -37,7 +37,6 @@ defmodule Deft.CLI do
   alias Deft.Job.RateLimiter
   alias Deft.Session.Entry.SessionStart
   alias Deft.Session.Store
-  alias Deft.SlashCommand
 
   @version Mix.Project.config()[:version]
 
@@ -583,7 +582,12 @@ defmodule Deft.CLI do
             IO.puts("Deft session #{session_id} resumed.")
             IO.puts("Type /quit to exit.\n")
 
-            interactive_loop(agent_pid)
+            Server.start_link(
+              view: Deft.TUI.Chat,
+              params: %{session_id: session_id, agent_pid: agent_pid, config: config}
+            )
+
+            Process.sleep(:infinity)
 
           prompt ->
             # Non-interactive continuation
@@ -992,120 +996,6 @@ defmodule Deft.CLI do
   end
 
   # REPL loop for interactive mode
-  defp interactive_loop(agent_pid) do
-    case IO.gets("deft> ") do
-      :eof ->
-        :ok
-
-      {:error, _reason} ->
-        :ok
-
-      input ->
-        prompt = String.trim(input)
-
-        process_prompt(agent_pid, prompt)
-    end
-  end
-
-  # Process a prompt: handle quit, empty input, or dispatch to agent
-  defp process_prompt(agent_pid, prompt) do
-    cond do
-      prompt == "/quit" ->
-        :ok
-
-      prompt == "" ->
-        interactive_loop(agent_pid)
-
-      true ->
-        case handle_user_input(prompt) do
-          {:ok, text_to_send} ->
-            send_to_agent(agent_pid, {:prompt, text_to_send})
-
-          {:inject_skill, skill_definition} ->
-            send_to_agent(agent_pid, {:inject_skill, skill_definition})
-
-          {:error, error_msg} ->
-            IO.puts(:stderr, error_msg)
-            interactive_loop(agent_pid)
-        end
-    end
-  end
-
-  # Send input to agent and wait for response
-  defp send_to_agent(agent_pid, {:prompt, text}) do
-    Deft.Agent.prompt(agent_pid, text)
-    interactive_response_loop()
-    IO.puts("")
-    interactive_loop(agent_pid)
-  end
-
-  defp send_to_agent(agent_pid, {:inject_skill, definition}) do
-    Deft.Agent.inject_skill(agent_pid, definition)
-    interactive_response_loop()
-    IO.puts("")
-    interactive_loop(agent_pid)
-  end
-
-  # Handle user input - dispatch slash commands or pass through regular text
-  defp handle_user_input(input) do
-    case SlashCommand.parse(input) do
-      {:not_slash, text} ->
-        {:ok, text}
-
-      {:command, name, args} ->
-        handle_command_dispatch(name, args)
-    end
-  end
-
-  defp handle_command_dispatch(name, args) do
-    case SlashCommand.dispatch(name) do
-      {:ok, :command, definition} ->
-        # Commands: inject markdown content as user message
-        # If args provided, append them to the definition
-        text = if args == "", do: definition, else: "#{definition}\n\n#{args}"
-        {:ok, text}
-
-      {:ok, :skill, definition} ->
-        # Skills: inject definition as system-level instruction per spec section 2.4
-        # If args provided, append them to the definition
-        text =
-          if args == "", do: definition, else: "#{definition}\n\nAdditional context: #{args}"
-
-        {:inject_skill, text}
-
-      {:error, :not_found, cmd_name} ->
-        {:error, "Unknown command: /#{cmd_name}"}
-
-      {:error, :no_definition, cmd_name} ->
-        {:error,
-         "Skill '/#{cmd_name}' exists but has no definition (manifest-only, missing --- separator)"}
-
-      {:error, reason, cmd_name} ->
-        {:error, "Error loading command /#{cmd_name}: #{reason}"}
-    end
-  end
-
-  # Wait for agent response in interactive mode
-  defp interactive_response_loop do
-    receive do
-      {:agent_event, {:text_delta, delta}} ->
-        IO.write(delta)
-        interactive_response_loop()
-
-      {:agent_event, {:state_change, :idle}} ->
-        IO.puts("")
-
-      {:agent_event, {:error, message}} ->
-        IO.puts(:stderr, "\nError: #{message}")
-
-      {:agent_event, _other_event} ->
-        interactive_response_loop()
-    after
-      300_000 ->
-        IO.puts(:stderr, "\nError: Timeout waiting for response")
-    end
-  end
-
   # Write output to stdout or file
   defp write_output(:stdio, text) do
     IO.write(text)
