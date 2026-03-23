@@ -4,6 +4,8 @@ defmodule DeftWeb.CoreComponents do
   """
   use Phoenix.Component
 
+  alias Phoenix.LiveView.JS
+
   @doc """
   Renders flash notices.
   """
@@ -27,8 +29,8 @@ defmodule DeftWeb.CoreComponents do
     """
   end
 
-  defp show(js \\ %Phoenix.LiveView.JS{}, selector) do
-    Phoenix.LiveView.JS.show(js,
+  defp show(js \\ %JS{}, selector) do
+    JS.show(js,
       to: selector,
       transition:
         {"transition-all transform ease-out duration-300",
@@ -37,8 +39,8 @@ defmodule DeftWeb.CoreComponents do
     )
   end
 
-  defp hide(js \\ %Phoenix.LiveView.JS{}, selector) do
-    Phoenix.LiveView.JS.hide(js,
+  defp hide(js \\ %JS{}, selector) do
+    JS.hide(js,
       to: selector,
       time: 200,
       transition:

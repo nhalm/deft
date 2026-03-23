@@ -4,5 +4,5 @@ defmodule DeftWeb.Layouts do
   """
   use DeftWeb, :html
 
-  embed_templates("layouts/*")
+  embed_templates("../layouts/*")
 end

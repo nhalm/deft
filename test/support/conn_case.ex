@@ -22,7 +22,9 @@ defmodule DeftWeb.ConnCase do
     end
   end
 
+  alias Phoenix.ConnTest
+
   setup _tags do
-    {:ok, conn: Phoenix.ConnTest.build_conn()}
+    {:ok, conn: ConnTest.build_conn()}
   end
 end

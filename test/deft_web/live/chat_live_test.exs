@@ -14,7 +14,7 @@ defmodule DeftWeb.ChatLiveTest do
     # Create a test session ID
     session_id = "test_session_#{System.unique_integer([:positive])}"
 
-    %{session_id: session_id, conn: Phoenix.ConnTest.build_conn()}
+    %{session_id: session_id, conn: build_conn()}
   end
 
   describe "mount/3" do
