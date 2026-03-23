@@ -958,10 +958,12 @@ defmodule Deft.TUI.Chat do
     # Extract message from `/correct <message>`
     message = String.slice(input, 9..-1//1)
 
-    # Check if this is a job correction (no → separator) and job is active
+    # Check if this is a job correction (no → or -> separator) and job is active
     # Job corrections get the __JOB_CORRECTION__ prefix for the Foreman
-    # OM corrections (with →) go through the normal command dispatch
-    if term.assigns.job_active and not String.contains?(message, "→") do
+    # OM corrections (with → or ->) go through the normal command dispatch
+    has_arrow = String.contains?(message, "→") or String.contains?(message, "->")
+
+    if term.assigns.job_active and not has_arrow do
       # Job correction - add sentinel prefix and submit to Foreman
       corrected_text = "__JOB_CORRECTION__: " <> message
       {:submit, corrected_text}

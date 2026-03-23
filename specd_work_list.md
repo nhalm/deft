@@ -16,7 +16,3 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
-
-## tui v0.4
-
-- Fix `/correct` misroute during orchestration (chat.ex:964): `String.contains?(message, "→")` only checks for Unicode arrow; the spec's primary syntax `->` (ASCII) is not checked, so `/correct old -> new` is misrouted as a job correction when a job is active; must check for both `->` and `→`
