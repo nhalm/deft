@@ -17,3 +17,7 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
+## tui v0.3
+
+- Fix orchestration mode header to show job phase instead of agent loop state: header line (chat.ex:129) displays `format_agent_state(assigns.agent_state)` which only produces loop states (`:idle`, `:streaming`, `:calling`, `:executing_tools`); should use `assigns.job_phase` to show orchestration phases (`:planning`, `:executing`, etc.) as specified in spec §3
+- Fix `extract_repo_name` called on every render: `render/1` (chat.ex:116) calls `extract_repo_name` which shells out to `git rev-parse` on every render cycle (~30/sec during streaming); compute once in `mount/2` and store in assigns
