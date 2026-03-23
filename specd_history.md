@@ -1,4 +1,5 @@
 # History
+- **tui v0.4 (2026-03-23):** Wire up `deft resume` (no session ID) to start Breeze with `Deft.TUI.SessionPicker` — when the user selects a session, the picker returns the session ID, then CLI reconstructs that session and starts a new Breeze server with `Deft.TUI.Chat`
 - **tui v0.4 (2026-03-23):** Remove the old stdio REPL functions (`interactive_loop/1`, `interactive_response_loop/0`, `process_prompt/2`, `send_to_agent/2`, `handle_user_input/1`, `handle_command_dispatch/2`) from cli.ex after Breeze integration is confirmed working
 - **tui v0.4 (2026-03-23):** Replace `interactive_loop(agent_pid)` call in `execute_command({:resume_session, session_id}, flags)` with the same Breeze startup after session reconstruction
 - **tui v0.4 (2026-03-23):** Replace `interactive_loop(agent_pid)` call in `execute_command(:new_session, flags)` (cli.ex:621) with `Breeze.Server.start_link(view: Deft.TUI.Chat, params: %{session_id: session_id, agent_pid: agent_pid, config: config})` — the CLI process blocks on the Breeze server until the view exits

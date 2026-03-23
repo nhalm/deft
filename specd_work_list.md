@@ -19,9 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## tui v0.4
 
-### Breeze startup integration
-- Wire up `deft resume` (no session ID) to start Breeze with `Deft.TUI.SessionPicker` — when the user selects a session, the picker returns the session ID, then CLI reconstructs that session and starts a new Breeze server with `Deft.TUI.Chat`
-
 ### Shutdown and terminal safety
 - Add `try/catch` wrapper around the Breeze server call in CLI to guarantee terminal restoration on crash — catch `:exit` reason, call `Breeze.Terminal.restore/0` if available, otherwise emit raw ANSI reset sequences (`\e[?1049l`, `\e[?25h`, `\e[0m`)
 - Implement double Ctrl+C behavior in `Deft.TUI.Chat`: first press while agent is working sends abort to Agent and stays open; second press (or first press while idle) returns `{:stop, term}` to exit Breeze
