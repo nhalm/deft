@@ -542,10 +542,15 @@ defmodule Deft.CLI do
 
       {:ok, _sessions} ->
         # Start Breeze with SessionPicker view
+        cli_pid = self()
+
         try do
           Server.start_link(
             view: Deft.TUI.SessionPicker,
-            params: %{working_dir: working_dir}
+            params: %{
+              working_dir: working_dir,
+              on_select: fn session_id -> send(cli_pid, {:session_selected, session_id}) end
+            }
           )
 
           # Wait for session selection or exit

@@ -159,13 +159,12 @@ defmodule Deft.TUI.SessionPicker do
     if length(sessions) > 0 do
       selected_session = Enum.at(sessions, selected_index)
 
-      # Invoke callback if provided
+      # Invoke callback if provided (callback should send to CLI process)
       if term.assigns.on_select do
         term.assigns.on_select.(selected_session.session_id)
       end
 
-      # Signal to stop the picker view and return the selected session ID
-      send(self(), {:session_selected, selected_session.session_id})
+      # Stop the picker view - callback already notified CLI
       {:stop, term}
     else
       {:noreply, term}

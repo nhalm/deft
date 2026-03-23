@@ -19,5 +19,4 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## tui v0.4
 
-- Fix `SessionPicker.handle_select/1` (session_picker.ex:168): `send(self(), {:session_selected, ...})` sends to the Breeze view process, not the CLI process waiting at cli.ex:552; the CLI's `receive` never matches, so `deft resume` session selection is broken — the picker exits and the CLI catches `:exit` instead of resuming the selected session; must send the message to the CLI process (e.g., pass CLI pid via params or use an `on_select` callback)
 - Fix `/correct` misroute during orchestration (chat.ex:964): `String.contains?(message, "→")` only checks for Unicode arrow; the spec's primary syntax `->` (ASCII) is not checked, so `/correct old -> new` is misrouted as a job correction when a job is active; must check for both `->` and `→`
