@@ -187,8 +187,8 @@ defmodule Deft.Agent do
     tool_calls = extract_tool_calls(data.messages)
 
     if Enum.empty?(tool_calls) do
-      # No tool calls - check prompt queue and transition to idle
-      handle_idle_transition(data)
+      # No tool calls - defer transition via zero timeout (enter handlers can't use next_event)
+      {:keep_state_and_data, [{:timeout, 0, :no_tool_calls}]}
     else
       # Start tool execution asynchronously
       start_tool_execution(tool_calls, data)
@@ -198,6 +198,11 @@ defmodule Deft.Agent do
   def handle_event(:enter, _old_state, _state, _data) do
     # Default entry handler - do nothing
     :keep_state_and_data
+  end
+
+  # Handle deferred idle transition from executing_tools enter handler
+  def handle_event(:timeout, :no_tool_calls, :executing_tools, data) do
+    handle_idle_transition(data)
   end
 
   def handle_event(:cast, {:prompt, text}, :idle, data) do
@@ -871,8 +876,16 @@ defmodule Deft.Agent do
         retry_delay: 1000
     }
 
-    broadcast_event(data.session_id, {:state_change, :executing_tools})
-    {:next_state, :executing_tools, new_data}
+    # Check if the assistant message contains tool calls
+    tool_calls = extract_tool_calls(new_data.messages)
+
+    if Enum.empty?(tool_calls) do
+      # No tool calls — go directly to idle (skip executing_tools state)
+      handle_idle_transition(new_data)
+    else
+      broadcast_event(data.session_id, {:state_change, :executing_tools})
+      {:next_state, :executing_tools, new_data}
+    end
   end
 
   defp handle_stream_error(error_payload, data) do
