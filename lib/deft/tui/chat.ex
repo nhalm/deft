@@ -731,15 +731,18 @@ defmodule Deft.TUI.Chat do
   end
 
   defp commit_streaming_message(term) do
-    if term.assigns.current_text != "" do
-      # Collect all thinking blocks (completed + current)
-      all_thinking_blocks =
-        if term.assigns.current_thinking != "" do
-          term.assigns.completed_thinking_blocks ++ [term.assigns.current_thinking]
-        else
-          term.assigns.completed_thinking_blocks
-        end
+    # Collect all thinking blocks (completed + current)
+    all_thinking_blocks =
+      if term.assigns.current_thinking != "" do
+        term.assigns.completed_thinking_blocks ++ [term.assigns.current_thinking]
+      else
+        term.assigns.completed_thinking_blocks
+      end
 
+    # Commit a message if there's text OR thinking blocks
+    has_content = term.assigns.current_text != "" || all_thinking_blocks != []
+
+    if has_content do
       # Create assistant message with the accumulated text and thinking blocks
       message = %{
         role: :assistant,

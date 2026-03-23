@@ -17,7 +17,3 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## tui v0.3
-
-- Fix thinking-only turns dropped from history: `commit_streaming_message` (chat.ex:734) guards on `current_text != ""` and discards `completed_thinking_blocks` + `current_thinking` when no text was produced; turns with thinking + tool calls but no text lose their thinking blocks from scrollback (violates spec §5.4)
-

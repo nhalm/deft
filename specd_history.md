@@ -1,4 +1,5 @@
 # History
+- **tui v0.3 (2026-03-23):** Fix thinking-only turns dropped from history: `commit_streaming_message` (chat.ex:734) guards on `current_text != ""` and discards `completed_thinking_blocks` + `current_thinking` when no text was produced; turns with thinking + tool calls but no text lose their thinking blocks from scrollback (violates spec §5.4)
 - **tui v0.3 (2026-03-23):** Fix TUI job_status subscription by switching to Deft.Registry with distinct key {:job_status, session_id} to avoid collision with Foreman's {:foreman, session_id} registration
 - **tui v0.3 (2026-03-23):** Wrap conversation text to avoid the roster area (~30 rightmost columns) during orchestration; collapse roster to header-only when terminal width < 80 columns
 - **tui v0.3 (2026-03-23):** Collapse multiple active Runners into a single `Runners (N)` row instead of listing each individually
