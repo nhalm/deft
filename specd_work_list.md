@@ -19,15 +19,8 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## web-ui v0.1
 
-### Phoenix setup
-- Create `lib/deft_web/layouts/root.html.heex` and `lib/deft_web/layouts/app.html.heex` — minimal layout shell with LiveView container, CSS link, JS hook. No nav chrome.
-- Add `Phoenix.PubSub` and `DeftWeb.Endpoint` to `Deft.Application` supervision tree children
-
-### Styles
-- Create `assets/css/app.css` — CSS Grid layout for chat (header, conversation+roster, input, status bar), responsive breakpoints (desktop >1024px full sidebar, tablet 768-1024px overlay roster, mobile <768px single column), thinking block styling (light gray, italic), tool call styling (spinner animation, ✓/✗), status bar, vim mode indicator, dark theme default with `prefers-color-scheme` support (blocked: Create `lib/deft_web/layouts/root.html.heex`...)
-
 ### Chat LiveView — mount and render
-- Create `lib/deft_web/live/chat_live.ex` with `mount/3` that subscribes to `Deft.Registry` events `{:session, session_id}` and `{:job_status, session_id}`, initializes assigns (messages, streaming state, agent_state, input, tools, tokens, cost, turns, OM state, job/roster state, vim_mode: :insert). Create `lib/deft_web/live/chat_live.html.heex` with the layout: header bar, conversation area with `phx-update="stream"`, roster sidebar (hidden in solo mode), input area with mode indicator, status bar. (blocked: Create `assets/css/app.css`...)
+- Create `lib/deft_web/live/chat_live.ex` with `mount/3` that subscribes to `Deft.Registry` events `{:session, session_id}` and `{:job_status, session_id}`, initializes assigns (messages, streaming state, agent_state, input, tools, tokens, cost, turns, OM state, job/roster state, vim_mode: :insert). Create `lib/deft_web/live/chat_live.html.heex` with the layout: header bar, conversation area with `phx-update="stream"`, roster sidebar (hidden in solo mode), input area with mode indicator, status bar.
 
 ### Chat LiveView — agent event handling
 - Add `handle_info` clauses to ChatLive for agent events: `{:agent_event, {:text_delta, delta}}` appends to streaming text assign, `{:agent_event, {:thinking_delta, delta}}` appends to thinking block, `{:agent_event, {:tool_call_start, %{id, name}}}` adds to active_tools map, `{:agent_event, {:tool_call_done, %{id, status, duration}}}` updates tool, `{:agent_event, {:state_change, state}}` updates agent_state, `{:agent_event, {:usage, %{input, output}}}` updates token/cost counters (blocked: Create `lib/deft_web/live/chat_live.ex`...)

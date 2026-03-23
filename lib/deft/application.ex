@@ -33,7 +33,11 @@ defmodule Deft.Application do
       {Registry, keys: :unique, name: Deft.ProcessRegistry},
       Deft.Provider.Registry,
       Deft.Skills.Registry,
-      Deft.Session.Supervisor
+      Deft.Session.Supervisor,
+      # Phoenix PubSub for web UI
+      {Phoenix.PubSub, name: Deft.PubSub},
+      # Phoenix Endpoint for web UI
+      DeftWeb.Endpoint
     ]
 
     # Conditionally add Issues if issues.jsonl exists

@@ -1,4 +1,7 @@
 # History
+- **web-ui v0.1 (2026-03-23):** Create `assets/css/app.css` — CSS Grid layout for chat (header, conversation+roster, input, status bar), responsive breakpoints (desktop >1024px full sidebar, tablet 768-1024px overlay roster, mobile <768px single column), thinking block styling (light gray, italic), tool call styling (spinner animation, ✓/✗), status bar, vim mode indicator, dark theme default with `prefers-color-scheme` support
+- **web-ui v0.1 (2026-03-23):** Add `Phoenix.PubSub` and `DeftWeb.Endpoint` to `Deft.Application` supervision tree children
+- **web-ui v0.1 (2026-03-23):** Create `lib/deft_web/layouts/root.html.heex` and `lib/deft_web/layouts/app.html.heex` — minimal layout shell with LiveView container, CSS link, JS hook. No nav chrome.
 - **web-ui v0.1 (2026-03-23):** Create `lib/deft_web/router.ex` — `live "/", DeftWeb.ChatLive` and `live "/sessions", DeftWeb.SessionsLive`. Standard browser pipeline with `fetch_session` and `put_root_layout`.
 - **web-ui v0.1 (2026-03-23):** Create `lib/deft_web/endpoint.ex` — Phoenix.Endpoint on localhost:4000, LiveView socket at `/live`, static asset serving. Add `config/` entries for endpoint and live_view signing salt.
 - **web-ui v0.1 (2026-03-23):** Add Phoenix deps to mix.exs: `phoenix`, `phoenix_live_view`, `phoenix_html`, `phoenix_live_reload` (dev only), `bandit`. Remove `{:breeze, "~> 0.2"}`. Run `mix deps.get`.
