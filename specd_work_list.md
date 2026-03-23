@@ -19,9 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## web-ui v0.1
 
-### Chat LiveView — orchestration
-- Add `handle_info` for `{:agent_event, {:job_status, statuses}}` — update `agent_statuses` and `job_active` assigns, roster sidebar becomes visible
-
 ### Components
 - Create `lib/deft_web/components/thinking.ex` — function component for thinking blocks: gray background, italic, collapsible with `phx-click` toggle, `thinking:` label
 - Create `lib/deft_web/components/tool_call.ex` — function component for tool execution display: tool name + key arg, CSS spinner while running, ✓/✗ + duration on complete, expandable detail
