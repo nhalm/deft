@@ -96,6 +96,7 @@ defmodule Deft.Job.Foreman do
       current_message: nil,
       stream_ref: nil,
       stream_monitor_ref: nil,
+      estimated_tokens: nil,
       tool_tasks: [],
       tool_call_buffers: %{},
       tool_results: [],

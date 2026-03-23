@@ -1,4 +1,5 @@
 # History
+- **web-ui v0.1 (2026-03-23):** Create `lib/deft_web/components/thinking.ex` — function component for thinking blocks: gray background, italic, collapsible with `phx-click` toggle, `thinking:` label
 - **web-ui v0.1 (2026-03-23):** Add `handle_info` for `{:agent_event, {:job_status, statuses}}` — update `agent_statuses` and `job_active` assigns, roster sidebar becomes visible
 - **web-ui v0.1 (2026-03-23):** Create `assets/js/app.js` — LiveView JS hooks for scroll control (auto-scroll during streaming, freeze on user scroll, resume on scroll-to-bottom) and input focus management (focus input on insert mode, blur on normal mode)
 - **web-ui v0.1 (2026-03-23):** Add `handle_event("keydown", ...)` for tmux pane keys: `Ctrl+b` sets a prefix flag in assigns, next key dispatches — `%` toggles roster panel visibility, `z` toggles zoom. Track `tmux_prefix: false`, `roster_visible: true` in assigns.
