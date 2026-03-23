@@ -54,6 +54,7 @@ defmodule Deft.MixProject do
 
       # Dev/Test only
       {:phoenix_live_reload, "~> 1.5", only: [:dev]},
+      {:floki, ">= 0.30.0", only: :test},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev], runtime: false},
       {:stream_data, "~> 1.0", only: [:test]},

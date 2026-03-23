@@ -6,7 +6,7 @@ defmodule DeftWeb.ChatLive do
   thinking blocks, and agent roster. Supports vim/tmux-style keybindings.
   """
 
-  use Phoenix.LiveView
+  use DeftWeb, :live_view
 
   alias Deft.Session.Worker
   alias Deft.Skills.Registry, as: SkillsRegistry

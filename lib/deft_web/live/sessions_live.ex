@@ -6,8 +6,7 @@ defmodule DeftWeb.SessionsLive do
   Supports vim-style keyboard navigation (j/k to move, Enter to select).
   """
 
-  use Phoenix.LiveView
-  use Phoenix.Component
+  use DeftWeb, :live_view
 
   alias Deft.Session.Store
 

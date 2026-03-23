@@ -20,5 +20,4 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 ## web-ui v0.1
 
 ### Tests
-- Create `test/deft_web/live/chat_live_test.exs` — tests for: mount renders header with repo name, text_delta event updates conversation, thinking_delta renders thinking block with styling, tool_call_start shows spinner, tool_call_done shows ✓/✗, Esc switches to normal mode, `i` in normal switches to insert, Enter submits prompt, slash command `/quit` handled, agent roster appears on job_status event, status bar shows token count and cost
 - Create `test/deft_web/live/sessions_live_test.exs` — tests for: mount lists sessions, `j`/`k` navigation changes selected index, Enter redirects to chat with session_id

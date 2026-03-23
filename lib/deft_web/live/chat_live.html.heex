@@ -1,4 +1,4 @@
-<div class="chat-container">
+<div class="chat-container" phx-keydown="keydown" phx-window="true">
   <div class="header-bar">
     <div class="header-left">
       <span class="app-name">Deft</span>
@@ -27,14 +27,14 @@
       <% end %>
 
       <%= if @streaming_thinking != "" do %>
-        <div class="thinking-block">
+        <div class="thinking-block" id="streaming-thinking-block">
           <span class="thinking-label">thinking:</span>
           <span class="thinking-content"><%= @streaming_thinking %></span>
         </div>
       <% end %>
 
       <%= if @streaming_text != "" do %>
-        <div class="streaming-text">
+        <div class="streaming-text" id="streaming-text-block">
           <%= @streaming_text %><span class="cursor">▊</span>
         </div>
       <% end %>
@@ -69,16 +69,18 @@
   </div>
 
   <div class="input-area">
-    <input
-      type="text"
-      id="input"
-      phx-keydown="keydown"
-      phx-hook="InputFocus"
-      data-vim-mode={@vim_mode}
-      value={@input}
-      placeholder="Enter a prompt or command..."
-      class="chat-input"
-    />
+    <form phx-submit="submit">
+      <input
+        type="text"
+        name="input"
+        id="input"
+        phx-hook="InputFocus"
+        data-vim-mode={@vim_mode}
+        value={@input}
+        placeholder="Enter a prompt or command..."
+        class="chat-input"
+      />
+    </form>
     <span class="mode-indicator"><%= mode_indicator(@vim_mode) %></span>
   </div>
 

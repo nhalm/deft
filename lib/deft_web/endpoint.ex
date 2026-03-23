@@ -51,8 +51,5 @@ defmodule DeftWeb.Endpoint do
   plug(Plug.MethodOverride)
   plug(Plug.Head)
   plug(Plug.Session, @session_options)
-  # Router is plugged separately - will be created in next work item
-  if Code.ensure_loaded?(DeftWeb.Router) do
-    plug(DeftWeb.Router)
-  end
+  plug(DeftWeb.Router)
 end
