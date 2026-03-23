@@ -20,8 +20,7 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 ## tui v0.3
 
 ### Agent roster
-- Subscribe TUI to `{:job_status, ...}` broadcasts and store `agent_statuses` in assigns
-- Render agent roster as right-aligned text rows in the top-right of the conversation area — one row per agent (Foreman, each Lead, Runners) with `◉ <state>` indicator (blocked: Subscribe TUI to `{:job_status, ...}` broadcasts and store `agent_statuses` in assigns)
+- Render agent roster as right-aligned text rows in the top-right of the conversation area — one row per agent (Foreman, each Lead, Runners) with `◉ <state>` indicator
 - Color the `◉` indicator by state: green (planning, researching, executing, implementing, testing, merging, verifying), yellow (waiting), white (idle, complete), red (error) (blocked: Render agent roster as right-aligned text rows in the top-right of the conversation area)
 - Collapse multiple active Runners into a single `Runners (N)` row instead of listing each individually (blocked: Render agent roster as right-aligned text rows in the top-right of the conversation area)
 - Hide agent roster in solo mode; only render when a Job is active (blocked: Render agent roster as right-aligned text rows in the top-right of the conversation area)

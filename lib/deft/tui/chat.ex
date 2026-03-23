@@ -38,6 +38,9 @@ defmodule Deft.TUI.Chat do
     # Subscribe to agent events via Registry
     Registry.register(Deft.Registry, {:session, session_id}, [])
 
+    # Subscribe to Foreman job_status broadcasts via ProcessRegistry
+    Registry.register(Deft.ProcessRegistry, {:foreman, session_id}, [])
+
     # Initialize state
     term =
       term
@@ -82,7 +85,9 @@ defmodule Deft.TUI.Chat do
         job_cost_ceiling: nil,
         job_leads: %{},
         job_lead_count: 0,
-        job_completed_count: 0
+        job_completed_count: 0,
+        # Agent roster (orchestration mode)
+        agent_statuses: []
       )
 
     {:ok, term}
@@ -284,6 +289,11 @@ defmodule Deft.TUI.Chat do
 
   def handle_info({:job_event, {:job_completed, _metadata}}, term) do
     handle_job_completed(term)
+  end
+
+  # Job status broadcasts from Foreman (agent roster updates)
+  def handle_info({:job_status, agent_statuses}, term) do
+    {:noreply, assign(term, agent_statuses: agent_statuses)}
   end
 
   # Ignore events that don't need display updates
