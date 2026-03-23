@@ -410,7 +410,7 @@ defmodule Deft.TUI.Chat do
 
   def handle_event(_event, %{"key" => "ctrl-l"}, term) do
     # Clear screen - reset messages
-    {:noreply, assign(term, messages: [], current_text: "")}
+    {:noreply, assign(term, messages: [], current_text: "", current_thinking: "")}
   end
 
   def handle_event(_event, %{"key" => "ctrl-r"}, term) do
@@ -617,6 +617,7 @@ defmodule Deft.TUI.Chat do
       |> assign(messages: new_messages)
       |> assign(streaming: false)
       |> assign(current_text: "")
+      |> assign(current_thinking: "")
 
     {:noreply, new_term}
   end
@@ -661,6 +662,7 @@ defmodule Deft.TUI.Chat do
       |> assign(messages: new_messages)
       |> assign(streaming: false)
       |> assign(current_text: "")
+      |> assign(current_thinking: "")
       |> assign(active_tools: %{})
 
     {:noreply, new_term}
@@ -678,11 +680,13 @@ defmodule Deft.TUI.Chat do
       term
       |> assign(messages: term.assigns.messages ++ [message])
       |> assign(current_text: "")
+      |> assign(current_thinking: "")
       |> assign(streaming: false)
       |> assign(active_tools: %{})
     else
       term
       |> assign(streaming: false)
+      |> assign(current_thinking: "")
       |> assign(active_tools: %{})
     end
   end
@@ -748,7 +752,7 @@ defmodule Deft.TUI.Chat do
 
       # Handle /clear command directly in TUI
       input == "/clear" ->
-        new_term = assign(term, messages: [], current_text: "")
+        new_term = assign(term, messages: [], current_text: "", current_thinking: "")
         {:command_handled, new_term}
 
       # Handle /help command directly in TUI
@@ -865,20 +869,54 @@ defmodule Deft.TUI.Chat do
   # Rendering helpers
 
   defp calculate_streaming_rendered(assigns) do
-    # Return empty if not streaming or no current text
-    if assigns.streaming and assigns.current_text != "" do
-      # If raw mode is enabled, show raw text
-      if assigns.raw_mode do
-        assigns.current_text
+    thinking_part = render_thinking_block(assigns.current_thinking)
+
+    text_part =
+      if assigns.streaming and assigns.current_text != "" do
+        # If raw mode is enabled, show raw text
+        if assigns.raw_mode do
+          assigns.current_text
+        else
+          # Use Markdown.render_streaming/1 to buffer incomplete lines
+          # and only render complete blocks
+          {rendered, _buffer} = Markdown.render_streaming(assigns.current_text)
+          rendered
+        end
       else
-        # Use Markdown.render_streaming/1 to buffer incomplete lines
-        # and only render complete blocks
-        {rendered, _buffer} = Markdown.render_streaming(assigns.current_text)
-        rendered
+        ""
       end
-    else
-      ""
+
+    # Combine thinking and text, with newlines as separators if both exist
+    case {thinking_part, text_part} do
+      {"", ""} -> ""
+      {thinking, ""} -> thinking
+      {"", text} -> text
+      {thinking, text} -> thinking <> "\n\n" <> text
     end
+  end
+
+  defp render_thinking_block(""), do: ""
+
+  defp render_thinking_block(thinking) do
+    # Split thinking into lines for proper formatting
+    lines = String.split(thinking, "\n")
+
+    # Render with dim + italic ANSI styling
+    # \e[2m = dim, \e[3m = italic
+    # \e[22m = reset dim, \e[23m = reset italic
+    formatted_lines =
+      lines
+      |> Enum.with_index()
+      |> Enum.map(fn {line, index} ->
+        if index == 0 do
+          "[thinking: " <> line
+        else
+          " " <> line
+        end
+      end)
+
+    content = Enum.join(formatted_lines, "\n")
+    "\e[2m\e[3m" <> content <> "]" <> "\e[23m\e[22m"
   end
 
   defp calculate_visible_messages(assigns) do
