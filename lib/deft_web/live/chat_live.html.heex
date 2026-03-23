@@ -1,0 +1,121 @@
+<div class="chat-container">
+  <div class="header-bar">
+    <div class="header-left">
+      <span class="app-name">Deft</span>
+      <span class="separator">—</span>
+      <span class="repo-name"><%= @repo_name %></span>
+    </div>
+    <div class="header-center">
+      <span class="agent-identity"><%= @agent_identity %></span>
+      <span class={"state-indicator state-#{@agent_state}"}>
+        ◉ <%= @agent_state %>
+      </span>
+    </div>
+    <div class="header-right">
+      <button>⚙</button>
+      <button>📋</button>
+      <button>?</button>
+    </div>
+  </div>
+
+  <div class="main-area">
+    <div class="conversation-area" phx-update="stream" id="conversation">
+      <%= for {id, item} <- @streams.conversation do %>
+        <div id={id} class="conversation-item">
+          <%= render_conversation_item(item) %>
+        </div>
+      <% end %>
+
+      <%= if @streaming_thinking != "" do %>
+        <div class="thinking-block">
+          <span class="thinking-label">thinking:</span>
+          <span class="thinking-content"><%= @streaming_thinking %></span>
+        </div>
+      <% end %>
+
+      <%= if @streaming_text != "" do %>
+        <div class="streaming-text">
+          <%= @streaming_text %><span class="cursor">▊</span>
+        </div>
+      <% end %>
+
+      <%= for {tool_id, tool} <- @active_tools do %>
+        <div class="tool-call" id={"tool-#{tool_id}"}>
+          <span class="tool-name">[Tool: <%= tool.name %>]</span>
+          <%= if tool.status == :running do %>
+            <span class="spinner">⟳</span>
+          <% else %>
+            <span class={"tool-result tool-#{tool.status}"}>
+              <%= if tool.status == :done, do: "✓", else: "✗" %>
+              <%= if tool.duration, do: "(#{tool.duration}s)" %>
+            </span>
+          <% end %>
+        </div>
+      <% end %>
+    </div>
+
+    <%= if @roster_visible or @job_active do %>
+      <div class="roster-panel">
+        <div class="roster-header">Agents</div>
+        <%= for status <- @agent_statuses do %>
+          <div class="agent-status">
+            <span class={"status-dot status-#{status.state}"}></span>
+            <span class="agent-label"><%= status.label %></span>
+            <span class="agent-state-label"><%= status.state %></span>
+          </div>
+        <% end %>
+      </div>
+    <% end %>
+  </div>
+
+  <div class="input-area">
+    <input
+      type="text"
+      id="input"
+      phx-keydown="keydown"
+      phx-hook="InputFocus"
+      value={@input}
+      placeholder="Enter a prompt or command..."
+      class="chat-input"
+    />
+    <span class="mode-indicator"><%= mode_indicator(@vim_mode) %></span>
+  </div>
+
+  <div class="status-bar">
+    <%= if @job_active do %>
+      <%!-- Orchestration mode status --%>
+      <span class="status-item">
+        <%= length(@agent_statuses) %> agents
+      </span>
+      <span class="separator">│</span>
+      <span class="status-item">
+        $<%= :erlang.float_to_binary(@cost, decimals: 2) %>
+      </span>
+      <span class="separator">│</span>
+      <span class="status-item state-indicator">
+        ◉ <%= @agent_state %>
+      </span>
+    <% else %>
+      <%!-- Solo mode status --%>
+      <span class="status-item">
+        <%= @tokens_input + @tokens_output %>/200k
+      </span>
+      <span class="separator">│</span>
+      <span class="status-item">
+        memory: <%= @om_memory_tokens %>/40k
+      </span>
+      <span class="separator">│</span>
+      <span class="status-item">
+        $<%= :erlang.float_to_binary(@cost, decimals: 2) %>
+      </span>
+      <span class="separator">│</span>
+      <span class="status-item">
+        turn <%= @turn_count %>/<%= @turn_limit %>
+      </span>
+      <span class="separator">│</span>
+      <span class="status-item state-indicator">
+        ◉ <%= @agent_state %>
+      </span>
+    <% end %>
+  </div>
+</div>

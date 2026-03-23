@@ -19,11 +19,8 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## web-ui v0.1
 
-### Chat LiveView — mount and render
-- Create `lib/deft_web/live/chat_live.ex` with `mount/3` that subscribes to `Deft.Registry` events `{:session, session_id}` and `{:job_status, session_id}`, initializes assigns (messages, streaming state, agent_state, input, tools, tokens, cost, turns, OM state, job/roster state, vim_mode: :insert). Create `lib/deft_web/live/chat_live.html.heex` with the layout: header bar, conversation area with `phx-update="stream"`, roster sidebar (hidden in solo mode), input area with mode indicator, status bar.
-
 ### Chat LiveView — agent event handling
-- Add `handle_info` clauses to ChatLive for agent events: `{:agent_event, {:text_delta, delta}}` appends to streaming text assign, `{:agent_event, {:thinking_delta, delta}}` appends to thinking block, `{:agent_event, {:tool_call_start, %{id, name}}}` adds to active_tools map, `{:agent_event, {:tool_call_done, %{id, status, duration}}}` updates tool, `{:agent_event, {:state_change, state}}` updates agent_state, `{:agent_event, {:usage, %{input, output}}}` updates token/cost counters (blocked: Create `lib/deft_web/live/chat_live.ex`...)
+- Add `handle_info` clauses to ChatLive for agent events: `{:agent_event, {:text_delta, delta}}` appends to streaming text assign, `{:agent_event, {:thinking_delta, delta}}` appends to thinking block, `{:agent_event, {:tool_call_start, %{id, name}}}` adds to active_tools map, `{:agent_event, {:tool_call_done, %{id, status, duration}}}` updates tool, `{:agent_event, {:state_change, state}}` updates agent_state, `{:agent_event, {:usage, %{input, output}}}` updates token/cost counters
 
 ### Chat LiveView — input and keybindings
 - Add `handle_event` for input submission: `"submit"` event takes input value, dispatches slash commands or sends prompt to agent via `Deft.Agent.prompt/2`, clears input, adds user message to conversation (blocked: Add `handle_info` clauses to ChatLive for agent events...)
@@ -36,10 +33,10 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Add `handle_info` for `{:agent_event, {:job_status, statuses}}` — update `agent_statuses` and `job_active` assigns, roster sidebar becomes visible (blocked: Add `handle_info` clauses to ChatLive for agent events...)
 
 ### Components
-- Create `lib/deft_web/components/thinking.ex` — function component for thinking blocks: gray background, italic, collapsible with `phx-click` toggle, `thinking:` label (blocked: Create `lib/deft_web/live/chat_live.ex`...)
-- Create `lib/deft_web/components/tool_call.ex` — function component for tool execution display: tool name + key arg, CSS spinner while running, ✓/✗ + duration on complete, expandable detail (blocked: Create `lib/deft_web/live/chat_live.ex`...)
-- Create `lib/deft_web/components/status_bar.ex` — function component for status bar: solo mode (tokens, memory, cost, turn, state) and orchestration mode (leads, complete, cost, elapsed, state) (blocked: Create `lib/deft_web/live/chat_live.ex`...)
-- Create `lib/deft_web/components/roster.ex` — function component for agent roster sidebar: list of agents with colored dot + state label, CSS transition for show/hide (blocked: Create `lib/deft_web/live/chat_live.ex`...)
+- Create `lib/deft_web/components/thinking.ex` — function component for thinking blocks: gray background, italic, collapsible with `phx-click` toggle, `thinking:` label
+- Create `lib/deft_web/components/tool_call.ex` — function component for tool execution display: tool name + key arg, CSS spinner while running, ✓/✗ + duration on complete, expandable detail
+- Create `lib/deft_web/components/status_bar.ex` — function component for status bar: solo mode (tokens, memory, cost, turn, state) and orchestration mode (leads, complete, cost, elapsed, state)
+- Create `lib/deft_web/components/roster.ex` — function component for agent roster sidebar: list of agents with colored dot + state label, CSS transition for show/hide
 
 ### Session picker
 - Create `lib/deft_web/live/sessions_live.ex` — LiveView listing sessions from `Deft.Session.Store.list/0`, keyboard navigation (`j`/`k` to move, Enter to select), redirects to `"/?session=<id>"` on selection
