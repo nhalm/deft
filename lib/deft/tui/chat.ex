@@ -88,7 +88,9 @@ defmodule Deft.TUI.Chat do
         job_lead_count: 0,
         job_completed_count: 0,
         # Agent roster (orchestration mode)
-        agent_statuses: []
+        agent_statuses: [],
+        # Ctrl+C double-press tracking
+        ctrl_c_pressed_at: nil
       )
 
     {:ok, term}
@@ -330,7 +332,8 @@ defmodule Deft.TUI.Chat do
   - Enter: submit prompt
   - Shift+Enter: insert newline (Kitty protocol)
   - Backslash + Enter: insert newline (fallback)
-  - Ctrl+C / Ctrl+D: quit
+  - Ctrl+C: abort current operation (first press) / exit (second press or if idle)
+  - Ctrl+D: quit
   - Ctrl+L: clear screen
   - Up/Down: input history navigation
   """
@@ -431,12 +434,22 @@ defmodule Deft.TUI.Chat do
 
   def handle_event(_event, %{"key" => "ctrl-c"}, term) do
     # Ctrl+C: abort current operation if active, exit if idle
+    # Double Ctrl+C while agent is working: first press aborts, second press exits
     if term.assigns.agent_state == :idle do
       {:stop, term}
     else
-      # Agent is active - send abort signal and stay in session
-      Deft.Agent.abort(term.assigns.agent_pid)
-      {:noreply, term}
+      # Agent is active - check for double press
+      current_time = System.monotonic_time(:millisecond)
+      last_press = term.assigns.ctrl_c_pressed_at
+
+      # If Ctrl+C was pressed within the last 2 seconds, exit
+      if last_press != nil and current_time - last_press < 2000 do
+        {:stop, term}
+      else
+        # First press (or press after timeout) - send abort and stay in session
+        Deft.Agent.abort(term.assigns.agent_pid)
+        {:noreply, assign(term, ctrl_c_pressed_at: current_time)}
+      end
     end
   end
 
@@ -639,7 +652,9 @@ defmodule Deft.TUI.Chat do
     # When transitioning to idle, commit current streaming text and clear tools
     new_term =
       if new_state == :idle do
-        commit_streaming_message(new_term)
+        new_term
+        |> commit_streaming_message()
+        |> assign(ctrl_c_pressed_at: nil)
       else
         new_term
       end
@@ -1258,7 +1273,8 @@ defmodule Deft.TUI.Chat do
     Enter         - Submit prompt
     Shift+Enter   - Insert newline (multi-line input)
     \\ + Enter     - Insert newline (fallback)
-    Ctrl+C/Ctrl+D - Exit
+    Ctrl+C        - Abort (1st press) / Exit (2nd press or if idle)
+    Ctrl+D        - Exit
     Ctrl+L        - Clear screen
     Up/Down       - Navigate input history
     """

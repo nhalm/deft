@@ -16,8 +16,3 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
-
-## tui v0.4
-
-### Shutdown and terminal safety
-- Implement double Ctrl+C behavior in `Deft.TUI.Chat`: first press while agent is working sends abort to Agent and stays open; second press (or first press while idle) returns `{:stop, term}` to exit Breeze

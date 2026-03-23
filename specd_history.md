@@ -1,4 +1,5 @@
 # History
+- **tui v0.4 (2026-03-23):** Implement double Ctrl+C behavior in `Deft.TUI.Chat`: first press while agent is working sends abort to Agent and stays open; second press (or first press while idle) returns `{:stop, term}` to exit Breeze
 - **tui v0.4 (2026-03-23):** Add `try/catch` wrapper around the Breeze server call in CLI to guarantee terminal restoration on crash — catch `:exit` reason, call `Breeze.Terminal.restore/0` if available, otherwise emit raw ANSI reset sequences (`\e[?1049l`, `\e[?25h`, `\e[0m`)
 - **tui v0.4 (2026-03-23):** Wire up `deft resume` (no session ID) to start Breeze with `Deft.TUI.SessionPicker` — when the user selects a session, the picker returns the session ID, then CLI reconstructs that session and starts a new Breeze server with `Deft.TUI.Chat`
 - **tui v0.4 (2026-03-23):** Remove the old stdio REPL functions (`interactive_loop/1`, `interactive_response_loop/0`, `process_prompt/2`, `send_to_agent/2`, `handle_user_input/1`, `handle_command_dispatch/2`) from cli.ex after Breeze integration is confirmed working
