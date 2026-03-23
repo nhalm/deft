@@ -16,3 +16,25 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
+
+## tui v0.3
+
+### Thinking display
+- Handle `:thinking_delta` provider events in `handle_info` — accumulate tokens into a thinking block in assigns, same pattern as `:text_delta` handling
+- Render thinking blocks inline with dim (`\e[2m`) + italic (`\e[3m`) ANSI styling, prefixed with `[thinking: ` and closed with `]`
+- Support multiple thinking blocks per assistant turn — when `:thinking_delta` arrives after tool results, start a new thinking block at the current position in the conversation flow
+- Thinking blocks persist in scrollback as part of conversation history (not ephemeral)
+
+### Header
+- Redesign header line to include repo name: resolve `working_dir` to git root, use basename, truncate to 20 chars with `…` suffix if needed (blocked: Render thinking blocks inline...)
+- Show agent identity in header — "Solo" in solo mode, "Foreman" during orchestration (blocked: Redesign header line...)
+- Show model name in header in solo mode only (`model: claude-sonnet-4`); omit in orchestration mode (blocked: Show agent identity in header...)
+
+### Agent roster
+- Add `{:job_status, agent_statuses}` broadcast from Foreman: emit via Registry whenever an agent's state changes (Lead started, Lead completed, Runner spawned, etc.) — payload is a list of `%{id, type, state, label}` (blocked: Show agent identity in header...)
+- Subscribe TUI to `{:job_status, ...}` broadcasts and store `agent_statuses` in assigns (blocked: Add `{:job_status, agent_statuses}` broadcast...)
+- Render agent roster as right-aligned text rows in the top-right of the conversation area — one row per agent (Foreman, each Lead, Runners) with `◉ <state>` indicator (blocked: Subscribe TUI to `{:job_status, ...}` broadcasts...)
+- Color the `◉` indicator by state: green (planning, researching, executing, implementing, testing, merging, verifying), yellow (waiting), white (idle, complete), red (error) (blocked: Render agent roster as right-aligned text rows...)
+- Collapse multiple active Runners into a single `Runners (N)` row instead of listing each individually (blocked: Render agent roster as right-aligned text rows...)
+- Hide agent roster in solo mode; only render when a Job is active (blocked: Render agent roster as right-aligned text rows...)
+- Wrap conversation text to avoid the roster area (~30 rightmost columns) during orchestration; collapse roster to header-only when terminal width < 80 columns (blocked: Render agent roster as right-aligned text rows...)

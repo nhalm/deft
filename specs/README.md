@@ -65,7 +65,7 @@ Decision reasoning is logged in [specd_decisions.jsonl](../specd_decisions.jsonl
 | [tools](tools.md) | v0.2 | Implemented | Tool behaviour, 7 built-in tools, tool execution model |
 | [providers](providers.md) | v0.3 | Implemented | LLM provider behaviour, SSE streaming, Anthropic implementation |
 | [sessions](sessions.md) | v0.4 | Implemented | Session persistence (JSONL), resume, configuration, CLI, project-scoped storage |
-| [tui](tui.md) | v0.2 | Implemented | Breeze TUI, chat view, markdown rendering, input handling, slash commands |
+| [tui](tui.md) | v0.3 | Ready | Breeze TUI, chat view, markdown rendering, input handling, slash commands, thinking display, agent roster |
 
 ## Core
 
