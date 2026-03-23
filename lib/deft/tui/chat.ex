@@ -1644,7 +1644,8 @@ defmodule Deft.TUI.Chat do
 
         # Right-align by padding with spaces
         # Roster occupies rightmost ~30 columns
-        line_length = String.length(roster_line)
+        # Use visible_length to exclude ANSI escape codes from length calculation
+        line_length = visible_length(roster_line)
         padding = max(0, terminal_width - line_length - 1)
 
         String.duplicate(" ", padding) <> roster_line
@@ -1686,5 +1687,14 @@ defmodule Deft.TUI.Chat do
   defp colorize_state_indicator(_) do
     # White for idle/complete/other
     "\e[37m◉\e[39m"
+  end
+
+  # Calculate visible length of a string, excluding ANSI escape codes
+  # ANSI escape codes have the form \e[...m and should not count toward display width
+  defp visible_length(string) do
+    # Strip all ANSI escape sequences matching \e[<any chars>m
+    string
+    |> String.replace(~r/\e\[[^m]*m/, "")
+    |> String.length()
   end
 end

@@ -16,8 +16,3 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
-
-## tui v0.3
-
-- Fix roster right-alignment padding: `render_agent_roster` (chat.ex:1647) uses `String.length(roster_line)` which counts ANSI escape code codepoints as visible characters; `"\e[32m◉\e[39m"` is 10 codepoints but 1 terminal column, so every roster line is displaced ~9 columns left of intended position; strip ANSI codes before measuring length or use a display-width-aware measurement
-
