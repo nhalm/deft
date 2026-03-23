@@ -41,17 +41,15 @@
       <% end %>
 
       <%= for {tool_id, tool} <- @active_tools do %>
-        <div class="tool-call" id={"tool-#{tool_id}"}>
-          <span class="tool-name">[Tool: <%= tool.name %>]</span>
-          <%= if tool.status == :running do %>
-            <span class="spinner">⟳</span>
-          <% else %>
-            <span class={"tool-result tool-#{tool.status}"}>
-              <%= if tool.status == :done, do: "✓", else: "✗" %>
-              <%= if tool.duration, do: "(#{tool.duration}s)" %>
-            </span>
-          <% end %>
-        </div>
+        <.tool_call
+          id={"tool-#{tool_id}"}
+          name={tool.name}
+          status={tool.status}
+          duration={tool.duration}
+          input={tool.input}
+          output={tool.output}
+          expanded={Map.get(@tools_expanded, "tool-#{tool_id}", false)}
+        />
       <% end %>
     </div>
 

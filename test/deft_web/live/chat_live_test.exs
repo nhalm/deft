@@ -84,20 +84,38 @@ defmodule DeftWeb.ChatLiveTest do
                id: "tool_1",
                name: "read",
                status: :running,
-               duration: nil
+               duration: nil,
+               input: nil,
+               output: nil
              }
     end
 
-    test "tool_call_done shows success indicator", %{conn: conn, session_id: session_id} do
+    test "tool_call_done and tool_execution_complete show success indicator", %{
+      conn: conn,
+      session_id: session_id
+    } do
       {:ok, view, _html} = live(conn, "/?session=#{session_id}")
 
       send(view.pid, {:agent_event, {:tool_call_start, %{id: "tool_1", name: "read"}}})
-      send(view.pid, {:agent_event, {:tool_call_done, %{id: "tool_1", duration: 0.5}}})
+
+      send(
+        view.pid,
+        {:agent_event, {:tool_call_done, %{id: "tool_1", args: %{"file_path" => "test.ex"}}}}
+      )
+
+      send(
+        view.pid,
+        {:agent_event,
+         {:tool_execution_complete,
+          %{id: "tool_1", success: true, duration: 500, result: {:ok, "file contents"}}}}
+      )
 
       active_tools = get_assign(view, :active_tools)
       tool = active_tools["tool_1"]
-      assert tool.status == :done
+      assert tool.status == :success
       assert tool.duration == 0.5
+      assert tool.input == ~s({\n  "file_path": "test.ex"\n})
+      assert tool.output == "file contents"
     end
 
     test "tracks multiple tool calls", %{conn: conn, session_id: session_id} do

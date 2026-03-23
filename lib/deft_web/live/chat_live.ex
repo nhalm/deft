@@ -13,6 +13,7 @@ defmodule DeftWeb.ChatLive do
   alias Phoenix.HTML
 
   import DeftWeb.Components.Thinking
+  import DeftWeb.Components.ToolCall
 
   @impl true
   def mount(params, _session, socket) do
@@ -35,6 +36,7 @@ defmodule DeftWeb.ChatLive do
       |> assign(:agent_state, :idle)
       |> assign(:input, "")
       |> assign(:active_tools, %{})
+      |> assign(:tools_expanded, %{})
       |> assign(:tokens_input, 0)
       |> assign(:tokens_output, 0)
       |> assign(:cost, 0.0)
@@ -68,18 +70,40 @@ defmodule DeftWeb.ChatLive do
   end
 
   def handle_info({:agent_event, {:tool_call_start, %{id: id, name: name}}}, socket) do
-    tool = %{id: id, name: name, status: :running, duration: nil}
+    tool = %{id: id, name: name, status: :running, duration: nil, input: nil, output: nil}
     active_tools = Map.put(socket.assigns.active_tools, id, tool)
     {:noreply, assign(socket, :active_tools, active_tools)}
   end
 
-  def handle_info({:agent_event, {:tool_call_done, %{id: id} = tool_result}}, socket) do
+  def handle_info({:agent_event, {:tool_call_done, %{id: id, args: args}}}, socket) do
     active_tools = socket.assigns.active_tools
 
     updated_tool =
       active_tools
       |> Map.get(id, %{})
-      |> Map.merge(%{status: :done, duration: Map.get(tool_result, :duration)})
+      |> Map.put(:input, Jason.encode!(args, pretty: true))
+
+    active_tools = Map.put(active_tools, id, updated_tool)
+    {:noreply, assign(socket, :active_tools, active_tools)}
+  end
+
+  def handle_info(
+        {:agent_event,
+         {:tool_execution_complete,
+          %{id: id, success: success, duration: duration_ms, result: result}}},
+        socket
+      ) do
+    active_tools = socket.assigns.active_tools
+
+    # Format the result for display
+    output = format_tool_result(result)
+    status = if success, do: :success, else: :error
+    duration_sec = duration_ms / 1000.0
+
+    updated_tool =
+      active_tools
+      |> Map.get(id, %{})
+      |> Map.merge(%{status: status, duration: duration_sec, output: output})
 
     active_tools = Map.put(active_tools, id, updated_tool)
     {:noreply, assign(socket, :active_tools, active_tools)}
@@ -168,6 +192,13 @@ defmodule DeftWeb.ChatLive do
     current_state = Map.get(socket.assigns.thinking_blocks_expanded, id, true)
     new_expanded_state = Map.put(socket.assigns.thinking_blocks_expanded, id, not current_state)
     {:noreply, assign(socket, :thinking_blocks_expanded, new_expanded_state)}
+  end
+
+  @impl true
+  def handle_event("toggle_tool", %{"id" => id}, socket) do
+    current_state = Map.get(socket.assigns.tools_expanded, id, false)
+    new_expanded_state = Map.put(socket.assigns.tools_expanded, id, not current_state)
+    {:noreply, assign(socket, :tools_expanded, new_expanded_state)}
   end
 
   # Private helpers
@@ -437,4 +468,10 @@ defmodule DeftWeb.ChatLive do
         end
     end
   end
+
+  defp format_tool_result({:ok, output}) when is_binary(output), do: output
+  defp format_tool_result({:ok, output}), do: inspect(output, pretty: true)
+  defp format_tool_result({:error, reason}) when is_binary(reason), do: "Error: #{reason}"
+  defp format_tool_result({:error, reason}), do: "Error: #{inspect(reason, pretty: true)}"
+  defp format_tool_result(other), do: inspect(other, pretty: true)
 end

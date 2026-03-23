@@ -1,4 +1,5 @@
 # History
+- **web-ui v0.1 (2026-03-23):** Add expandable tool calls: inline tool template in `chat_live.html.heex` has no click-to-expand details. Either use the existing `DeftWeb.Components.ToolCall` component or add expand logic inline, and add corresponding `handle_event("toggle_tool", ...)` in `ChatLive`.
 - **web-ui v0.1 (2026-03-23):** Add collapsible thinking blocks: inline thinking template in `chat_live.html.heex` has no click-to-collapse. Either use the existing `DeftWeb.Components.Thinking` component (which has `phx-click="toggle_thinking"`) or add collapse logic inline, and add corresponding `handle_event("toggle_thinking", ...)` in `ChatLive`.
 - **web-ui v0.1 (2026-03-23):** Replace `<input type="text">` with `<textarea>` in `chat_live.html.heex` for multi-line input support (Shift+Enter for newline, Enter to submit per spec §4).
 - **web-ui v0.1 (2026-03-23):** Increment `turn_count` in `ChatLive` — initialized to 0 but never updated. Increment on each `:usage` event so the status bar shows the correct turn number.
