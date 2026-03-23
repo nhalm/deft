@@ -4,6 +4,7 @@
  * Provides client-side hooks for LiveView:
  * - ScrollControl: Auto-scroll during streaming, freeze on user scroll, resume on scroll-to-bottom
  * - InputFocus: Focus input on insert mode, blur on normal mode
+ * - TextareaInput: Focus management + Enter to submit, Shift+Enter for newline
  *
  * Note: This file is copied to priv/static/assets/app.js during build.
  * It relies on phoenix.js and phoenix_live_view.js being loaded first.
@@ -89,6 +90,40 @@ const InputFocus = {
   }
 }
 
+// Textarea Input Hook
+// Combines focus management (vim mode) and Enter key handling (submit vs newline)
+const TextareaInput = {
+  mounted() {
+    // Focus input on mount (default to insert mode)
+    this.el.focus()
+
+    // Handle Enter to submit, Shift+Enter for newline
+    this.el.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        // Enter without Shift - submit the form
+        e.preventDefault()
+        const form = this.el.closest("form")
+        if (form) {
+          // Trigger form submit event
+          form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+        }
+      }
+      // Shift+Enter allows default behavior (newline)
+    })
+  },
+
+  updated() {
+    // Check for vim_mode changes via data attribute
+    const mode = this.el.dataset.vimMode
+
+    if (mode === "insert") {
+      this.el.focus()
+    } else if (mode === "normal" || mode === "command") {
+      this.el.blur()
+    }
+  }
+}
+
 // Initialize LiveSocket when DOM is ready
 document.addEventListener("DOMContentLoaded", () => {
   // Get CSRF token from meta tag
@@ -99,7 +134,8 @@ document.addEventListener("DOMContentLoaded", () => {
     params: { _csrf_token: csrfToken },
     hooks: {
       ScrollControl,
-      InputFocus
+      InputFocus,
+      TextareaInput
     }
   })
 

@@ -1,4 +1,6 @@
 # History
+- **web-ui v0.1 (2026-03-23):** Add collapsible thinking blocks: inline thinking template in `chat_live.html.heex` has no click-to-collapse. Either use the existing `DeftWeb.Components.Thinking` component (which has `phx-click="toggle_thinking"`) or add collapse logic inline, and add corresponding `handle_event("toggle_thinking", ...)` in `ChatLive`.
+- **web-ui v0.1 (2026-03-23):** Replace `<input type="text">` with `<textarea>` in `chat_live.html.heex` for multi-line input support (Shift+Enter for newline, Enter to submit per spec §4).
 - **web-ui v0.1 (2026-03-23):** Increment `turn_count` in `ChatLive` — initialized to 0 but never updated. Increment on each `:usage` event so the status bar shows the correct turn number.
 - **web-ui v0.1 (2026-03-23):** Add `handle_info` clause for `{:agent_event, {:error, reason}}` in `ChatLive` — currently caught by the catch-all and silently dropped. Display error message in conversation stream.
 - **web-ui v0.1 (2026-03-23):** Fix `phx-window="true"` on chat container: `chat_live.html.heex` line 1 uses `phx-keydown="keydown" phx-window="true"` — `phx-window` is not a valid LiveView attribute. Change to `phx-window-keydown="keydown"` so keyboard events fire at the window level.

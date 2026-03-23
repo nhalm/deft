@@ -12,6 +12,8 @@ defmodule DeftWeb.ChatLive do
   alias Deft.Skills.Registry, as: SkillsRegistry
   alias Phoenix.HTML
 
+  import DeftWeb.Components.Thinking
+
   @impl true
   def mount(params, _session, socket) do
     # Get session_id from URL params (e.g., /?session=abc123)
@@ -50,6 +52,7 @@ defmodule DeftWeb.ChatLive do
       |> assign(:zoom, false)
       |> assign(:repo_name, get_repo_name())
       |> assign(:agent_identity, "Solo")
+      |> assign(:thinking_blocks_expanded, %{})
       |> stream(:conversation, [])
 
     {:ok, socket}
@@ -158,6 +161,13 @@ defmodule DeftWeb.ChatLive do
     ctrl = params["ctrlKey"] || false
     socket = handle_vim_key(socket, key, ctrl)
     {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("toggle_thinking", %{"id" => id}, socket) do
+    current_state = Map.get(socket.assigns.thinking_blocks_expanded, id, true)
+    new_expanded_state = Map.put(socket.assigns.thinking_blocks_expanded, id, not current_state)
+    {:noreply, assign(socket, :thinking_blocks_expanded, new_expanded_state)}
   end
 
   # Private helpers

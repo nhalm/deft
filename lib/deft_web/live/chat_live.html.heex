@@ -27,10 +27,11 @@
       <% end %>
 
       <%= if @streaming_thinking != "" do %>
-        <div class="thinking-block" id="streaming-thinking-block">
-          <span class="thinking-label">thinking:</span>
-          <span class="thinking-content"><%= @streaming_thinking %></span>
-        </div>
+        <.thinking
+          id="streaming-thinking"
+          content={@streaming_thinking}
+          expanded={Map.get(@thinking_blocks_expanded, "streaming-thinking", true)}
+        />
       <% end %>
 
       <%= if @streaming_text != "" do %>
@@ -70,16 +71,14 @@
 
   <div class="input-area">
     <form phx-submit="submit">
-      <input
-        type="text"
+      <textarea
         name="input"
         id="input"
-        phx-hook="InputFocus"
+        phx-hook="TextareaInput"
         data-vim-mode={@vim_mode}
-        value={@input}
         placeholder="Enter a prompt or command..."
         class="chat-input"
-      />
+      ><%= @input %></textarea>
     </form>
     <span class="mode-indicator"><%= mode_indicator(@vim_mode) %></span>
   </div>
