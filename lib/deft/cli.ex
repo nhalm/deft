@@ -28,6 +28,9 @@ defmodule Deft.CLI do
 
   alias Breeze.Server
 
+  # Suppress warning for Breeze.Terminal.restore/0 - we check for its existence at runtime
+  @compile {:no_warn_undefined, Breeze.Terminal}
+
   alias Deft.Config
   alias Deft.Git
   alias Deft.Git.Job, as: GitJob
@@ -539,16 +542,22 @@ defmodule Deft.CLI do
 
       {:ok, _sessions} ->
         # Start Breeze with SessionPicker view
-        Server.start_link(
-          view: Deft.TUI.SessionPicker,
-          params: %{working_dir: working_dir}
-        )
+        try do
+          Server.start_link(
+            view: Deft.TUI.SessionPicker,
+            params: %{working_dir: working_dir}
+          )
 
-        # Wait for session selection or exit
-        receive do
-          {:session_selected, session_id} ->
-            # Reconstruct the selected session and start Chat view
-            execute_command({:resume_session, session_id}, flags)
+          # Wait for session selection or exit
+          receive do
+            {:session_selected, session_id} ->
+              # Reconstruct the selected session and start Chat view
+              execute_command({:resume_session, session_id}, flags)
+          end
+        catch
+          :exit, reason ->
+            restore_terminal()
+            exit(reason)
         end
 
       {:error, reason} ->
@@ -593,12 +602,18 @@ defmodule Deft.CLI do
             IO.puts("Deft session #{session_id} resumed.")
             IO.puts("Type /quit to exit.\n")
 
-            Server.start_link(
-              view: Deft.TUI.Chat,
-              params: %{session_id: session_id, agent_pid: agent_pid, config: config}
-            )
+            try do
+              Server.start_link(
+                view: Deft.TUI.Chat,
+                params: %{session_id: session_id, agent_pid: agent_pid, config: config}
+              )
 
-            Process.sleep(:infinity)
+              Process.sleep(:infinity)
+            catch
+              :exit, reason ->
+                restore_terminal()
+                exit(reason)
+            end
 
           prompt ->
             # Non-interactive continuation
@@ -635,12 +650,18 @@ defmodule Deft.CLI do
     IO.puts("Deft session #{session_id} started.")
     IO.puts("Type /quit to exit.\n")
 
-    Server.start_link(
-      view: Deft.TUI.Chat,
-      params: %{session_id: session_id, agent_pid: agent_pid, config: config}
-    )
+    try do
+      Server.start_link(
+        view: Deft.TUI.Chat,
+        params: %{session_id: session_id, agent_pid: agent_pid, config: config}
+      )
 
-    Process.sleep(:infinity)
+      Process.sleep(:infinity)
+    catch
+      :exit, reason ->
+        restore_terminal()
+        exit(reason)
+    end
   end
 
   defp execute_command({:non_interactive, prompt}, flags) do
@@ -936,6 +957,25 @@ defmodule Deft.CLI do
   # Close output handle if it's a file
   defp close_output_handle(:stdio), do: :ok
   defp close_output_handle(handle), do: File.close(handle)
+
+  # Restore terminal state on crash
+  defp restore_terminal do
+    # Try to call Breeze.Terminal.restore/0 if it exists
+    if Code.ensure_loaded?(Breeze.Terminal) and function_exported?(Breeze.Terminal, :restore, 0) do
+      # credo:disable-for-next-line Credo.Check.Design.AliasUsage
+      Breeze.Terminal.restore()
+    else
+      # Fallback: emit raw ANSI reset sequences
+      IO.write([
+        # Exit alt screen
+        "\e[?1049l",
+        # Show cursor
+        "\e[?25h",
+        # Reset attributes
+        "\e[0m"
+      ])
+    end
+  end
 
   # Event loop for non-interactive mode
   defp non_interactive_loop(output_handle) do
