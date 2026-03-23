@@ -47,6 +47,7 @@ defmodule DeftWeb.ChatLive do
       |> assign(:pending_g, false)
       |> assign(:tmux_prefix, false)
       |> assign(:roster_visible, false)
+      |> assign(:zoom, false)
       |> assign(:repo_name, get_repo_name())
       |> assign(:agent_identity, "Solo")
       |> stream(:conversation, [])
@@ -150,50 +151,67 @@ defmodule DeftWeb.ChatLive do
   # Private helpers
 
   defp handle_vim_key(socket, key, ctrl) do
-    mode = socket.assigns.vim_mode
-    pending_g = socket.assigns.pending_g
+    tmux_prefix = socket.assigns.tmux_prefix
 
-    case {mode, key, ctrl, pending_g} do
-      # Escape always goes to normal mode and clears pending_g
-      {_, "Escape", _, _} ->
-        socket
-        |> assign(:vim_mode, :normal)
-        |> assign(:pending_g, false)
-
-      # In normal mode: i or a enters insert mode
-      {:normal, "i", false, _} ->
-        socket
-        |> assign(:vim_mode, :insert)
-        |> assign(:pending_g, false)
-
-      {:normal, "a", false, _} ->
-        socket
-        |> assign(:vim_mode, :insert)
-        |> assign(:pending_g, false)
-
-      # In normal mode: : or / enters command mode
-      {:normal, ":", false, _} ->
-        socket
-        |> assign(:vim_mode, :command)
-        |> assign(:pending_g, false)
-
-      {:normal, "/", false, _} ->
-        socket
-        |> assign(:vim_mode, :command)
-        |> assign(:pending_g, false)
-
-      # Navigation keys in normal mode - delegate to scroll handler
-      {:normal, key, ctrl, pending_g} when key in ["j", "k", "g", "G", "u", "d"] ->
-        handle_scroll_key(socket, key, ctrl, pending_g)
-
-      # Any other key in normal mode clears pending_g
-      {:normal, _, _, true} ->
-        assign(socket, :pending_g, false)
-
-      # All other keys: no change
-      _ ->
-        socket
+    # If tmux prefix is active, dispatch to tmux handler
+    if tmux_prefix do
+      handle_tmux_key(socket, key)
+    else
+      handle_standard_vim_key(socket, key, ctrl)
     end
+  end
+
+  # Ctrl+b sets tmux prefix
+  defp handle_standard_vim_key(socket, "b", true) do
+    assign(socket, :tmux_prefix, true)
+  end
+
+  # Escape always goes to normal mode and clears pending_g
+  defp handle_standard_vim_key(socket, "Escape", _ctrl) do
+    socket
+    |> assign(:vim_mode, :normal)
+    |> assign(:pending_g, false)
+  end
+
+  # Mode change keys in normal mode
+  defp handle_standard_vim_key(socket, key, false) when key in ["i", "a", ":", "/"] do
+    if socket.assigns.vim_mode == :normal do
+      handle_mode_change(socket, key)
+    else
+      socket
+    end
+  end
+
+  # Navigation keys in normal mode
+  defp handle_standard_vim_key(socket, key, ctrl) when key in ["j", "k", "g", "G", "u", "d"] do
+    if socket.assigns.vim_mode == :normal do
+      handle_scroll_key(socket, key, ctrl, socket.assigns.pending_g)
+    else
+      socket
+    end
+  end
+
+  # Any other key in normal mode with pending_g clears it
+  defp handle_standard_vim_key(socket, _key, _ctrl) do
+    if socket.assigns.vim_mode == :normal and socket.assigns.pending_g do
+      assign(socket, :pending_g, false)
+    else
+      socket
+    end
+  end
+
+  defp handle_mode_change(socket, key) do
+    new_mode =
+      case key do
+        "i" -> :insert
+        "a" -> :insert
+        ":" -> :command
+        "/" -> :command
+      end
+
+    socket
+    |> assign(:vim_mode, new_mode)
+    |> assign(:pending_g, false)
   end
 
   defp handle_scroll_key(socket, key, ctrl, pending_g) do
@@ -240,6 +258,26 @@ defmodule DeftWeb.ChatLive do
       # Other keys clear pending_g
       _ ->
         assign(socket, :pending_g, false)
+    end
+  end
+
+  defp handle_tmux_key(socket, key) do
+    case key do
+      # % - toggle roster panel visibility
+      "%" ->
+        socket
+        |> assign(:roster_visible, not socket.assigns.roster_visible)
+        |> assign(:tmux_prefix, false)
+
+      # z - toggle zoom
+      "z" ->
+        socket
+        |> assign(:zoom, not socket.assigns.zoom)
+        |> assign(:tmux_prefix, false)
+
+      # Any other key clears tmux_prefix
+      _ ->
+        assign(socket, :tmux_prefix, false)
     end
   end
 

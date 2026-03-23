@@ -19,10 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## web-ui v0.1
 
-### Chat LiveView — input and keybindings
-- Add `handle_event("keydown", ...)` for tmux pane keys: `Ctrl+b` sets a prefix flag in assigns, next key dispatches — `%` toggles roster panel visibility, `z` toggles zoom. Track `tmux_prefix: false`, `roster_visible: true` in assigns.
-- Create `assets/js/app.js` — LiveView JS hooks for scroll control (auto-scroll during streaming, freeze on user scroll, resume on scroll-to-bottom) and input focus management (focus input on insert mode, blur on normal mode) (blocked: Add `handle_event("keydown", ...)` for tmux pane keys...)
-
 ### Chat LiveView — orchestration
 - Add `handle_info` for `{:agent_event, {:job_status, statuses}}` — update `agent_statuses` and `job_active` assigns, roster sidebar becomes visible
 
@@ -36,11 +32,11 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Create `lib/deft_web/live/sessions_live.ex` — LiveView listing sessions from `Deft.Session.Store.list/0`, keyboard navigation (`j`/`k` to move, Enter to select), redirects to `"/?session=<id>"` on selection
 
 ### CLI integration
-- Update `lib/deft/cli.ex` — remove `alias Breeze.Server` and `@compile {:no_warn_undefined, Breeze.Terminal}`, replace Breeze startup in `execute_command(:new_session, ...)` and `execute_command({:resume_session, ...}, ...)` with starting `DeftWeb.Endpoint` (if not already running) and opening browser via `System.cmd("open", ["http://localhost:4000?session=<id>"])`. Print URL as fallback. Block until shutdown. (blocked: Create `assets/js/app.js`...)
+- Update `lib/deft/cli.ex` — remove `alias Breeze.Server` and `@compile {:no_warn_undefined, Breeze.Terminal}`, replace Breeze startup in `execute_command(:new_session, ...)` and `execute_command({:resume_session, ...}, ...)` with starting `DeftWeb.Endpoint` (if not already running) and opening browser via `System.cmd("open", ["http://localhost:4000?session=<id>"])`. Print URL as fallback. Block until shutdown.
 
 ### Cleanup
 - Delete `lib/deft/tui/` directory entirely (chat.ex, session_picker.ex, breeze_poc.ex, markdown.ex) after web UI is confirmed working (blocked: Update `lib/deft/cli.ex`...)
 
 ### Tests
-- Create `test/deft_web/live/chat_live_test.exs` — tests for: mount renders header with repo name, text_delta event updates conversation, thinking_delta renders thinking block with styling, tool_call_start shows spinner, tool_call_done shows ✓/✗, Esc switches to normal mode, `i` in normal switches to insert, Enter submits prompt, slash command `/quit` handled, agent roster appears on job_status event, status bar shows token count and cost (blocked: Create `assets/js/app.js`...)
+- Create `test/deft_web/live/chat_live_test.exs` — tests for: mount renders header with repo name, text_delta event updates conversation, thinking_delta renders thinking block with styling, tool_call_start shows spinner, tool_call_done shows ✓/✗, Esc switches to normal mode, `i` in normal switches to insert, Enter submits prompt, slash command `/quit` handled, agent roster appears on job_status event, status bar shows token count and cost
 - Create `test/deft_web/live/sessions_live_test.exs` — tests for: mount lists sessions, `j`/`k` navigation changes selected index, Enter redirects to chat with session_id (blocked: Create `lib/deft_web/live/sessions_live.ex`...)
