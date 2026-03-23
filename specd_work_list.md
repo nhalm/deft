@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## web-ui v0.1
 
-- Fix `phx-window="true"` on chat container: `chat_live.html.heex` line 1 uses `phx-keydown="keydown" phx-window="true"` — `phx-window` is not a valid LiveView attribute. Change to `phx-window-keydown="keydown"` so keyboard events fire at the window level.
 - Add `handle_info` clause for `{:agent_event, {:error, reason}}` in `ChatLive` — currently caught by the catch-all and silently dropped. Display error message in conversation stream.
 - Increment `turn_count` in `ChatLive` — initialized to 0 but never updated. Increment on each `:usage` event so the status bar shows the correct turn number.
 - Replace `<input type="text">` with `<textarea>` in `chat_live.html.heex` for multi-line input support (Shift+Enter for newline, Enter to submit per spec §4).
