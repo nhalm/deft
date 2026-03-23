@@ -26,6 +26,8 @@ defmodule Deft.CLI do
   - `--version` - Show version
   """
 
+  alias Breeze.Server
+
   alias Deft.Config
   alias Deft.Git
   alias Deft.Git.Job, as: GitJob
@@ -618,7 +620,12 @@ defmodule Deft.CLI do
     IO.puts("Deft session #{session_id} started.")
     IO.puts("Type /quit to exit.\n")
 
-    interactive_loop(agent_pid)
+    Server.start_link(
+      view: Deft.TUI.Chat,
+      params: %{session_id: session_id, agent_pid: agent_pid, config: config}
+    )
+
+    Process.sleep(:infinity)
   end
 
   defp execute_command({:non_interactive, prompt}, flags) do
