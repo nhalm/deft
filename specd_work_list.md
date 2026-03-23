@@ -17,3 +17,8 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
+## tui v0.3
+
+- Fix TUI job_status subscription: TUI registers `{:foreman, session_id}` in `Deft.ProcessRegistry` (chat.ex:42) which uses `keys: :unique` (application.ex:33); Foreman registers the same key first (foreman.ex:231), so TUI registration silently fails and never receives `{:job_status, ...}` broadcasts; switch to `Deft.Registry` (duplicate keys) or use a distinct key
+- Fix thinking-only turns dropped from history: `commit_streaming_message` (chat.ex:734) guards on `current_text != ""` and discards `completed_thinking_blocks` + `current_thinking` when no text was produced; turns with thinking + tool calls but no text lose their thinking blocks from scrollback (violates spec §5.4)
+
