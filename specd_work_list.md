@@ -17,6 +17,3 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## tui v0.3
-
-- Fix `extract_repo_name` called on every render: `render/1` (chat.ex:116) calls `extract_repo_name` which shells out to `git rev-parse` on every render cycle (~30/sec during streaming); compute once in `mount/2` and store in assigns

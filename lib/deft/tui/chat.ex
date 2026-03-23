@@ -48,6 +48,7 @@ defmodule Deft.TUI.Chat do
         session_id: session_id,
         agent_pid: agent_pid,
         config: config,
+        repo_name: extract_repo_name(config[:working_dir] || File.cwd!()),
         messages: [],
         current_text: "",
         current_thinking: "",
@@ -113,7 +114,6 @@ defmodule Deft.TUI.Chat do
     assigns =
       assign(assigns,
         model_name: assigns.config[:model] || "claude-sonnet-4-20250514",
-        repo_name: extract_repo_name(assigns.config[:working_dir] || File.cwd!()),
         agent_state_display:
           if assigns.job_active do
             format_job_phase(assigns.job_phase)
