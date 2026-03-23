@@ -16,3 +16,50 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
+
+## web-ui v0.1
+
+### Phoenix setup
+- Add Phoenix deps to mix.exs: `phoenix`, `phoenix_live_view`, `phoenix_html`, `phoenix_live_reload` (dev only), `bandit`. Remove `{:breeze, "~> 0.2"}`. Run `mix deps.get`.
+- Create `lib/deft_web/endpoint.ex` — Phoenix.Endpoint on localhost:4000, LiveView socket at `/live`, static asset serving. Add `config/` entries for endpoint and live_view signing salt. (blocked: Add Phoenix deps to mix.exs...)
+- Create `lib/deft_web/router.ex` — `live "/", DeftWeb.ChatLive` and `live "/sessions", DeftWeb.SessionsLive`. Standard browser pipeline with `fetch_session` and `put_root_layout`. (blocked: Create `lib/deft_web/endpoint.ex`...)
+- Create `lib/deft_web/layouts/root.html.heex` and `lib/deft_web/layouts/app.html.heex` — minimal layout shell with LiveView container, CSS link, JS hook. No nav chrome. (blocked: Create `lib/deft_web/router.ex`...)
+- Add `Phoenix.PubSub` and `DeftWeb.Endpoint` to `Deft.Application` supervision tree children (blocked: Create `lib/deft_web/endpoint.ex`...)
+
+### Styles
+- Create `assets/css/app.css` — CSS Grid layout for chat (header, conversation+roster, input, status bar), responsive breakpoints (desktop >1024px full sidebar, tablet 768-1024px overlay roster, mobile <768px single column), thinking block styling (light gray, italic), tool call styling (spinner animation, ✓/✗), status bar, vim mode indicator, dark theme default with `prefers-color-scheme` support (blocked: Create `lib/deft_web/layouts/root.html.heex`...)
+
+### Chat LiveView — mount and render
+- Create `lib/deft_web/live/chat_live.ex` with `mount/3` that subscribes to `Deft.Registry` events `{:session, session_id}` and `{:job_status, session_id}`, initializes assigns (messages, streaming state, agent_state, input, tools, tokens, cost, turns, OM state, job/roster state, vim_mode: :insert). Create `lib/deft_web/live/chat_live.html.heex` with the layout: header bar, conversation area with `phx-update="stream"`, roster sidebar (hidden in solo mode), input area with mode indicator, status bar. (blocked: Create `assets/css/app.css`...)
+
+### Chat LiveView — agent event handling
+- Add `handle_info` clauses to ChatLive for agent events: `{:agent_event, {:text_delta, delta}}` appends to streaming text assign, `{:agent_event, {:thinking_delta, delta}}` appends to thinking block, `{:agent_event, {:tool_call_start, %{id, name}}}` adds to active_tools map, `{:agent_event, {:tool_call_done, %{id, status, duration}}}` updates tool, `{:agent_event, {:state_change, state}}` updates agent_state, `{:agent_event, {:usage, %{input, output}}}` updates token/cost counters (blocked: Create `lib/deft_web/live/chat_live.ex`...)
+
+### Chat LiveView — input and keybindings
+- Add `handle_event` for input submission: `"submit"` event takes input value, dispatches slash commands or sends prompt to agent via `Deft.Agent.prompt/2`, clears input, adds user message to conversation (blocked: Add `handle_info` clauses to ChatLive for agent events...)
+- Add `handle_event("keydown", ...)` for vim mode switching: Esc → :normal, `i`/`a` in normal → :insert, `:`/`/` in normal → :command. Track vim_mode in assigns, show `[NOR]`/`[INS]`/`[CMD]` in input area. (blocked: Add `handle_event` for input submission...)
+- Add `handle_event("keydown", ...)` for normal mode navigation: `j`/`k` scroll conversation, `G` scroll to bottom, `gg` scroll to top, `Ctrl+u`/`Ctrl+d` half-page scroll. Track scroll_offset in assigns. (blocked: Add `handle_event("keydown", ...)` for vim mode switching...)
+- Add `handle_event("keydown", ...)` for tmux pane keys: `Ctrl+b` sets a prefix flag in assigns, next key dispatches — `%` toggles roster panel visibility, `z` toggles zoom. Track `tmux_prefix: false`, `roster_visible: true` in assigns. (blocked: Add `handle_event("keydown", ...)` for normal mode navigation...)
+- Create `assets/js/app.js` — LiveView JS hooks for scroll control (auto-scroll during streaming, freeze on user scroll, resume on scroll-to-bottom) and input focus management (focus input on insert mode, blur on normal mode) (blocked: Add `handle_event("keydown", ...)` for tmux pane keys...)
+
+### Chat LiveView — orchestration
+- Add `handle_info` for `{:agent_event, {:job_status, statuses}}` — update `agent_statuses` and `job_active` assigns, roster sidebar becomes visible (blocked: Add `handle_info` clauses to ChatLive for agent events...)
+
+### Components
+- Create `lib/deft_web/components/thinking.ex` — function component for thinking blocks: gray background, italic, collapsible with `phx-click` toggle, `thinking:` label (blocked: Create `lib/deft_web/live/chat_live.ex`...)
+- Create `lib/deft_web/components/tool_call.ex` — function component for tool execution display: tool name + key arg, CSS spinner while running, ✓/✗ + duration on complete, expandable detail (blocked: Create `lib/deft_web/live/chat_live.ex`...)
+- Create `lib/deft_web/components/status_bar.ex` — function component for status bar: solo mode (tokens, memory, cost, turn, state) and orchestration mode (leads, complete, cost, elapsed, state) (blocked: Create `lib/deft_web/live/chat_live.ex`...)
+- Create `lib/deft_web/components/roster.ex` — function component for agent roster sidebar: list of agents with colored dot + state label, CSS transition for show/hide (blocked: Create `lib/deft_web/live/chat_live.ex`...)
+
+### Session picker
+- Create `lib/deft_web/live/sessions_live.ex` — LiveView listing sessions from `Deft.Session.Store.list/0`, keyboard navigation (`j`/`k` to move, Enter to select), redirects to `"/?session=<id>"` on selection (blocked: Create `lib/deft_web/router.ex`...)
+
+### CLI integration
+- Update `lib/deft/cli.ex` — remove `alias Breeze.Server` and `@compile {:no_warn_undefined, Breeze.Terminal}`, replace Breeze startup in `execute_command(:new_session, ...)` and `execute_command({:resume_session, ...}, ...)` with starting `DeftWeb.Endpoint` (if not already running) and opening browser via `System.cmd("open", ["http://localhost:4000?session=<id>"])`. Print URL as fallback. Block until shutdown. (blocked: Create `assets/js/app.js`...)
+
+### Cleanup
+- Delete `lib/deft/tui/` directory entirely (chat.ex, session_picker.ex, breeze_poc.ex, markdown.ex) after web UI is confirmed working (blocked: Update `lib/deft/cli.ex`...)
+
+### Tests
+- Create `test/deft_web/live/chat_live_test.exs` — tests for: mount renders header with repo name, text_delta event updates conversation, thinking_delta renders thinking block with styling, tool_call_start shows spinner, tool_call_done shows ✓/✗, Esc switches to normal mode, `i` in normal switches to insert, Enter submits prompt, slash command `/quit` handled, agent roster appears on job_status event, status bar shows token count and cost (blocked: Create `assets/js/app.js`...)
+- Create `test/deft_web/live/sessions_live_test.exs` — tests for: mount lists sessions, `j`/`k` navigation changes selected index, Enter redirects to chat with session_id (blocked: Create `lib/deft_web/live/sessions_live.ex`...)

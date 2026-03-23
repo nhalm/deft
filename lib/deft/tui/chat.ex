@@ -34,6 +34,7 @@ defmodule Deft.TUI.Chat do
     session_id = Map.fetch!(params, :session_id)
     agent_pid = Map.fetch!(params, :agent_pid)
     config = Map.fetch!(params, :config)
+    working_dir = Map.get(params, :working_dir, File.cwd!())
 
     # Subscribe to agent events via Registry
     Registry.register(Deft.Registry, {:session, session_id}, [])
@@ -48,7 +49,7 @@ defmodule Deft.TUI.Chat do
         session_id: session_id,
         agent_pid: agent_pid,
         config: config,
-        repo_name: extract_repo_name(config[:working_dir] || File.cwd!()),
+        repo_name: extract_repo_name(working_dir),
         messages: [],
         current_text: "",
         current_thinking: "",
@@ -65,10 +66,10 @@ defmodule Deft.TUI.Chat do
         active_tools: %{},
         # Token/cost tracking
         current_tokens: 0,
-        context_window: Map.get(config, :context_window, 200_000),
+        context_window: 200_000,
         session_cost: 0.0,
         turn_count: 0,
-        max_turns: Map.get(config, :turn_limit, 25),
+        max_turns: config.turn_limit || 25,
         # OM state (memory tracking)
         memory_tokens: nil,
         memory_threshold: config.om_observation_token_threshold,
@@ -114,19 +115,21 @@ defmodule Deft.TUI.Chat do
       end
 
     assigns =
-      assign(assigns,
-        model_name: assigns.config[:model] || "claude-sonnet-4-20250514",
-        agent_state_display:
-          if assigns.job_active do
-            format_job_phase(assigns.job_phase)
-          else
-            format_agent_state(assigns.agent_state, assigns.om_active, assigns.om_sync_fallback)
-          end,
-        streaming_rendered: calculate_streaming_rendered(assigns),
-        visible_messages: calculate_visible_messages(assigns),
-        agent_roster: render_agent_roster(assigns.agent_statuses, terminal_width),
-        terminal_width: terminal_width
+      assigns
+      |> Map.put(:model_name, assigns.config.model || "claude-sonnet-4-20250514")
+      |> Map.put(
+        :agent_state_display,
+        if assigns.job_active do
+          format_job_phase(assigns.job_phase)
+        else
+          format_agent_state(assigns.agent_state, assigns.om_active, assigns.om_sync_fallback)
+        end
       )
+      |> Map.put(:streaming_rendered, calculate_streaming_rendered(assigns))
+      |> Map.put(:visible_messages, calculate_visible_messages(assigns))
+      |> Map.put(:agent_roster, render_agent_roster(assigns.agent_statuses, terminal_width))
+      |> Map.put(:terminal_width, terminal_width)
+      |> Map.put_new(:__changed__, %{})
 
     ~H"""
     <box>
@@ -1249,7 +1252,7 @@ defmodule Deft.TUI.Chat do
     # Opus: $15/MTok input, $75/MTok output
     # Haiku: $0.25/MTok input, $1.25/MTok output
 
-    model = config[:model] || "claude-sonnet-4-20250514"
+    model = config.model || "claude-sonnet-4-20250514"
 
     {input_price, output_price} =
       cond do

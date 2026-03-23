@@ -545,12 +545,16 @@ defmodule Deft.CLI do
         cli_pid = self()
 
         try do
-          Server.start_link(
-            view: Deft.TUI.SessionPicker,
-            params: %{
-              working_dir: working_dir,
-              on_select: fn session_id -> send(cli_pid, {:session_selected, session_id}) end
-            }
+          GenServer.start_link(
+            Server,
+            [
+              view: Deft.TUI.SessionPicker,
+              start_opts: %{
+                working_dir: working_dir,
+                on_select: fn session_id -> send(cli_pid, {:session_selected, session_id}) end
+              }
+            ],
+            name: :deft_tui
           )
 
           # Wait for session selection or exit
@@ -608,9 +612,18 @@ defmodule Deft.CLI do
             IO.puts("Type /quit to exit.\n")
 
             try do
-              Server.start_link(
-                view: Deft.TUI.Chat,
-                params: %{session_id: session_id, agent_pid: agent_pid, config: config}
+              GenServer.start_link(
+                Server,
+                [
+                  view: Deft.TUI.Chat,
+                  start_opts: %{
+                    session_id: session_id,
+                    agent_pid: agent_pid,
+                    config: config,
+                    working_dir: working_dir
+                  }
+                ],
+                name: :deft_tui
               )
 
               Process.sleep(:infinity)
@@ -656,9 +669,18 @@ defmodule Deft.CLI do
     IO.puts("Type /quit to exit.\n")
 
     try do
-      Server.start_link(
-        view: Deft.TUI.Chat,
-        params: %{session_id: session_id, agent_pid: agent_pid, config: config}
+      GenServer.start_link(
+        Server,
+        [
+          view: Deft.TUI.Chat,
+          start_opts: %{
+            session_id: session_id,
+            agent_pid: agent_pid,
+            config: config,
+            working_dir: working_dir
+          }
+        ],
+        name: :deft_tui
       )
 
       Process.sleep(:infinity)
