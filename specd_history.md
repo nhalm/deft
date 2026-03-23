@@ -1,4 +1,6 @@
 # History
+- **tui v0.3 (2026-03-23):** Hide agent roster in solo mode; only render when a Job is active
+- **tui v0.3 (2026-03-23):** Color the `◉` indicator by state: green (planning, researching, executing, implementing, testing, merging, verifying), yellow (waiting), white (idle, complete), red (error)
 - **tui v0.3 (2026-03-23):** Render agent roster as right-aligned text rows in the top-right of the conversation area — one row per agent (Foreman, each Lead, Runners) with `◉ <state>` indicator
 - **tui v0.3 (2026-03-23):** Subscribe TUI to `{:job_status, ...}` broadcasts and store `agent_statuses` in assigns
 - **tui v0.3 (2026-03-23):** Add `{:job_status, agent_statuses}` broadcast from Foreman: emit via Registry whenever an agent's state changes (Lead started, Lead completed, Runner spawned, etc.) — payload is a list of `%{id, type, state, label}`

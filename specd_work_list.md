@@ -20,7 +20,5 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 ## tui v0.3
 
 ### Agent roster
-- Color the `◉` indicator by state: green (planning, researching, executing, implementing, testing, merging, verifying), yellow (waiting), white (idle, complete), red (error)
 - Collapse multiple active Runners into a single `Runners (N)` row instead of listing each individually
-- Hide agent roster in solo mode; only render when a Job is active
 - Wrap conversation text to avoid the roster area (~30 rightmost columns) during orchestration; collapse roster to header-only when terminal width < 80 columns
