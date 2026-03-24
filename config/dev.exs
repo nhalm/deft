@@ -4,6 +4,7 @@ import Config
 
 # For development, we enable code reloading and debugging
 config :deft, DeftWeb.Endpoint,
+  server: true,
   # Binding to loopback ipv4 address prevents access from other machines.
   http: [ip: {127, 0, 0, 1}, port: 4000],
   check_origin: false,
