@@ -66,7 +66,7 @@ Decision reasoning is logged in [specd_decisions.jsonl](../specd_decisions.jsonl
 | [providers](providers.md) | v0.3 | Implemented | LLM provider behaviour, SSE streaming, Anthropic implementation |
 | [sessions](sessions.md) | v0.4 | Implemented | Session persistence (JSONL), resume, configuration, CLI, project-scoped storage |
 | [tui](tui.md) | v0.5 | Deprecated | Terminal UI — superseded by web-ui |
-| [web-ui](web-ui.md) | v0.2 | Ready | Phoenix LiveView web interface, vim/tmux keybindings, responsive, real-time streaming |
+| [web-ui](web-ui.md) | v0.2 | Implemented | Phoenix LiveView web interface, vim/tmux keybindings, responsive, real-time streaming |
 
 ## Core
 

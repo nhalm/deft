@@ -541,56 +541,51 @@ defmodule DeftWeb.ChatLive do
 
   defp handle_scroll_key(socket, key, ctrl, pending_g) do
     case {key, ctrl, pending_g} do
-      # j - scroll down
-      {"j", false, _} ->
-        socket
-        |> assign(:scroll_offset, socket.assigns.scroll_offset + 1)
-        |> assign(:pending_g, false)
-        |> push_event("scroll_to", %{delta: 50})
-
-      # k - scroll up
-      {"k", false, _} ->
-        socket
-        |> assign(:scroll_offset, max(0, socket.assigns.scroll_offset - 1))
-        |> assign(:pending_g, false)
-        |> push_event("scroll_to", %{delta: -50})
-
-      # G - scroll to bottom
-      {"G", false, _} ->
-        socket
-        |> assign(:scroll_offset, :bottom)
-        |> assign(:pending_g, false)
-        |> push_event("scroll_to", %{position: "bottom"})
-
-      # g - first press sets pending_g, second press (gg) scrolls to top
-      {"g", false, false} ->
-        assign(socket, :pending_g, true)
-
-      {"g", false, true} ->
-        socket
-        |> assign(:scroll_offset, 0)
-        |> assign(:pending_g, false)
-        |> push_event("scroll_to", %{position: "top"})
-
-      # Ctrl+u - half-page scroll up
-      {"u", true, _} ->
-        socket
-        |> assign(:scroll_offset, max(0, socket.assigns.scroll_offset - 10))
-        |> assign(:pending_g, false)
-        |> push_event("scroll_to", %{delta: -250})
-
-      # Ctrl+d - half-page scroll down
-      {"d", true, _} ->
-        socket
-        |> assign(:scroll_offset, socket.assigns.scroll_offset + 10)
-        |> assign(:pending_g, false)
-        |> push_event("scroll_to", %{delta: 250})
-
-      # Other keys clear pending_g
-      _ ->
-        assign(socket, :pending_g, false)
+      {"j", false, _} -> scroll_down(socket, 1, 50)
+      {"k", false, _} -> scroll_up(socket, 1, 50)
+      {"G", false, _} -> scroll_to_bottom(socket)
+      {"g", false, false} -> assign(socket, :pending_g, true)
+      {"g", false, true} -> scroll_to_top(socket)
+      {"u", true, _} -> scroll_up(socket, 10, 250)
+      {"d", true, _} -> scroll_down(socket, 10, 250)
+      _ -> assign(socket, :pending_g, false)
     end
   end
+
+  defp scroll_down(socket, offset_delta, pixel_delta) do
+    current_offset = normalize_scroll_offset(socket.assigns.scroll_offset)
+
+    socket
+    |> assign(:scroll_offset, current_offset + offset_delta)
+    |> assign(:pending_g, false)
+    |> push_event("scroll_to", %{delta: pixel_delta})
+  end
+
+  defp scroll_up(socket, offset_delta, pixel_delta) do
+    current_offset = normalize_scroll_offset(socket.assigns.scroll_offset)
+
+    socket
+    |> assign(:scroll_offset, max(0, current_offset - offset_delta))
+    |> assign(:pending_g, false)
+    |> push_event("scroll_to", %{delta: -pixel_delta})
+  end
+
+  defp scroll_to_bottom(socket) do
+    socket
+    |> assign(:scroll_offset, :bottom)
+    |> assign(:pending_g, false)
+    |> push_event("scroll_to", %{position: "bottom"})
+  end
+
+  defp scroll_to_top(socket) do
+    socket
+    |> assign(:scroll_offset, 0)
+    |> assign(:pending_g, false)
+    |> push_event("scroll_to", %{position: "top"})
+  end
+
+  defp normalize_scroll_offset(:bottom), do: 0
+  defp normalize_scroll_offset(offset) when is_integer(offset), do: offset
 
   defp handle_tmux_key(socket, key) do
     case key do

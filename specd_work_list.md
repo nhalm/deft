@@ -16,7 +16,3 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
-
-## web-ui v0.2
-
-- Fix `scroll_offset` atom crash after `G` key in `chat_live.ex`: pressing `G` assigns `:bottom` (atom) to `scroll_offset` at line 561, but `j`/`k`/`Ctrl+u`/`Ctrl+d` handlers (lines 547, 554, 578, 585) do integer arithmetic on it (`scroll_offset + 1`, `max(0, scroll_offset - 1)`, etc.), causing `ArithmeticError`. Either assign `0` instead of `:bottom` after `G`, or guard arithmetic clauses to reset `:bottom` to a numeric value first.
