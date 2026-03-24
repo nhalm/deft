@@ -17,7 +17,3 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## web-ui v0.4 + sessions v0.6
-
-### Tests
-- Verify all existing web UI tests still pass after changes — run `mix test test/deft_web/` and confirm 45+ tests, 0 failures. Run `mix test` for full suite.
