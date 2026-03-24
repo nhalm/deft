@@ -129,7 +129,9 @@ defmodule DeftWeb.Components.ToolCall do
   defp status_color(:error), do: "#ef4444"
   defp status_color(_), do: "#6b7280"
 
-  defp status_icon(assigns = %{status: :running}) do
+  defp status_icon(:running) do
+    assigns = %{}
+
     ~H"""
     <span
       class="spinner"
@@ -152,19 +154,25 @@ defmodule DeftWeb.Components.ToolCall do
     """
   end
 
-  defp status_icon(assigns = %{status: :success}) do
+  defp status_icon(:success) do
+    assigns = %{}
+
     ~H"""
     <span style="color: #10b981; font-weight: bold;">✓</span>
     """
   end
 
-  defp status_icon(assigns = %{status: :error}) do
+  defp status_icon(:error) do
+    assigns = %{}
+
     ~H"""
     <span style="color: #ef4444; font-weight: bold;">✗</span>
     """
   end
 
-  defp status_icon(assigns) do
+  defp status_icon(_status) do
+    assigns = %{}
+
     ~H"""
     <span style="color: #6b7280;">○</span>
     """

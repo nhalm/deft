@@ -136,6 +136,9 @@ document.addEventListener("DOMContentLoaded", () => {
       ScrollControl,
       InputFocus,
       TextareaInput
+    },
+    metadata: {
+      keydown: (e) => ({ ctrlKey: e.ctrlKey })
     }
   })
 
