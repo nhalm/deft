@@ -19,14 +19,11 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## web-ui v0.4 + sessions v0.6
 
-### Verify `mix deft work` and `mix deft issue` subcommands
-- Run `mix deft issue list` and confirm it dispatches correctly through `Deft.CLI.main(["issue", "list"])`. Run `mix deft work` and confirm it dispatches to the work loop. These already work in cli.ex — just verify the Mix task wrapper passes args through correctly.
-
 ### Syntax highlighting
 - Add highlight.js to `assets/js/app.js` — import from CDN or vendor bundle, call `hljs.highlightAll()` after each LiveView DOM update via a `phx-hook` on the conversation container. Style code blocks with a dark theme.
 
 ### Cleanup old TUI
-- Delete `lib/deft/tui/` directory entirely (chat.ex, session_picker.ex, breeze_poc.ex, markdown.ex) — all functionality replaced by `lib/deft_web/`. Remove any remaining `Breeze` or `Termite` references from the codebase. (blocked: Verify `mix deft work` and `mix deft issue`...)
+- Delete `lib/deft/tui/` directory entirely (chat.ex, session_picker.ex, breeze_poc.ex, markdown.ex) — all functionality replaced by `lib/deft_web/`. Remove any remaining `Breeze` or `Termite` references from the codebase.
 
 ### Tests
 - Verify all existing web UI tests still pass after changes — run `mix test test/deft_web/` and confirm 45+ tests, 0 failures. Run `mix test` for full suite. (blocked: Delete `lib/deft/tui/` directory...)

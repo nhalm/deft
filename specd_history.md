@@ -1,4 +1,5 @@
 # History
+- **web-ui v0.4 + sessions v0.6 (2026-03-24):** Verify `mix deft work` and `mix deft issue` subcommands - Run `mix deft issue list` and confirm it dispatches correctly through `Deft.CLI.main(["issue", "list"])`. Run `mix deft work` and confirm it dispatches to the work loop. These already work in cli.ex — just verify the Mix task wrapper passes args through correctly.
 - **web-ui v0.4 + sessions v0.6 (2026-03-24):** Verify `mix deft` works end-to-end
 - **web-ui v0.4 + sessions v0.6 (2026-03-24):** Create `lib/mix/tasks/deft.ex` implementing `Mix.Tasks.Deft` — calls `Application.ensure_all_started(:deft)`, then delegates to `Deft.CLI.main(args)`. This allows `mix deft`, `mix deft work --loop`, `mix deft -p "prompt"`, `mix deft issue list` etc. All subcommands go through the same dispatcher.
 - **web-ui v0.4 + sessions v0.6 (2026-03-24):** Add browser open to `start_web_ui/1` in cli.ex: after printing the URL, call `System.cmd("open", [url])` on macOS (detect via `:os.type()`) or `System.cmd("xdg-open", [url])` on Linux. Wrap in `try/rescue` so failure to open browser is a warning, not a crash.
