@@ -19,5 +19,4 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## web-ui v0.2
 
-- Pass `key_arg` to `<.tool_call>` component in `chat_live.html.heex`: extract the primary argument from tool args (e.g., file path for `read`, command for `bash`) in the `:tool_call_done` handler and store it on the tool map, then pass it as `key_arg={tool.key_arg}`. Currently tools display only `[Tool: name]` without the key argument.
 - Implement actual server shutdown in `handle_quit_command/1` at `chat_live.ex`: call `System.stop(0)` or `Application.stop(:deft)` instead of pushing an unhandled `"shutdown"` JS event. Currently `/quit` displays "Shutting down..." but the server keeps running.

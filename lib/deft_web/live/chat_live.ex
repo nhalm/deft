@@ -86,7 +86,16 @@ defmodule DeftWeb.ChatLive do
   end
 
   def handle_info({:agent_event, {:tool_call_start, %{id: id, name: name}}}, socket) do
-    tool = %{id: id, name: name, status: :running, duration: nil, input: nil, output: nil}
+    tool = %{
+      id: id,
+      name: name,
+      status: :running,
+      duration: nil,
+      input: nil,
+      output: nil,
+      key_arg: nil
+    }
+
     active_tools = Map.put(socket.assigns.active_tools, id, tool)
     {:noreply, assign(socket, :active_tools, active_tools)}
   end
@@ -94,10 +103,14 @@ defmodule DeftWeb.ChatLive do
   def handle_info({:agent_event, {:tool_call_done, %{id: id, args: args}}}, socket) do
     active_tools = socket.assigns.active_tools
 
+    # Extract the key argument to display alongside tool name
+    tool = Map.get(active_tools, id, %{})
+    key_arg = extract_key_arg(tool.name, args)
+
     updated_tool =
-      active_tools
-      |> Map.get(id, %{})
+      tool
       |> Map.put(:input, Jason.encode!(args, pretty: true))
+      |> Map.put(:key_arg, key_arg)
 
     active_tools = Map.put(active_tools, id, updated_tool)
     {:noreply, assign(socket, :active_tools, active_tools)}
@@ -743,6 +756,23 @@ defmodule DeftWeb.ChatLive do
 
             stream_insert(socket, :conversation, message)
         end
+    end
+  end
+
+  defp extract_key_arg(tool_name, args) do
+    case tool_name do
+      name when name in ["read", "write", "edit"] ->
+        Map.get(args, "file_path")
+
+      "bash" ->
+        Map.get(args, "command")
+
+      name when name in ["grep", "glob"] ->
+        Map.get(args, "pattern")
+
+      _ ->
+        # For unknown tools, try common field names or return nil
+        Map.get(args, "path") || Map.get(args, "query") || nil
     end
   end
 

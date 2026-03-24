@@ -86,7 +86,8 @@ defmodule DeftWeb.ChatLiveTest do
                status: :running,
                duration: nil,
                input: nil,
-               output: nil
+               output: nil,
+               key_arg: nil
              }
     end
 
@@ -114,6 +115,7 @@ defmodule DeftWeb.ChatLiveTest do
       tool = active_tools["tool_1"]
       assert tool.status == :success
       assert tool.duration == 0.5
+      assert tool.key_arg == "test.ex"
       assert tool.input == ~s({\n  "file_path": "test.ex"\n})
       assert tool.output == "file contents"
     end
