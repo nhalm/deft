@@ -19,11 +19,8 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## web-ui v0.4 + sessions v0.6
 
-### Verify `mix deft` works end-to-end
-- Run `mix deft` and confirm: (1) OTP app starts including Endpoint, (2) browser opens to `http://localhost:4000`, (3) web UI renders the chat interface, (4) Ctrl+C shuts down cleanly. Then test `mix deft -p "hello"` for non-interactive mode.
-
 ### Verify `mix deft work` and `mix deft issue` subcommands
-- Run `mix deft issue list` and confirm it dispatches correctly through `Deft.CLI.main(["issue", "list"])`. Run `mix deft work` and confirm it dispatches to the work loop. These already work in cli.ex — just verify the Mix task wrapper passes args through correctly. (blocked: Verify `mix deft` works end-to-end...)
+- Run `mix deft issue list` and confirm it dispatches correctly through `Deft.CLI.main(["issue", "list"])`. Run `mix deft work` and confirm it dispatches to the work loop. These already work in cli.ex — just verify the Mix task wrapper passes args through correctly.
 
 ### Syntax highlighting
 - Add highlight.js to `assets/js/app.js` — import from CDN or vendor bundle, call `hljs.highlightAll()` after each LiveView DOM update via a `phx-hook` on the conversation container. Style code blocks with a dark theme.
