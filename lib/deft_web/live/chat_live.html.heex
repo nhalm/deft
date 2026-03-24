@@ -19,7 +19,7 @@
   </div>
 
   <div class="conversation-area" id="conversation-area" phx-hook="ScrollControl">
-      <div phx-update="stream" id="conversation">
+      <div phx-update="stream" id="conversation" phx-hook="SyntaxHighlight">
         <%= for {id, item} <- @streams.conversation do %>
           <div id={id} class="conversation-item">
             <%= render_conversation_item(item) %>

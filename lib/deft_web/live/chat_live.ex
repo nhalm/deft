@@ -10,6 +10,7 @@ defmodule DeftWeb.ChatLive do
 
   alias Deft.Session.Worker
   alias Deft.Skills.Registry, as: SkillsRegistry
+  alias Phoenix.HTML
 
   import DeftWeb.Components.Thinking
   import DeftWeb.Components.ToolCall
@@ -642,10 +643,15 @@ defmodule DeftWeb.ChatLive do
   defp mode_indicator(:command), do: "[CMD]"
 
   defp render_conversation_item(item) do
-    # Return plain text - HEEx will auto-escape HTML entities
-    # This prevents XSS attacks by escaping <, >, & characters
-    # TODO: Add markdown-to-HTML rendering via Earmark for rich text display
-    item.content || ""
+    content = item.content || ""
+
+    # Convert markdown to HTML using Earmark
+    # Disable smartypants to preserve literal "..." instead of converting to "…"
+    case Earmark.as_html(content, smartypants: false) do
+      {:ok, html, []} -> HTML.raw(html)
+      {:ok, html, _messages} -> HTML.raw(html)
+      {:error, _html, _messages} -> content
+    end
   end
 
   defp add_user_message(socket, text) do

@@ -48,6 +48,7 @@ defmodule Deft.MixProject do
       {:bandit, "~> 1.0"},
       # Markdown parser for web UI rendering
       {:earmark_parser, "~> 1.4"},
+      {:earmark, "~> 1.4"},
       # Single-binary distribution
       {:burrito, "~> 1.0"},
 

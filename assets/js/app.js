@@ -147,6 +147,26 @@ const TextareaInput = {
   }
 }
 
+// Syntax Highlighting Hook
+// Applies highlight.js to code blocks after each LiveView DOM update
+const SyntaxHighlight = {
+  mounted() {
+    this.highlight()
+  },
+
+  updated() {
+    this.highlight()
+  },
+
+  highlight() {
+    // Find all code blocks within this container that haven't been highlighted
+    const codeBlocks = this.el.querySelectorAll('pre code:not(.hljs)')
+    codeBlocks.forEach((block) => {
+      window.hljs.highlightElement(block)
+    })
+  }
+}
+
 // Initialize LiveSocket when DOM is ready
 document.addEventListener("DOMContentLoaded", () => {
   // Get CSRF token from meta tag
@@ -158,7 +178,8 @@ document.addEventListener("DOMContentLoaded", () => {
     hooks: {
       ScrollControl,
       InputFocus,
-      TextareaInput
+      TextareaInput,
+      SyntaxHighlight
     },
     metadata: {
       keydown: (e) => ({ ctrlKey: e.ctrlKey })

@@ -19,9 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## web-ui v0.4 + sessions v0.6
 
-### Syntax highlighting
-- Add highlight.js to `assets/js/app.js` — import from CDN or vendor bundle, call `hljs.highlightAll()` after each LiveView DOM update via a `phx-hook` on the conversation container. Style code blocks with a dark theme.
-
 ### Cleanup old TUI
 - Delete `lib/deft/tui/` directory entirely (chat.ex, session_picker.ex, breeze_poc.ex, markdown.ex) — all functionality replaced by `lib/deft_web/`. Remove any remaining `Breeze` or `Termite` references from the codebase.
 
