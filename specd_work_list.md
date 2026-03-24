@@ -19,5 +19,4 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## web-ui v0.4
 
-- Fix `render_conversation_item/1` error branch in chat_live.ex:653: returns plain `content` string instead of `HTML.raw(html)`. Earmark's `{:error, html, messages}` tuple includes rendered HTML in the second element, but the code ignores it (`_html`) and returns the raw markdown string. Phoenix templates HTML-escape plain strings, so error-branch content renders with visible `&lt;`/`&gt;` entities. Fix: change `{:error, _html, _messages} -> content` to `{:error, html, _messages} -> HTML.raw(html)`.
 - Implement force-abort for double Ctrl+c in chat_live.ex:392-396: both single and double Ctrl+c call `Deft.Agent.abort(agent)`. Spec §6.4 requires double Ctrl+c to force-abort. Need `Deft.Agent.force_abort/1` (or equivalent) that kills the agent process immediately rather than requesting graceful abort. (blocked: harness — Agent module needs force_abort/1)

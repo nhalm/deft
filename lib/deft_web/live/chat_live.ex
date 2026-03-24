@@ -650,7 +650,7 @@ defmodule DeftWeb.ChatLive do
     case Earmark.as_html(content, smartypants: false) do
       {:ok, html, []} -> HTML.raw(html)
       {:ok, html, _messages} -> HTML.raw(html)
-      {:error, _html, _messages} -> content
+      {:error, html, _messages} -> HTML.raw(html)
     end
   end
 
