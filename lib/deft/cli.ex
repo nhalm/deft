@@ -462,9 +462,6 @@ defmodule Deft.CLI do
     cli_flags = build_cli_flags(flags)
     config = Config.load(cli_flags, working_dir)
 
-    # Set up SIGINT handler
-    setup_sigint_handler()
-
     IO.puts("Starting work loop...")
     IO.puts("Cost ceiling: $#{config.work_cost_ceiling}")
 
@@ -485,9 +482,6 @@ defmodule Deft.CLI do
     # Ensure Issues GenServer is started
     ensure_issues_started(flags)
 
-    # Set up SIGINT handler
-    setup_sigint_handler()
-
     # Get ready issues (sorted by priority, then created_at)
     ready_issues = Issues.ready()
 
@@ -505,9 +499,6 @@ defmodule Deft.CLI do
   defp execute_command({:work_issue, issue_id}, flags) do
     # Ensure Issues GenServer is started
     ensure_issues_started(flags)
-
-    # Set up SIGINT handler
-    setup_sigint_handler()
 
     # Get the specific issue
     case Issues.get(issue_id) do
@@ -916,20 +907,6 @@ defmodule Deft.CLI do
   # Close output handle if it's a file
   defp close_output_handle(:stdio), do: :ok
   defp close_output_handle(handle), do: File.close(handle)
-
-  # Restore terminal state on crash
-  # Terminal restoration no longer needed with web UI
-  # defp restore_terminal do
-  #   # Fallback: emit raw ANSI reset sequences
-  #   IO.write([
-  #     # Exit alt screen
-  #     "\e[?1049l",
-  #     # Show cursor
-  #     "\e[?25h",
-  #     # Reset attributes
-  #     "\e[0m"
-  #   ])
-  # end
 
   # Event loop for non-interactive mode
   defp non_interactive_loop(output_handle) do
@@ -1955,17 +1932,11 @@ defmodule Deft.CLI do
     }
   end
 
-  # Set up SIGINT handler for graceful shutdown in work loop
-  defp setup_sigint_handler do
-    # Set up SIGINT handler using :os.set_signal/2
-    # The :handle option causes the BEAM to send {:signal, :sigint} messages
-    # to this process when SIGINT is received
-    :os.set_signal(:sigint, :handle)
-  end
-
   # Start the web UI and block until shutdown
   defp start_web_ui(session_id) do
-    url = "http://localhost:4000?session=#{session_id}"
+    # Read the actual port from the pidfile
+    port = read_server_port()
+    url = "http://localhost:#{port}?session=#{session_id}"
 
     # Open browser (macOS)
     case System.cmd("open", [url], stderr_to_stdout: true) do
@@ -1989,6 +1960,22 @@ defmodule Deft.CLI do
 
     # Block until Ctrl+C (BEAM handles shutdown)
     Process.sleep(:infinity)
+  end
+
+  # Read the server port from the pidfile
+  defp read_server_port do
+    pidfile_path = Deft.Project.project_dir() |> Path.join("server.pid")
+
+    case File.read(pidfile_path) do
+      {:ok, content} ->
+        content
+        |> String.trim()
+        |> String.to_integer()
+
+      {:error, _} ->
+        # Fallback to default port if pidfile doesn't exist
+        4000
+    end
   end
 
   # Run the work loop - keeps picking and running ready issues
