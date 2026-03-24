@@ -16,3 +16,7 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
+
+## web-ui v0.1
+
+- Fix `dispatch_skill_or_command/3` to pass `args` to the agent: currently `_args` is discarded at `chat_live.ex:597`, so parameterized slash commands (`/model gpt-4`, `/forget <text>`, `/correct <old> -> <new>`, `/inspect <lead>`) silently lose their arguments. Either extend `Deft.Agent.inject_skill/2` to accept args, or send args as a follow-up user prompt after skill injection.
