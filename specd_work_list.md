@@ -16,3 +16,8 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
+
+## web-ui v0.2
+
+- Fix `handle_info` pattern for `{:job_status, statuses}` in `chat_live.ex`: Foreman sends `{:job_status, agent_statuses}` via Registry dispatch (foreman.ex:4050) but `ChatLive` handles `{:agent_event, {:job_status, statuses}}` (chat_live.ex:198) which never matches. Change the handler pattern to `{:job_status, statuses}` so the agent roster actually updates.
+- Guard against missing tool in `tool_call_done` handler in `chat_live.ex`: when `Map.get(active_tools, id, %{})` returns `%{}`, `tool.name` at line 108 raises `KeyError` crashing the LiveView. Use `Map.get(tool, :name)` or pattern match with a fallback so reconnects and missed `tool_call_start` events don't crash the process.
