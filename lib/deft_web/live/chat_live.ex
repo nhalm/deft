@@ -118,7 +118,45 @@ defmodule DeftWeb.ChatLive do
   end
 
   def handle_info({:agent_event, {:state_change, state}}, socket) do
-    {:noreply, assign(socket, :agent_state, state)}
+    socket =
+      if state == :idle do
+        # Flush streaming content to conversation stream when turn ends
+        thinking = socket.assigns.streaming_thinking
+        text = socket.assigns.streaming_text
+
+        socket =
+          if thinking != "" or text != "" do
+            # Build content: thinking first (with label), then text
+            content_parts =
+              [
+                if(thinking != "", do: "[thinking: #{thinking}]", else: nil),
+                if(text != "", do: text, else: nil)
+              ]
+              |> Enum.reject(&is_nil/1)
+
+            content = Enum.join(content_parts, "\n\n")
+
+            message = %{
+              id: System.unique_integer([:positive, :monotonic]),
+              role: :assistant,
+              content: content
+            }
+
+            stream_insert(socket, :conversation, message)
+          else
+            socket
+          end
+
+        # Reset streaming buffers and update state
+        socket
+        |> assign(:streaming_text, "")
+        |> assign(:streaming_thinking, "")
+        |> assign(:agent_state, state)
+      else
+        assign(socket, :agent_state, state)
+      end
+
+    {:noreply, socket}
   end
 
   def handle_info(
