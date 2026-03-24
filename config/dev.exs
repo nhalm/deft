@@ -11,13 +11,16 @@ config :deft, DeftWeb.Endpoint,
   debug_errors: true,
   secret_key_base:
     "dev_secret_key_base_at_least_64_bytes_long_for_development_only_do_not_use_in_production",
-  watchers: []
+  watchers: [
+    esbuild: {Esbuild, :install_and_run, [:default, ~w(--sourcemap=inline --watch)]}
+  ]
 
 # Watch static and templates for browser reloading.
 config :deft, DeftWeb.Endpoint,
   live_reload: [
     patterns: [
       ~r"priv/static/.*(js|css|png|jpeg|jpg|gif|svg)$",
-      ~r"lib/deft_web/(live|views|components)/.*(ex|heex)$"
+      ~r"lib/deft_web/(live|views|components)/.*(ex|heex)$",
+      ~r"lib/deft_web.ex$"
     ]
   ]

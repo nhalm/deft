@@ -19,12 +19,8 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## web-ui v0.4 + sessions v0.6
 
-### Config files
-- Update `config/dev.exs` — ensure `debug_errors: true`, `code_reloader: true`, `check_origin: false`, live_reload patterns for `.ex`, `.heex`, `.css`, `.js`
-- Update `config/runtime.exs` — add dynamic port from `PORT` env var (default 4000), generate `SECRET_KEY_BASE` via `:crypto.strong_rand_bytes(64) |> Base.encode64()` if not set in env (local tool, not a web service), read `ANTHROPIC_API_KEY`
-
 ### Dynamic port selection
-- Implement dynamic port selection: try port from config, if `:eaddrinuse` try 4001-4099. Write actual port to `~/.deft/projects/<path-encoded-repo>/server.pid`. Print `Deft running at http://localhost:<port>` on startup. This can be in `Deft.Application.start/2` after the endpoint starts, or in a custom `DeftWeb.Endpoint.init/2` callback. (blocked: Update `config/runtime.exs`...)
+- Implement dynamic port selection: try port from config, if `:eaddrinuse` try 4001-4099. Write actual port to `~/.deft/projects/<path-encoded-repo>/server.pid`. Print `Deft running at http://localhost:<port>` on startup. This can be in `Deft.Application.start/2` after the endpoint starts, or in a custom `DeftWeb.Endpoint.init/2` callback.
 
 ### Remove escript CLI code
 - Remove `setup_sigint_handler/0` function and all `:os.set_signal(:sigint, :handle)` calls from `lib/deft/cli.ex`. Remove `restore_terminal/0`. Remove `alias Breeze.Server` and `@compile {:no_warn_undefined, Breeze.Terminal}`. In `start_web_ui/1`, the blocking is already `Process.sleep(:infinity)` — verify this is correct.
@@ -42,7 +38,7 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Run `mix deft issue list` and confirm it dispatches correctly through `Deft.CLI.main(["issue", "list"])`. Run `mix deft work` and confirm it dispatches to the work loop. These already work in cli.ex — just verify the Mix task wrapper passes args through correctly. (blocked: Verify `mix deft` works end-to-end...)
 
 ### Syntax highlighting
-- Add highlight.js to `assets/js/app.js` — import from CDN or vendor bundle, call `hljs.highlightAll()` after each LiveView DOM update via a `phx-hook` on the conversation container. Style code blocks with a dark theme. (blocked: Update `config/dev.exs`...)
+- Add highlight.js to `assets/js/app.js` — import from CDN or vendor bundle, call `hljs.highlightAll()` after each LiveView DOM update via a `phx-hook` on the conversation container. Style code blocks with a dark theme.
 
 ### Cleanup old TUI
 - Delete `lib/deft/tui/` directory entirely (chat.ex, session_picker.ex, breeze_poc.ex, markdown.ex) — all functionality replaced by `lib/deft_web/`. Remove any remaining `Breeze` or `Termite` references from the codebase. (blocked: Verify `mix deft work` and `mix deft issue`...)
