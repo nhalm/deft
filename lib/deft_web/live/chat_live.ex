@@ -10,7 +10,6 @@ defmodule DeftWeb.ChatLive do
 
   alias Deft.Session.Worker
   alias Deft.Skills.Registry, as: SkillsRegistry
-  alias Phoenix.HTML
 
   import DeftWeb.Components.Thinking
   import DeftWeb.Components.ToolCall
@@ -616,8 +615,10 @@ defmodule DeftWeb.ChatLive do
   defp mode_indicator(:command), do: "[CMD]"
 
   defp render_conversation_item(item) do
-    # Placeholder for rendering conversation items
-    HTML.raw(item.content || "")
+    # Return plain text - HEEx will auto-escape HTML entities
+    # This prevents XSS attacks by escaping <, >, & characters
+    # TODO: Add markdown-to-HTML rendering via Earmark for rich text display
+    item.content || ""
   end
 
   defp add_user_message(socket, text) do
