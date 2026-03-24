@@ -2,11 +2,18 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.4 |
-| Status | Implemented |
-| Last Updated | 2026-03-19 |
+| Version | 0.5 |
+| Status | Ready |
+| Last Updated | 2026-03-24 |
 
 ## Changelog
+
+### v0.5 (2026-03-24)
+- Replaced escript distribution with Mix release + Burrito
+- Dev startup via `mix phx.server`, production via release binary
+- Non-interactive mode via Mix task `mix deft.prompt` instead of `deft -p`
+- CLI interface simplified — session/resume commands handled by web UI routes, not CLI arg parsing
+- Added dynamic port selection (try 4000, increment if busy)
 
 ### v0.4 (2026-03-19)
 - Clarified resume: must use observation entries from main JSONL as fallback when `_om.jsonl` snapshot is missing
@@ -141,30 +148,35 @@ Tracks estimated cost per model per turn from `:usage` events and model pricing:
 - `session_cost` — cumulative estimated cost (Actor + OM calls)
 - Displayed in TUI status bar, persisted in session JSONL
 
-### 5. CLI Interface
+### 5. Startup Interface
 
-The binary is invoked as `deft`.
+Deft is a Phoenix web application. The primary interface is the browser.
 
-#### 5.1 Commands
+#### 5.1 Development
 
-| Command | Description |
-|---------|-------------|
-| `deft` | Start a new session in the current directory |
-| `deft resume` | List recent sessions and pick one to resume |
-| `deft resume <session-id>` | Resume a specific session |
-| `deft config` | Show current configuration |
+```
+mix phx.server        # start server, opens browser
+iex -S mix phx.server # with interactive shell
+```
 
-#### 5.2 Non-Interactive Mode
+The web UI handles session management — new sessions, resume, session picker are all browser routes (see [web-ui.md](web-ui.md)).
+
+#### 5.2 Non-Interactive Mode (Mix Task)
 
 | Usage | Description |
 |-------|-------------|
-| `deft -p "prompt"` | Single-turn: send prompt, print response, exit |
-| `echo "prompt" \| deft` | Piped input: read from stdin |
-| `deft -p "prompt" --output file.txt` | Write response to file |
+| `mix deft.prompt "prompt"` | Single-turn: send prompt, print response, exit |
+| `echo "prompt" \| mix deft.prompt` | Piped input: read from stdin |
+| `mix deft.prompt "prompt" --output file.txt` | Write response to file |
 
-In non-interactive mode, no TUI is started. Output goes to stdout.
+In the release binary:
+```
+./bin/deft eval "Deft.CLI.run_prompt(\"prompt\")"
+```
 
-#### 5.3 Flags
+No web server is started for non-interactive mode. Output goes to stdout.
+
+#### 5.3 Flags (Mix Task)
 
 | Flag | Description |
 |------|-------------|
@@ -172,23 +184,26 @@ In non-interactive mode, no TUI is started. Output goes to stdout.
 | `--provider <name>` | Override provider |
 | `--no-om` | Disable observational memory |
 | `--working-dir <path>` | Override working directory |
-| `-p <prompt>` | Non-interactive single-turn mode |
-| `--output <file>` | Write response to file (non-interactive) |
-| `--auto-approve-all` | Skip all plan approvals for orchestrated jobs |
-| `--help` / `-h` | Show help |
-| `--version` | Show version |
+| `--output <file>` | Write response to file |
+| `--auto-approve-all` | Skip all plan approvals |
+
+Interactive flags (session management, resume) are handled by the web UI, not the CLI.
 
 ### 6. Distribution
 
-Packaged as a single binary using Burrito from day 1.
+Packaged as a Mix release wrapped with Burrito for single-binary distribution.
 
-- Self-contained — no Erlang/Elixir installation required
+- **Development:** `mix phx.server` — requires Elixir/Erlang installed
+- **Production:** `mix release` produces a self-contained release with BEAM runtime, `priv/` assets, and config
+- **Single binary:** Burrito wraps the release — `./deft` starts the Phoenix server and opens the browser
 - Targets: macOS (arm64, x86_64), Linux (x86_64, aarch64)
-- External runtime dependencies: `rg` (ripgrep) and `fd` (fd-find) — warn if missing on startup
+- External runtime dependencies: `rg` (ripgrep) and `fd` (fd-find) — warn on startup if missing
 - Startup orphan cleanup: scan for `deft/job-*` branches and worktrees from crashed jobs, offer to clean up
+
+**No escript.** Escript doesn't support `priv/` directories (needed for static assets), signal handling is broken on OTP 28, and it conflicts with Phoenix's runtime model.
 
 ## References
 
 - [harness.md](harness.md) — agent loop
-- [tui.md](tui.md) — terminal UI
+- [web-ui.md](web-ui.md) — web interface
 - [standards.md](standards.md) — coding standards

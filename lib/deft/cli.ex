@@ -1987,15 +1987,8 @@ defmodule Deft.CLI do
     IO.puts("\nDeft running at #{url}")
     IO.puts("Press Ctrl+C to stop.\n")
 
-    # Set up SIGINT handler
-    setup_sigint_handler()
-
-    # Block until shutdown signal
-    receive do
-      {:signal, :sigint} ->
-        IO.puts("\nShutting down...")
-        :ok
-    end
+    # Block until Ctrl+C (BEAM handles shutdown)
+    Process.sleep(:infinity)
   end
 
   # Run the work loop - keeps picking and running ready issues

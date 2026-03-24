@@ -2,11 +2,18 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.2 |
-| Status | Implemented |
-| Last Updated | 2026-03-23 |
+| Version | 0.3 |
+| Status | Ready |
+| Last Updated | 2026-03-24 |
 
 ## Changelog
+
+### v0.3 (2026-03-24)
+- Replaced escript with Mix release + Burrito for distribution
+- Dev startup via `mix phx.server`, not escript
+- Non-interactive mode (`deft -p`) runs as a Mix task instead of escript main
+- Removed `setup_sigint_handler` — `:os.set_signal(:sigint, ...)` is invalid in escript mode and unnecessary with Mix/Phoenix
+- Resolved open questions: dynamic port selection, `prefers-color-scheme`, server-side markdown via Earmark, client-side syntax highlighting via highlight.js
 
 ### v0.2 (2026-03-23)
 - Added `:turn_limit_reached` to event handling list — UI must prompt user to continue or abort
@@ -262,26 +269,75 @@ Recognized by leading `/` in input or via `:` in command mode. Same command set 
 
 ### 9. Startup and Lifecycle
 
-#### 9.1 Startup
+#### 9.1 Development Startup
 
-When the CLI starts an interactive session:
+In development, Deft runs as a normal Mix application:
 
-1. CLI creates the session and starts the Agent (existing flow)
-2. CLI starts the Phoenix endpoint (`DeftWeb.Endpoint`)
-3. CLI opens the browser: `System.cmd("open", ["http://localhost:4000"])` (macOS) or equivalent
-4. CLI prints `Deft running at http://localhost:4000` and blocks
+```
+mix phx.server
+```
 
-The LiveView mounts, subscribes to agent events, and is ready.
+This starts the full OTP application (agent, providers, sessions, OM) and the Phoenix endpoint. Opens browser to `http://localhost:<port>`. Supports live-reload of templates and CSS.
 
-#### 9.2 Non-Interactive Mode
+Alternatively, `iex -S mix phx.server` for an interactive shell alongside the web UI.
 
-`deft -p "prompt"` — no web server, stdio only. Unchanged from current behavior.
+#### 9.2 Production / Distribution
 
-#### 9.3 Shutdown
+Deft is distributed as a Mix release wrapped with Burrito for single-binary distribution:
 
-- `/quit` command or Ctrl+C in the terminal where `deft` is running
+```
+MIX_ENV=prod mix release
+```
+
+Or with Burrito for a self-contained binary:
+
+```
+MIX_ENV=prod mix release --overwrite
+```
+
+The release includes the `priv/` directory (static assets, CSS, JS), config, and the full BEAM runtime (via Burrito). The binary is invoked as `./deft` which starts the Phoenix server and opens the browser.
+
+**Release startup module:** `Deft.Application` starts the full supervision tree including `DeftWeb.Endpoint`. No separate CLI entry point needed — the OTP application IS the entry point.
+
+#### 9.3 Non-Interactive Mode
+
+Non-interactive mode (`deft -p "prompt"`) is implemented as a Mix task (`Mix.Tasks.Deft.Prompt`) rather than an escript:
+
+```
+mix deft.prompt "explain the auth module"
+echo "prompt" | mix deft.prompt
+mix deft.prompt "prompt" --output file.txt
+```
+
+In the release binary, this becomes:
+
+```
+./deft eval "Deft.CLI.run_prompt(\"explain the auth module\")"
+```
+
+Or via a custom release command script in `rel/overlays/bin/deft-prompt`.
+
+No web server is started for non-interactive mode — just the agent, provider, and session subsystems.
+
+#### 9.4 Port Selection
+
+The endpoint picks a port dynamically to avoid conflicts when running multiple Deft instances:
+
+1. Try `PORT` environment variable if set
+2. Try port 4000
+3. If 4000 is in use, try 4001-4099
+4. Print the actual port: `Deft running at http://localhost:4007`
+
+Store the port in a pidfile at `~/.deft/projects/<path-encoded-repo>/server.pid` so other tools can find the running instance.
+
+#### 9.5 Shutdown
+
+- Ctrl+C in the terminal where `deft` is running (standard BEAM shutdown)
+- `/quit` command in the web UI calls `System.stop(0)`
 - Browser close does NOT shut down the server — user can reconnect
 - LiveView reconnects automatically on network interruption (built-in)
+
+No custom signal handling needed — the BEAM's default Ctrl+C behavior is correct.
 
 ### 10. Event Handling
 
@@ -370,20 +426,27 @@ Full flow tests: mount LiveView, simulate user input, send agent events, verify 
 
 ### 12. Dependencies
 
-**Added:**
+**Runtime:**
 - `phoenix` — web framework
 - `phoenix_live_view` — real-time UI
 - `phoenix_html` — HTML helpers
-- `phoenix_live_reload` — dev hot reload (dev only)
-- `jason` — JSON (likely already a dep)
 - `bandit` — HTTP server (lightweight, Elixir-native)
+- `jason` — JSON (already a dep)
+- `earmark_parser` — markdown → HTML rendering (already a dep)
+- `burrito` — single-binary distribution (already a dep)
+
+**Dev/Test:**
+- `phoenix_live_reload` — dev hot reload
+- `floki` — HTML parsing for LiveView tests
+- `esbuild` — JS bundling for app.js (Phoenix default)
 
 **Removed:**
 - `breeze` (and transitive: `back_breeze`, `termite`)
-- All Phoenix deps that were transitive through Breeze are now direct (and actually used correctly)
+- Escript config from mix.exs (`escript/0` function)
 
-**Kept:**
-- `earmark_parser` — markdown rendering (render to HTML instead of ANSI now)
+**Not needed:**
+- Tailwind (plain CSS for now, add later if needed)
+- No new test deps — `floki` already present
 
 ### 13. Migration
 
@@ -398,16 +461,20 @@ Files to create:
 - `lib/deft_web/live/sessions_live.ex` — session picker LiveView
 - `lib/deft_web/components/` — thinking, tool, roster, status bar components
 - `lib/deft_web/layouts/` — app layout
-- `assets/css/app.css` — styles (Tailwind or plain CSS)
-- `assets/js/app.js` — LiveView JS hooks (minimal — scroll control, focus management)
+- `assets/css/app.css` — styles
+- `assets/js/app.js` — LiveView JS hooks (scroll control, focus management)
+- `lib/mix/tasks/deft/prompt.ex` — Mix task for non-interactive mode
 - `test/deft_web/live/chat_live_test.exs`
 - `test/deft_web/live/sessions_live_test.exs`
 
 Files to modify:
-- `lib/deft/application.ex` — add Phoenix.PubSub and Endpoint to supervision tree
-- `lib/deft/cli.ex` — replace Breeze startup with Endpoint startup + browser open
-- `mix.exs` — swap deps
-- `config/` — Phoenix endpoint config
+- `lib/deft/application.ex` — add Phoenix.PubSub and Endpoint to supervision tree. Endpoint starts conditionally (not in non-interactive mode).
+- `lib/deft/cli.ex` — remove escript-specific code (interactive_loop, Breeze aliases, setup_sigint_handler, restore_terminal). Simplify to just parse args and delegate to Application or Mix tasks.
+- `mix.exs` — remove `escript/0` function and escript config from `project/0`. Add `esbuild` dep. Keep `releases/0` with Burrito.
+- `config/config.exs` — Phoenix endpoint config, LiveView signing salt
+- `config/dev.exs` — live-reload config, debug logging
+- `config/prod.exs` — production endpoint config (server: true)
+- `config/runtime.exs` — port from `PORT` env var, secret key base
 
 Files to keep:
 - Everything in `lib/deft/` except `lib/deft/tui/` — agent, tools, providers, sessions, OM, orchestration all unchanged
@@ -423,13 +490,15 @@ Files to keep:
 - **No Tailwind initially.** Plain CSS keeps deps minimal. Can add Tailwind later if the styling gets complex.
 - **Browser open on startup.** Minimal friction — `deft` just works. Print the URL as fallback for headless/SSH environments.
 - **No auth.** Localhost only, single user. Auth is a future concern for remote access.
+- **Mix release over escript.** Escript doesn't support `priv/` directory (needed for static assets), signal handling is broken, and hot-reload doesn't work. Mix release is the standard Phoenix distribution path. Burrito wraps the release into a single binary for the "just run `./deft`" experience.
+- **Non-interactive as Mix task.** `mix deft.prompt` replaces `deft -p`. In the release, `./deft eval` provides the same capability. Keeps the CLI entry point simple.
 
-### Open questions
+### Resolved questions
 
-- **Port selection.** Fixed 4000, or find an open port? Multiple `deft` sessions on different projects would need different ports.
-- **Dark/light theme.** Follow system preference via `prefers-color-scheme`? Configurable?
-- **Markdown rendering.** Earmark can render to HTML directly (instead of ANSI). Use that, or a client-side renderer like marked.js?
-- **Syntax highlighting for code blocks.** Server-side (Makeup) or client-side (highlight.js)?
+- **Port selection.** Dynamic — try 4000, increment if in use. Store port in pidfile.
+- **Dark/light theme.** Dark by default, respect `prefers-color-scheme`.
+- **Markdown rendering.** Server-side via Earmark (already a dep, renders to HTML).
+- **Syntax highlighting for code blocks.** Client-side via highlight.js (loaded from CDN or bundled). No server dep needed.
 
 ## References
 
