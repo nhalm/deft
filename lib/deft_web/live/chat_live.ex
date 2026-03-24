@@ -155,20 +155,13 @@ defmodule DeftWeb.ChatLive do
 
         socket =
           if thinking != "" or text != "" do
-            # Build content: thinking first (with label), then text
-            content_parts =
-              [
-                if(thinking != "", do: "[thinking: #{thinking}]", else: nil),
-                if(text != "", do: text, else: nil)
-              ]
-              |> Enum.reject(&is_nil/1)
-
-            content = Enum.join(content_parts, "\n\n")
-
+            # Store thinking and text as separate fields so we can render thinking
+            # blocks using the <.thinking> component instead of plain markdown
             message = %{
               id: System.unique_integer([:positive, :monotonic]),
               role: :assistant,
-              content: content
+              thinking: if(thinking != "", do: thinking, else: nil),
+              content: if(text != "", do: text, else: nil)
             }
 
             stream_insert(socket, :conversation, message)
@@ -642,9 +635,33 @@ defmodule DeftWeb.ChatLive do
   defp mode_indicator(:insert), do: "[INS]"
   defp mode_indicator(:command), do: "[CMD]"
 
-  defp render_conversation_item(item) do
-    content = item.content || ""
+  attr(:item, :map, required: true)
+  attr(:thinking_expanded, :map, default: %{})
 
+  defp render_conversation_item(assigns) do
+    thinking = Map.get(assigns.item, :thinking)
+    content = Map.get(assigns.item, :content)
+
+    assigns =
+      assigns
+      |> assign(:thinking, thinking)
+      |> assign(:content, content)
+
+    ~H"""
+    <%= if @thinking do %>
+      <.thinking
+        id={"thinking-#{@item.id}"}
+        content={@thinking}
+        expanded={Map.get(@thinking_expanded, "thinking-#{@item.id}", true)}
+      />
+    <% end %>
+    <%= if @content do %>
+      <%= render_markdown(@content) %>
+    <% end %>
+    """
+  end
+
+  defp render_markdown(content) do
     # Convert markdown to HTML using Earmark
     # Disable smartypants to preserve literal "..." instead of converting to "…"
     case Earmark.as_html(content, smartypants: false) do
