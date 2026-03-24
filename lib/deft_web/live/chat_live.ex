@@ -52,9 +52,11 @@ defmodule DeftWeb.ChatLive do
       |> assign(:tmux_prefix, false)
       |> assign(:roster_visible, false)
       |> assign(:zoom, false)
+      |> assign(:active_pane, :left)
       |> assign(:repo_name, get_repo_name())
       |> assign(:agent_identity, "Solo")
       |> assign(:thinking_blocks_expanded, %{})
+      |> assign(:last_ctrl_c, nil)
       |> stream(:conversation, [])
 
     {:ok, socket}
@@ -219,6 +221,54 @@ defmodule DeftWeb.ChatLive do
     assign(socket, :tmux_prefix, true)
   end
 
+  # Ctrl+c aborts agent operation (single press) or force aborts (double press)
+  defp handle_standard_vim_key(socket, "c", true) do
+    now = System.monotonic_time(:millisecond)
+    last_ctrl_c = socket.assigns.last_ctrl_c
+
+    # Check if this is a double press (within 500ms)
+    is_double_press = last_ctrl_c != nil and now - last_ctrl_c < 500
+
+    if is_double_press do
+      # Force abort (double Ctrl+c)
+      # TODO: Implement force_abort when available in Agent module
+      agent = Worker.agent_via_tuple(socket.assigns.session_id)
+      Deft.Agent.abort(agent)
+
+      message = %{
+        id: System.unique_integer([:positive, :monotonic]),
+        role: :system,
+        content: "Force aborting agent operation..."
+      }
+
+      socket
+      |> assign(:last_ctrl_c, nil)
+      |> stream_insert(:conversation, message)
+    else
+      # First Ctrl+c - abort current operation
+      agent = Worker.agent_via_tuple(socket.assigns.session_id)
+      Deft.Agent.abort(agent)
+
+      message = %{
+        id: System.unique_integer([:positive, :monotonic]),
+        role: :system,
+        content: "Aborting agent operation... (press Ctrl+c again to force abort)"
+      }
+
+      socket
+      |> assign(:last_ctrl_c, now)
+      |> stream_insert(:conversation, message)
+    end
+  end
+
+  # Ctrl+l clears/redraws the display
+  defp handle_standard_vim_key(socket, "l", true) do
+    # Clear conversation display
+    socket
+    |> assign(:messages, [])
+    |> stream(:conversation, [], reset: true)
+  end
+
   # Escape always goes to normal mode and clears pending_g
   defp handle_standard_vim_key(socket, "Escape", _ctrl) do
     socket
@@ -320,6 +370,29 @@ defmodule DeftWeb.ChatLive do
       "%" ->
         socket
         |> assign(:roster_visible, not socket.assigns.roster_visible)
+        |> assign(:tmux_prefix, false)
+
+      # x - close active panel
+      "x" ->
+        socket =
+          if socket.assigns.active_pane == :right and socket.assigns.roster_visible do
+            assign(socket, :roster_visible, false)
+          else
+            socket
+          end
+
+        assign(socket, :tmux_prefix, false)
+
+      # h - focus left pane (main chat area)
+      "h" ->
+        socket
+        |> assign(:active_pane, :left)
+        |> assign(:tmux_prefix, false)
+
+      # l - focus right pane (roster)
+      "l" ->
+        socket
+        |> assign(:active_pane, :right)
         |> assign(:tmux_prefix, false)
 
       # z - toggle zoom

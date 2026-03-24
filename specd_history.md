@@ -1,4 +1,6 @@
 # History
+- **web-ui v0.1 (2026-03-23):** Add global keys `Ctrl+c` (abort agent operation) and `Ctrl+l` (clear/redraw) to `handle_standard_vim_key/3` in `ChatLive`. Include double-`Ctrl+c` tracking for force abort per spec §6.4.
+- **web-ui v0.1 (2026-03-23):** Add tmux pane keys `x` (close active panel), `h`/`l` (focus left/right pane) to `handle_tmux_key/2` in `ChatLive` — currently only `%` and `z` are handled.
 - **web-ui v0.1 (2026-03-23):** Add expandable tool calls: inline tool template in `chat_live.html.heex` has no click-to-expand details. Either use the existing `DeftWeb.Components.ToolCall` component or add expand logic inline, and add corresponding `handle_event("toggle_tool", ...)` in `ChatLive`.
 - **web-ui v0.1 (2026-03-23):** Add collapsible thinking blocks: inline thinking template in `chat_live.html.heex` has no click-to-collapse. Either use the existing `DeftWeb.Components.Thinking` component (which has `phx-click="toggle_thinking"`) or add collapse logic inline, and add corresponding `handle_event("toggle_thinking", ...)` in `ChatLive`.
 - **web-ui v0.1 (2026-03-23):** Replace `<input type="text">` with `<textarea>` in `chat_live.html.heex` for multi-line input support (Shift+Enter for newline, Enter to submit per spec §4).

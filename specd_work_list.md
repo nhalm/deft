@@ -19,7 +19,5 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## web-ui v0.1
 
-- Add tmux pane keys `x` (close active panel), `h`/`l` (focus left/right pane) to `handle_tmux_key/2` in `ChatLive` — currently only `%` and `z` are handled.
-- Add global keys `Ctrl+c` (abort agent operation) and `Ctrl+l` (clear/redraw) to `handle_standard_vim_key/3` in `ChatLive`. Include double-`Ctrl+c` tracking for force abort per spec §6.4.
 - Add input history: track submitted prompts in a history buffer assign, handle Up/Down arrow keys in normal mode to navigate history per spec §4.
 - Fix orchestration status bar: currently shows `X agents`, spec requires `X leads │ Y/Z complete │ $cost/$budget │ Xm elapsed │ ◉ state`. Compute lead count and completion from `@agent_statuses`.
