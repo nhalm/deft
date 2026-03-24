@@ -22,50 +22,56 @@ defmodule DeftWeb.ChatLive do
     # Get session_id from URL params (e.g., /?session=abc123)
     session_id = params["session"]
 
-    if connected?(socket) do
-      # Subscribe to agent events for this session
-      Registry.register(Deft.Registry, {:session, session_id}, [])
-      Registry.register(Deft.Registry, {:job_status, session_id}, [])
+    # Redirect to session picker if no session_id provided
+    # (direct visit to /, session picker q key, /quit redirect)
+    if is_nil(session_id) do
+      {:ok, push_navigate(socket, to: "/sessions")}
+    else
+      if connected?(socket) do
+        # Subscribe to agent events for this session
+        Registry.register(Deft.Registry, {:session, session_id}, [])
+        Registry.register(Deft.Registry, {:job_status, session_id}, [])
+      end
+
+      # Initialize all assigns
+      socket =
+        socket
+        |> assign(:session_id, session_id)
+        |> assign(:messages, [])
+        |> assign(:streaming_text, "")
+        |> assign(:streaming_thinking, "")
+        |> assign(:agent_state, :idle)
+        |> assign(:input, "")
+        |> assign(:active_tools, %{})
+        |> assign(:tools_expanded, %{})
+        |> assign(:tokens_input, 0)
+        |> assign(:tokens_output, 0)
+        |> assign(:cost, 0.0)
+        |> assign(:turn_count, 0)
+        |> assign(:turn_limit, 25)
+        |> assign(:om_observation_count, 0)
+        |> assign(:om_memory_tokens, 0)
+        |> assign(:agent_statuses, [])
+        |> assign(:job_active, false)
+        |> assign(:job_budget, 10.0)
+        |> assign(:job_started_at, nil)
+        |> assign(:vim_mode, :insert)
+        |> assign(:scroll_offset, 0)
+        |> assign(:pending_g, false)
+        |> assign(:tmux_prefix, false)
+        |> assign(:roster_visible, false)
+        |> assign(:zoom, false)
+        |> assign(:active_pane, :left)
+        |> assign(:repo_name, get_repo_name())
+        |> assign(:agent_identity, "Solo")
+        |> assign(:thinking_blocks_expanded, %{})
+        |> assign(:last_ctrl_c, nil)
+        |> assign(:input_history, [])
+        |> assign(:input_history_index, nil)
+        |> stream(:conversation, [])
+
+      {:ok, socket}
     end
-
-    # Initialize all assigns
-    socket =
-      socket
-      |> assign(:session_id, session_id)
-      |> assign(:messages, [])
-      |> assign(:streaming_text, "")
-      |> assign(:streaming_thinking, "")
-      |> assign(:agent_state, :idle)
-      |> assign(:input, "")
-      |> assign(:active_tools, %{})
-      |> assign(:tools_expanded, %{})
-      |> assign(:tokens_input, 0)
-      |> assign(:tokens_output, 0)
-      |> assign(:cost, 0.0)
-      |> assign(:turn_count, 0)
-      |> assign(:turn_limit, 25)
-      |> assign(:om_observation_count, 0)
-      |> assign(:om_memory_tokens, 0)
-      |> assign(:agent_statuses, [])
-      |> assign(:job_active, false)
-      |> assign(:job_budget, 10.0)
-      |> assign(:job_started_at, nil)
-      |> assign(:vim_mode, :insert)
-      |> assign(:scroll_offset, 0)
-      |> assign(:pending_g, false)
-      |> assign(:tmux_prefix, false)
-      |> assign(:roster_visible, false)
-      |> assign(:zoom, false)
-      |> assign(:active_pane, :left)
-      |> assign(:repo_name, get_repo_name())
-      |> assign(:agent_identity, "Solo")
-      |> assign(:thinking_blocks_expanded, %{})
-      |> assign(:last_ctrl_c, nil)
-      |> assign(:input_history, [])
-      |> assign(:input_history_index, nil)
-      |> stream(:conversation, [])
-
-    {:ok, socket}
   end
 
   @impl true
@@ -147,10 +153,11 @@ defmodule DeftWeb.ChatLive do
             socket
           end
 
-        # Reset streaming buffers and update state
+        # Reset streaming buffers, clear active tools, and update state
         socket
         |> assign(:streaming_text, "")
         |> assign(:streaming_thinking, "")
+        |> assign(:active_tools, %{})
         |> assign(:agent_state, state)
       else
         assign(socket, :agent_state, state)
@@ -562,7 +569,7 @@ defmodule DeftWeb.ChatLive do
     # Parse command and args (e.g., "/model gpt-4" -> {"model", "gpt-4"})
     [command | args] = String.split(input, " ", parts: 2)
     command = String.trim_leading(command, "/")
-    args = if args == [], do: "", else: List.first(args)
+    args = if args == [], do: nil, else: List.first(args)
 
     case command do
       "help" ->
