@@ -19,11 +19,8 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## web-ui v0.4 + sessions v0.6
 
-### Mix task for CLI dispatch
-- Create `lib/mix/tasks/deft.ex` implementing `Mix.Tasks.Deft` — calls `Application.ensure_all_started(:deft)`, then delegates to `Deft.CLI.main(args)`. This allows `mix deft`, `mix deft work --loop`, `mix deft -p "prompt"`, `mix deft issue list` etc. All subcommands go through the same dispatcher.
-
 ### Verify `mix deft` works end-to-end
-- Run `mix deft` and confirm: (1) OTP app starts including Endpoint, (2) browser opens to `http://localhost:4000`, (3) web UI renders the chat interface, (4) Ctrl+C shuts down cleanly. Then test `mix deft -p "hello"` for non-interactive mode. (blocked: Create `lib/mix/tasks/deft.ex`...)
+- Run `mix deft` and confirm: (1) OTP app starts including Endpoint, (2) browser opens to `http://localhost:4000`, (3) web UI renders the chat interface, (4) Ctrl+C shuts down cleanly. Then test `mix deft -p "hello"` for non-interactive mode.
 
 ### Verify `mix deft work` and `mix deft issue` subcommands
 - Run `mix deft issue list` and confirm it dispatches correctly through `Deft.CLI.main(["issue", "list"])`. Run `mix deft work` and confirm it dispatches to the work loop. These already work in cli.ex — just verify the Mix task wrapper passes args through correctly. (blocked: Verify `mix deft` works end-to-end...)
