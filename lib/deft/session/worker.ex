@@ -35,6 +35,7 @@ defmodule Deft.Session.Worker do
     session_id = Keyword.fetch!(opts, :session_id)
     config = Keyword.fetch!(opts, :config)
     messages = Keyword.get(opts, :messages, [])
+    session_cost = Keyword.get(opts, :session_cost, 0.0)
     om_snapshot = Keyword.get(opts, :om_snapshot)
 
     # Build cache DETS path
@@ -66,6 +67,7 @@ defmodule Deft.Session.Worker do
          session_id: session_id,
          config: config,
          messages: messages,
+         session_cost: session_cost,
          name: agent_via_tuple(session_id)
        ]},
 

@@ -826,7 +826,7 @@ defmodule Deft.CLI do
          working_dir,
          config,
          initial_messages \\ [],
-         _initial_session_cost \\ 0.0,
+         initial_session_cost \\ 0.0,
          om_snapshot \\ nil
        ) do
     agent_config = %{
@@ -861,6 +861,7 @@ defmodule Deft.CLI do
         session_id: session_id,
         config: agent_config,
         messages: initial_messages,
+        session_cost: initial_session_cost,
         om_snapshot: om_snapshot,
         project_dir: working_dir
       )

@@ -38,6 +38,7 @@ defmodule Deft.Session.Supervisor do
     session_id = Keyword.fetch!(opts, :session_id)
     config = Keyword.fetch!(opts, :config)
     messages = Keyword.get(opts, :messages, [])
+    session_cost = Keyword.get(opts, :session_cost, 0.0)
     om_snapshot = Keyword.get(opts, :om_snapshot)
     project_dir = Keyword.get(opts, :project_dir, File.cwd!())
 
@@ -49,6 +50,7 @@ defmodule Deft.Session.Supervisor do
       session_id: session_id,
       config: config,
       messages: messages,
+      session_cost: session_cost,
       om_snapshot: om_snapshot
     ]
 
