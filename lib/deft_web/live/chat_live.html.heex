@@ -53,6 +53,18 @@
             expanded={Map.get(@tools_expanded, "tool-#{tool_id}", false)}
           />
         <% end %>
+
+        <%= if @turn_limit_reached do %>
+          <div class="turn-limit-prompt">
+            <p class="turn-limit-message">
+              The agent has reached the turn limit. Would you like to continue or abort?
+            </p>
+            <div class="turn-limit-actions">
+              <button phx-click="continue_turn" class="btn-continue">Continue</button>
+              <button phx-click="abort_turn" class="btn-abort">Abort</button>
+            </div>
+          </div>
+        <% end %>
       </div>
     </div>
 

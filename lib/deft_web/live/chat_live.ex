@@ -68,6 +68,9 @@ defmodule DeftWeb.ChatLive do
         |> assign(:last_ctrl_c, nil)
         |> assign(:input_history, [])
         |> assign(:input_history_index, nil)
+        |> assign(:turn_limit_reached, false)
+        |> assign(:turn_limit_count, 0)
+        |> assign(:turn_limit_max, 0)
         |> stream(:conversation, [])
 
       {:ok, socket}
@@ -210,6 +213,24 @@ defmodule DeftWeb.ChatLive do
     {:noreply, stream_insert(socket, :conversation, message)}
   end
 
+  def handle_info({:agent_event, {:turn_limit_reached, count, max}}, socket) do
+    # Display turn limit message and prompt user to continue or abort
+    message = %{
+      id: System.unique_integer([:positive, :monotonic]),
+      role: :system,
+      content: "Turn limit reached (#{count}/#{max})"
+    }
+
+    socket =
+      socket
+      |> stream_insert(:conversation, message)
+      |> assign(:turn_limit_reached, true)
+      |> assign(:turn_limit_count, count)
+      |> assign(:turn_limit_max, max)
+
+    {:noreply, socket}
+  end
+
   def handle_info({:agent_event, _other}, socket) do
     # Ignore unknown events
     {:noreply, socket}
@@ -268,6 +289,52 @@ defmodule DeftWeb.ChatLive do
     current_state = Map.get(socket.assigns.tools_expanded, id, false)
     new_expanded_state = Map.put(socket.assigns.tools_expanded, id, not current_state)
     {:noreply, assign(socket, :tools_expanded, new_expanded_state)}
+  end
+
+  @impl true
+  def handle_event("continue_turn", _params, socket) do
+    # Call continue_turn with true to allow the agent to proceed
+    agent = Worker.agent_via_tuple(socket.assigns.session_id)
+    Deft.Agent.continue_turn(agent, true)
+
+    # Clear the turn limit reached state
+    socket =
+      socket
+      |> assign(:turn_limit_reached, false)
+      |> assign(:turn_limit_count, 0)
+      |> assign(:turn_limit_max, 0)
+
+    # Add a system message confirming the action
+    message = %{
+      id: System.unique_integer([:positive, :monotonic]),
+      role: :system,
+      content: "Continuing turn..."
+    }
+
+    {:noreply, stream_insert(socket, :conversation, message)}
+  end
+
+  @impl true
+  def handle_event("abort_turn", _params, socket) do
+    # Call continue_turn with false to decline continuing
+    agent = Worker.agent_via_tuple(socket.assigns.session_id)
+    Deft.Agent.continue_turn(agent, false)
+
+    # Clear the turn limit reached state
+    socket =
+      socket
+      |> assign(:turn_limit_reached, false)
+      |> assign(:turn_limit_count, 0)
+      |> assign(:turn_limit_max, 0)
+
+    # Add a system message confirming the action
+    message = %{
+      id: System.unique_integer([:positive, :monotonic]),
+      role: :system,
+      content: "Declining to continue turn..."
+    }
+
+    {:noreply, stream_insert(socket, :conversation, message)}
   end
 
   # Private helpers

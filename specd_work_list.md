@@ -19,4 +19,5 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## web-ui v0.2
 
-- Add `handle_info` for `{:agent_event, {:turn_limit_reached, count, max}}` in `ChatLive`: display a message like "Turn limit reached (X/Y)" and provide a way for the user to call `Deft.Agent.continue_turn/2` or abort. Without this, the agent blocks permanently when the turn limit is hit.
+- Fix `render_conversation_item/1` in `chat_live.ex`: replace `HTML.raw(item.content || "")` with proper HTML escaping. User and assistant content is passed through `HTML.raw()` unescaped, so any `<`, `>`, `&` characters in messages render as HTML markup instead of displaying as text. Use `Phoenix.HTML.html_escape/1` or HEEx auto-escaping, and add markdown-to-HTML rendering via Earmark if desired.
+
