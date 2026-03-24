@@ -19,11 +19,8 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## web-ui v0.4 + sessions v0.6
 
-### mix.exs cleanup
-- Remove `escript/0` function and `escript: escript()` from `project/0` in mix.exs. Add `{:esbuild, "~> 0.8", runtime: Mix.env() == :dev}` to deps. Run `mix deps.get`. Add `deft` to `.gitignore` (it's the escript build artifact).
-
 ### Bandit adapter config (CRITICAL — blocks startup)
-- Add `adapter: Bandit.PhoenixAdapter` to `DeftWeb.Endpoint` config in `config/config.exs`. Without this, Phoenix defaults to Cowboy which is not installed, crashing on startup with `UndefinedFunctionError: Plug.Cowboy.child_spec/1`. (blocked: Remove `escript/0` function...)
+- Add `adapter: Bandit.PhoenixAdapter` to `DeftWeb.Endpoint` config in `config/config.exs`. Without this, Phoenix defaults to Cowboy which is not installed, crashing on startup with `UndefinedFunctionError: Plug.Cowboy.child_spec/1`.
 
 ### prod.exs (CRITICAL — blocks release)
 - Create `config/prod.exs` with `server: true` (without this the release binary won't start the HTTP listener), `adapter: Bandit.PhoenixAdapter`, `url: [host: "localhost"]`. (blocked: Add `adapter: Bandit.PhoenixAdapter`...)

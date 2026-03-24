@@ -8,6 +8,9 @@ erl_crash.dump
 # Burrito builds
 burrito_out/
 
+# Escript builds
+deft
+
 # Test/coverage
 cover/
 doc/

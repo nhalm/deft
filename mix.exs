@@ -13,7 +13,6 @@ defmodule Deft.MixProject do
       test_pattern: "*_test.exs",
       test_coverage: [ignore_modules: [~r/^Inspect\./]],
       aliases: aliases(),
-      escript: escript(),
       releases: releases()
     ]
   end
@@ -54,6 +53,7 @@ defmodule Deft.MixProject do
 
       # Dev/Test only
       {:phoenix_live_reload, "~> 1.5", only: [:dev]},
+      {:esbuild, "~> 0.8", runtime: Mix.env() == :dev},
       {:floki, ">= 0.30.0", only: :test},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev], runtime: false},
@@ -67,12 +67,6 @@ defmodule Deft.MixProject do
 
   defp aliases do
     []
-  end
-
-  defp escript do
-    [
-      main_module: Deft.CLI
-    ]
   end
 
   defp releases do
