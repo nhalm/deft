@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## web-ui v0.2
 
-- Apply `roster-hidden` class dynamically to `chat-container` div based on `@roster_visible` and `@job_active` assigns: use `class={"chat-container #{unless @roster_visible or @job_active, do: "roster-hidden"}"}`. Currently the class is static and the `.chat-container.roster-hidden` CSS rules are dead code.
 - Handle nil `session_id` at mount in `ChatLive`: when `params["session"]` is nil (direct visit to `/`, session picker `q` key, `/quit` redirect), redirect to `/sessions` instead of proceeding with nil. Currently nil session_id causes crashes on prompt submission (`Worker.agent_via_tuple(nil)`) and Ctrl+C abort.
 - Clear `active_tools` map when a new turn starts or previous turn ends in `ChatLive`: add reset logic in the `:state_change` handler. Currently tool calls accumulate across all turns and are never removed, showing stale tools from previous turns indefinitely.
 - Add `handle_info` for `{:agent_event, {:turn_limit_reached, count, max}}` in `ChatLive`: display a message like "Turn limit reached (X/Y)" and provide a way for the user to call `Deft.Agent.continue_turn/2` or abort. Without this, the agent blocks permanently when the turn limit is hit.

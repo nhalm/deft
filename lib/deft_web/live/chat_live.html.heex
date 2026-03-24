@@ -1,4 +1,4 @@
-<div class="chat-container" phx-window-keydown="keydown">
+<div class={"chat-container #{unless @roster_visible or @job_active, do: "roster-hidden"}"} phx-window-keydown="keydown">
   <div class="header-bar">
     <div class="header-left">
       <span class="app-name">Deft</span>
