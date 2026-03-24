@@ -2,11 +2,17 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.5 |
+| Version | 0.6 |
 | Status | Ready |
 | Last Updated | 2026-03-24 |
 
 ## Changelog
+
+### v0.6 (2026-03-24)
+- Replaced escript with unified CLI dispatcher — same `./deft` binary handles all subcommands
+- Application always starts full supervision tree (including Endpoint); CLI dispatcher controls what runs
+- All subcommands work in both dev (`mix deft <subcommand>`) and release (`./deft <subcommand>`)
+- Added Bandit adapter config, prod.exs, dynamic port selection, browser auto-open, pidfile
 
 ### v0.5 (2026-03-24)
 - Replaced escript distribution with Mix release + Burrito
@@ -148,35 +154,73 @@ Tracks estimated cost per model per turn from `:usage` events and model pricing:
 - `session_cost` — cumulative estimated cost (Actor + OM calls)
 - Displayed in TUI status bar, persisted in session JSONL
 
-### 5. Startup Interface
+### 5. Application Runtime
 
-Deft is a Phoenix web application. The primary interface is the browser.
+Deft is a Phoenix web application with CLI subcommands. The OTP application always starts the full supervision tree (agent subsystems, Phoenix endpoint, PubSub). A CLI dispatcher controls what happens after startup.
 
-#### 5.1 Development
+#### 5.1 Architecture
 
 ```
-mix phx.server        # start server, opens browser
-iex -S mix phx.server # with interactive shell
+Deft.Application.start/2
+  └── Supervision tree (always starts fully):
+      ├── Deft.Registry (duplicate — event pub/sub)
+      ├── Deft.ProcessRegistry (unique — process naming)
+      ├── Deft.Provider.Registry
+      ├── Deft.Skills.Registry
+      ├── Deft.Session.Supervisor
+      ├── Phoenix.PubSub (name: Deft.PubSub)
+      ├── DeftWeb.Endpoint (Bandit on localhost:<port>)
+      └── (optional) Deft.Issues
+
+After the supervision tree starts, Deft.CLI.main/1 dispatches based on argv.
 ```
 
-The web UI handles session management — new sessions, resume, session picker are all browser routes (see [web-ui.md](web-ui.md)).
+The endpoint always starts. It's cheap (~2MB idle) and means the web UI is always available, even during `deft work` — you can open the browser to monitor a running job.
 
-#### 5.2 Non-Interactive Mode (Mix Task)
+#### 5.2 CLI Dispatcher
 
-| Usage | Description |
-|-------|-------------|
-| `mix deft.prompt "prompt"` | Single-turn: send prompt, print response, exit |
-| `echo "prompt" \| mix deft.prompt` | Piped input: read from stdin |
-| `mix deft.prompt "prompt" --output file.txt` | Write response to file |
+`Deft.CLI.main/1` parses `System.argv()` and dispatches:
 
-In the release binary:
+| Command | Action |
+|---------|--------|
+| `deft` (no args) | Open browser to web UI, block until Ctrl+C |
+| `deft -p "prompt"` | Non-interactive: send prompt, stream response to stdout, exit |
+| `deft work` | Pick highest-priority ready issue, run as job (see [issues.md](issues.md)) |
+| `deft work --loop` | Keep picking issues until queue empty or cost ceiling |
+| `deft work <id>` | Run a specific issue as a job |
+| `deft issue create <title>` | Interactive issue creation session |
+| `deft issue list` | List issues |
+| `deft issue show <id>` | Show issue details |
+| `deft issue ready` | List ready (unblocked) issues |
+| `deft issue update <id>` | Update issue fields |
+| `deft issue close <id>` | Close an issue |
+| `deft config` | Show current configuration |
+| `deft --help` | Show help |
+| `deft --version` | Show version |
+
+All commands work identically in dev and release. The dispatcher is the same `Deft.CLI` module used today — it just no longer runs as an escript.
+
+#### 5.3 Development
+
 ```
-./bin/deft eval "Deft.CLI.run_prompt(\"prompt\")"
+mix phx.server                    # web UI only (standard Phoenix)
+iex -S mix phx.server             # web UI + IEx shell
+mix run -e "Deft.CLI.main([])"    # web UI via CLI dispatcher
+mix run -e "Deft.CLI.main([\"work\", \"--loop\"])"  # work loop
 ```
 
-No web server is started for non-interactive mode. Output goes to stdout.
+Or via a Mix task wrapper (convenience):
 
-#### 5.3 Flags (Mix Task)
+```
+mix deft                          # web UI
+mix deft work --loop              # work loop
+mix deft -p "prompt"              # non-interactive
+mix deft issue list               # issue commands
+```
+
+The `Mix.Tasks.Deft` task delegates to `Deft.CLI.main/1` after ensuring the application is started.
+
+#### 5.4 Flags
 
 | Flag | Description |
 |------|-------------|
@@ -184,26 +228,79 @@ No web server is started for non-interactive mode. Output goes to stdout.
 | `--provider <name>` | Override provider |
 | `--no-om` | Disable observational memory |
 | `--working-dir <path>` | Override working directory |
-| `--output <file>` | Write response to file |
-| `--auto-approve-all` | Skip all plan approvals |
+| `-p <prompt>` | Non-interactive single-turn mode |
+| `--output <file>` | Write response to file (non-interactive) |
+| `--auto-approve-all` | Skip all plan approvals for orchestrated jobs |
+| `--help` / `-h` | Show help |
+| `--version` | Show version |
 
-Interactive flags (session management, resume) are handled by the web UI, not the CLI.
+#### 5.5 Interactive Mode (Web UI)
+
+When `deft` is invoked with no subcommand (or in the release binary with no args):
+
+1. Application starts (supervision tree including Endpoint)
+2. CLI opens the browser: `System.cmd("open", [url])` on macOS, `xdg-open` on Linux
+3. Prints `Deft running at http://localhost:<port>` to terminal
+4. Blocks with `Process.sleep(:infinity)` until Ctrl+C
+
+Session management (new, resume, picker) is handled entirely by the web UI routes.
+
+#### 5.6 Non-Interactive Mode
+
+`deft -p "prompt"` sends a single prompt, streams the response to stdout, and exits. The endpoint is running but unused. Output goes to stdout or `--output <file>`.
 
 ### 6. Distribution
 
+#### 6.1 Mix Release + Burrito
+
 Packaged as a Mix release wrapped with Burrito for single-binary distribution.
 
-- **Development:** `mix phx.server` — requires Elixir/Erlang installed
-- **Production:** `mix release` produces a self-contained release with BEAM runtime, `priv/` assets, and config
-- **Single binary:** Burrito wraps the release — `./deft` starts the Phoenix server and opens the browser
-- Targets: macOS (arm64, x86_64), Linux (x86_64, aarch64)
-- External runtime dependencies: `rg` (ripgrep) and `fd` (fd-find) — warn on startup if missing
-- Startup orphan cleanup: scan for `deft/job-*` branches and worktrees from crashed jobs, offer to clean up
+```
+MIX_ENV=prod mix assets.deploy   # build CSS/JS
+MIX_ENV=prod mix release         # build release + Burrito binary
+```
 
-**No escript.** Escript doesn't support `priv/` directories (needed for static assets), signal handling is broken on OTP 28, and it conflicts with Phoenix's runtime model.
+The release includes:
+- BEAM runtime (via Burrito — no Erlang/Elixir install needed)
+- `priv/static/` with compiled CSS, JS, and Phoenix assets
+- Config (compiled from config/*.exs)
+- All application code
+
+#### 6.2 Release Binary
+
+The Burrito binary is invoked as `./deft`. It starts the OTP application, then runs `Deft.CLI.main(argv)` to dispatch subcommands.
+
+```
+./deft                           # web UI — opens browser
+./deft work --loop               # work loop
+./deft -p "prompt"               # non-interactive
+./deft issue list                # issue commands
+```
+
+All the same commands as dev mode. No `eval` or wrapper scripts needed — the release binary IS the CLI.
+
+#### 6.3 Release Configuration
+
+The release binary needs:
+
+- `config/runtime.exs` — reads `PORT`, `ANTHROPIC_API_KEY`, `SECRET_KEY_BASE` from env. Generates `SECRET_KEY_BASE` if not set (local tool, not a web service).
+- `config/prod.exs` — `server: true` (starts HTTP listener), Bandit adapter config.
+- Dynamic port selection: try `PORT` env, then 4000, then 4001-4099 if busy. Write actual port to `~/.deft/projects/<path-encoded-repo>/server.pid`.
+
+#### 6.4 Targets
+
+- macOS (arm64, x86_64)
+- Linux (x86_64, aarch64)
+
+External runtime dependencies: `rg` (ripgrep) and `fd` (fd-find) — warn on startup if missing.
+
+Startup orphan cleanup: scan for `deft/job-*` branches and worktrees from crashed jobs, offer to clean up.
+
+**No escript.** Escript doesn't support `priv/` directories, signal handling is broken on OTP 28, and it conflicts with Phoenix's runtime model.
 
 ## References
 
 - [harness.md](harness.md) — agent loop
 - [web-ui.md](web-ui.md) — web interface
+- [issues.md](issues.md) — issue tracker, work mode
 - [standards.md](standards.md) — coding standards

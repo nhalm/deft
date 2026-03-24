@@ -17,38 +17,45 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## web-ui v0.3 + sessions v0.5
+## web-ui v0.4 + sessions v0.6
 
-### Drop escript, fix mix.exs
-- Remove `escript/0` function and `escript: escript()` from `project/0` in mix.exs. Add `{:esbuild, "~> 0.8", runtime: Mix.env() == :dev}` to deps. Run `mix deps.get`.
-- Delete the `deft` escript binary from the repo root (it's a build artifact that should be in .gitignore)
+### mix.exs cleanup
+- Remove `escript/0` function and `escript: escript()` from `project/0` in mix.exs. Add `{:esbuild, "~> 0.8", runtime: Mix.env() == :dev}` to deps. Run `mix deps.get`. Add `deft` to `.gitignore` (it's the escript build artifact).
 
-### Phoenix config files
-- Create `config/config.exs` with Phoenix endpoint config: `url: [host: "localhost"]`, `render_errors`, `pubsub_server: Deft.PubSub`, `live_view: [signing_salt: ...]`, esbuild config for `assets/js/app.js` bundling (blocked: Remove `escript/0` function...)
-- Create `config/dev.exs` with `debug_errors: true`, `code_reloader: true`, `check_origin: false`, live_reload patterns for `.ex`, `.heex`, `.css`, `.js` files (blocked: Create `config/config.exs`...)
-- Create `config/prod.exs` with `server: true`, `url: [host: "localhost"]` (blocked: Create `config/config.exs`...)
-- Create `config/runtime.exs` with port from `PORT` env var (default 4000), secret_key_base generation via `:crypto.strong_rand_bytes/1` for dev (blocked: Create `config/config.exs`...)
+### Bandit adapter config (CRITICAL — blocks startup)
+- Add `adapter: Bandit.PhoenixAdapter` to `DeftWeb.Endpoint` config in `config/config.exs`. Without this, Phoenix defaults to Cowboy which is not installed, crashing on startup with `UndefinedFunctionError: Plug.Cowboy.child_spec/1`. (blocked: Remove `escript/0` function...)
+
+### prod.exs (CRITICAL — blocks release)
+- Create `config/prod.exs` with `server: true` (without this the release binary won't start the HTTP listener), `adapter: Bandit.PhoenixAdapter`, `url: [host: "localhost"]`. (blocked: Add `adapter: Bandit.PhoenixAdapter`...)
+
+### Config files
+- Update `config/config.exs` — ensure it has esbuild config for `assets/js/app.js` bundling and `import_config "#{config_env()}.exs"` at the bottom (blocked: Add `adapter: Bandit.PhoenixAdapter`...)
+- Update `config/dev.exs` — ensure `debug_errors: true`, `code_reloader: true`, `check_origin: false`, live_reload patterns for `.ex`, `.heex`, `.css`, `.js` (blocked: Update `config/config.exs`...)
+- Update `config/runtime.exs` — add dynamic port from `PORT` env var (default 4000), generate `SECRET_KEY_BASE` via `:crypto.strong_rand_bytes(64) |> Base.encode64()` if not set in env (local tool, not a web service), read `ANTHROPIC_API_KEY` (blocked: Update `config/config.exs`...)
 
 ### Dynamic port selection
-- Add dynamic port selection to `DeftWeb.Endpoint` init or `Deft.Application`: try port from config, if `:eaddrinuse` increment through 4001-4099, store actual port in `~/.deft/projects/<path-encoded-repo>/server.pid`. Print actual URL with correct port on startup. (blocked: Create `config/runtime.exs`...)
+- Implement dynamic port selection: try port from config, if `:eaddrinuse` try 4001-4099. Write actual port to `~/.deft/projects/<path-encoded-repo>/server.pid`. Print `Deft running at http://localhost:<port>` on startup. This can be in `Deft.Application.start/2` after the endpoint starts, or in a custom `DeftWeb.Endpoint.init/2` callback. (blocked: Update `config/runtime.exs`...)
 
 ### Remove escript CLI code
-- Remove `setup_sigint_handler/0` and all `:os.set_signal` calls from `lib/deft/cli.ex` — replace `start_web_ui/1` signal-based blocking with `Process.sleep(:infinity)`. Remove `restore_terminal/0` and `alias Breeze.Server` and `@compile {:no_warn_undefined, Breeze.Terminal}`. (blocked: Remove `escript/0` function...)
-- Remove the old interactive REPL functions if any remain in cli.ex: `interactive_loop/1`, `interactive_response_loop/0`, `process_prompt/2`, `send_to_agent/2` (blocked: Remove `setup_sigint_handler/0`...)
+- Remove `setup_sigint_handler/0` function and all `:os.set_signal(:sigint, :handle)` calls from `lib/deft/cli.ex`. Remove `restore_terminal/0`. Remove `alias Breeze.Server` and `@compile {:no_warn_undefined, Breeze.Terminal}`. In `start_web_ui/1`, the blocking is already `Process.sleep(:infinity)` — verify this is correct. (blocked: Remove `escript/0` function...)
 
-### Non-interactive Mix task
-- Create `lib/mix/tasks/deft/prompt.ex` implementing `Mix.Tasks.Deft.Prompt` — parses args (`--model`, `--provider`, `--no-om`, `--working-dir`, `--output`), reads from stdin if no positional arg, starts agent (no Endpoint), sends prompt, streams response to stdout or file, exits. (blocked: Remove `escript/0` function...)
-- Add `Deft.CLI.run_prompt/1` function for release eval mode — same logic as the Mix task but callable as `./bin/deft eval "Deft.CLI.run_prompt(\"prompt\")"` (blocked: Create `lib/mix/tasks/deft/prompt.ex`...)
+### Browser auto-open
+- Add browser open to `start_web_ui/1` in cli.ex: after printing the URL, call `System.cmd("open", [url])` on macOS (detect via `:os.type()`) or `System.cmd("xdg-open", [url])` on Linux. Wrap in `try/rescue` so failure to open browser is a warning, not a crash. (blocked: Remove `setup_sigint_handler/0`...)
 
-### Conditional endpoint startup
-- Update `lib/deft/application.ex` — start `DeftWeb.Endpoint` only when `Application.get_env(:deft, :start_endpoint, true)` is true. The Mix task sets this to false before starting the app. (blocked: Create `lib/mix/tasks/deft/prompt.ex`...)
+### Mix task for CLI dispatch
+- Create `lib/mix/tasks/deft.ex` implementing `Mix.Tasks.Deft` — calls `Application.ensure_all_started(:deft)`, then delegates to `Deft.CLI.main(args)`. This allows `mix deft`, `mix deft work --loop`, `mix deft -p "prompt"`, `mix deft issue list` etc. All subcommands go through the same dispatcher. (blocked: Remove `setup_sigint_handler/0`...)
+
+### Verify `mix deft` works end-to-end
+- Run `mix deft` and confirm: (1) OTP app starts including Endpoint, (2) browser opens to `http://localhost:4000`, (3) web UI renders the chat interface, (4) Ctrl+C shuts down cleanly. Then test `mix deft -p "hello"` for non-interactive mode. (blocked: Create `lib/mix/tasks/deft.ex`...)
+
+### Verify `mix deft work` and `mix deft issue` subcommands
+- Run `mix deft issue list` and confirm it dispatches correctly through `Deft.CLI.main(["issue", "list"])`. Run `mix deft work` and confirm it dispatches to the work loop. These already work in cli.ex — just verify the Mix task wrapper passes args through correctly. (blocked: Verify `mix deft` works end-to-end...)
 
 ### Syntax highlighting
-- Add highlight.js to `assets/js/app.js` — import from CDN or bundle, call `hljs.highlightAll()` after each LiveView update via a hook on the conversation container. Style code blocks with the highlight.js dark theme. (blocked: Create `config/dev.exs`...)
+- Add highlight.js to `assets/js/app.js` — import from CDN or vendor bundle, call `hljs.highlightAll()` after each LiveView DOM update via a `phx-hook` on the conversation container. Style code blocks with a dark theme. (blocked: Update `config/dev.exs`...)
 
 ### Cleanup old TUI
-- Delete `lib/deft/tui/` directory entirely (chat.ex, session_picker.ex, breeze_poc.ex, markdown.ex) — all functionality replaced by `lib/deft_web/` (blocked: Conditional endpoint startup...)
+- Delete `lib/deft/tui/` directory entirely (chat.ex, session_picker.ex, breeze_poc.ex, markdown.ex) — all functionality replaced by `lib/deft_web/`. Remove any remaining `Breeze` or `Termite` references from the codebase. (blocked: Verify `mix deft work` and `mix deft issue`...)
 
 ### Tests
-- Create `test/mix/tasks/deft/prompt_test.exs` — test that the Mix task parses args correctly, starts agent without Endpoint, streams response to stdout, handles `--output` flag (blocked: Create `lib/mix/tasks/deft/prompt.ex`...)
-- Verify all existing web UI tests still pass after escript removal — run `mix test test/deft_web/` and confirm 45 tests, 0 failures (blocked: Delete `lib/deft/tui/` directory...)
+- Verify all existing web UI tests still pass after changes — run `mix test test/deft_web/` and confirm 45+ tests, 0 failures. Run `mix test` for full suite. (blocked: Delete `lib/deft/tui/` directory...)

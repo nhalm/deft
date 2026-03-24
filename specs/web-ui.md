@@ -2,11 +2,19 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.3 |
+| Version | 0.4 |
 | Status | Ready |
 | Last Updated | 2026-03-24 |
 
 ## Changelog
+
+### v0.4 (2026-03-24)
+- Fixed startup architecture: unified CLI dispatcher replaces escript, see sessions.md §5
+- Added Bandit adapter config (was defaulting to missing Cowboy)
+- Added prod.exs with `server: true`
+- Added esbuild for asset compilation
+- Removed escript-specific code (setup_sigint_handler, restore_terminal)
+- Resolved open questions: dynamic port selection, `prefers-color-scheme`, Earmark for markdown, highlight.js for syntax
 
 ### v0.3 (2026-03-24)
 - Replaced escript with Mix release + Burrito for distribution
@@ -269,68 +277,11 @@ Recognized by leading `/` in input or via `:` in command mode. Same command set 
 
 ### 9. Startup and Lifecycle
 
-#### 9.1 Development Startup
+See [sessions.md](sessions.md) §5 for the full application runtime architecture, CLI dispatcher, and distribution model.
 
-In development, Deft runs as a normal Mix application:
+The web UI is the default mode — `deft` with no args opens the browser. The endpoint always starts (even during `deft work`) so the web UI is available for monitoring running jobs.
 
-```
-mix phx.server
-```
-
-This starts the full OTP application (agent, providers, sessions, OM) and the Phoenix endpoint. Opens browser to `http://localhost:<port>`. Supports live-reload of templates and CSS.
-
-Alternatively, `iex -S mix phx.server` for an interactive shell alongside the web UI.
-
-#### 9.2 Production / Distribution
-
-Deft is distributed as a Mix release wrapped with Burrito for single-binary distribution:
-
-```
-MIX_ENV=prod mix release
-```
-
-Or with Burrito for a self-contained binary:
-
-```
-MIX_ENV=prod mix release --overwrite
-```
-
-The release includes the `priv/` directory (static assets, CSS, JS), config, and the full BEAM runtime (via Burrito). The binary is invoked as `./deft` which starts the Phoenix server and opens the browser.
-
-**Release startup module:** `Deft.Application` starts the full supervision tree including `DeftWeb.Endpoint`. No separate CLI entry point needed — the OTP application IS the entry point.
-
-#### 9.3 Non-Interactive Mode
-
-Non-interactive mode (`deft -p "prompt"`) is implemented as a Mix task (`Mix.Tasks.Deft.Prompt`) rather than an escript:
-
-```
-mix deft.prompt "explain the auth module"
-echo "prompt" | mix deft.prompt
-mix deft.prompt "prompt" --output file.txt
-```
-
-In the release binary, this becomes:
-
-```
-./deft eval "Deft.CLI.run_prompt(\"explain the auth module\")"
-```
-
-Or via a custom release command script in `rel/overlays/bin/deft-prompt`.
-
-No web server is started for non-interactive mode — just the agent, provider, and session subsystems.
-
-#### 9.4 Port Selection
-
-The endpoint picks a port dynamically to avoid conflicts when running multiple Deft instances:
-
-1. Try `PORT` environment variable if set
-2. Try port 4000
-3. If 4000 is in use, try 4001-4099
-4. Print the actual port: `Deft running at http://localhost:4007`
-
-Store the port in a pidfile at `~/.deft/projects/<path-encoded-repo>/server.pid` so other tools can find the running instance.
-
-#### 9.5 Shutdown
+#### 9.1 Shutdown
 
 - Ctrl+C in the terminal where `deft` is running (standard BEAM shutdown)
 - `/quit` command in the web UI calls `System.stop(0)`
@@ -430,23 +381,26 @@ Full flow tests: mount LiveView, simulate user input, send agent events, verify 
 - `phoenix` — web framework
 - `phoenix_live_view` — real-time UI
 - `phoenix_html` — HTML helpers
-- `bandit` — HTTP server (lightweight, Elixir-native)
+- `bandit` — HTTP server (lightweight, Elixir-native). Must be configured as the adapter: `adapter: Bandit.PhoenixAdapter` in endpoint config.
 - `jason` — JSON (already a dep)
 - `earmark_parser` — markdown → HTML rendering (already a dep)
 - `burrito` — single-binary distribution (already a dep)
 
 **Dev/Test:**
 - `phoenix_live_reload` — dev hot reload
-- `floki` — HTML parsing for LiveView tests
-- `esbuild` — JS bundling for app.js (Phoenix default)
+- `floki` — HTML parsing for LiveView tests (already a dep)
+- `esbuild` — JS bundling for app.js
 
 **Removed:**
 - `breeze` (and transitive: `back_breeze`, `termite`)
-- Escript config from mix.exs (`escript/0` function)
+- Escript config from mix.exs (`escript/0` function, `escript: escript()` in `project/0`)
 
-**Not needed:**
-- Tailwind (plain CSS for now, add later if needed)
-- No new test deps — `floki` already present
+**Config files required:**
+- `config/config.exs` — base Phoenix config, `adapter: Bandit.PhoenixAdapter`, LiveView signing salt
+- `config/dev.exs` — `debug_errors: true`, `code_reloader: true`, live-reload patterns
+- `config/prod.exs` — `server: true` (critical — without this the release won't start HTTP), Bandit adapter
+- `config/runtime.exs` — `PORT` env var, `SECRET_KEY_BASE` (generate if not set), `ANTHROPIC_API_KEY`
+- `config/test.exs` — `server: false`, port 4002
 
 ### 13. Migration
 
