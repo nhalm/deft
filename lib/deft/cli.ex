@@ -156,7 +156,7 @@ defmodule Deft.CLI do
         :config
 
       positional == ["resume"] ->
-        :resume_list
+        {:error, "Use the web UI to pick a session. Run: deft"}
 
       match?(["resume", _], positional) ->
         [_cmd, session_id] = positional
@@ -515,26 +515,6 @@ defmodule Deft.CLI do
 
         IO.puts("Starting work on issue #{issue.id}: #{issue.title}")
         run_work_on_issue(issue, flags)
-    end
-  end
-
-  defp execute_command(:resume_list, flags) do
-    working_dir = flags[:working_dir] || File.cwd!()
-
-    case Store.list(working_dir) do
-      {:ok, sessions} when sessions == [] ->
-        IO.puts("No sessions found.")
-        :ok
-
-      {:ok, _sessions} ->
-        # Start Breeze with SessionPicker view
-        # TODO: Implement session picker with Phoenix LiveView
-        IO.puts(:stderr, "Error: Interactive session picker not yet implemented in web UI")
-        exit({:shutdown, 1})
-
-      {:error, reason} ->
-        IO.puts(:stderr, "Error listing sessions: #{inspect(reason)}")
-        exit({:shutdown, 1})
     end
   end
 
