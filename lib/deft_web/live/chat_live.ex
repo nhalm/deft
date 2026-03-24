@@ -195,7 +195,7 @@ defmodule DeftWeb.ChatLive do
     {:noreply, socket}
   end
 
-  def handle_info({:agent_event, {:job_status, statuses}}, socket) do
+  def handle_info({:job_status, statuses}, socket) do
     # Set job_started_at on first job_status event if not already set
     job_started_at =
       if socket.assigns.job_started_at == nil do
