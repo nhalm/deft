@@ -88,8 +88,16 @@ defmodule DeftWeb.SessionsLive do
   end
 
   def handle_event("keydown", %{"key" => "q"}, socket) do
-    # Quit - go back to current session or close
-    {:noreply, push_navigate(socket, to: "/")}
+    # Go back to most recent session (first in list, sorted by last_message_at desc)
+    sessions = socket.assigns.sessions
+
+    if sessions != [] do
+      most_recent = List.first(sessions)
+      {:noreply, push_navigate(socket, to: "/?session=#{most_recent.session_id}")}
+    else
+      # No sessions available - stay on picker
+      {:noreply, socket}
+    end
   end
 
   def handle_event("keydown", _params, socket) do

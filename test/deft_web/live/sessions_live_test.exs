@@ -255,14 +255,34 @@ defmodule DeftWeb.SessionsLiveTest do
   end
 
   describe "q key - quit/back" do
-    test "q redirects to main chat view", %{conn: conn} do
+    test "q redirects to most recent session", %{conn: conn} do
+      # Create test sessions
+      create_test_session("session_newer", message_count: 2, last_prompt: "Newer")
+      # Ensure different timestamps
+      :timer.sleep(10)
+      create_test_session("session_older", message_count: 1, last_prompt: "Older")
+
       {:ok, view, _html} = live(conn, "/sessions")
 
       # Press q
       view |> element(".sessions-picker") |> render_keydown(%{"key" => "q"})
 
-      # Should redirect to main chat
-      assert_redirect(view, "/")
+      # Should redirect to most recent session (the one with the latest last_message_at)
+      # Sessions are sorted by last_message_at desc, so the first one is most recent
+      {:ok, sessions} = Store.list()
+      most_recent = List.first(sessions)
+      assert_redirect(view, "/?session=#{most_recent.session_id}")
+    end
+
+    test "q does nothing when no sessions", %{conn: conn} do
+      {:ok, view, _html} = live(conn, "/sessions")
+
+      # Press q
+      html = view |> element(".sessions-picker") |> render_keydown(%{"key" => "q"})
+
+      # Should stay on picker (no redirect, still shows sessions page)
+      assert html =~ "Sessions"
+      assert html =~ "No sessions found"
     end
   end
 

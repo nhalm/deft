@@ -63,6 +63,29 @@ const ScrollControl = {
     this.isAtBottom = true
   },
 
+  handleEvent(event, payload) {
+    if (event === "scroll_to") {
+      if (payload.position === "bottom") {
+        // Scroll to bottom (G key)
+        this.el.scrollTop = this.el.scrollHeight
+        this.isAtBottom = true
+        this.userScrolled = false
+      } else if (payload.position === "top") {
+        // Scroll to top (gg keys)
+        this.el.scrollTop = 0
+        this.isAtBottom = false
+        this.userScrolled = true
+      } else if (payload.delta !== undefined) {
+        // Relative scroll (j/k/Ctrl+u/Ctrl+d)
+        this.el.scrollTop += payload.delta
+        // Check if we're at bottom after scroll
+        const isNowAtBottom = this.el.scrollHeight - this.el.scrollTop <= this.el.clientHeight + 50
+        this.isAtBottom = isNowAtBottom
+        this.userScrolled = !isNowAtBottom
+      }
+    }
+  },
+
   destroyed() {
     if (this.observer) {
       this.observer.disconnect()

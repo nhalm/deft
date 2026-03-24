@@ -520,18 +520,21 @@ defmodule DeftWeb.ChatLive do
         socket
         |> assign(:scroll_offset, socket.assigns.scroll_offset + 1)
         |> assign(:pending_g, false)
+        |> push_event("scroll_to", %{delta: 50})
 
       # k - scroll up
       {"k", false, _} ->
         socket
         |> assign(:scroll_offset, max(0, socket.assigns.scroll_offset - 1))
         |> assign(:pending_g, false)
+        |> push_event("scroll_to", %{delta: -50})
 
       # G - scroll to bottom
       {"G", false, _} ->
         socket
         |> assign(:scroll_offset, :bottom)
         |> assign(:pending_g, false)
+        |> push_event("scroll_to", %{position: "bottom"})
 
       # g - first press sets pending_g, second press (gg) scrolls to top
       {"g", false, false} ->
@@ -541,18 +544,21 @@ defmodule DeftWeb.ChatLive do
         socket
         |> assign(:scroll_offset, 0)
         |> assign(:pending_g, false)
+        |> push_event("scroll_to", %{position: "top"})
 
       # Ctrl+u - half-page scroll up
       {"u", true, _} ->
         socket
         |> assign(:scroll_offset, max(0, socket.assigns.scroll_offset - 10))
         |> assign(:pending_g, false)
+        |> push_event("scroll_to", %{delta: -250})
 
       # Ctrl+d - half-page scroll down
       {"d", true, _} ->
         socket
         |> assign(:scroll_offset, socket.assigns.scroll_offset + 10)
         |> assign(:pending_g, false)
+        |> push_event("scroll_to", %{delta: 250})
 
       # Other keys clear pending_g
       _ ->
