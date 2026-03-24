@@ -19,4 +19,4 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## web-ui v0.2
 
-- Guard against missing tool in `tool_call_done` handler in `chat_live.ex`: when `Map.get(active_tools, id, %{})` returns `%{}`, `tool.name` at line 108 raises `KeyError` crashing the LiveView. Use `Map.get(tool, :name)` or pattern match with a fallback so reconnects and missed `tool_call_start` events don't crash the process.
+- Fix `scroll_offset` atom crash after `G` key in `chat_live.ex`: pressing `G` assigns `:bottom` (atom) to `scroll_offset` at line 561, but `j`/`k`/`Ctrl+u`/`Ctrl+d` handlers (lines 547, 554, 578, 585) do integer arithmetic on it (`scroll_offset + 1`, `max(0, scroll_offset - 1)`, etc.), causing `ArithmeticError`. Either assign `0` instead of `:bottom` after `G`, or guard arithmetic clauses to reset `:bottom` to a numeric value first.

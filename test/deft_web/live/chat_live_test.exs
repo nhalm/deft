@@ -278,12 +278,11 @@ defmodule DeftWeb.ChatLiveTest do
       # Send job_status event
       send(
         view.pid,
-        {:agent_event,
-         {:job_status,
-          [
-            %{label: "Foreman", state: :executing},
-            %{label: "Lead A", state: :implementing}
-          ]}}
+        {:job_status,
+         [
+           %{label: "Foreman", state: :executing},
+           %{label: "Lead A", state: :implementing}
+         ]}
       )
 
       html = render(view)

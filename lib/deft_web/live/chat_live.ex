@@ -103,17 +103,24 @@ defmodule DeftWeb.ChatLive do
   def handle_info({:agent_event, {:tool_call_done, %{id: id, args: args}}}, socket) do
     active_tools = socket.assigns.active_tools
 
-    # Extract the key argument to display alongside tool name
-    tool = Map.get(active_tools, id, %{})
-    key_arg = extract_key_arg(tool.name, args)
+    # Get the tool, or return if missing (can happen on reconnect or missed tool_call_start)
+    tool = Map.get(active_tools, id)
 
-    updated_tool =
-      tool
-      |> Map.put(:input, Jason.encode!(args, pretty: true))
-      |> Map.put(:key_arg, key_arg)
+    if tool do
+      # Extract the key argument to display alongside tool name
+      key_arg = extract_key_arg(tool.name, args)
 
-    active_tools = Map.put(active_tools, id, updated_tool)
-    {:noreply, assign(socket, :active_tools, active_tools)}
+      updated_tool =
+        tool
+        |> Map.put(:input, Jason.encode!(args, pretty: true))
+        |> Map.put(:key_arg, key_arg)
+
+      active_tools = Map.put(active_tools, id, updated_tool)
+      {:noreply, assign(socket, :active_tools, active_tools)}
+    else
+      # Tool not found in active_tools (missed tool_call_start event)
+      {:noreply, socket}
+    end
   end
 
   def handle_info(
