@@ -10,13 +10,8 @@ secret_key_base =
   System.get_env("SECRET_KEY_BASE") ||
     :crypto.strong_rand_bytes(64) |> Base.encode64()
 
-# Validate ANTHROPIC_API_KEY — fail fast on startup if missing (except in test env)
-if config_env() != :test and not System.get_env("ANTHROPIC_API_KEY") do
-  raise """
-  environment variable ANTHROPIC_API_KEY is missing.
-  Set it to your Anthropic API key to use Deft.
-  """
-end
+# Note: ANTHROPIC_API_KEY validation is deferred to LLM-using commands (see Deft.CLI.verify_api_key/0)
+# This allows non-LLM commands (--help, --version, config, issue list) to work without an API key
 
 config :deft, DeftWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: port],

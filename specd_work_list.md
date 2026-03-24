@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## sessions v0.6
-
-- Defer `ANTHROPIC_API_KEY` validation from `config/runtime.exs` to LLM-using CLI commands: Remove the fail-fast check from runtime.exs (currently at lines 13-19) and add it instead to code paths that actually call the LLM (e.g., `start_web_ui`, `non_interactive_mode`, `work` commands). This allows non-LLM commands like `deft --help`, `deft --version`, `deft config`, and `deft issue list` to work without an API key configured (spec §5.2).
-
 ## web-ui v0.4
 
 - Implement force-abort for double Ctrl+c in chat_live.ex:392-396: both single and double Ctrl+c call `Deft.Agent.abort(agent)`. Spec §6.4 requires double Ctrl+c to force-abort. Need `Deft.Agent.force_abort/1` (or equivalent) that kills the agent process immediately rather than requesting graceful abort. (blocked: harness — Agent module needs force_abort/1)
