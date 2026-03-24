@@ -81,41 +81,28 @@
     <span class="mode-indicator"><%= mode_indicator(@vim_mode) %></span>
   </div>
 
-  <div class="status-bar">
-    <%= if @job_active do %>
-      <%!-- Orchestration mode status --%>
-      <span class="status-item">
-        <%= length(@agent_statuses) %> agents
-      </span>
-      <span class="separator">│</span>
-      <span class="status-item">
-        $<%= :erlang.float_to_binary(@cost, decimals: 2) %>
-      </span>
-      <span class="separator">│</span>
-      <span class="status-item state-indicator">
-        ◉ <%= @agent_state %>
-      </span>
-    <% else %>
-      <%!-- Solo mode status --%>
-      <span class="status-item">
-        <%= @tokens_input + @tokens_output %>/200k
-      </span>
-      <span class="separator">│</span>
-      <span class="status-item">
-        memory: <%= @om_memory_tokens %>/40k
-      </span>
-      <span class="separator">│</span>
-      <span class="status-item">
-        $<%= :erlang.float_to_binary(@cost, decimals: 2) %>
-      </span>
-      <span class="separator">│</span>
-      <span class="status-item">
-        turn <%= @turn_count %>/<%= @turn_limit %>
-      </span>
-      <span class="separator">│</span>
-      <span class="status-item state-indicator">
-        ◉ <%= @agent_state %>
-      </span>
-    <% end %>
-  </div>
+  <%= if @job_active do %>
+    <.status_bar
+      mode={:orchestration}
+      lead_count={count_leads(@agent_statuses)}
+      completed={count_completed_leads(@agent_statuses)}
+      total={count_leads(@agent_statuses)}
+      cost={@cost}
+      cost_limit={@job_budget}
+      elapsed_seconds={compute_elapsed_seconds(@job_started_at)}
+      state={@agent_state}
+    />
+  <% else %>
+    <.status_bar
+      mode={:solo}
+      tokens_used={@tokens_input + @tokens_output}
+      tokens_max={200_000}
+      memory_tokens={@om_memory_tokens}
+      memory_max={40_000}
+      cost={@cost}
+      turn={@turn_count}
+      turn_limit={@turn_limit}
+      state={@agent_state}
+    />
+  <% end %>
 </div>

@@ -16,8 +16,3 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
-
-## web-ui v0.1
-
-- Add input history: track submitted prompts in a history buffer assign, handle Up/Down arrow keys in normal mode to navigate history per spec §4.
-- Fix orchestration status bar: currently shows `X agents`, spec requires `X leads │ Y/Z complete │ $cost/$budget │ Xm elapsed │ ◉ state`. Compute lead count and completion from `@agent_statuses`.

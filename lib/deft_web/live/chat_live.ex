@@ -14,6 +14,7 @@ defmodule DeftWeb.ChatLive do
 
   import DeftWeb.Components.Thinking
   import DeftWeb.Components.ToolCall
+  import DeftWeb.Components.StatusBar
 
   @impl true
   def mount(params, _session, socket) do
@@ -46,6 +47,8 @@ defmodule DeftWeb.ChatLive do
       |> assign(:om_memory_tokens, 0)
       |> assign(:agent_statuses, [])
       |> assign(:job_active, false)
+      |> assign(:job_budget, 10.0)
+      |> assign(:job_started_at, nil)
       |> assign(:vim_mode, :insert)
       |> assign(:scroll_offset, 0)
       |> assign(:pending_g, false)
@@ -57,6 +60,8 @@ defmodule DeftWeb.ChatLive do
       |> assign(:agent_identity, "Solo")
       |> assign(:thinking_blocks_expanded, %{})
       |> assign(:last_ctrl_c, nil)
+      |> assign(:input_history, [])
+      |> assign(:input_history_index, nil)
       |> stream(:conversation, [])
 
     {:ok, socket}
@@ -130,11 +135,20 @@ defmodule DeftWeb.ChatLive do
   end
 
   def handle_info({:agent_event, {:job_status, statuses}}, socket) do
+    # Set job_started_at on first job_status event if not already set
+    job_started_at =
+      if socket.assigns.job_started_at == nil do
+        System.system_time(:second)
+      else
+        socket.assigns.job_started_at
+      end
+
     socket =
       socket
       |> assign(:agent_statuses, statuses)
       |> assign(:job_active, true)
       |> assign(:roster_visible, true)
+      |> assign(:job_started_at, job_started_at)
 
     {:noreply, socket}
   end
@@ -157,15 +171,22 @@ defmodule DeftWeb.ChatLive do
 
   @impl true
   def handle_event("submit", %{"input" => input}, socket) do
-    # Clear input immediately for better UX
-    socket = assign(socket, :input, "")
-
     # Trim whitespace
     input = String.trim(input)
 
     if input == "" do
       {:noreply, socket}
     else
+      # Add to input history (newest first)
+      history = [input | socket.assigns.input_history]
+
+      # Clear input and reset history index
+      socket =
+        socket
+        |> assign(:input, "")
+        |> assign(:input_history, history)
+        |> assign(:input_history_index, nil)
+
       # Add user message to conversation
       socket = add_user_message(socket, input)
 
@@ -294,6 +315,15 @@ defmodule DeftWeb.ChatLive do
     end
   end
 
+  # Input history navigation in normal mode (Up/Down arrow keys)
+  defp handle_standard_vim_key(socket, key, false) when key in ["ArrowUp", "ArrowDown"] do
+    if socket.assigns.vim_mode == :normal do
+      handle_history_navigation(socket, key)
+    else
+      socket
+    end
+  end
+
   # Any other key in normal mode with pending_g clears it
   defp handle_standard_vim_key(socket, _key, _ctrl) do
     if socket.assigns.vim_mode == :normal and socket.assigns.pending_g do
@@ -315,6 +345,60 @@ defmodule DeftWeb.ChatLive do
     socket
     |> assign(:vim_mode, new_mode)
     |> assign(:pending_g, false)
+  end
+
+  defp handle_history_navigation(socket, "ArrowUp"), do: navigate_history_up(socket)
+  defp handle_history_navigation(socket, "ArrowDown"), do: navigate_history_down(socket)
+  defp handle_history_navigation(socket, _key), do: socket
+
+  defp navigate_history_up(socket) do
+    history = socket.assigns.input_history
+    current_index = socket.assigns.input_history_index
+    history_length = length(history)
+
+    if history_length == 0 do
+      socket
+    else
+      new_index =
+        case current_index do
+          nil -> 0
+          i when i < history_length - 1 -> i + 1
+          i -> i
+        end
+
+      new_input = Enum.at(history, new_index, "")
+
+      socket
+      |> assign(:input, new_input)
+      |> assign(:input_history_index, new_index)
+    end
+  end
+
+  defp navigate_history_down(socket) do
+    history = socket.assigns.input_history
+    current_index = socket.assigns.input_history_index
+
+    if length(history) == 0 do
+      socket
+    else
+      case current_index do
+        nil ->
+          socket
+
+        0 ->
+          socket
+          |> assign(:input, "")
+          |> assign(:input_history_index, nil)
+
+        i when i > 0 ->
+          new_index = i - 1
+          new_input = Enum.at(history, new_index, "")
+
+          socket
+          |> assign(:input, new_input)
+          |> assign(:input_history_index, new_index)
+      end
+    end
   end
 
   defp handle_scroll_key(socket, key, ctrl, pending_g) do
@@ -547,4 +631,20 @@ defmodule DeftWeb.ChatLive do
   defp format_tool_result({:error, reason}) when is_binary(reason), do: "Error: #{reason}"
   defp format_tool_result({:error, reason}), do: "Error: #{inspect(reason, pretty: true)}"
   defp format_tool_result(other), do: inspect(other, pretty: true)
+
+  defp count_leads(agent_statuses) do
+    Enum.count(agent_statuses, fn status -> Map.get(status, :type) == :lead end)
+  end
+
+  defp count_completed_leads(agent_statuses) do
+    Enum.count(agent_statuses, fn status ->
+      Map.get(status, :type) == :lead and Map.get(status, :state) == :complete
+    end)
+  end
+
+  defp compute_elapsed_seconds(job_started_at) when is_integer(job_started_at) do
+    System.system_time(:second) - job_started_at
+  end
+
+  defp compute_elapsed_seconds(_), do: 0
 end

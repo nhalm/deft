@@ -1,4 +1,6 @@
 # History
+- **web-ui v0.1 (2026-03-24):** Fix orchestration status bar: currently shows `X agents`, spec requires `X leads │ Y/Z complete │ $cost/$budget │ Xm elapsed │ ◉ state`. Compute lead count and completion from `@agent_statuses`.
+- **web-ui v0.1 (2026-03-23):** Add input history: track submitted prompts in a history buffer assign, handle Up/Down arrow keys in normal mode to navigate history per spec §4.
 - **web-ui v0.1 (2026-03-23):** Add global keys `Ctrl+c` (abort agent operation) and `Ctrl+l` (clear/redraw) to `handle_standard_vim_key/3` in `ChatLive`. Include double-`Ctrl+c` tracking for force abort per spec §6.4.
 - **web-ui v0.1 (2026-03-23):** Add tmux pane keys `x` (close active panel), `h`/`l` (focus left/right pane) to `handle_tmux_key/2` in `ChatLive` — currently only `%` and `z` are handled.
 - **web-ui v0.1 (2026-03-23):** Add expandable tool calls: inline tool template in `chat_live.html.heex` has no click-to-expand details. Either use the existing `DeftWeb.Components.ToolCall` component or add expand logic inline, and add corresponding `handle_event("toggle_tool", ...)` in `ChatLive`.
