@@ -99,6 +99,8 @@ defmodule DeftWeb.SessionsLive do
 
   # Private helpers
 
+  defp format_datetime(nil), do: "—"
+
   defp format_datetime(datetime) do
     Calendar.strftime(datetime, "%Y-%m-%d %H:%M:%S")
   end

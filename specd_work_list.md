@@ -16,7 +16,3 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
-
-## web-ui v0.1
-
-- Fix `format_datetime/1` crash on nil in `sessions_live.ex`: `Calendar.strftime(nil, ...)` raises `FunctionClauseError` if any session has `nil` `last_message_at`. Add a `format_datetime(nil)` clause returning a fallback string like `"—"`.
