@@ -5,6 +5,7 @@ config :phoenix, :json_library, Jason
 
 # Configure Phoenix endpoint
 config :deft, DeftWeb.Endpoint,
+  adapter: Bandit.PhoenixAdapter,
   url: [host: "localhost"],
   render_errors: [
     formats: [html: DeftWeb.ErrorHTML],
