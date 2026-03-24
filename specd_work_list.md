@@ -16,3 +16,9 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
+
+## web-ui v0.1
+
+- Fix LiveSocket metadata callbacks: `app.js` initializes `LiveSocket` without `metadata` config, so `phx-window-keydown` events never include `ctrlKey`. All Ctrl+ key handlers (Ctrl+b tmux prefix, Ctrl+c abort, Ctrl+l clear) are unreachable dead code. Add `metadata: {keydown: (e) => ({ctrlKey: e.ctrlKey})}` to `LiveSocket` constructor in `assets/js/app.js`.
+- Fix `status_icon/1` type mismatch in `tool_call.ex`: `status_icon(@status)` passes an atom (`:running`, `:success`, `:error`) but function heads match on maps (`%{status: :running}`). The specific clauses never match — spinner, ✓, and ✗ icons never render. Change function heads to match atoms, or wrap the call as `status_icon(%{status: @status})`.
+- Fix `format_datetime/1` crash on nil in `sessions_live.ex`: `Calendar.strftime(nil, ...)` raises `FunctionClauseError` if any session has `nil` `last_message_at`. Add a `format_datetime(nil)` clause returning a fallback string like `"—"`.
