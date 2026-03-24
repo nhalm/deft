@@ -64,7 +64,7 @@ Decision reasoning is logged in [specd_decisions.jsonl](../specd_decisions.jsonl
 | [harness](harness.md) | v0.2 | Implemented | Agent loop (gen_statem), message format, process architecture, context assembly |
 | [tools](tools.md) | v0.2 | Implemented | Tool behaviour, 7 built-in tools, tool execution model |
 | [providers](providers.md) | v0.3 | Implemented | LLM provider behaviour, SSE streaming, Anthropic implementation |
-| [sessions](sessions.md) | v0.6 | Ready | Session persistence (JSONL), resume, configuration, CLI dispatcher, Mix release distribution |
+| [sessions](sessions.md) | v0.6 | Implemented | Session persistence (JSONL), resume, configuration, CLI dispatcher, Mix release distribution |
 | [tui](tui.md) | v0.5 | Deprecated | Terminal UI — superseded by web-ui |
 | [web-ui](web-ui.md) | v0.4 | Ready | Phoenix LiveView web interface, vim/tmux keybindings, responsive, real-time streaming |
 
