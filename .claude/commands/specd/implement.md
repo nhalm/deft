@@ -3,6 +3,10 @@ Read specd_work_list.md in full — it contains all remaining work items.
 
 Your task is to implement ONE work item from specd_work_list.md, then validate it works.
 
+## Step 0: Check for work
+
+After reading specd_work_list.md, check if there are any unblocked items (lines that do NOT contain the string `(blocked:`). If the file is empty or every item contains `(blocked:`, there is nothing to do — output `LOOP_COMPLETE: true` and stop.
+
 ## Step 1: Pick a work item
 
 - Pick an unblocked item from specd_work_list.md — an item is unblocked if and only if its line does NOT contain the string `(blocked:`. Items without that string are ready to implement regardless of what version or section they're in.
@@ -17,14 +21,12 @@ Your task is to implement ONE work item from specd_work_list.md, then validate i
 ## Step 3: Implement
 
 - If code contradicts the spec, fix the code first (see AGENTS.md)
-- Use `specd_decisions.md` to find relevent previous implementation step decisions.
 - Do NOT use TodoWrite — just do the work
 - Do NOT do multiple things — ONE thing per iteration
 
 ## Step 4: Validate
 
 <!-- Customize: add your project's validation steps here -->
-
 - Run the project's test suite to catch errors
 - If there are linting or formatting errors fix them even if they aren't in a file you modified
 
@@ -42,10 +44,3 @@ Update tracking files, then commit:
 3. Check specd_work_list.md for items with `(blocked: ...)` annotations that reference the work you just completed. If the blocker is resolved, remove the `(blocked: ...)` annotation.
 4. Commit ALL changes — code, tests, and tracking files (specd_work_list.md, specd_history.md) — in a single commit. Do not commit code separately from tracking updates.
    Output `TASK_COMPLETE: true` when done.
-
-Before declaring LOOP_COMPLETE, re-read specd_work_list.md and list every remaining
-item. For each item, check: does the line contain `(blocked:`? If ANY item does
-NOT contain `(blocked:`, you are NOT done — pick one and implement it.
-
-Output `LOOP_COMPLETE: true` only if every remaining item in specd_work_list.md
-contains `(blocked:` on its line, or the file is empty.

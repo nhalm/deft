@@ -1938,25 +1938,30 @@ defmodule Deft.CLI do
     port = read_server_port()
     url = "http://localhost:#{port}?session=#{session_id}"
 
-    # Open browser (macOS)
-    case System.cmd("open", [url], stderr_to_stdout: true) do
-      {_, 0} ->
-        # Successfully opened browser
-        :ok
-
-      _ ->
-        # Failed to open browser (not on macOS or 'open' command failed)
-        # Try xdg-open for Linux
-        case System.cmd("xdg-open", [url], stderr_to_stdout: true) do
-          {_, 0} -> :ok
-          # Ignore errors - user can manually open URL
-          _ -> :ok
-        end
-    end
-
-    # Print URL as fallback
+    # Print URL first
     IO.puts("\nDeft running at #{url}")
     IO.puts("Press Ctrl+C to stop.\n")
+
+    # Open browser based on OS
+    try do
+      case :os.type() do
+        {:unix, :darwin} ->
+          # macOS
+          System.cmd("open", [url])
+
+        {:unix, _} ->
+          # Linux and other Unix
+          System.cmd("xdg-open", [url])
+
+        _ ->
+          # Windows or other - skip auto-open
+          {:ok, ""}
+      end
+    rescue
+      e ->
+        # Failed to open browser - warn but don't crash
+        IO.puts(:stderr, "Warning: Could not auto-open browser: #{Exception.message(e)}")
+    end
 
     # Block until Ctrl+C (BEAM handles shutdown)
     Process.sleep(:infinity)
