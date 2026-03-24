@@ -19,8 +19,5 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## web-ui v0.4 + sessions v0.6
 
-### Cleanup old TUI
-- Delete `lib/deft/tui/` directory entirely (chat.ex, session_picker.ex, breeze_poc.ex, markdown.ex) — all functionality replaced by `lib/deft_web/`. Remove any remaining `Breeze` or `Termite` references from the codebase.
-
 ### Tests
-- Verify all existing web UI tests still pass after changes — run `mix test test/deft_web/` and confirm 45+ tests, 0 failures. Run `mix test` for full suite. (blocked: Delete `lib/deft/tui/` directory...)
+- Verify all existing web UI tests still pass after changes — run `mix test test/deft_web/` and confirm 45+ tests, 0 failures. Run `mix test` for full suite.
