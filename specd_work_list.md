@@ -19,13 +19,9 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## web-ui v0.4 + sessions v0.6
 
-### prod.exs (CRITICAL — blocks release)
-- Create `config/prod.exs` with `server: true` (without this the release binary won't start the HTTP listener), `adapter: Bandit.PhoenixAdapter`, `url: [host: "localhost"]`.
-
 ### Config files
-- Update `config/config.exs` — ensure it has esbuild config for `assets/js/app.js` bundling and `import_config "#{config_env()}.exs"` at the bottom
-- Update `config/dev.exs` — ensure `debug_errors: true`, `code_reloader: true`, `check_origin: false`, live_reload patterns for `.ex`, `.heex`, `.css`, `.js` (blocked: Update `config/config.exs`...)
-- Update `config/runtime.exs` — add dynamic port from `PORT` env var (default 4000), generate `SECRET_KEY_BASE` via `:crypto.strong_rand_bytes(64) |> Base.encode64()` if not set in env (local tool, not a web service), read `ANTHROPIC_API_KEY` (blocked: Update `config/config.exs`...)
+- Update `config/dev.exs` — ensure `debug_errors: true`, `code_reloader: true`, `check_origin: false`, live_reload patterns for `.ex`, `.heex`, `.css`, `.js`
+- Update `config/runtime.exs` — add dynamic port from `PORT` env var (default 4000), generate `SECRET_KEY_BASE` via `:crypto.strong_rand_bytes(64) |> Base.encode64()` if not set in env (local tool, not a web service), read `ANTHROPIC_API_KEY`
 
 ### Dynamic port selection
 - Implement dynamic port selection: try port from config, if `:eaddrinuse` try 4001-4099. Write actual port to `~/.deft/projects/<path-encoded-repo>/server.pid`. Print `Deft running at http://localhost:<port>` on startup. This can be in `Deft.Application.start/2` after the endpoint starts, or in a custom `DeftWeb.Endpoint.init/2` callback. (blocked: Update `config/runtime.exs`...)
