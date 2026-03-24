@@ -248,6 +248,12 @@ defmodule DeftWeb.ChatLive do
     {:noreply, socket}
   end
 
+  def handle_info(:shutdown_server, socket) do
+    # Actually stop the server and exit
+    System.stop(0)
+    {:noreply, socket}
+  end
+
   @impl true
   def handle_event("submit", %{"input" => input}, socket) do
     # Trim whitespace
@@ -715,16 +721,16 @@ defmodule DeftWeb.ChatLive do
 
   defp handle_quit_command(socket) do
     # Stop the server
-    # For now, just display a message. Actual shutdown will be handled elsewhere.
     message = %{
       id: System.unique_integer([:positive, :monotonic]),
       role: :system,
       content: "Shutting down..."
     }
 
-    socket
-    |> stream_insert(:conversation, message)
-    |> push_event("shutdown", %{})
+    # Schedule shutdown after a brief delay to ensure message is sent to browser
+    Process.send_after(self(), :shutdown_server, 500)
+
+    stream_insert(socket, :conversation, message)
   end
 
   defp dispatch_skill_or_command(socket, command_name, args) do

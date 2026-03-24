@@ -16,7 +16,3 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
-
-## web-ui v0.2
-
-- Implement actual server shutdown in `handle_quit_command/1` at `chat_live.ex`: call `System.stop(0)` or `Application.stop(:deft)` instead of pushing an unhandled `"shutdown"` JS event. Currently `/quit` displays "Shutting down..." but the server keeps running.

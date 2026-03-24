@@ -240,8 +240,9 @@ defmodule DeftWeb.ChatLiveTest do
 
       view |> element("form") |> render_submit(%{"input" => "/quit"})
 
-      # Should push shutdown event
-      assert_push_event(view, "shutdown", %{})
+      # Should display shutdown message
+      html = render(view)
+      assert html =~ "Shutting down..."
     end
 
     test "/help command displays help", %{conn: conn, session_id: session_id} do
