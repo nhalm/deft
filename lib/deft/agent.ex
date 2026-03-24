@@ -144,9 +144,14 @@ defmodule Deft.Agent do
   This function is used when a user invokes a skill via slash command (e.g., /review).
 
   If the agent is not idle, the skill injection is queued and delivered when idle.
+
+  ## Parameters
+  - `agent`: The agent PID or via tuple
+  - `definition`: The skill definition text to inject as a system message
+  - `args`: Optional arguments to send as a user message after the skill (default: nil)
   """
-  def inject_skill(agent, definition) do
-    :gen_statem.cast(agent, {:inject_skill, definition})
+  def inject_skill(agent, definition, args \\ nil) do
+    :gen_statem.cast(agent, {:inject_skill, definition, args})
   end
 
   @doc """
@@ -270,7 +275,7 @@ defmodule Deft.Agent do
     {:keep_state, new_data}
   end
 
-  def handle_event(:cast, {:inject_skill, definition}, :idle, data) do
+  def handle_event(:cast, {:inject_skill, definition, args}, :idle, data) do
     # Create system message with skill definition
     system_message = %Message{
       id: generate_message_id(),
@@ -285,8 +290,17 @@ defmodule Deft.Agent do
     # Notify OM about new message
     notify_om_messages_added(data.session_id, [system_message], data.config)
 
+    # If args provided, queue them as a user message to be processed after skill
+    updated_data =
+      if args && String.trim(args) != "" do
+        new_queue = :queue.in(args, data.prompt_queue)
+        %{data | messages: new_messages, prompt_queue: new_queue}
+      else
+        %{data | messages: new_messages}
+      end
+
     # Check if compaction is needed before calling provider
-    compacted_data = maybe_compact_messages(%{data | messages: new_messages})
+    compacted_data = maybe_compact_messages(updated_data)
 
     # Immediately call provider with the updated message history
     # Build context from all messages
@@ -325,10 +339,19 @@ defmodule Deft.Agent do
     end
   end
 
-  def handle_event(:cast, {:inject_skill, definition}, _state, data) do
+  def handle_event(:cast, {:inject_skill, definition, args}, _state, data) do
     # Queue skill injection if not idle
     # Use a special marker to distinguish from regular prompts
     new_queue = :queue.in({:skill, definition}, data.prompt_queue)
+
+    # If args provided, also queue them as a follow-up user message
+    new_queue =
+      if args && String.trim(args) != "" do
+        :queue.in(args, new_queue)
+      else
+        new_queue
+      end
+
     new_data = %{data | prompt_queue: new_queue}
     {:keep_state, new_data}
   end

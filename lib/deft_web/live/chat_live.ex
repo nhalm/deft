@@ -15,6 +15,7 @@ defmodule DeftWeb.ChatLive do
   import DeftWeb.Components.Thinking
   import DeftWeb.Components.ToolCall
   import DeftWeb.Components.StatusBar
+  import DeftWeb.Components.Roster
 
   @impl true
   def mount(params, _session, socket) do
@@ -594,7 +595,7 @@ defmodule DeftWeb.ChatLive do
     |> push_event("shutdown", %{})
   end
 
-  defp dispatch_skill_or_command(socket, command_name, _args) do
+  defp dispatch_skill_or_command(socket, command_name, args) do
     case SkillsRegistry.lookup(command_name) do
       :not_found ->
         # Unknown command
@@ -611,7 +612,7 @@ defmodule DeftWeb.ChatLive do
         case SkillsRegistry.load_definition(command_name) do
           {:ok, definition} ->
             agent = Worker.agent_via_tuple(socket.assigns.session_id)
-            Deft.Agent.inject_skill(agent, definition)
+            Deft.Agent.inject_skill(agent, definition, args)
             socket
 
           {:error, reason} ->

@@ -2,11 +2,14 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.1 |
+| Version | 0.2 |
 | Status | Ready |
 | Last Updated | 2026-03-23 |
 
 ## Changelog
+
+### v0.2 (2026-03-23)
+- Added `:turn_limit_reached` to event handling list — UI must prompt user to continue or abort
 
 ### v0.1 (2026-03-23)
 - Initial spec — Phoenix LiveView web interface replacing terminal TUI
@@ -301,6 +304,7 @@ Event handling in `handle_info`:
 - `:state_change` — update agent state indicator
 - `:usage` — update token/cost counters
 - `:error` — display error message
+- `:turn_limit_reached` — show turn limit prompt, user can continue or abort
 - `{:job_status, statuses}` — update agent roster
 
 Each event updates assigns; LiveView diffs and pushes to browser automatically.

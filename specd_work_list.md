@@ -17,6 +17,13 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## web-ui v0.1
+## web-ui v0.2
 
-- Fix `dispatch_skill_or_command/3` to pass `args` to the agent: currently `_args` is discarded at `chat_live.ex:597`, so parameterized slash commands (`/model gpt-4`, `/forget <text>`, `/correct <old> -> <new>`, `/inspect <lead>`) silently lose their arguments. Either extend `Deft.Agent.inject_skill/2` to accept args, or send args as a follow-up user prompt after skill injection.
+- Clear `streaming_text` and `streaming_thinking` assigns when a turn ends (`:state_change` to `:idle`): flush accumulated content into the conversation stream as a permanent assistant message, then reset both assigns to `""`. Without this, streaming buffers accumulate across turns and the conversation stream never shows completed assistant messages.
+- Move non-stream content outside the `phx-update="stream"` container in `chat_live.html.heex`: the `streaming_thinking`, `streaming_text`, and `active_tools` blocks (lines 29–53) are inside the `phx-update="stream"` div but are not stream-managed elements. Phoenix will overwrite or remove them on stream updates. Move them to a sibling div below the stream container.
+- Remove `<div class="main-area">` wrapper in `chat_live.html.heex` (line 21) so `.conversation-area` and `.roster-panel` are direct children of the `.chat-container` grid. The wrapper has no CSS grid-area rule, breaking the two-column conversation+roster layout entirely.
+- Apply `roster-hidden` class dynamically to `chat-container` div based on `@roster_visible` and `@job_active` assigns: use `class={"chat-container #{unless @roster_visible or @job_active, do: "roster-hidden"}"}`. Currently the class is static and the `.chat-container.roster-hidden` CSS rules are dead code.
+- Handle nil `session_id` at mount in `ChatLive`: when `params["session"]` is nil (direct visit to `/`, session picker `q` key, `/quit` redirect), redirect to `/sessions` instead of proceeding with nil. Currently nil session_id causes crashes on prompt submission (`Worker.agent_via_tuple(nil)`) and Ctrl+C abort.
+- Clear `active_tools` map when a new turn starts or previous turn ends in `ChatLive`: add reset logic in the `:state_change` handler. Currently tool calls accumulate across all turns and are never removed, showing stale tools from previous turns indefinitely.
+- Add `handle_info` for `{:agent_event, {:turn_limit_reached, count, max}}` in `ChatLive`: display a message like "Turn limit reached (X/Y)" and provide a way for the user to call `Deft.Agent.continue_turn/2` or abort. Without this, the agent blocks permanently when the turn limit is hit.
+- Fix slash command args: change `args = if args == [], do: "", else: List.first(args)` to `args = if args == [], do: nil, else: List.first(args)` at `chat_live.ex` line 527. Empty string `""` causes `inject_skill/3` to send a spurious empty user message to the agent after every no-arg command (`/status`, `/plan`, `/observations`, etc.).

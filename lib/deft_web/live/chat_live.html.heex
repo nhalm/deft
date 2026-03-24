@@ -53,18 +53,7 @@
       <% end %>
     </div>
 
-    <%= if @roster_visible or @job_active do %>
-      <div class="roster-panel">
-        <div class="roster-header">Agents</div>
-        <%= for status <- @agent_statuses do %>
-          <div class="agent-status">
-            <span class={"status-dot status-#{status.state}"}></span>
-            <span class="agent-label"><%= status.label %></span>
-            <span class="agent-state-label"><%= status.state %></span>
-          </div>
-        <% end %>
-      </div>
-    <% end %>
+    <.roster agents={@agent_statuses} visible={@roster_visible or @job_active} />
   </div>
 
   <div class="input-area">
