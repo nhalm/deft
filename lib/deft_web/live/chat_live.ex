@@ -79,14 +79,28 @@ defmodule DeftWeb.ChatLive do
 
   @impl true
   def handle_info({:agent_event, {:text_delta, delta}}, socket) do
+    # Flush any pending thinking before starting text
+    socket = maybe_flush_thinking(socket, socket.assigns.streaming_thinking)
+    socket = assign(socket, :streaming_thinking, "")
+
     {:noreply, assign(socket, :streaming_text, socket.assigns.streaming_text <> delta)}
   end
 
   def handle_info({:agent_event, {:thinking_delta, delta}}, socket) do
+    # Flush any pending text before starting thinking
+    socket = maybe_flush_text(socket, socket.assigns.streaming_text)
+    socket = assign(socket, :streaming_text, "")
+
     {:noreply, assign(socket, :streaming_thinking, socket.assigns.streaming_thinking <> delta)}
   end
 
   def handle_info({:agent_event, {:tool_call_start, %{id: id, name: name}}}, socket) do
+    # Flush any pending thinking and text before starting tool call
+    socket = maybe_flush_thinking(socket, socket.assigns.streaming_thinking)
+    socket = assign(socket, :streaming_thinking, "")
+    socket = maybe_flush_text(socket, socket.assigns.streaming_text)
+    socket = assign(socket, :streaming_text, "")
+
     tool = %{
       id: id,
       name: name,
