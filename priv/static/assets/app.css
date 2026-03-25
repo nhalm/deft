@@ -422,7 +422,7 @@ body {
   border-top: 1px solid var(--border-color);
 }
 
-.input-field {
+.chat-input {
   flex-grow: 1;
   min-height: 40px;
   max-height: 200px;
@@ -437,7 +437,7 @@ body {
   outline: none;
 }
 
-.input-field:focus {
+.chat-input:focus {
   border-color: var(--accent-primary);
 }
 
@@ -599,6 +599,40 @@ body {
     height: 36px;
     font-size: 11px;
   }
+}
+
+/* ============================================
+   Code Blocks (Syntax Highlighting)
+   ============================================ */
+pre {
+  margin: 12px 0;
+  padding: 12px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  overflow-x: auto;
+}
+
+code {
+  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+pre code {
+  display: block;
+  color: var(--text-primary);
+  background: none;
+  padding: 0;
+}
+
+/* Inline code */
+:not(pre) > code {
+  padding: 2px 6px;
+  background-color: var(--bg-tertiary);
+  border-radius: 3px;
+  color: var(--text-primary);
+  font-size: 12px;
 }
 
 /* ============================================

@@ -4,6 +4,7 @@
  * Provides client-side hooks for LiveView:
  * - ScrollControl: Auto-scroll during streaming, freeze on user scroll, resume on scroll-to-bottom
  * - InputFocus: Focus input on insert mode, blur on normal mode
+ * - TextareaInput: Focus management + Enter to submit, Shift+Enter for newline
  *
  * Note: This file is copied to priv/static/assets/app.js during build.
  * It relies on phoenix.js and phoenix_live_view.js being loaded first.
@@ -62,6 +63,29 @@ const ScrollControl = {
     this.isAtBottom = true
   },
 
+  handleEvent(event, payload) {
+    if (event === "scroll_to") {
+      if (payload.position === "bottom") {
+        // Scroll to bottom (G key)
+        this.el.scrollTop = this.el.scrollHeight
+        this.isAtBottom = true
+        this.userScrolled = false
+      } else if (payload.position === "top") {
+        // Scroll to top (gg keys)
+        this.el.scrollTop = 0
+        this.isAtBottom = false
+        this.userScrolled = true
+      } else if (payload.delta !== undefined) {
+        // Relative scroll (j/k/Ctrl+u/Ctrl+d)
+        this.el.scrollTop += payload.delta
+        // Check if we're at bottom after scroll
+        const isNowAtBottom = this.el.scrollHeight - this.el.scrollTop <= this.el.clientHeight + 50
+        this.isAtBottom = isNowAtBottom
+        this.userScrolled = !isNowAtBottom
+      }
+    }
+  },
+
   destroyed() {
     if (this.observer) {
       this.observer.disconnect()
@@ -89,6 +113,60 @@ const InputFocus = {
   }
 }
 
+// Textarea Input Hook
+// Combines focus management (vim mode) and Enter key handling (submit vs newline)
+const TextareaInput = {
+  mounted() {
+    // Focus input on mount (default to insert mode)
+    this.el.focus()
+
+    // Handle Enter to submit, Shift+Enter for newline
+    this.el.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        // Enter without Shift - submit the form
+        e.preventDefault()
+        const form = this.el.closest("form")
+        if (form) {
+          // Trigger native form submission (LiveView intercepts this)
+          form.requestSubmit()
+        }
+      }
+      // Shift+Enter allows default behavior (newline)
+    })
+  },
+
+  updated() {
+    // Check for vim_mode changes via data attribute
+    const mode = this.el.dataset.vimMode
+
+    if (mode === "insert") {
+      this.el.focus()
+    } else if (mode === "normal" || mode === "command") {
+      this.el.blur()
+    }
+  }
+}
+
+// Syntax Highlighting Hook
+// Applies highlight.js to code blocks after each LiveView DOM update
+const SyntaxHighlight = {
+  mounted() {
+    this.highlight()
+  },
+
+  updated() {
+    this.highlight()
+  },
+
+  highlight() {
+    // Find all code blocks within this container that haven't been highlighted
+    const codeBlocks = this.el.querySelectorAll('pre code:not(.hljs)')
+    codeBlocks.forEach((block) => {
+      window.hljs.highlightElement(block)
+    })
+  }
+}
+
 // Initialize LiveSocket when DOM is ready
 document.addEventListener("DOMContentLoaded", () => {
   // Get CSRF token from meta tag
@@ -99,7 +177,12 @@ document.addEventListener("DOMContentLoaded", () => {
     params: { _csrf_token: csrfToken },
     hooks: {
       ScrollControl,
-      InputFocus
+      InputFocus,
+      TextareaInput,
+      SyntaxHighlight
+    },
+    metadata: {
+      keydown: (e) => ({ ctrlKey: e.ctrlKey })
     }
   })
 

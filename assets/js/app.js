@@ -127,8 +127,8 @@ const TextareaInput = {
         e.preventDefault()
         const form = this.el.closest("form")
         if (form) {
-          // Trigger form submit event
-          form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+          // Trigger native form submission (LiveView intercepts this)
+          form.requestSubmit()
         }
       }
       // Shift+Enter allows default behavior (newline)

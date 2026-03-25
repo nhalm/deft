@@ -422,7 +422,7 @@ body {
   border-top: 1px solid var(--border-color);
 }
 
-.input-field {
+.chat-input {
   flex-grow: 1;
   min-height: 40px;
   max-height: 200px;
@@ -437,7 +437,7 @@ body {
   outline: none;
 }
 
-.input-field:focus {
+.chat-input:focus {
   border-color: var(--accent-primary);
 }
 

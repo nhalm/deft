@@ -367,4 +367,32 @@ defmodule DeftWeb.ChatLiveTest do
       assert get_assign(view, :agent_state) == :executing
     end
   end
+
+  describe "HTML structure" do
+    test "textarea has correct class and hook", %{conn: conn, session_id: session_id} do
+      {:ok, _view, html} = live(conn, "/?session=#{session_id}")
+
+      assert html =~ ~r/class="chat-input"/
+      assert html =~ ~r/phx-hook="TextareaInput"/
+    end
+
+    test "textarea is wrapped in form with phx-submit", %{conn: conn, session_id: session_id} do
+      {:ok, _view, html} = live(conn, "/?session=#{session_id}")
+
+      assert html =~ ~r/<form[^>]*phx-submit="submit"[^>]*>/
+      assert html =~ ~r/<form[^>]*>.*?<textarea[^>]*class="chat-input"/s
+    end
+
+    test "conversation area has ScrollControl hook", %{conn: conn, session_id: session_id} do
+      {:ok, _view, html} = live(conn, "/?session=#{session_id}")
+
+      assert html =~ ~r/class="conversation-area"[^>]*phx-hook="ScrollControl"/
+    end
+
+    test "input area has mode-indicator element", %{conn: conn, session_id: session_id} do
+      {:ok, _view, html} = live(conn, "/?session=#{session_id}")
+
+      assert html =~ ~r/class="mode-indicator"/
+    end
+  end
 end
