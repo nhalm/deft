@@ -154,20 +154,9 @@ defmodule DeftWeb.ChatLive do
         text = socket.assigns.streaming_text
 
         socket =
-          if thinking != "" or text != "" do
-            # Store thinking and text as separate fields so we can render thinking
-            # blocks using the <.thinking> component instead of plain markdown
-            message = %{
-              id: System.unique_integer([:positive, :monotonic]),
-              role: :assistant,
-              thinking: if(thinking != "", do: thinking, else: nil),
-              content: if(text != "", do: text, else: nil)
-            }
-
-            stream_insert(socket, :conversation, message)
-          else
-            socket
-          end
+          socket
+          |> maybe_flush_thinking(thinking)
+          |> maybe_flush_text(text)
 
         # Reset streaming buffers, clear active tools, and update state
         socket
@@ -219,6 +208,7 @@ defmodule DeftWeb.ChatLive do
     # Display error message in conversation stream
     message = %{
       id: System.unique_integer([:positive, :monotonic]),
+      type: :error,
       role: :error,
       content: "Error: #{inspect(reason)}"
     }
@@ -230,6 +220,7 @@ defmodule DeftWeb.ChatLive do
     # Display turn limit message and prompt user to continue or abort
     message = %{
       id: System.unique_integer([:positive, :monotonic]),
+      type: :system,
       role: :system,
       content: "Turn limit reached (#{count}/#{max})"
     }
@@ -253,6 +244,38 @@ defmodule DeftWeb.ChatLive do
     # Actually stop the server and exit
     System.stop(0)
     {:noreply, socket}
+  end
+
+  # Private helpers for flushing content to conversation stream
+
+  defp maybe_flush_thinking(socket, "") do
+    socket
+  end
+
+  defp maybe_flush_thinking(socket, thinking) when is_binary(thinking) do
+    message = %{
+      id: System.unique_integer([:positive, :monotonic]),
+      type: :thinking,
+      role: :assistant,
+      content: thinking
+    }
+
+    stream_insert(socket, :conversation, message)
+  end
+
+  defp maybe_flush_text(socket, "") do
+    socket
+  end
+
+  defp maybe_flush_text(socket, text) when is_binary(text) do
+    message = %{
+      id: System.unique_integer([:positive, :monotonic]),
+      type: :text,
+      role: :assistant,
+      content: text
+    }
+
+    stream_insert(socket, :conversation, message)
   end
 
   @impl true
@@ -326,6 +349,7 @@ defmodule DeftWeb.ChatLive do
     # Add a system message confirming the action
     message = %{
       id: System.unique_integer([:positive, :monotonic]),
+      type: :system,
       role: :system,
       content: "Continuing turn..."
     }
@@ -349,6 +373,7 @@ defmodule DeftWeb.ChatLive do
     # Add a system message confirming the action
     message = %{
       id: System.unique_integer([:positive, :monotonic]),
+      type: :system,
       role: :system,
       content: "Declining to continue turn..."
     }
@@ -390,6 +415,7 @@ defmodule DeftWeb.ChatLive do
 
       message = %{
         id: System.unique_integer([:positive, :monotonic]),
+        type: :system,
         role: :system,
         content: "Force aborting agent operation..."
       }
@@ -404,6 +430,7 @@ defmodule DeftWeb.ChatLive do
 
       message = %{
         id: System.unique_integer([:positive, :monotonic]),
+        type: :system,
         role: :system,
         content: "Aborting agent operation... (press Ctrl+c again to force abort)"
       }
@@ -639,24 +666,38 @@ defmodule DeftWeb.ChatLive do
   attr(:thinking_expanded, :map, default: %{})
 
   defp render_conversation_item(assigns) do
-    thinking = Map.get(assigns.item, :thinking)
+    type = Map.get(assigns.item, :type)
     content = Map.get(assigns.item, :content)
 
     assigns =
       assigns
-      |> assign(:thinking, thinking)
+      |> assign(:type, type)
       |> assign(:content, content)
 
     ~H"""
-    <%= if @thinking do %>
-      <.thinking
-        id={"thinking-#{@item.id}"}
-        content={@thinking}
-        expanded={Map.get(@thinking_expanded, "thinking-#{@item.id}", true)}
-      />
-    <% end %>
-    <%= if @content do %>
-      <%= render_markdown(@content) %>
+    <%= case @type do %>
+      <% :thinking -> %>
+        <.thinking
+          id={"thinking-#{@item.id}"}
+          content={@content}
+          expanded={Map.get(@thinking_expanded, "thinking-#{@item.id}", true)}
+        />
+      <% :text -> %>
+        <%= render_markdown(@content) %>
+      <% :user -> %>
+        <div class="user-message">
+          <%= render_markdown(@content) %>
+        </div>
+      <% :system -> %>
+        <div class="system-message">
+          <%= @content %>
+        </div>
+      <% :error -> %>
+        <div class="error-message">
+          <%= @content %>
+        </div>
+      <% _ -> %>
+        <%= @content %>
     <% end %>
     """
   end
@@ -673,7 +714,13 @@ defmodule DeftWeb.ChatLive do
 
   defp add_user_message(socket, text) do
     # Add user message to conversation stream
-    message = %{id: System.unique_integer([:positive, :monotonic]), role: :user, content: text}
+    message = %{
+      id: System.unique_integer([:positive, :monotonic]),
+      type: :user,
+      role: :user,
+      content: text
+    }
+
     stream_insert(socket, :conversation, message)
   end
 
@@ -731,6 +778,7 @@ defmodule DeftWeb.ChatLive do
 
     message = %{
       id: System.unique_integer([:positive, :monotonic]),
+      type: :system,
       role: :system,
       content: help_text
     }
@@ -748,6 +796,7 @@ defmodule DeftWeb.ChatLive do
     # Stop the server
     message = %{
       id: System.unique_integer([:positive, :monotonic]),
+      type: :system,
       role: :system,
       content: "Shutting down..."
     }
@@ -764,6 +813,7 @@ defmodule DeftWeb.ChatLive do
         # Unknown command
         message = %{
           id: System.unique_integer([:positive, :monotonic]),
+          type: :system,
           role: :system,
           content: "Unknown command: /#{command_name}. Type /help for available commands."
         }
@@ -781,6 +831,7 @@ defmodule DeftWeb.ChatLive do
           {:error, reason} ->
             message = %{
               id: System.unique_integer([:positive, :monotonic]),
+              type: :system,
               role: :system,
               content: "Failed to load command #{command_name}: #{inspect(reason)}"
             }
