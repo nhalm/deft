@@ -1,6 +1,7 @@
 import Config
 
 # Runtime configuration (loaded at runtime, not compile time)
+# Note: .env loading happens in Deft.Application.start/2 via Dotenvy
 
 # Read PORT from environment, default to 4000
 port = String.to_integer(System.get_env("PORT") || "4000")

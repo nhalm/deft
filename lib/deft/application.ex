@@ -12,6 +12,8 @@ defmodule Deft.Application do
 
   @impl true
   def start(_type, _args) do
+    load_dotenv()
+
     # Resolve issues file path using same logic as Deft.Issues.resolve_file_path/0
     issues_file_path =
       case Git.cmd(["rev-parse", "--git-common-dir"]) do
@@ -54,5 +56,12 @@ defmodule Deft.Application do
 
     opts = [strategy: :one_for_one, name: Deft.Supervisor]
     Supervisor.start_link(children, opts)
+  end
+
+  defp load_dotenv do
+    case Dotenvy.source([".env"]) do
+      {:ok, vars} -> System.put_env(vars)
+      {:error, _} -> :ok
+    end
   end
 end

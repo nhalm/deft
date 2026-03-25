@@ -35,5 +35,5 @@ Thumbs.db
 priv/plts/
 
 # specd lock files
-*.lock
+specd.lock
 .deft-worktrees/

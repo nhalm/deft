@@ -51,6 +51,8 @@ defmodule Deft.MixProject do
       {:earmark, "~> 1.4"},
       # Single-binary distribution
       {:burrito, "~> 1.0"},
+      # .env file loading
+      {:dotenvy, "~> 1.1"},
 
       # Dev/Test only
       {:phoenix_live_reload, "~> 1.5", only: [:dev]},
