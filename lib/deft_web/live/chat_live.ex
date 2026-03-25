@@ -146,24 +146,34 @@ defmodule DeftWeb.ChatLive do
       ) do
     active_tools = socket.assigns.active_tools
 
+    # Get the tool from active_tools (may be missing if we missed earlier events)
+    tool = Map.get(active_tools, id, %{id: id, name: "unknown", key_arg: nil, input: nil})
+
     # Format the result for display
     output = format_tool_result(result)
     status = if success, do: :success, else: :error
     duration_sec = duration_ms / 1000.0
 
-    updated_tool =
-      active_tools
-      |> Map.get(id, %{})
+    # Build the completed tool data
+    completed_tool =
+      tool
       |> Map.merge(%{status: status, duration: duration_sec, output: output})
 
-    active_tools = Map.put(active_tools, id, updated_tool)
+    # Persist the completed tool to the conversation stream immediately
+    socket = flush_tool(socket, completed_tool)
+
+    # Remove the tool from active_tools now that it's persisted
+    active_tools = Map.delete(active_tools, id)
+
     {:noreply, assign(socket, :active_tools, active_tools)}
   end
 
   def handle_info({:agent_event, {:state_change, state}}, socket) do
     socket =
       if state == :idle do
-        # Flush streaming content to conversation stream when turn ends
+        # Flush only remaining in-progress content (if any) to conversation stream.
+        # Most content will already be persisted by earlier incremental flushes
+        # when content type changes (thinking→text, text→tool, etc).
         thinking = socket.assigns.streaming_thinking
         text = socket.assigns.streaming_text
 
@@ -172,11 +182,11 @@ defmodule DeftWeb.ChatLive do
           |> maybe_flush_thinking(thinking)
           |> maybe_flush_text(text)
 
-        # Reset streaming buffers, clear active tools, and update state
+        # Reset streaming buffers and update state
+        # Note: active_tools are cleared immediately when tools complete, not on idle
         socket
         |> assign(:streaming_text, "")
         |> assign(:streaming_thinking, "")
-        |> assign(:active_tools, %{})
         |> assign(:agent_state, state)
       else
         assign(socket, :agent_state, state)
@@ -267,14 +277,24 @@ defmodule DeftWeb.ChatLive do
   end
 
   defp maybe_flush_thinking(socket, thinking) when is_binary(thinking) do
+    message_id = System.unique_integer([:positive, :monotonic])
+
     message = %{
-      id: System.unique_integer([:positive, :monotonic]),
+      id: message_id,
       type: :thinking,
       role: :assistant,
       content: thinking
     }
 
-    stream_insert(socket, :conversation, message)
+    # Auto-collapse thinking blocks when they persist to conversation
+    thinking_id = "thinking-#{message_id}"
+
+    thinking_blocks_expanded =
+      Map.put(socket.assigns.thinking_blocks_expanded, thinking_id, false)
+
+    socket
+    |> assign(:thinking_blocks_expanded, thinking_blocks_expanded)
+    |> stream_insert(:conversation, message)
   end
 
   defp maybe_flush_text(socket, "") do
@@ -287,6 +307,17 @@ defmodule DeftWeb.ChatLive do
       type: :text,
       role: :assistant,
       content: text
+    }
+
+    stream_insert(socket, :conversation, message)
+  end
+
+  defp flush_tool(socket, tool) do
+    message = %{
+      id: System.unique_integer([:positive, :monotonic]),
+      type: :tool,
+      role: :assistant,
+      tool: tool
     }
 
     stream_insert(socket, :conversation, message)
@@ -678,15 +709,18 @@ defmodule DeftWeb.ChatLive do
 
   attr(:item, :map, required: true)
   attr(:thinking_expanded, :map, default: %{})
+  attr(:tools_expanded, :map, default: %{})
 
   defp render_conversation_item(assigns) do
     type = Map.get(assigns.item, :type)
     content = Map.get(assigns.item, :content)
+    tool = Map.get(assigns.item, :tool)
 
     assigns =
       assigns
       |> assign(:type, type)
       |> assign(:content, content)
+      |> assign(:tool, tool)
 
     ~H"""
     <%= case @type do %>
@@ -695,6 +729,17 @@ defmodule DeftWeb.ChatLive do
           id={"thinking-#{@item.id}"}
           content={@content}
           expanded={Map.get(@thinking_expanded, "thinking-#{@item.id}", true)}
+        />
+      <% :tool -> %>
+        <.tool_call
+          id={"tool-#{@item.id}"}
+          name={Map.get(@tool, :name, "unknown")}
+          key_arg={Map.get(@tool, :key_arg)}
+          status={Map.get(@tool, :status, :running)}
+          duration={Map.get(@tool, :duration)}
+          input={Map.get(@tool, :input)}
+          output={Map.get(@tool, :output)}
+          expanded={Map.get(@tools_expanded, "tool-#{@item.id}", false)}
         />
       <% :text -> %>
         <%= render_markdown(@content) %>

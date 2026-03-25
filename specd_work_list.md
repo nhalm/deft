@@ -20,10 +20,3 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 ## web-ui v0.4
 
 - Implement force-abort for double Ctrl+c in chat_live.ex: both single and double Ctrl+c call `Deft.Agent.abort(agent)`. Spec §6.4 requires double Ctrl+c to force-abort. Need `Deft.Agent.force_abort/1` (or equivalent) that kills the agent process immediately rather than requesting graceful abort. (blocked: harness — Agent module needs force_abort/1)
-
-## web-ui v0.5
-
-- Flush completed tools to the conversation stream immediately on `:tool_execution_complete`. Currently tools live in `active_tools` and only clear on `:idle`.
-- Update the template to render conversation stream items by type — dispatch to the thinking component, a text/markdown block, or the tool component based on the item's type field.
-- Auto-collapse thinking blocks once they finish streaming. Thinking should be expanded while actively streaming, then collapse when it persists to the conversation. User can click to re-expand.
-- Update the `:idle` handler to only flush remaining in-progress content (if any), not the entire turn. Most content will already be persisted by earlier incremental flushes.

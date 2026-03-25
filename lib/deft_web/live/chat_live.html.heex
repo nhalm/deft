@@ -22,7 +22,7 @@
       <div phx-update="stream" id="conversation" phx-hook="SyntaxHighlight">
         <%= for {id, item} <- @streams.conversation do %>
           <div id={id} class="conversation-item">
-            <.render_conversation_item item={item} thinking_expanded={@thinking_blocks_expanded} />
+            <.render_conversation_item item={item} thinking_expanded={@thinking_blocks_expanded} tools_expanded={@tools_expanded} />
           </div>
         <% end %>
       </div>

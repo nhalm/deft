@@ -1,4 +1,8 @@
 # History
+- **web-ui v0.5 (2026-03-25):** Update the `:idle` handler to only flush remaining in-progress content (if any), not the entire turn. Most content will already be persisted by earlier incremental flushes.
+- **web-ui v0.5 (2026-03-25):** Auto-collapse thinking blocks once they finish streaming. Thinking should be expanded while actively streaming, then collapse when it persists to the conversation. User can click to re-expand.
+- **web-ui v0.5 (2026-03-25):** Update the template to render conversation stream items by type — dispatch to the thinking component, a text/markdown block, or the tool component based on the item's type field.
+- **web-ui v0.5 (2026-03-25):** Flush completed tools to the conversation stream immediately on `:tool_execution_complete`. Currently tools live in `active_tools` and only clear on `:idle`.
 - **web-ui v0.5 (2026-03-25):** Flush text to the conversation stream when the next content type begins (tool call or thinking delta arrives). Same root cause as thinking — text only flushes on `:idle`.
 - **web-ui v0.5 (2026-03-25):** Flush thinking to the conversation stream when the next content type begins (text delta or tool call arrives). Currently thinking only flushes on `:idle`, so it vanishes mid-turn.
 - **web-ui v0.5 (2026-03-25):** Add a `type` field to conversation stream items so the template can distinguish thinking, text, and tool blocks. Currently all items are plain maps with `role`/`thinking`/`content` — they need a `:thinking`, `:text`, or `:tool` type.

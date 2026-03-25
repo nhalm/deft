@@ -2,11 +2,15 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.4 |
+| Version | 0.5 |
 | Status | Implemented |
-| Last Updated | 2026-03-24 |
+| Last Updated | 2026-03-25 |
 
 ## Changelog
+
+### v0.5 (2026-03-25)
+- Incremental content flushing: thinking, text, and tool blocks flush to the conversation stream as they complete, not batched on idle
+- Fixes: thinking disappears mid-turn, tool results vanish, subsequent thinking steps never appear
 
 ### v0.4 (2026-03-24)
 - Fixed startup architecture: unified CLI dispatcher replaces escript, see sessions.md §5
@@ -142,15 +146,17 @@ LiveView pushes text deltas to the browser as they arrive. The conversation area
 
 Streaming renders via a `phx-update="stream"` container for efficient DOM updates — LiveView only sends the new content, not the full conversation.
 
+**Content blocks persist incrementally.** Each content block (thinking, text, tool) becomes a permanent part of the conversation as soon as it completes — not batched at the end of the turn. During a multi-step turn the user sees a growing sequence of completed blocks above, with only the currently-streaming block at the bottom. Nothing disappears.
+
 #### 2.4 Thinking Display
 
 Thinking blocks render inline, styled distinctly:
 - Light gray text on slightly darker background
 - Italic
 - Prefixed with `thinking:` label
-- Collapsible (click to expand/collapse, default expanded)
+- Collapsible (click to expand/collapse, default expanded while streaming, auto-collapses once complete)
 
-Multiple thinking blocks per turn (between tool calls) each render at their position in the conversation flow.
+Multiple thinking blocks per turn (between tool calls) each render at their position in the conversation flow. Completed thinking blocks collapse so they don't dominate the view — the user can click to re-expand.
 
 #### 2.5 Tool Execution Display
 
@@ -159,6 +165,8 @@ Each tool call shows:
 - Animated spinner while running (CSS animation, no JS needed)
 - ✓/✗ icon and duration on completion
 - Expandable: click to see full tool input/output
+
+Completed tools persist in the conversation immediately — they don't wait for the turn to end.
 
 #### 2.6 Agent Roster
 
@@ -305,14 +313,17 @@ end
 ```
 
 Event handling in `handle_info`:
-- `:text_delta` — append to streaming text, push via stream
+- `:text_delta` — append to streaming text
 - `:thinking_delta` — append to thinking block
 - `:tool_call_start` / `:tool_call_done` — update tool status
+- `:tool_execution_complete` — tool finishes, persists to conversation
 - `:state_change` — update agent state indicator
 - `:usage` — update token/cost counters
 - `:error` — display error message
 - `:turn_limit_reached` — show turn limit prompt, user can continue or abort
 - `{:job_status, statuses}` — update agent roster
+
+Content blocks (thinking, text, tool) persist to the conversation stream incrementally as described in §2.3 — each block becomes permanent as soon as it completes, not batched on idle.
 
 Each event updates assigns; LiveView diffs and pushes to browser automatically.
 
