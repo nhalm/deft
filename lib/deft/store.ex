@@ -306,7 +306,7 @@ defmodule Deft.Store do
 
   # Private Functions
 
-  defp open_dets_file(path, type) do
+  defp open_dets_file(path, _type) do
     case :dets.open_file(String.to_charlist(path), type: :set) do
       {:ok, dets_file} ->
         Logger.debug("[Store] DETS file opened: #{path}")
@@ -314,11 +314,7 @@ defmodule Deft.Store do
 
       {:error, reason} ->
         # Fall back to creating a new empty DETS file
-        if type == :sitelog do
-          Logger.warning(
-            "[Store] site log DETS corruption at #{path}, creating new file: #{inspect(reason)}"
-          )
-        end
+        Logger.error("[Store] DETS corruption at #{path}, creating new file: #{inspect(reason)}")
 
         # Delete corrupted file if it exists
         File.rm(path)

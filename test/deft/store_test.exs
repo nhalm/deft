@@ -402,7 +402,7 @@ defmodule Deft.StoreTest do
       Store.cleanup(pid)
     end
 
-    test "logs warning for site log corruption", %{tmp_dir: tmp_dir} do
+    test "logs error for DETS corruption", %{tmp_dir: tmp_dir} do
       dets_path = Path.join(tmp_dir, "corrupt_sitelog.dets")
 
       # Create corrupted file
@@ -422,7 +422,32 @@ defmodule Deft.StoreTest do
           Store.cleanup(pid)
         end)
 
-      assert log =~ "site log DETS corruption"
+      assert log =~ "[error]"
+      assert log =~ "DETS corruption"
+    end
+
+    test "logs error for cache DETS corruption", %{tmp_dir: tmp_dir} do
+      dets_path = Path.join(tmp_dir, "corrupt_cache.dets")
+
+      # Create corrupted file
+      File.write!(dets_path, "corrupted")
+
+      # Capture log
+      log =
+        capture_log(fn ->
+          {:ok, pid} =
+            Store.start_link(
+              name: {:cache, "test-cache"},
+              type: :cache,
+              dets_path: dets_path,
+              owner_name: nil
+            )
+
+          Store.cleanup(pid)
+        end)
+
+      assert log =~ "[error]"
+      assert log =~ "DETS corruption"
     end
 
     test "does not use periodic flush timer", %{tmp_dir: tmp_dir} do

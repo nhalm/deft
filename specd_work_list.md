@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## logging v0.2
-
-- Log DETS corruption at `:error` level for ALL store types in `lib/deft/store.ex:315-329`: spec §9 requires "Data corruption detected" at Error level. Currently logged at `:warning` for sitelog type only, and completely silent for cache type. Change `Logger.warning` to `Logger.error`, remove the `if type == :sitelog` guard so corruption is logged regardless of store type.
-
 ## web-ui v0.4
 
 - Implement force-abort for double Ctrl+c in chat_live.ex: both single and double Ctrl+c call `Deft.Agent.abort(agent)`. Spec §6.4 requires double Ctrl+c to force-abort. Need `Deft.Agent.force_abort/1` (or equivalent) that kills the agent process immediately rather than requesting graceful abort. (blocked: harness — Agent module needs force_abort/1)
