@@ -23,7 +23,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## logging v0.1
 
-- Fix test env log level override: `config/runtime.exs` unconditionally sets log level from `LOG_LEVEL` env var (defaulting to `:info`), overriding `config/test.exs` `:warning` default. Guard the runtime.exs log level config with `if config_env() != :test` or similar.
 - Add duration to "Stream complete" log in `lib/deft/agent.ex`: spec §4 requires `Stream complete (duration)`. Record stream start time in agent state when provider stream starts, compute elapsed time in `handle_stream_done/1`.
 - Add duration to "Turn complete" log in `lib/deft/agent.ex`: spec §4 requires `Turn complete (total turn duration)`. Record turn start time in agent state when prompt is received, compute elapsed time in idle transition.
 - Add error-level log for tool crashes in `lib/deft/agent/tool_runner.ex`: spec §4 requires `Tool crashes (tool name, reason)` at `:error` level. The `{:exit, reason}` branch in `execute_batch/5` silently returns an error tuple — add `Logger.error` with tool name and crash reason.

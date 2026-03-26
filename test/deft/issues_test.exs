@@ -405,10 +405,16 @@ defmodule Deft.IssuesTest do
       File.write!(file_path, line1 <> line2 <> line3)
 
       # Start Issues GenServer with 90-day compaction threshold
+      # Temporarily set log level to :info since compaction logs at :info and test env defaults to :warning
+      original_level = Logger.level()
+      Logger.configure(level: :info)
+
       log =
         capture_log(fn ->
           {:ok, _pid} = Issues.start_link(file_path: file_path, compaction_days: 90)
         end)
+
+      Logger.configure(level: original_level)
 
       # Verify compaction log message
       assert log =~ "Compacted 1 closed issues older than 90 days"
@@ -496,10 +502,16 @@ defmodule Deft.IssuesTest do
       File.write!(file_path, Enum.join(lines))
 
       # Start Issues GenServer
+      # Temporarily set log level to :info since compaction logs at :info and test env defaults to :warning
+      original_level = Logger.level()
+      Logger.configure(level: :info)
+
       log =
         capture_log(fn ->
           {:ok, _pid} = Issues.start_link(file_path: file_path, compaction_days: 90)
         end)
+
+      Logger.configure(level: original_level)
 
       # Verify compaction log message
       assert log =~ "Compacted 3 closed issues older than 90 days"
