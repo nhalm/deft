@@ -1,4 +1,5 @@
 # History
+- **logging v0.1 (2026-03-26):** Update existing Foreman log calls in `lib/deft/job/foreman.ex` to use `[Foreman:<job_id_prefix>]` prefix convention per logging spec §2
 - **logging v0.1 (2026-03-26):** Add chat layer logging to `lib/deft_web/live/chat_live.ex`: require Logger, add `[Chat:<session_id_prefix>]` prefixed log calls at user message submit (info), session connect/disconnect (info), agent events received (debug)
 - **logging v0.1 (2026-03-26):** Add provider logging to `lib/deft/provider/anthropic.ex`: require Logger, add `[Provider:<session_id_prefix>]` prefixed log calls at API request started (info), API request complete (info), SSE chunk received (debug), SSE event parsed (debug), non-2xx responses (error), connection failures (error)
 - **logging v0.1 (2026-03-26):** Add agent lifecycle logging to `lib/deft/agent.ex`: require Logger, add `[Agent:<session_id_prefix>]` prefixed log calls at prompt received (info), prompt queued (info), provider stream started (info), stream complete (info), tool execution started/complete (info), turn complete (info), abort (info), SSE events (debug), broadcasts (debug), state transitions (debug)

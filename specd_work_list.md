@@ -23,7 +23,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## logging v0.1
 
-- Update existing Foreman log calls in `lib/deft/job/foreman.ex` to use `[Foreman:<job_id_prefix>]` prefix convention per logging spec §2
 - Update existing Lead log calls in `lib/deft/job/lead.ex` to use `[Lead:<id_prefix>]` prefix convention per logging spec §2
 - Update existing Git log calls in `lib/deft/git/job.ex` to use `[Git:<id_prefix>]` prefix convention per logging spec §2
 - Update existing OM log calls in `lib/deft/om/state.ex`, `observer.ex`, `reflector.ex` to use `[OM:<id_prefix>]` prefix convention per logging spec §2
