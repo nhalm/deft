@@ -85,6 +85,12 @@ Decision reasoning is logged in [specd_decisions.jsonl](../specd_decisions.jsonl
 | [skills](skills.md) | v0.4 | Implemented | Skills (agent-selected YAML) and commands (markdown prompts), three-level cascade |
 | [issues](issues.md) | v0.5 | Implemented | Persistent issue tracker — JSONL+git, interactive creation, approve-every-plan `deft work` loop |
 
+## Operations
+
+| Spec | Version | Status | Description |
+|------|---------|--------|-------------|
+| [logging](logging.md) | v0.1 | Ready | Configurable log levels, per-layer logging requirements, message conventions |
+
 ## Future
 
 | Spec | Version | Status | Description |

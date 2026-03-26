@@ -550,6 +550,7 @@ defmodule Deft.Job.ForemanTest do
           session_id: session_id,
           config: %{
             provider: "anthropic",
+            provider_module: Deft.ProviderMock,
             job_lead_model: "claude-sonnet-4-20250514",
             job_research_runner_model: "claude-sonnet-4-20250514"
           },
@@ -562,9 +563,8 @@ defmodule Deft.Job.ForemanTest do
       # Wait for initialization
       Process.sleep(100)
 
-      # Without a real LLM, the planning phase's call_llm fails gracefully
-      # and transitions to complete. Verify the Foreman handled the error
-      # without crashing (process is still alive).
+      # The mock provider fails immediately, so the planning phase's call_llm
+      # fails gracefully and transitions to complete.
       {state, _data} = :sys.get_state(foreman_pid)
       assert match?({:complete, :idle}, state)
 
@@ -624,6 +624,7 @@ defmodule Deft.Job.ForemanTest do
           session_id: session_id,
           config: %{
             provider: "anthropic",
+            provider_module: Deft.ProviderMock,
             job_lead_model: "claude-sonnet-4-20250514"
           },
           prompt: "test prompt",
@@ -658,8 +659,7 @@ defmodule Deft.Job.ForemanTest do
       Process.sleep(200)
 
       # Research findings are collected and tasks cleared.
-      # Without a real LLM, the decomposition phase's call_llm fails,
-      # transitioning to complete. Verify findings were captured.
+      # The mock provider fails immediately, so decomposition transitions to complete.
       {state, data} = :sys.get_state(foreman_pid)
       assert match?({:complete, :idle}, state)
       assert data.research_findings == ["Research finding 1"]
@@ -680,6 +680,7 @@ defmodule Deft.Job.ForemanTest do
           session_id: session_id,
           config: %{
             provider: "anthropic",
+            provider_module: Deft.ProviderMock,
             job_lead_model: "claude-sonnet-4-20250514",
             job_research_timeout: 100
           },
@@ -716,7 +717,7 @@ defmodule Deft.Job.ForemanTest do
       Process.sleep(200)
 
       # Research findings are preserved despite timeout.
-      # Without a real LLM, decomposition's call_llm fails → complete.
+      # The mock provider fails immediately, so decomposition transitions to complete.
       {state, data} = :sys.get_state(foreman_pid)
       assert match?({:complete, :idle}, state)
       assert data.research_findings == ["Finding 1"]
@@ -954,7 +955,7 @@ defmodule Deft.Job.ForemanTest do
       {:ok, foreman_pid} =
         Foreman.start_link(
           session_id: session_id,
-          config: %{auto_approve_all: false},
+          config: %{auto_approve_all: false, provider_module: Deft.ProviderMock},
           prompt: "build a REST API",
           rate_limiter_pid: self(),
           runner_supervisor: runner_supervisor,
@@ -986,7 +987,7 @@ defmodule Deft.Job.ForemanTest do
       Process.sleep(100)
 
       # reject_plan adds a revision prompt and calls call_llm.
-      # Without a real LLM, the call fails → complete.
+      # The mock provider fails immediately → complete.
       # Verify the revision message was still added.
       {state, data_after} = :sys.get_state(foreman_pid)
       assert match?({:complete, :idle}, state)

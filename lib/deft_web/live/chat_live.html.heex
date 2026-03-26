@@ -72,7 +72,7 @@
   <.roster agents={@agent_statuses} visible={@roster_visible or @job_active} />
 
   <div class="input-area">
-    <form phx-submit="submit">
+    <form phx-submit="submit" class="input-form">
       <textarea
         name="input"
         id="input"
@@ -82,7 +82,7 @@
         class="chat-input"
       ><%= @input %></textarea>
     </form>
-    <span class="mode-indicator"><%= mode_indicator(@vim_mode) %></span>
+    <span class={"vim-mode-indicator #{@vim_mode}"}><%= mode_indicator(@vim_mode) %></span>
   </div>
 
   <%= if @job_active do %>

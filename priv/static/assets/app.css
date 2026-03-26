@@ -422,6 +422,11 @@ body {
   border-top: 1px solid var(--border-color);
 }
 
+.input-form {
+  flex-grow: 1;
+  display: flex;
+}
+
 .chat-input {
   flex-grow: 1;
   min-height: 40px;

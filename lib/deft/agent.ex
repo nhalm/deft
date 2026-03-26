@@ -39,6 +39,8 @@ defmodule Deft.Agent do
   - `pending_compaction_data` — Data to use when compaction completes (optional)
   """
 
+  require Logger
+
   @behaviour :gen_statem
 
   alias Deft.Message
@@ -211,6 +213,8 @@ defmodule Deft.Agent do
   end
 
   def handle_event(:cast, {:prompt, text}, :idle, data) do
+    Logger.info("#{log_prefix(data.session_id)} Prompt received, #{String.length(text)} chars")
+
     # Create user message
     user_message = %Message{
       id: generate_message_id(),
@@ -245,6 +249,9 @@ defmodule Deft.Agent do
     # Call provider.stream/3
     case call_provider_stream(provider, context_messages, tools, compacted_data.config) do
       {:ok, stream_ref} ->
+        provider_name = if provider, do: inspect(provider), else: "nil"
+        Logger.info("#{log_prefix(data.session_id)} Provider stream started (#{provider_name})")
+
         # Monitor the stream process to detect crashes (only if stream_ref is a PID)
         monitor_ref = if is_pid(stream_ref), do: Process.monitor(stream_ref), else: nil
 
@@ -258,6 +265,7 @@ defmodule Deft.Agent do
             turn_count: 1
         }
 
+        Logger.debug("#{log_prefix(data.session_id)} State transition: idle -> calling")
         {:next_state, :calling, new_data}
 
       {:error, reason} ->
@@ -268,9 +276,15 @@ defmodule Deft.Agent do
     end
   end
 
-  def handle_event(:cast, {:prompt, text}, _state, data) do
+  def handle_event(:cast, {:prompt, text}, state, data) do
     # Queue prompt if not idle
     new_queue = :queue.in(text, data.prompt_queue)
+    queue_depth = :queue.len(new_queue)
+
+    Logger.info(
+      "#{log_prefix(data.session_id)} Prompt queued (current state: #{state}, queue depth: #{queue_depth})"
+    )
+
     new_data = %{data | prompt_queue: new_queue}
     {:keep_state, new_data}
   end
@@ -357,6 +371,8 @@ defmodule Deft.Agent do
   end
 
   def handle_event(:cast, :abort, state, data) do
+    Logger.info("#{log_prefix(data.session_id)} Abort requested (current state: #{state})")
+
     # Cancel any in-flight operations based on current state
     cancel_operations_for_abort(state, data)
 
@@ -376,6 +392,7 @@ defmodule Deft.Agent do
         pending_compaction_data: nil
     }
 
+    Logger.debug("#{log_prefix(data.session_id)} State transition: #{state} -> idle")
     {:next_state, :idle, clean_data}
   end
 
@@ -392,6 +409,10 @@ defmodule Deft.Agent do
   end
 
   def handle_event(:info, {:provider_event, event}, :calling, data) do
+    Logger.debug(
+      "#{log_prefix(data.session_id)} SSE event received: #{event.__struct__ |> to_string() |> String.split(".") |> List.last()}"
+    )
+
     case event do
       # First content chunk - transition to streaming
       %TextDelta{} ->
@@ -409,6 +430,7 @@ defmodule Deft.Agent do
         }
 
         broadcast_event(data.session_id, {:state_change, :streaming})
+        Logger.debug("#{log_prefix(data.session_id)} State transition: calling -> streaming")
         {:next_state, :streaming, new_data}
 
       %ThinkingDelta{} ->
@@ -426,6 +448,7 @@ defmodule Deft.Agent do
         }
 
         broadcast_event(data.session_id, {:state_change, :streaming})
+        Logger.debug("#{log_prefix(data.session_id)} State transition: calling -> streaming")
         {:next_state, :streaming, new_data}
 
       %ToolCallStart{} ->
@@ -443,6 +466,7 @@ defmodule Deft.Agent do
         }
 
         broadcast_event(data.session_id, {:state_change, :streaming})
+        Logger.debug("#{log_prefix(data.session_id)} State transition: calling -> streaming")
         {:next_state, :streaming, new_data}
 
       # Error event - retry with exponential backoff
@@ -539,34 +563,42 @@ defmodule Deft.Agent do
   end
 
   def handle_event(:info, {:provider_event, %TextDelta{} = event}, :streaming, data) do
+    Logger.debug("#{log_prefix(data.session_id)} SSE event received: TextDelta")
     handle_text_delta(event, data)
   end
 
   def handle_event(:info, {:provider_event, %ThinkingDelta{} = event}, :streaming, data) do
+    Logger.debug("#{log_prefix(data.session_id)} SSE event received: ThinkingDelta")
     handle_thinking_delta(event, data)
   end
 
   def handle_event(:info, {:provider_event, %ToolCallStart{} = event}, :streaming, data) do
+    Logger.debug("#{log_prefix(data.session_id)} SSE event received: ToolCallStart")
     handle_tool_call_start(event, data)
   end
 
   def handle_event(:info, {:provider_event, %ToolCallDelta{} = event}, :streaming, data) do
+    Logger.debug("#{log_prefix(data.session_id)} SSE event received: ToolCallDelta")
     handle_tool_call_delta(event, data)
   end
 
   def handle_event(:info, {:provider_event, %ToolCallDone{} = event}, :streaming, data) do
+    Logger.debug("#{log_prefix(data.session_id)} SSE event received: ToolCallDone")
     handle_tool_call_done(event, data)
   end
 
   def handle_event(:info, {:provider_event, %Usage{} = event}, :streaming, data) do
+    Logger.debug("#{log_prefix(data.session_id)} SSE event received: Usage")
     handle_usage(event, data)
   end
 
   def handle_event(:info, {:provider_event, %Done{}}, :streaming, data) do
+    Logger.debug("#{log_prefix(data.session_id)} SSE event received: Done")
     handle_stream_done(data)
   end
 
   def handle_event(:info, {:provider_event, %Error{} = event}, :streaming, data) do
+    Logger.debug("#{log_prefix(data.session_id)} SSE event received: Error")
     handle_stream_error(event, data)
   end
 
@@ -623,6 +655,8 @@ defmodule Deft.Agent do
       # Check if it's a tool execution task
       Enum.find(data.tool_tasks, fn task -> task.ref == ref end) != nil ->
         # Tool execution task crashed/shutdown - transition to idle
+        Logger.error("#{log_prefix(data.session_id)} Tool execution crashed: #{inspect(reason)}")
+
         broadcast_event(
           data.session_id,
           {:error, "Tool execution was interrupted"}
@@ -716,6 +750,12 @@ defmodule Deft.Agent do
     "msg_" <> (:crypto.strong_rand_bytes(8) |> Base.encode16(case: :lower))
   end
 
+  defp log_prefix(session_id) do
+    # Get first 8 chars of session ID for log prefix
+    prefix = String.slice(session_id, 0, 8)
+    "[Agent:#{prefix}]"
+  end
+
   defp call_provider_stream(nil, _messages, _tools, _config) do
     # No provider configured
     {:error, :no_provider}
@@ -751,6 +791,9 @@ defmodule Deft.Agent do
   defp broadcast_event(session_id, event) do
     # Broadcast event via Registry for TUI and other consumers
     # Registry key is {:session, session_id}
+    event_type = elem(event, 0)
+    Logger.debug("#{log_prefix(session_id)} Broadcasting event: #{event_type}")
+
     Registry.dispatch(Deft.Registry, {:session, session_id}, fn entries ->
       for {pid, _} <- entries do
         send(pid, {:agent_event, event})
@@ -880,6 +923,8 @@ defmodule Deft.Agent do
   end
 
   defp handle_stream_done(data) do
+    Logger.info("#{log_prefix(data.session_id)} Stream complete")
+
     # Demonitor the stream process
     if data.stream_monitor_ref do
       Process.demonitor(data.stream_monitor_ref, [:flush])
@@ -911,11 +956,19 @@ defmodule Deft.Agent do
       handle_idle_transition(new_data)
     else
       broadcast_event(data.session_id, {:state_change, :executing_tools})
+
+      Logger.debug(
+        "#{log_prefix(data.session_id)} State transition: streaming -> executing_tools"
+      )
+
       {:next_state, :executing_tools, new_data}
     end
   end
 
   defp handle_stream_error(error_payload, data) do
+    error_msg = Map.get(error_payload, :message, "Unknown error")
+    Logger.warning("#{log_prefix(data.session_id)} Stream error: #{error_msg}")
+
     max_retries = 3
 
     # Demonitor the stream process
@@ -952,6 +1005,10 @@ defmodule Deft.Agent do
     else
       # Max retries exceeded - transition to idle with error
       error_message = Map.get(error_payload, :message, "Unknown streaming error")
+
+      Logger.error(
+        "#{log_prefix(data.session_id)} Unrecoverable provider failure after #{max_retries} retries: #{error_message}"
+      )
 
       broadcast_event(
         data.session_id,
@@ -1063,12 +1120,24 @@ defmodule Deft.Agent do
 
       {:empty, _} ->
         # No queued prompts - transition to idle
+        Logger.info("#{log_prefix(data_with_saved.session_id)} Turn complete")
         broadcast_event(data_with_saved.session_id, {:state_change, :idle})
+
+        Logger.debug(
+          "#{log_prefix(data_with_saved.session_id)} State transition: executing_tools -> idle"
+        )
+
         {:next_state, :idle, data_with_saved}
     end
   end
 
   defp process_queued_message(message, new_queue, data) do
+    queue_depth = :queue.len(new_queue)
+
+    Logger.debug(
+      "#{log_prefix(data.session_id)} Processing queued prompt (remaining queue depth: #{queue_depth})"
+    )
+
     # Update data with new message and queue
     new_data = %{data | prompt_queue: new_queue, messages: data.messages ++ [message]}
 
@@ -1103,10 +1172,12 @@ defmodule Deft.Agent do
         }
 
         broadcast_event(compacted_data.session_id, {:state_change, :calling})
+        Logger.debug("#{log_prefix(compacted_data.session_id)} State transition: idle -> calling")
         {:next_state, :calling, updated_data}
 
       {:error, reason} ->
         broadcast_event(new_data.session_id, {:error, reason})
+        Logger.debug("#{log_prefix(new_data.session_id)} State transition: idle -> idle (error)")
         {:next_state, :idle, new_data}
     end
   end
@@ -1256,6 +1327,13 @@ defmodule Deft.Agent do
   defp start_tool_execution(tool_calls, data) do
     # Execute tools concurrently via ToolRunner
     # Get the ToolRunner supervisor from the session worker
+    tool_count = length(tool_calls)
+    tool_names = Enum.map(tool_calls, & &1.name) |> Enum.join(", ")
+
+    Logger.info(
+      "#{log_prefix(data.session_id)} Tool execution started (#{tool_count} tools: #{tool_names})"
+    )
+
     tool_timeout = Map.get(data.config, :tool_timeout, 120_000)
 
     # Record start times for each tool call
@@ -1317,6 +1395,14 @@ defmodule Deft.Agent do
   defp handle_tool_execution_complete(ref, results, data) do
     # Clean up the task process (only if ref is present, not needed for Task.Supervisor.async_nolink)
     if ref, do: Process.demonitor(ref, [:flush])
+
+    # Log tool execution complete with success/failure counts
+    success_count = Enum.count(results, fn {_id, result} -> match?({:ok, _}, result) end)
+    failure_count = Enum.count(results, fn {_id, result} -> match?({:error, _}, result) end)
+
+    Logger.info(
+      "#{log_prefix(data.session_id)} Tool execution complete (#{success_count} succeeded, #{failure_count} failed)"
+    )
 
     # Calculate durations and prepare tool results for persistence
     end_time = System.monotonic_time(:millisecond)
@@ -1525,6 +1611,11 @@ defmodule Deft.Agent do
           }
 
           broadcast_event(compacted_data.session_id, {:state_change, :calling})
+
+          Logger.debug(
+            "#{log_prefix(compacted_data.session_id)} State transition: executing_tools -> calling"
+          )
+
           {:next_state, :calling, updated_data}
 
         {:error, reason} ->

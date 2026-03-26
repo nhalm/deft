@@ -2740,22 +2740,29 @@ defmodule Deft.Job.Foreman do
 
   # Get provider module from config
   defp get_provider(data) do
-    provider_value = Map.get(data.config, :provider, "anthropic")
-    # Normalize provider to string (CLI sets it as atom, Registry expects string)
-    provider_name = normalize_provider_name(provider_value)
-    # Use Foreman's model for resolving provider
-    model_name = Map.get(data.config, :job_foreman_model, "claude-sonnet-4-20250514")
+    # Allow tests to inject a provider module directly via config
+    case Map.get(data.config, :provider_module) do
+      nil ->
+        provider_value = Map.get(data.config, :provider, "anthropic")
+        # Normalize provider to string (CLI sets it as atom, Registry expects string)
+        provider_name = normalize_provider_name(provider_value)
+        # Use Foreman's model for resolving provider
+        model_name = Map.get(data.config, :job_foreman_model, "claude-sonnet-4-20250514")
 
-    case Deft.Provider.Registry.resolve(provider_name, model_name) do
-      {:ok, {provider_module, _model_config}} ->
-        provider_module
+        case Deft.Provider.Registry.resolve(provider_name, model_name) do
+          {:ok, {provider_module, _model_config}} ->
+            provider_module
 
-      {:error, _} ->
-        # Fallback to anthropic
-        {:ok, {provider_module, _}} =
-          Deft.Provider.Registry.resolve("anthropic", "claude-sonnet-4-20250514")
+          {:error, _} ->
+            # Fallback to anthropic
+            {:ok, {provider_module, _}} =
+              Deft.Provider.Registry.resolve("anthropic", "claude-sonnet-4-20250514")
 
-        provider_module
+            provider_module
+        end
+
+      module ->
+        module
     end
   end
 

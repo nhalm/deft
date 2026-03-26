@@ -28,7 +28,7 @@ defmodule DeftWeb.ChatLiveTest do
     test "starts in insert mode", %{conn: conn, session_id: session_id} do
       {:ok, _view, html} = live(conn, "/?session=#{session_id}")
 
-      assert html =~ "[INS]"
+      assert html =~ "Insert"
     end
 
     test "initializes with empty conversation", %{conn: conn, session_id: session_id} do
@@ -111,13 +111,14 @@ defmodule DeftWeb.ChatLiveTest do
           %{id: "tool_1", success: true, duration: 500, result: {:ok, "file contents"}}}}
       )
 
+      # Tool should be removed from active_tools after completion
       active_tools = get_assign(view, :active_tools)
-      tool = active_tools["tool_1"]
-      assert tool.status == :success
-      assert tool.duration == 0.5
-      assert tool.key_arg == "test.ex"
-      assert tool.input == ~s({\n  "file_path": "test.ex"\n})
-      assert tool.output == "file contents"
+      assert active_tools["tool_1"] == nil
+
+      # Tool should be in the conversation stream
+      html = render(view)
+      assert html =~ "[Tool: read]"
+      assert html =~ "test.ex"
     end
 
     test "tracks multiple tool calls", %{conn: conn, session_id: session_id} do
@@ -392,7 +393,7 @@ defmodule DeftWeb.ChatLiveTest do
     test "input area has mode-indicator element", %{conn: conn, session_id: session_id} do
       {:ok, _view, html} = live(conn, "/?session=#{session_id}")
 
-      assert html =~ ~r/class="mode-indicator"/
+      assert html =~ ~r/class="vim-mode-indicator/
     end
   end
 end

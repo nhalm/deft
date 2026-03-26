@@ -1,4 +1,5 @@
 # History
+- **logging v0.1 (2026-03-26):** Add agent lifecycle logging to `lib/deft/agent.ex`: require Logger, add `[Agent:<session_id_prefix>]` prefixed log calls at prompt received (info), prompt queued (info), provider stream started (info), stream complete (info), tool execution started/complete (info), turn complete (info), abort (info), SSE events (debug), broadcasts (debug), state transitions (debug)
 - **logging v0.1 (2026-03-26):** Change LiveView `log: false` to `log: :debug` in the `live_view` macro in `deft_web.ex`
 - **logging v0.1 (2026-03-26):** Set `config :logger, level: :warning` in `config/test.exs` so tests are quiet by default
 - **logging v0.1 (2026-03-26):** Add `LOG_LEVEL` env var parsing to `config/runtime.exs`: read `LOG_LEVEL`, default to `"info"`, configure `config :logger, level:` with the parsed atom

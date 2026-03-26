@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s \"https://hexdocs.pm/dotenvy/readme.html\")",
+      "Bash(curl -s \"https://hexdocs.pm/dotenv_parser/readme.html\")"
+    ]
+  }
+}

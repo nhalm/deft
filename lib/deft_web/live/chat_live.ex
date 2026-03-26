@@ -703,9 +703,9 @@ defmodule DeftWeb.ChatLive do
     end
   end
 
-  defp mode_indicator(:normal), do: "[NOR]"
-  defp mode_indicator(:insert), do: "[INS]"
-  defp mode_indicator(:command), do: "[CMD]"
+  defp mode_indicator(:normal), do: "Normal"
+  defp mode_indicator(:insert), do: "Insert"
+  defp mode_indicator(:command), do: "Command"
 
   attr(:item, :map, required: true)
   attr(:thinking_expanded, :map, default: %{})

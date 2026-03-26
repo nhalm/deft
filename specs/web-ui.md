@@ -215,9 +215,9 @@ The chat interface supports three modes, tracked in LiveView assigns:
 
 | Mode | Indicator | Behavior |
 |------|-----------|----------|
-| Normal | `[NOR]` | Navigation keys active, typing enters insert mode |
-| Insert | `[INS]` | Text goes to input area, Esc returns to normal |
-| Command | `[CMD]` | `:` prefix, slash commands, Esc cancels |
+| Normal | `Normal` | Navigation keys active, typing enters insert mode |
+| Insert | `Insert` | Text goes to input area, Esc returns to normal |
+| Command | `Command` | `:` prefix, slash commands, Esc cancels |
 
 Default mode on page load: Insert (lowest friction for new users).
 
