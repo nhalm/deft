@@ -1,4 +1,5 @@
 # History
+- **logging v0.1 (2026-03-26):** Add duration to "Turn complete" log in `lib/deft/agent.ex`: spec §4 requires `Turn complete (total turn duration)`. Record turn start time in agent state when prompt is received, compute elapsed time in idle transition.
 - **logging v0.1 (2026-03-26):** Add duration to "Stream complete" log in `lib/deft/agent.ex`: spec §4 requires `Stream complete (duration)`. Record stream start time in agent state when provider stream starts, compute elapsed time in `handle_stream_done/1`.
 - **logging v0.1 (2026-03-26):** Fix test env log level override: guard runtime.exs LOG_LEVEL config with `if config_env() != :test` to preserve test.exs :warning default
 - **logging v0.1 (2026-03-26):** Update existing infrastructure log calls in Store, Skills, Issues, Session modules to use their respective prefix conventions (`[Store]`, `[Skills]`, `[Issues]`, `[Session]`) per logging spec §2

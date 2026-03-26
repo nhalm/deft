@@ -106,6 +106,7 @@ defmodule Deft.Agent do
       stream_ref: nil,
       stream_monitor_ref: nil,
       stream_start_time: nil,
+      turn_start_time: nil,
       tool_tasks: [],
       tool_call_buffers: %{},
       prompt_queue: :queue.new(),
@@ -265,6 +266,7 @@ defmodule Deft.Agent do
           | stream_ref: stream_ref,
             stream_monitor_ref: monitor_ref,
             stream_start_time: System.monotonic_time(:millisecond),
+            turn_start_time: System.monotonic_time(:millisecond),
             retry_count: 0,
             retry_delay: 1000,
             turn_count: 1
@@ -1147,7 +1149,17 @@ defmodule Deft.Agent do
 
       {:empty, _} ->
         # No queued prompts - transition to idle
-        Logger.info("#{log_prefix(data_with_saved.session_id)} Turn complete")
+        turn_duration_ms =
+          if data_with_saved.turn_start_time do
+            System.monotonic_time(:millisecond) - data_with_saved.turn_start_time
+          else
+            0
+          end
+
+        Logger.info(
+          "#{log_prefix(data_with_saved.session_id)} Turn complete (#{turn_duration_ms}ms)"
+        )
+
         broadcast_event(data_with_saved.session_id, {:state_change, :idle})
 
         Logger.debug(
@@ -1196,6 +1208,7 @@ defmodule Deft.Agent do
           compacted_data
           | stream_ref: stream_ref,
             stream_monitor_ref: monitor_ref,
+            turn_start_time: System.monotonic_time(:millisecond),
             retry_count: 0,
             retry_delay: 1000,
             turn_count: 1
