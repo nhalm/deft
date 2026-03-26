@@ -2,11 +2,15 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.1 |
+| Version | 0.2 |
 | Status | Ready |
 | Last Updated | 2026-03-26 |
 
 ## Changelog
+
+### v0.2 (2026-03-26)
+- Move "Job abort" from Error to Info level (abort is user-initiated, not an error condition)
+- Add "Job abort cleanup failures" to Error level (for when cleanup fails during abort)
 
 ### v0.1 (2026-03-26)
 - Initial spec: log level configuration, per-layer logging requirements, message conventions
@@ -119,6 +123,7 @@ The agent logs its message lifecycle:
 - Lead spawned/completed (lead ID, task summary)
 - Cost checkpoints (accumulated cost)
 - Job complete (duration, total cost)
+- Job abort (user-initiated)
 
 **Debug level:**
 - Lead message dispatch (message type)
@@ -133,7 +138,7 @@ The agent logs its message lifecycle:
 **Error level:**
 - Lead crashes
 - Git operation failures
-- Job abort
+- Job abort cleanup failures
 
 ### 7. Observational Memory Layer
 

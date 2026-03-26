@@ -17,6 +17,12 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
+## logging v0.2
+
+- Change job abort log from `:error` to `:info` in `lib/deft/job/foreman.ex:720` "Foreman aborting job": spec v0.2 §6 moves "Job abort" to Info level (user-initiated, not an error)
+- Change job abort log from `:error` to `:info` in `lib/deft/git/job.ex:1115` "Job aborted - cleanup completed": spec v0.2 §6 moves "Job abort" to Info level
+- Add error-level logging for job abort cleanup failures in foreman.ex and git/job.ex: spec v0.2 §6 requires "Job abort cleanup failures" at Error level (blocked: need to identify where cleanup failures occur and add error handling)
+
 ## logging v0.1
 
 - Change lead message dispatch log from `:info` to `:debug` in `lib/deft/job/foreman.ex` line 830: spec §6 requires "Lead message dispatch (message type)" at `:debug`
