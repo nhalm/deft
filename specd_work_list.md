@@ -20,3 +20,16 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 ## web-ui v0.4
 
 - Implement force-abort for double Ctrl+c in chat_live.ex: both single and double Ctrl+c call `Deft.Agent.abort(agent)`. Spec §6.4 requires double Ctrl+c to force-abort. Need `Deft.Agent.force_abort/1` (or equivalent) that kills the agent process immediately rather than requesting graceful abort. (blocked: harness — Agent module needs force_abort/1)
+
+## logging v0.1
+
+- Set `config :logger, level: :warning` in `config/test.exs` so tests are quiet by default
+- Change LiveView `log: false` to `log: :debug` in the `live_view` macro in `deft_web.ex`
+- Add agent lifecycle logging to `lib/deft/agent.ex`: require Logger, add `[Agent:<session_id_prefix>]` prefixed log calls at prompt received (info), prompt queued (info), provider stream started (info), stream complete (info), tool execution started/complete (info), turn complete (info), abort (info), SSE events (debug), broadcasts (debug), state transitions (debug)
+- Add provider logging to `lib/deft/provider/anthropic.ex`: require Logger, add `[Provider:<session_id_prefix>]` prefixed log calls at API request started (info), API request complete (info), SSE chunk received (debug), SSE event parsed (debug), non-2xx responses (error), connection failures (error)
+- Add chat layer logging to `lib/deft_web/live/chat_live.ex`: require Logger, add `[Chat:<session_id_prefix>]` prefixed log calls at user message submit (info), session connect/disconnect (info), agent events received (debug)
+- Update existing Foreman log calls in `lib/deft/job/foreman.ex` to use `[Foreman:<job_id_prefix>]` prefix convention per logging spec §2
+- Update existing Lead log calls in `lib/deft/job/lead.ex` to use `[Lead:<id_prefix>]` prefix convention per logging spec §2
+- Update existing Git log calls in `lib/deft/git/job.ex` to use `[Git:<id_prefix>]` prefix convention per logging spec §2
+- Update existing OM log calls in `lib/deft/om/state.ex`, `observer.ex`, `reflector.ex` to use `[OM:<id_prefix>]` prefix convention per logging spec §2
+- Update existing infrastructure log calls in Store, Skills, Issues, Session modules to use their respective prefix conventions (`[Store]`, `[Skills]`, `[Issues]`, `[Session]`) per logging spec §2
