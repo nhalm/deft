@@ -17,6 +17,12 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
+## logging v0.1
+
+- Change lead message dispatch log from `:info` to `:debug` in `lib/deft/job/foreman.ex` line 830: spec §6 requires "Lead message dispatch (message type)" at `:debug`
+- Change runner task spawning/result logs from `:info` to `:debug` in `lib/deft/job/lead.ex` lines 1287, 1294: spec §6 requires "Runner task assignment" at `:debug`
+- Change branch operation success logs from `:info` to `:debug` in `lib/deft/git/job.ex`: spec §6 requires "Branch operations (create, merge, cleanup)" at `:debug`. Applies to success paths (lines 1004, 1017, and similar); failure paths correctly stay at `:error`
+
 ## web-ui v0.4
 
 - Implement force-abort for double Ctrl+c in chat_live.ex: both single and double Ctrl+c call `Deft.Agent.abort(agent)`. Spec §6.4 requires double Ctrl+c to force-abort. Need `Deft.Agent.force_abort/1` (or equivalent) that kills the agent process immediately rather than requesting graceful abort. (blocked: harness — Agent module needs force_abort/1)
