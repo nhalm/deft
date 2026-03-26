@@ -20,6 +20,8 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 ## logging v0.2
 
 - Add error-level logging for job abort cleanup failures in foreman.ex and git/job.ex: spec v0.2 §6 requires "Job abort cleanup failures" at Error level (blocked: need to identify where cleanup failures occur and add error handling)
+- Add deliverable name/task summary to "Lead spawned" info log in foreman.ex:3590: spec §6 requires `Lead spawned/completed (lead ID, task summary)` but log only includes lead ID, PID, and worktree path — `deliverable.name` is in scope but not logged
+- Add `[Skills]` prefix to 3 warning logs in skills/registry.ex (lines 41, 185, 220): spec §2 requires all log messages include bracketed prefix; other logs in same file already have it
 
 ## web-ui v0.4
 
