@@ -23,7 +23,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## logging v0.1
 
-- Add error-level log for tool crashes in `lib/deft/agent/tool_runner.ex`: spec §4 requires `Tool crashes (tool name, reason)` at `:error` level. The `{:exit, reason}` branch in `execute_batch/5` silently returns an error tuple — add `Logger.error` with tool name and crash reason.
 - Add `:info` logs for session loaded/saved in `lib/deft/session/store.ex`: spec §9 requires info-level logs for session load and save operations. Currently only has `:error` and `:debug` logs.
 - Add `:info` log for issue created/updated in `lib/deft/issues.ex`: spec §9 requires info-level logs when issues are created or updated. Currently only logs compaction at `:info`.
 - Add `:info` log for skill registered in `lib/deft/skills/registry.ex`: spec §9 requires info-level log when skills are registered. Currently only has `:warning` logs.

@@ -62,21 +62,27 @@ defmodule Deft.Agent.ToolRunner do
             execute_tool(tool_use, context, tool_map)
           end)
 
-        {tool_use.id, task}
+        {tool_use.id, tool_use.name, task}
       end)
 
     # Collect results with timeout
+    session_prefix = "[Tools:#{String.slice(context.session_id, 0, 8)}]"
+
     results =
       tasks
-      |> Enum.map(fn {_id, task} -> task end)
+      |> Enum.map(fn {_id, _name, task} -> task end)
       |> Task.yield_many(timeout)
       |> Enum.zip(tasks)
-      |> Enum.map(fn {{_task_ref, result}, {tool_use_id, task}} ->
+      |> Enum.map(fn {{_task_ref, result}, {tool_use_id, tool_name, task}} ->
         case result do
           {:ok, tool_result} ->
             {tool_use_id, tool_result}
 
           {:exit, reason} ->
+            Logger.error(
+              "#{session_prefix} Tool crashed: #{tool_name}, reason: #{inspect(reason)}"
+            )
+
             {tool_use_id, {:error, "Tool crashed: #{inspect(reason)}"}}
 
           nil ->
