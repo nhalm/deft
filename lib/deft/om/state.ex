@@ -1078,10 +1078,6 @@ defmodule Deft.OM.State do
       # Reset circuit if cooldown has expired
       state = if state.circuit_open, do: reset_circuit(state), else: state
 
-      Logger.debug(
-        "#{log_prefix(state.session_id)} Spawning Observer Task at #{state.pending_message_tokens} tokens"
-      )
-
       # Emit buffering_started event for async buffering
       broadcast_event(state.session_id, {:om, :buffering_started, %{type: :observation}})
       # Emit observation_started event (LLM call begins immediately)
@@ -1091,6 +1087,10 @@ defmodule Deft.OM.State do
       unobserved_messages =
         state.messages
         |> Enum.reject(fn msg -> msg.id in state.observed_message_ids end)
+
+      Logger.info(
+        "#{log_prefix(state.session_id)} Observer triggered (#{length(unobserved_messages)} observations)"
+      )
 
       task_supervisor = Supervisor.task_supervisor_name(state.session_id)
 
