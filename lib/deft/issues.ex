@@ -500,7 +500,10 @@ defmodule Deft.Issues do
             Map.put(acc, issue.id, issue)
 
           {:error, reason} ->
-            Logger.warning("Skipping invalid JSON line in #{file_path}: #{inspect(reason)}")
+            Logger.warning(
+              "[Issues] Skipping invalid JSON line in #{file_path}: #{inspect(reason)}"
+            )
+
             acc
         end
       end)
@@ -527,7 +530,9 @@ defmodule Deft.Issues do
     compacted_count = length(compacted)
 
     if compacted_count > 0 do
-      Logger.info("Compacted #{compacted_count} closed issues older than #{compaction_days} days")
+      Logger.info(
+        "[Issues] Compacted #{compacted_count} closed issues older than #{compaction_days} days"
+      )
 
       # Rewrite the file without the compacted issues
       # We need to write directly here since we're in init/1, not in a handle_call
@@ -536,7 +541,7 @@ defmodule Deft.Issues do
           remaining
 
         {:error, reason} ->
-          Logger.warning("Failed to persist compacted issues: #{inspect(reason)}")
+          Logger.warning("[Issues] Failed to persist compacted issues: #{inspect(reason)}")
           issues
       end
     else
@@ -589,7 +594,7 @@ defmodule Deft.Issues do
         Enum.map(issues, fn issue ->
           if MapSet.member?(cycle_members, issue.id) do
             Logger.warning(
-              "Issue #{issue.id} is part of a dependency cycle. Clearing dependencies."
+              "[Issues] Issue #{issue.id} is part of a dependency cycle. Clearing dependencies."
             )
 
             %{issue | dependencies: []}
@@ -604,7 +609,7 @@ defmodule Deft.Issues do
           corrected_issues
 
         {:error, reason} ->
-          Logger.warning("Failed to persist cycle fixes: #{inspect(reason)}")
+          Logger.warning("[Issues] Failed to persist cycle fixes: #{inspect(reason)}")
           corrected_issues
       end
     else
@@ -845,7 +850,7 @@ defmodule Deft.Issues do
   rescue
     _e ->
       # If anything goes wrong, log and continue (don't block issue creation)
-      Logger.debug("Could not update .gitattributes for issues.jsonl merge strategy")
+      Logger.debug("[Issues] Could not update .gitattributes for issues.jsonl merge strategy")
       :ok
   end
 

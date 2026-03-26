@@ -273,7 +273,7 @@ defmodule Deft.Store do
       )
       when not is_nil(monitor_ref) do
     # Task failed - log warning, ETS stays partially populated
-    Logger.warning("Deft.Store: DETS load task failed: #{inspect(reason)}")
+    Logger.warning("[Store] DETS load task failed: #{inspect(reason)}")
     {:noreply, %{state | load_task: nil, monitor_ref: nil}}
   end
 
@@ -310,7 +310,7 @@ defmodule Deft.Store do
         # Fall back to creating a new empty DETS file
         if type == :sitelog do
           Logger.warning(
-            "Deft.Store: site log DETS corruption at #{path}, creating new file: #{inspect(reason)}"
+            "[Store] site log DETS corruption at #{path}, creating new file: #{inspect(reason)}"
           )
         end
 

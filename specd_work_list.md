@@ -20,7 +20,3 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 ## web-ui v0.4
 
 - Implement force-abort for double Ctrl+c in chat_live.ex: both single and double Ctrl+c call `Deft.Agent.abort(agent)`. Spec §6.4 requires double Ctrl+c to force-abort. Need `Deft.Agent.force_abort/1` (or equivalent) that kills the agent process immediately rather than requesting graceful abort. (blocked: harness — Agent module needs force_abort/1)
-
-## logging v0.1
-
-- Update existing infrastructure log calls in Store, Skills, Issues, Session modules to use their respective prefix conventions (`[Store]`, `[Skills]`, `[Issues]`, `[Session]`) per logging spec §2

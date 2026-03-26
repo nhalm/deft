@@ -44,7 +44,7 @@ defmodule Deft.Session.Store do
     else
       {:error, reason} = error ->
         require Logger
-        Logger.error("Failed to append to session #{session_id}: #{inspect(reason)}")
+        Logger.error("[Session] Failed to append to session #{session_id}: #{inspect(reason)}")
         error
     end
   end
@@ -72,7 +72,7 @@ defmodule Deft.Session.Store do
     else
       {:error, reason} = error ->
         require Logger
-        Logger.error("Failed to append to session file #{path}: #{inspect(reason)}")
+        Logger.error("[Session] Failed to append to session file #{path}: #{inspect(reason)}")
         error
     end
   end
@@ -107,7 +107,7 @@ defmodule Deft.Session.Store do
 
       {:error, reason} = error ->
         require Logger
-        Logger.debug("Failed to load session #{session_id}: #{inspect(reason)}")
+        Logger.debug("[Session] Failed to load session #{session_id}: #{inspect(reason)}")
         error
     end
   end
@@ -163,7 +163,7 @@ defmodule Deft.Session.Store do
 
       {:error, reason} = error ->
         require Logger
-        Logger.debug("Failed to resume session #{session_id}: #{inspect(reason)}")
+        Logger.debug("[Session] Failed to resume session #{session_id}: #{inspect(reason)}")
         error
     end
   end
