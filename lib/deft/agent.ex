@@ -105,6 +105,7 @@ defmodule Deft.Agent do
       current_message: nil,
       stream_ref: nil,
       stream_monitor_ref: nil,
+      stream_start_time: nil,
       tool_tasks: [],
       tool_call_buffers: %{},
       prompt_queue: :queue.new(),
@@ -263,6 +264,7 @@ defmodule Deft.Agent do
           compacted_data
           | stream_ref: stream_ref,
             stream_monitor_ref: monitor_ref,
+            stream_start_time: System.monotonic_time(:millisecond),
             retry_count: 0,
             retry_delay: 1000,
             turn_count: 1
@@ -342,6 +344,7 @@ defmodule Deft.Agent do
           compacted_data
           | stream_ref: stream_ref,
             stream_monitor_ref: monitor_ref,
+            stream_start_time: System.monotonic_time(:millisecond),
             current_message: nil,
             tool_call_buffers: %{},
             retry_count: 0,
@@ -390,6 +393,7 @@ defmodule Deft.Agent do
       data
       | stream_ref: nil,
         stream_monitor_ref: nil,
+        stream_start_time: nil,
         current_message: nil,
         tool_call_buffers: %{},
         tool_tasks: [],
@@ -495,6 +499,7 @@ defmodule Deft.Agent do
           data
           | stream_ref: nil,
             stream_monitor_ref: nil,
+            stream_start_time: nil,
             retry_count: 0,
             retry_delay: 1000
         }
@@ -547,7 +552,8 @@ defmodule Deft.Agent do
         new_data = %{
           data
           | stream_ref: nil,
-            stream_monitor_ref: nil
+            stream_monitor_ref: nil,
+            stream_start_time: nil
         }
 
         handle_idle_transition(new_data)
@@ -843,6 +849,7 @@ defmodule Deft.Agent do
       new_data = %{
         data
         | stream_ref: nil,
+          stream_start_time: nil,
           retry_count: 0,
           retry_delay: 1000
       }
@@ -933,7 +940,15 @@ defmodule Deft.Agent do
   end
 
   defp handle_stream_done(data) do
-    Logger.info("#{log_prefix(data.session_id)} Stream complete")
+    duration_ms =
+      if data.stream_start_time do
+        System.monotonic_time(:millisecond) - data.stream_start_time
+      else
+        nil
+      end
+
+    duration_str = if duration_ms, do: " (#{duration_ms}ms)", else: ""
+    Logger.info("#{log_prefix(data.session_id)} Stream complete#{duration_str}")
 
     # Demonitor the stream process
     if data.stream_monitor_ref do
@@ -953,6 +968,7 @@ defmodule Deft.Agent do
         current_message: nil,
         stream_ref: nil,
         stream_monitor_ref: nil,
+        stream_start_time: nil,
         tool_call_buffers: %{},
         retry_count: 0,
         retry_delay: 1000
@@ -992,6 +1008,7 @@ defmodule Deft.Agent do
       | current_message: nil,
         stream_ref: nil,
         stream_monitor_ref: nil,
+        stream_start_time: nil,
         tool_call_buffers: %{}
     }
 
