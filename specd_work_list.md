@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## logging v0.1
 
-- Add cache hit/miss debug logs to `lib/deft/store.ex` `read/2`: spec §9 requires cache hits/misses at debug level. Currently returns results silently.
 - Add DETS operation debug logs to `lib/deft/store.ex`: spec §9 requires DETS operations at debug level. `flush_buffer/2` and `open_dets_file/2` success paths have no debug logging.
 - Add skill file parsing debug logs to `lib/deft/skills/registry.ex`: spec §9 requires skill file parsing at debug level. `parse_skill_manifest/2` and `discover_commands/3` have no debug logging during parse.
 

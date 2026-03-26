@@ -112,8 +112,13 @@ defmodule Deft.Store do
   def read(tid, key) do
     try do
       case :ets.lookup(tid, key) do
-        [{^key, entry}] -> {:ok, entry}
-        [] -> :miss
+        [{^key, entry}] ->
+          Logger.debug("[Store] Cache hit for key: #{inspect(key)}")
+          {:ok, entry}
+
+        [] ->
+          Logger.debug("[Store] Cache miss for key: #{inspect(key)}")
+          :miss
       end
     rescue
       ArgumentError -> :expired
