@@ -23,7 +23,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## logging v0.1
 
-- Add provider logging to `lib/deft/provider/anthropic.ex`: require Logger, add `[Provider:<session_id_prefix>]` prefixed log calls at API request started (info), API request complete (info), SSE chunk received (debug), SSE event parsed (debug), non-2xx responses (error), connection failures (error)
 - Add chat layer logging to `lib/deft_web/live/chat_live.ex`: require Logger, add `[Chat:<session_id_prefix>]` prefixed log calls at user message submit (info), session connect/disconnect (info), agent events received (debug)
 - Update existing Foreman log calls in `lib/deft/job/foreman.ex` to use `[Foreman:<job_id_prefix>]` prefix convention per logging spec §2
 - Update existing Lead log calls in `lib/deft/job/lead.ex` to use `[Lead:<id_prefix>]` prefix convention per logging spec §2

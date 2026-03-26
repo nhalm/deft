@@ -54,6 +54,7 @@ defmodule Deft.Provider.Anthropic do
       temperature = Map.get(config, :temperature, 1.0)
       thinking = Map.get(config, :thinking, false)
       thinking_budget = Map.get(config, :thinking_budget, 4096)
+      session_id = Map.get(config, :session_id)
 
       # Spawn a process to handle the streaming request
       # Use spawn instead of spawn_link so stream crashes don't kill the agent
@@ -68,7 +69,8 @@ defmodule Deft.Provider.Anthropic do
             max_tokens,
             temperature,
             thinking,
-            thinking_budget
+            thinking_budget,
+            session_id
           )
         end)
 
@@ -98,11 +100,20 @@ defmodule Deft.Provider.Anthropic do
          max_tokens,
          temperature,
          thinking,
-         thinking_budget
+         thinking_budget,
+         session_id
        ) do
     # Format messages and tools for Anthropic API
     {system_param, wire_messages} = format_messages(messages)
     wire_tools = format_tools(tools)
+
+    # Log API request start
+    message_count = length(wire_messages)
+    tool_count = length(wire_tools)
+
+    Logger.info(
+      "#{log_prefix(session_id)} API request started (model: #{model}, messages: #{message_count}, tools: #{tool_count})"
+    )
 
     # Build request body
     body =
@@ -123,6 +134,9 @@ defmodule Deft.Provider.Anthropic do
       {"content-type", "application/json"}
     ]
 
+    # Track request start time for response time calculation
+    start_time = System.monotonic_time(:millisecond)
+
     # Start streaming request
     case Req.post(@api_url,
            json: body,
@@ -130,11 +144,34 @@ defmodule Deft.Provider.Anthropic do
            into: :self,
            receive_timeout: 60_000
          ) do
-      {:ok, %Req.Response{} = response} ->
-        # Start receiving chunks with SSE parser state
-        receive_chunks(caller, response.body.ref, "", %{})
+      {:ok, %Req.Response{status: status} = response} ->
+        response_time = System.monotonic_time(:millisecond) - start_time
+
+        Logger.info(
+          "#{log_prefix(session_id)} API request complete (status: #{status}, response_time: #{response_time}ms)"
+        )
+
+        # Check for non-2xx response
+        if status >= 200 and status < 300 do
+          # Start receiving chunks with SSE parser state
+          receive_chunks(caller, response.body.ref, "", %{}, session_id)
+        else
+          # Non-2xx response - log error
+          error_body = inspect(response.body) |> String.slice(0, 200)
+
+          Logger.error(
+            "#{log_prefix(session_id)} Non-2xx API response (status: #{status}, error: #{error_body})"
+          )
+
+          send(
+            caller,
+            {:provider_event, %Error{message: "HTTP request failed with status #{status}"}}
+          )
+        end
 
       {:error, reason} ->
+        Logger.error("#{log_prefix(session_id)} Connection failure (error: #{inspect(reason)})")
+
         send(
           caller,
           {:provider_event, %Error{message: "HTTP request failed: #{inspect(reason)}"}}
@@ -143,13 +180,20 @@ defmodule Deft.Provider.Anthropic do
   end
 
   # Receive and process streaming chunks with SSE buffering
-  defp receive_chunks(caller, req_stream, buffer, tool_state) do
+  defp receive_chunks(caller, req_stream, buffer, tool_state, session_id) do
     receive do
       {^req_stream, {:data, chunk}} ->
+        # Log SSE chunk received
+        chunk_size = byte_size(chunk)
+        Logger.debug("#{log_prefix(session_id)} SSE chunk received (#{chunk_size} bytes)")
+
         # Append to buffer and process complete SSE events
         new_buffer = buffer <> chunk
-        {remaining_buffer, new_tool_state} = process_sse_buffer(caller, new_buffer, tool_state)
-        receive_chunks(caller, req_stream, remaining_buffer, new_tool_state)
+
+        {remaining_buffer, new_tool_state} =
+          process_sse_buffer(caller, new_buffer, tool_state, session_id)
+
+        receive_chunks(caller, req_stream, remaining_buffer, new_tool_state, session_id)
 
       {^req_stream, :done} ->
         # Stream complete - Done event already sent via message_stop SSE event
@@ -164,17 +208,22 @@ defmodule Deft.Provider.Anthropic do
   end
 
   # Process SSE buffer and extract complete events
-  defp process_sse_buffer(caller, buffer, tool_state) do
+  defp process_sse_buffer(caller, buffer, tool_state, session_id) do
     case ServerSentEvents.parse(buffer) do
       {events, remaining} ->
-        new_tool_state = Enum.reduce(events, tool_state, &process_single_event(caller, &1, &2))
+        new_tool_state =
+          Enum.reduce(events, tool_state, &process_single_event(caller, &1, &2, session_id))
+
         {remaining, new_tool_state}
     end
   end
 
   # Process a single SSE event
-  defp process_single_event(caller, sse_event, tool_state) do
+  defp process_single_event(caller, sse_event, tool_state, session_id) do
     event_type = Map.get(sse_event, :event, "message")
+
+    # Log SSE event parsed
+    Logger.debug("#{log_prefix(session_id)} SSE event parsed (type: #{event_type})")
 
     case event_type do
       "content_block_start" ->
@@ -539,5 +588,14 @@ defmodule Deft.Provider.Anthropic do
       _ ->
         {:error, :unknown_model}
     end
+  end
+
+  # Helper function to create log prefix
+  defp log_prefix(nil), do: "[Provider:unknown]"
+
+  defp log_prefix(session_id) do
+    # Get first 8 chars of session ID for log prefix
+    prefix = String.slice(session_id, 0, 8)
+    "[Provider:#{prefix}]"
   end
 end

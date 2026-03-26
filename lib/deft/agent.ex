@@ -246,8 +246,11 @@ defmodule Deft.Agent do
     # Get tools from config
     tools = Map.get(compacted_data.config, :tools, [])
 
+    # Add session_id to config for provider logging
+    config_with_session = Map.put(compacted_data.config, :session_id, data.session_id)
+
     # Call provider.stream/3
-    case call_provider_stream(provider, context_messages, tools, compacted_data.config) do
+    case call_provider_stream(provider, context_messages, tools, config_with_session) do
       {:ok, stream_ref} ->
         provider_name = if provider, do: inspect(provider), else: "nil"
         Logger.info("#{log_prefix(data.session_id)} Provider stream started (#{provider_name})")
@@ -327,7 +330,10 @@ defmodule Deft.Agent do
     provider = Map.get(compacted_data.config, :provider)
     tools = Map.get(compacted_data.config, :tools, [])
 
-    case call_provider_stream(provider, context_messages, tools, compacted_data.config) do
+    # Add session_id to config for provider logging
+    config_with_session = Map.put(compacted_data.config, :session_id, compacted_data.session_id)
+
+    case call_provider_stream(provider, context_messages, tools, config_with_session) do
       {:ok, stream_ref} ->
         # Monitor the stream process to detect crashes (only if stream_ref is a PID)
         monitor_ref = if is_pid(stream_ref), do: Process.monitor(stream_ref), else: nil
@@ -515,7 +521,10 @@ defmodule Deft.Agent do
     provider = Map.get(compacted_data.config, :provider)
     tools = Map.get(compacted_data.config, :tools, [])
 
-    case call_provider_stream(provider, context_messages, tools, compacted_data.config) do
+    # Add session_id to config for provider logging
+    config_with_session = Map.put(compacted_data.config, :session_id, compacted_data.session_id)
+
+    case call_provider_stream(provider, context_messages, tools, config_with_session) do
       {:ok, stream_ref} ->
         # Monitor the stream process to detect crashes (only if stream_ref is a PID)
         monitor_ref = if is_pid(stream_ref), do: Process.monitor(stream_ref), else: nil
@@ -763,6 +772,7 @@ defmodule Deft.Agent do
 
   defp call_provider_stream(provider, messages, tools, config) do
     # Call provider.stream/3
+    # Ensure session_id is in config for provider logging
     provider.stream(messages, tools, config)
   end
 
@@ -1157,7 +1167,10 @@ defmodule Deft.Agent do
     provider = Map.get(compacted_data.config, :provider)
     tools = Map.get(compacted_data.config, :tools, [])
 
-    case call_provider_stream(provider, context_messages, tools, compacted_data.config) do
+    # Add session_id to config for provider logging
+    config_with_session = Map.put(compacted_data.config, :session_id, compacted_data.session_id)
+
+    case call_provider_stream(provider, context_messages, tools, config_with_session) do
       {:ok, stream_ref} ->
         # Monitor the stream process to detect crashes (only if stream_ref is a PID)
         monitor_ref = if is_pid(stream_ref), do: Process.monitor(stream_ref), else: nil
@@ -1596,7 +1609,10 @@ defmodule Deft.Agent do
       provider = Map.get(compacted_data.config, :provider)
       tools = Map.get(compacted_data.config, :tools, [])
 
-      case call_provider_stream(provider, context_messages, tools, compacted_data.config) do
+      # Add session_id to config for provider logging
+      config_with_session = Map.put(compacted_data.config, :session_id, compacted_data.session_id)
+
+      case call_provider_stream(provider, context_messages, tools, config_with_session) do
         {:ok, stream_ref} ->
           # Monitor the stream process to detect crashes (only if stream_ref is a PID)
           monitor_ref = if is_pid(stream_ref), do: Process.monitor(stream_ref), else: nil
@@ -1733,7 +1749,8 @@ defmodule Deft.Agent do
       # Spawn task to generate LLM summary asynchronously
       provider = Map.get(data.config, :provider)
       session_id = data.session_id
-      config = data.config
+      # Add session_id to config for provider logging
+      config = Map.put(data.config, :session_id, session_id)
 
       # Spawn task using the ToolRunner supervisor
       tool_runner = Worker.tool_runner_via_tuple(session_id)

@@ -1,4 +1,5 @@
 # History
+- **logging v0.1 (2026-03-26):** Add provider logging to `lib/deft/provider/anthropic.ex`: require Logger, add `[Provider:<session_id_prefix>]` prefixed log calls at API request started (info), API request complete (info), SSE chunk received (debug), SSE event parsed (debug), non-2xx responses (error), connection failures (error)
 - **logging v0.1 (2026-03-26):** Add agent lifecycle logging to `lib/deft/agent.ex`: require Logger, add `[Agent:<session_id_prefix>]` prefixed log calls at prompt received (info), prompt queued (info), provider stream started (info), stream complete (info), tool execution started/complete (info), turn complete (info), abort (info), SSE events (debug), broadcasts (debug), state transitions (debug)
 - **logging v0.1 (2026-03-26):** Change LiveView `log: false` to `log: :debug` in the `live_view` macro in `deft_web.ex`
 - **logging v0.1 (2026-03-26):** Set `config :logger, level: :warning` in `config/test.exs` so tests are quiet by default
