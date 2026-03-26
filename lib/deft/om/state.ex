@@ -1791,7 +1791,7 @@ defmodule Deft.OM.State do
          {:ok, json} <- Jason.encode(entry),
          line <- json <> "\n",
          :ok <- File.write(path, line, [:append]) do
-      Logger.debug("#{log_prefix(state.session_id)} OM snapshot written")
+      Logger.info("#{log_prefix(state.session_id)} Snapshot persisted")
       :ok
     else
       {:error, reason} = error ->
