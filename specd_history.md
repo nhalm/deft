@@ -1,4 +1,5 @@
 # History
+- **logging v0.1 (2026-03-26):** Set `config :logger, level: :warning` in `config/test.exs` so tests are quiet by default
 - **logging v0.1 (2026-03-26):** Add `LOG_LEVEL` env var parsing to `config/runtime.exs`: read `LOG_LEVEL`, default to `"info"`, configure `config :logger, level:` with the parsed atom
 - **web-ui v0.5 (2026-03-25):** Update the `:idle` handler to only flush remaining in-progress content (if any), not the entire turn. Most content will already be persisted by earlier incremental flushes.
 - **web-ui v0.5 (2026-03-25):** Auto-collapse thinking blocks once they finish streaming. Thinking should be expanded while actively streaming, then collapse when it persists to the conversation. User can click to re-expand.
