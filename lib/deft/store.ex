@@ -309,6 +309,7 @@ defmodule Deft.Store do
   defp open_dets_file(path, type) do
     case :dets.open_file(String.to_charlist(path), type: :set) do
       {:ok, dets_file} ->
+        Logger.debug("[Store] DETS file opened: #{path}")
         dets_file
 
       {:error, reason} ->
@@ -324,6 +325,7 @@ defmodule Deft.Store do
 
         # Create new DETS file
         {:ok, dets_file} = :dets.open_file(String.to_charlist(path), type: :set)
+        Logger.debug("[Store] DETS file created after corruption: #{path}")
         dets_file
     end
   end
@@ -386,6 +388,12 @@ defmodule Deft.Store do
   end
 
   defp flush_buffer(state, opts \\ []) do
+    buffer_size = length(state.write_buffer)
+
+    if buffer_size > 0 do
+      Logger.debug("[Store] Flushing #{buffer_size} DETS operations")
+    end
+
     # Write all buffered operations to DETS
     Enum.each(Enum.reverse(state.write_buffer), fn
       {:write, key, entry} ->
@@ -397,6 +405,7 @@ defmodule Deft.Store do
 
     # Sync DETS if requested (sitelog only)
     if Keyword.get(opts, :sync, false) do
+      Logger.debug("[Store] Syncing DETS file")
       :dets.sync(state.dets_file)
     end
 

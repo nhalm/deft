@@ -1,4 +1,5 @@
 # History
+- **logging v0.1 (2026-03-26):** Add DETS operation debug logs to `lib/deft/store.ex`: spec §9 requires DETS operations at debug level. `flush_buffer/2` and `open_dets_file/2` success paths have no debug logging.
 - **logging v0.1 (2026-03-26):** Add cache hit/miss debug logs to `lib/deft/store.ex` `read/2`: spec §9 requires cache hits/misses at debug level. Currently returns results silently.
 - **logging v0.1 (2026-03-26):** Add "Session disconnected" info log to `lib/deft_web/live/chat_live.ex`: spec §8 requires session disconnected at info level. Add a `terminate/2` callback that logs `[Chat:<id>] Session disconnected`.
 - **logging v0.1 (2026-03-26):** Add duration and total cost to "Job completed" log in `lib/deft/job/foreman.ex`: spec §6 requires `Job complete (duration, total cost)`. Current message is just "Job completed successfully - squash-merge done" with neither field.
