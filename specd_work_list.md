@@ -20,3 +20,16 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 ## web-ui v0.4
 
 - Implement force-abort for double Ctrl+c in chat_live.ex: both single and double Ctrl+c call `Deft.Agent.abort(agent)`. Spec §6.4 requires double Ctrl+c to force-abort. Need `Deft.Agent.force_abort/1` (or equivalent) that kills the agent process immediately rather than requesting graceful abort. (blocked: harness — Agent module needs force_abort/1)
+
+## logging v0.1
+
+- Fix test env log level override: `config/runtime.exs` unconditionally sets log level from `LOG_LEVEL` env var (defaulting to `:info`), overriding `config/test.exs` `:warning` default. Guard the runtime.exs log level config with `if config_env() != :test` or similar.
+- Add duration to "Stream complete" log in `lib/deft/agent.ex`: spec §4 requires `Stream complete (duration)`. Record stream start time in agent state when provider stream starts, compute elapsed time in `handle_stream_done/1`.
+- Add duration to "Turn complete" log in `lib/deft/agent.ex`: spec §4 requires `Turn complete (total turn duration)`. Record turn start time in agent state when prompt is received, compute elapsed time in idle transition.
+- Add error-level log for tool crashes in `lib/deft/agent/tool_runner.ex`: spec §4 requires `Tool crashes (tool name, reason)` at `:error` level. The `{:exit, reason}` branch in `execute_batch/5` silently returns an error tuple — add `Logger.error` with tool name and crash reason.
+- Add `:info` logs for session loaded/saved in `lib/deft/session/store.ex`: spec §9 requires info-level logs for session load and save operations. Currently only has `:error` and `:debug` logs.
+- Add `:info` log for issue created/updated in `lib/deft/issues.ex`: spec §9 requires info-level logs when issues are created or updated. Currently only logs compaction at `:info`.
+- Add `:info` log for skill registered in `lib/deft/skills/registry.ex`: spec §9 requires info-level log when skills are registered. Currently only has `:warning` logs.
+- Change Observer triggered log from `:debug` to `:info` in `lib/deft/om/state.ex` `spawn_observer_task/2`: spec §7 requires "Observer triggered (observation count)" at `:info`. Add observation count to message.
+- Change Reflector triggered log from `:debug` to `:info` in `lib/deft/om/state.ex` `spawn_reflector_task/1`: spec §7 requires "Reflector triggered (compression ratio)" at `:info`. Add compression ratio to message.
+- Change snapshot persisted log from `:debug` to `:info` in `lib/deft/om/state.ex` `write_snapshot/1`: spec §7 requires "Snapshot persisted" at `:info`.
