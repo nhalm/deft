@@ -23,7 +23,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## logging v0.1
 
-- Add `:info` log for skill registered in `lib/deft/skills/registry.ex`: spec §9 requires info-level log when skills are registered. Currently only has `:warning` logs.
 - Change Observer triggered log from `:debug` to `:info` in `lib/deft/om/state.ex` `spawn_observer_task/2`: spec §7 requires "Observer triggered (observation count)" at `:info`. Add observation count to message.
 - Change Reflector triggered log from `:debug` to `:info` in `lib/deft/om/state.ex` `spawn_reflector_task/1`: spec §7 requires "Reflector triggered (compression ratio)" at `:info`. Add compression ratio to message.
 - Change snapshot persisted log from `:debug` to `:info` in `lib/deft/om/state.ex` `write_snapshot/1`: spec §7 requires "Snapshot persisted" at `:info`.

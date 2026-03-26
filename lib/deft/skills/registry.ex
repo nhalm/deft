@@ -178,6 +178,7 @@ defmodule Deft.Skills.Registry do
       |> Enum.reduce(%{}, fn path, acc ->
         case parse_skill_manifest(path, level) do
           {:ok, entry} ->
+            Logger.info("[Skills] Skill registered: #{entry.name} (level: #{level})")
             Map.put(acc, entry.name, entry)
 
           {:error, reason} ->
