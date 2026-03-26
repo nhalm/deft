@@ -17,6 +17,17 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
+## logging v0.1
+
+- Add duration to "Tool execution complete" log in `lib/deft/agent.ex`: spec §4 requires `Tool execution complete (duration, success/failure count)`. Message has success/failure counts but no duration. Track tool batch start time and compute elapsed.
+- Add "Provider stream started" log to inject_skill path in `lib/deft/agent.ex`: the `:idle` inject_skill handler (line ~340) starts a provider stream without logging. The regular prompt path logs at info level; inject_skill should too.
+- Add "Job started" info log for fresh starts in `lib/deft/job/foreman.ex` init: spec §6 requires `Job started (job ID, description)` at info. The resume path logs "Resuming job" but normal fresh starts have no log.
+- Add duration and total cost to "Job completed" log in `lib/deft/job/foreman.ex`: spec §6 requires `Job complete (duration, total cost)`. Current message is just "Job completed successfully - squash-merge done" with neither field.
+- Add "Session disconnected" info log to `lib/deft_web/live/chat_live.ex`: spec §8 requires session disconnected at info level. Add a `terminate/2` callback that logs `[Chat:<id>] Session disconnected`.
+- Add cache hit/miss debug logs to `lib/deft/store.ex` `read/2`: spec §9 requires cache hits/misses at debug level. Currently returns results silently.
+- Add DETS operation debug logs to `lib/deft/store.ex`: spec §9 requires DETS operations at debug level. `flush_buffer/2` and `open_dets_file/2` success paths have no debug logging.
+- Add skill file parsing debug logs to `lib/deft/skills/registry.ex`: spec §9 requires skill file parsing at debug level. `parse_skill_manifest/2` and `discover_commands/3` have no debug logging during parse.
+
 ## web-ui v0.4
 
 - Implement force-abort for double Ctrl+c in chat_live.ex: both single and double Ctrl+c call `Deft.Agent.abort(agent)`. Spec §6.4 requires double Ctrl+c to force-abort. Need `Deft.Agent.force_abort/1` (or equivalent) that kills the agent process immediately rather than requesting graceful abort. (blocked: harness — Agent module needs force_abort/1)
