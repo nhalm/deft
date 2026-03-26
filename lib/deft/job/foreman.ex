@@ -286,6 +286,10 @@ defmodule Deft.Job.Foreman do
       initial_state = {:executing, :idle}
       {:ok, initial_state, data}
     else
+      Logger.info(
+        "#{log_prefix(initial_data.session_id)} Job started (#{initial_data.session_id}, #{initial_data.prompt})"
+      )
+
       # Normal start in planning phase, idle agent state
       initial_state = {:planning, :idle}
       {:ok, initial_state, data}

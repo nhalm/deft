@@ -1,4 +1,5 @@
 # History
+- **logging v0.1 (2026-03-26):** Add "Job started" info log for fresh starts in `lib/deft/job/foreman.ex` init: spec §6 requires `Job started (job ID, description)` at info. The resume path logs "Resuming job" but normal fresh starts have no log.
 - **logging v0.1 (2026-03-26):** Add "Provider stream started" log to inject_skill path in `lib/deft/agent.ex`: the `:idle` inject_skill handler (line ~340) starts a provider stream without logging. The regular prompt path logs at info level; inject_skill should too.
 - **logging v0.1 (2026-03-26):** Add duration to "Tool execution complete" log in `lib/deft/agent.ex`: spec §4 requires `Tool execution complete (duration, success/failure count)`. Message has success/failure counts but no duration. Track tool batch start time and compute elapsed.
 - **logging v0.1 (2026-03-26):** Change snapshot persisted log from `:debug` to `:info` in `lib/deft/om/state.ex` `write_snapshot/1`: spec §7 requires "Snapshot persisted" at `:info`.
