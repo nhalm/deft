@@ -89,7 +89,7 @@ Decision reasoning is logged in [specd_decisions.jsonl](../specd_decisions.jsonl
 
 | Spec | Version | Status | Description |
 |------|---------|--------|-------------|
-| [logging](logging.md) | v0.2 | Ready | Configurable log levels, per-layer logging requirements, message conventions |
+| [logging](logging.md) | v0.2 | Implemented | Configurable log levels, per-layer logging requirements, message conventions |
 
 ## Future
 
