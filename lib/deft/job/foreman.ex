@@ -827,7 +827,7 @@ defmodule Deft.Job.Foreman do
         {job_phase, _agent_state} = state,
         data
       ) do
-    Logger.info("#{log_prefix(data.session_id)} Foreman received lead message: #{type}")
+    Logger.debug("#{log_prefix(data.session_id)} Foreman received lead message: #{type}")
 
     # Process the lead message (may update Lead state)
     data = process_lead_message(type, content, metadata, data)
