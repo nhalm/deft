@@ -1435,20 +1435,33 @@ defmodule Deft.Agent do
     end
   end
 
+  defp calculate_batch_duration(results, tool_execution_times, end_time) do
+    # Get batch start time from the first tool (all tools in a batch have the same start time)
+    batch_start_time =
+      case results do
+        [{tool_use_id, _} | _] -> Map.get(tool_execution_times, tool_use_id, end_time)
+        [] -> end_time
+      end
+
+    end_time - batch_start_time
+  end
+
   defp handle_tool_execution_complete(ref, results, data) do
     # Clean up the task process (only if ref is present, not needed for Task.Supervisor.async_nolink)
     if ref, do: Process.demonitor(ref, [:flush])
 
-    # Log tool execution complete with success/failure counts
+    # Calculate durations and prepare tool results for persistence
+    end_time = System.monotonic_time(:millisecond)
+    batch_duration_ms = calculate_batch_duration(results, data.tool_execution_times, end_time)
+
+    # Log tool execution complete with duration and success/failure counts
     success_count = Enum.count(results, fn {_id, result} -> match?({:ok, _}, result) end)
     failure_count = Enum.count(results, fn {_id, result} -> match?({:error, _}, result) end)
 
     Logger.info(
-      "#{log_prefix(data.session_id)} Tool execution complete (#{success_count} succeeded, #{failure_count} failed)"
+      "#{log_prefix(data.session_id)} Tool execution complete (#{batch_duration_ms}ms, #{success_count} succeeded, #{failure_count} failed)"
     )
 
-    # Calculate durations and prepare tool results for persistence
-    end_time = System.monotonic_time(:millisecond)
     tool_calls = extract_tool_calls(data.messages)
 
     tool_results_with_timing =
