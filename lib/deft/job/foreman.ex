@@ -119,7 +119,8 @@ defmodule Deft.Job.Foreman do
       session_file_path: session_file_path,
       saved_message_ids: MapSet.new(),
       merge_resolution_tasks: %{},
-      post_merge_test_tasks: %{}
+      post_merge_test_tasks: %{},
+      job_start_time: nil
     }
 
     gen_statem_opts = if name, do: [name: name], else: []
@@ -280,7 +281,12 @@ defmodule Deft.Job.Foreman do
 
       # Update started_leads to reflect completed work
       started_leads = MapSet.new(completed_deliverables)
-      data = %{data | started_leads: started_leads}
+
+      data = %{
+        data
+        | started_leads: started_leads,
+          job_start_time: System.monotonic_time(:millisecond)
+      }
 
       # Start in executing phase, ready to resume incomplete work
       initial_state = {:executing, :idle}
@@ -289,6 +295,9 @@ defmodule Deft.Job.Foreman do
       Logger.info(
         "#{log_prefix(initial_data.session_id)} Job started (#{initial_data.session_id}, #{initial_data.prompt})"
       )
+
+      # Set job start time for duration tracking
+      data = %{data | job_start_time: System.monotonic_time(:millisecond)}
 
       # Normal start in planning phase, idle agent state
       initial_state = {:planning, :idle}
@@ -1310,8 +1319,12 @@ defmodule Deft.Job.Foreman do
              working_dir: data.working_dir
            ) do
         {:ok, :completed} ->
+          # Calculate job duration
+          duration_ms = System.monotonic_time(:millisecond) - data.job_start_time
+          duration_sec = Float.round(duration_ms / 1000, 1)
+
           Logger.info(
-            "#{log_prefix(data.session_id)} Job completed successfully - squash-merge done"
+            "#{log_prefix(data.session_id)} Job complete (#{duration_sec}s, $#{Float.round(data.session_cost, 2)})"
           )
 
           # Clean up any remaining Lead worktrees
