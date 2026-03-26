@@ -366,6 +366,15 @@ defmodule DeftWeb.ChatLive do
   end
 
   @impl true
+  def terminate(_reason, socket) do
+    # Log session disconnection
+    session_id = socket.assigns.session_id
+    id_prefix = String.slice(session_id, 0, 8)
+    Logger.info("[Chat:#{id_prefix}] Session disconnected")
+    :ok
+  end
+
+  @impl true
   def handle_event("submit", %{"input" => input}, socket) do
     # Trim whitespace
     input = String.trim(input)

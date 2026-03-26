@@ -1,4 +1,5 @@
 # History
+- **logging v0.1 (2026-03-26):** Add "Session disconnected" info log to `lib/deft_web/live/chat_live.ex`: spec §8 requires session disconnected at info level. Add a `terminate/2` callback that logs `[Chat:<id>] Session disconnected`.
 - **logging v0.1 (2026-03-26):** Add duration and total cost to "Job completed" log in `lib/deft/job/foreman.ex`: spec §6 requires `Job complete (duration, total cost)`. Current message is just "Job completed successfully - squash-merge done" with neither field.
 - **logging v0.1 (2026-03-26):** Add "Job started" info log for fresh starts in `lib/deft/job/foreman.ex` init: spec §6 requires `Job started (job ID, description)` at info. The resume path logs "Resuming job" but normal fresh starts have no log.
 - **logging v0.1 (2026-03-26):** Add "Provider stream started" log to inject_skill path in `lib/deft/agent.ex`: the `:idle` inject_skill handler (line ~340) starts a provider stream without logging. The regular prompt path logs at info level; inject_skill should too.
