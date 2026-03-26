@@ -24,6 +24,7 @@ defmodule Deft.OM.Observer do
 
   ## Parameters
 
+  - `session_id` - Session identifier for logging
   - `config` - Deft.Config struct with model and provider configuration
   - `messages` - List of unobserved Deft.Message structs
   - `existing_observations` - Current observations text (will be truncated)
@@ -41,13 +42,13 @@ defmodule Deft.OM.Observer do
 
   ## Examples
 
-      iex> result = Deft.OM.Observer.run(config, messages, "", 4.0)
+      iex> result = Deft.OM.Observer.run(session_id, config, messages, "", 4.0)
       iex> is_binary(result.observations)
       true
       iex> is_list(result.message_ids)
       true
   """
-  @spec run(Config.t(), [Message.t()], String.t(), float()) ::
+  @spec run(String.t(), Config.t(), [Message.t()], String.t(), float()) ::
           %{
             observations: String.t(),
             message_ids: [String.t()],
@@ -56,8 +57,10 @@ defmodule Deft.OM.Observer do
             continuation_hint: String.t() | nil,
             usage: %{input_tokens: integer(), output_tokens: integer()} | nil
           }
-  def run(config, messages, existing_observations, calibration_factor) do
-    Logger.debug("Observer: Starting observation extraction for #{length(messages)} messages")
+  def run(session_id, config, messages, existing_observations, calibration_factor) do
+    Logger.debug(
+      "#{log_prefix(session_id)} Starting observation extraction for #{length(messages)} messages"
+    )
 
     # Format messages for Observer input (spec section 3.3)
     formatted_messages = Prompt.format_messages(messages)
@@ -109,7 +112,7 @@ defmodule Deft.OM.Observer do
                 message_ids = Enum.map(messages, & &1.id)
 
                 Logger.debug(
-                  "Observer: Extracted observations (#{Tokens.estimate(observations, calibration_factor)} tokens) from #{message_tokens} tokens of messages"
+                  "#{log_prefix(session_id)} Extracted observations (#{Tokens.estimate(observations, calibration_factor)} tokens) from #{message_tokens} tokens of messages"
                 )
 
                 %{
@@ -122,19 +125,22 @@ defmodule Deft.OM.Observer do
                 }
 
               {:error, reason} ->
-                Logger.warning("Observer: Failed to parse output: #{inspect(reason)}")
+                Logger.warning(
+                  "#{log_prefix(session_id)} Failed to parse output: #{inspect(reason)}"
+                )
+
                 # Return empty observations on parse failure
                 empty_result(messages, calibration_factor)
             end
 
           {:error, reason} ->
-            Logger.warning("Observer: LLM call failed: #{inspect(reason)}")
+            Logger.warning("#{log_prefix(session_id)} LLM call failed: #{inspect(reason)}")
             # Return empty observations on LLM failure
             empty_result(messages, calibration_factor)
         end
 
       {:error, reason} ->
-        Logger.error("Observer: Failed to resolve provider: #{inspect(reason)}")
+        Logger.error("#{log_prefix(session_id)} Failed to resolve provider: #{inspect(reason)}")
         # Return empty observations on provider resolution failure
         empty_result(messages, calibration_factor)
     end
@@ -259,5 +265,10 @@ defmodule Deft.OM.Observer do
       continuation_hint: nil,
       usage: nil
     }
+  end
+
+  defp log_prefix(session_id) do
+    prefix = String.slice(session_id, 0, 8)
+    "[OM:#{prefix}]"
   end
 end

@@ -202,7 +202,7 @@ defmodule Deft.OM.State do
         {:ok, nil}
 
       {:error, reason} = error ->
-        Logger.warning("Failed to load OM snapshot for session #{session_id}: #{inspect(reason)}")
+        Logger.warning("#{log_prefix(session_id)} Failed to load OM snapshot: #{inspect(reason)}")
 
         error
     end
@@ -225,7 +225,7 @@ defmodule Deft.OM.State do
 
   @impl true
   def init({session_id, config, messages, snapshot}) do
-    Logger.debug("Starting OM State for session #{session_id}")
+    Logger.debug("#{log_prefix(session_id)} Starting OM State")
 
     # Schedule periodic snapshot timer (every 60 seconds)
     schedule_snapshot_timer()
@@ -249,7 +249,7 @@ defmodule Deft.OM.State do
   # Restore state from a snapshot (spec section 9.3)
   defp restore_from_snapshot(state, snapshot, messages) do
     Logger.info(
-      "Restoring OM state for session #{state.session_id} from snapshot: #{snapshot.observation_tokens} tokens, #{length(snapshot.observed_message_ids)} messages observed"
+      "#{log_prefix(state.session_id)} Restoring OM state from snapshot: #{snapshot.observation_tokens} tokens, #{length(snapshot.observed_message_ids)} messages observed"
     )
 
     # Restore all persisted fields from snapshot (spec section 9.2)
@@ -282,7 +282,7 @@ defmodule Deft.OM.State do
     restored_state = %{restored_state | pending_message_tokens: pending_tokens}
 
     Logger.debug(
-      "OM state restored: #{restored_state.observation_tokens} observation tokens, #{pending_tokens} pending tokens from #{length(unobserved_messages)} unobserved messages"
+      "#{log_prefix(state.session_id)} OM state restored: #{restored_state.observation_tokens} observation tokens, #{pending_tokens} pending tokens from #{length(unobserved_messages)} unobserved messages"
     )
 
     # Check if thresholds are already exceeded and trigger observation/reflection if needed
@@ -298,11 +298,11 @@ defmodule Deft.OM.State do
     if state.snapshot_dirty do
       case write_snapshot(state) do
         :ok ->
-          Logger.debug("Final OM snapshot written for session #{state.session_id} on shutdown")
+          Logger.debug("#{log_prefix(state.session_id)} Final OM snapshot written on shutdown")
 
         {:error, reason} ->
           Logger.warning(
-            "Failed to write final OM snapshot for session #{state.session_id} on shutdown: #{inspect(reason)}"
+            "#{log_prefix(state.session_id)} Failed to write final OM snapshot on shutdown: #{inspect(reason)}"
           )
       end
     end
@@ -320,7 +320,7 @@ defmodule Deft.OM.State do
   @impl true
   def handle_call(:force_observe, from, state) do
     Logger.info(
-      "Force observe called for session #{state.session_id} (sync fallback) - pending: #{state.pending_message_tokens} tokens"
+      "#{log_prefix(state.session_id)} Force observe called (sync fallback) - pending: #{state.pending_message_tokens} tokens"
     )
 
     # Get unobserved messages
@@ -343,6 +343,7 @@ defmodule Deft.OM.State do
       task =
         Task.Supervisor.async_nolink(task_supervisor, fn ->
           run_observer_with_retry(
+            state.session_id,
             state.config,
             unobserved_messages,
             state.active_observations,
@@ -367,7 +368,7 @@ defmodule Deft.OM.State do
   @impl true
   def handle_call(:force_reflect, from, state) do
     Logger.info(
-      "Force reflect called for session #{state.session_id} (sync fallback) - observation_tokens: #{state.observation_tokens}"
+      "#{log_prefix(state.session_id)} Force reflect called (sync fallback) - observation_tokens: #{state.observation_tokens}"
     )
 
     # If observation_tokens is below threshold, return immediately
@@ -388,6 +389,7 @@ defmodule Deft.OM.State do
       task =
         Task.Supervisor.async_nolink(task_supervisor, fn ->
           run_reflector_with_retry(
+            state.session_id,
             state.config,
             state.active_observations,
             target_size,
@@ -510,7 +512,7 @@ defmodule Deft.OM.State do
   @impl true
   def handle_info({ref, result}, %{observer_ref: ref} = state) when ref != nil do
     # Observer Task completed successfully
-    Logger.debug("Observer Task completed for session #{state.session_id}")
+    Logger.debug("#{log_prefix(state.session_id)} Observer Task completed")
 
     # Demonitor the task
     Process.demonitor(ref, [:flush])
@@ -594,7 +596,7 @@ defmodule Deft.OM.State do
   def handle_info({:DOWN, ref, :process, _pid, reason}, %{observer_ref: ref} = state)
       when ref != nil do
     # Observer Task crashed or failed
-    Logger.warning("Observer Task failed for session #{state.session_id}: #{inspect(reason)}")
+    Logger.warning("#{log_prefix(state.session_id)} Observer Task failed: #{inspect(reason)}")
 
     # Record failure for circuit breaker
     state = record_cycle_failure(state, :observation, reason)
@@ -638,7 +640,7 @@ defmodule Deft.OM.State do
   def handle_info({ref, result}, %{reflector_ref: ref} = state) when ref != nil do
     # Reflector Task completed successfully
     Logger.info(
-      "Reflector Task completed for session #{state.session_id}: #{result.before_tokens} -> #{result.after_tokens} tokens (level #{result.compression_level}, #{result.llm_calls} calls)"
+      "#{log_prefix(state.session_id)} Reflector Task completed: #{result.before_tokens} -> #{result.after_tokens} tokens (level #{result.compression_level}, #{result.llm_calls} calls)"
     )
 
     # Demonitor the task
@@ -667,7 +669,7 @@ defmodule Deft.OM.State do
         if state.is_buffering_reflection do
           # This was a buffered reflection - store it for later activation
           Logger.debug(
-            "Storing buffered reflection for session #{state.session_id} (epoch #{result.epoch})"
+            "#{log_prefix(state.session_id)} Storing buffered reflection (epoch #{result.epoch})"
           )
 
           # Emit buffering_complete event
@@ -697,7 +699,7 @@ defmodule Deft.OM.State do
   def handle_info({:DOWN, ref, :process, _pid, reason}, %{reflector_ref: ref} = state)
       when ref != nil do
     # Reflector Task crashed or failed
-    Logger.warning("Reflector Task failed for session #{state.session_id}: #{inspect(reason)}")
+    Logger.warning("#{log_prefix(state.session_id)} Reflector Task failed: #{inspect(reason)}")
 
     # Record failure for circuit breaker
     state = record_cycle_failure(state, :reflection, reason)
@@ -757,7 +759,7 @@ defmodule Deft.OM.State do
 
           {:error, reason} ->
             Logger.warning(
-              "Failed to write periodic snapshot for session #{state.session_id}: #{inspect(reason)}"
+              "#{log_prefix(state.session_id)} Failed to write periodic snapshot: #{inspect(reason)}"
             )
 
             state
@@ -914,6 +916,7 @@ defmodule Deft.OM.State do
   end
 
   defp run_observer_with_retry(
+         session_id,
          config,
          messages,
          existing_observations,
@@ -921,6 +924,7 @@ defmodule Deft.OM.State do
          max_retries
        ) do
     run_observer_with_retry_loop(
+      session_id,
       config,
       messages,
       existing_observations,
@@ -931,6 +935,7 @@ defmodule Deft.OM.State do
   end
 
   defp run_observer_with_retry_loop(
+         session_id,
          config,
          messages,
          existing_observations,
@@ -938,14 +943,19 @@ defmodule Deft.OM.State do
          max_retries,
          attempt
        ) do
-    case Observer.run(config, messages, existing_observations, calibration_factor) do
+    case Observer.run(session_id, config, messages, existing_observations, calibration_factor) do
       %{observations: ""} when attempt < max_retries ->
         # Empty observations means failure - retry with exponential backoff
         backoff_ms = trunc(:math.pow(2, attempt) * 1000)
-        Logger.warning("Observer attempt #{attempt + 1} failed, retrying after #{backoff_ms}ms")
+
+        Logger.warning(
+          "#{log_prefix(session_id)} Observer attempt #{attempt + 1} failed, retrying after #{backoff_ms}ms"
+        )
+
         Process.sleep(backoff_ms)
 
         run_observer_with_retry_loop(
+          session_id,
           config,
           messages,
           existing_observations,
@@ -961,6 +971,7 @@ defmodule Deft.OM.State do
   end
 
   defp run_reflector_with_retry(
+         session_id,
          config,
          observations,
          target_size,
@@ -968,6 +979,7 @@ defmodule Deft.OM.State do
          max_retries
        ) do
     run_reflector_with_retry_loop(
+      session_id,
       config,
       observations,
       target_size,
@@ -978,6 +990,7 @@ defmodule Deft.OM.State do
   end
 
   defp run_reflector_with_retry_loop(
+         session_id,
          config,
          observations,
          target_size,
@@ -985,14 +998,19 @@ defmodule Deft.OM.State do
          max_retries,
          attempt
        ) do
-    case Reflector.run(config, observations, target_size, calibration_factor) do
+    case Reflector.run(session_id, config, observations, target_size, calibration_factor) do
       %{compressed_observations: ""} when attempt < max_retries ->
         # Empty compressed observations means failure - retry with exponential backoff
         backoff_ms = trunc(:math.pow(2, attempt) * 1000)
-        Logger.warning("Reflector attempt #{attempt + 1} failed, retrying after #{backoff_ms}ms")
+
+        Logger.warning(
+          "#{log_prefix(session_id)} Reflector attempt #{attempt + 1} failed, retrying after #{backoff_ms}ms"
+        )
+
         Process.sleep(backoff_ms)
 
         run_reflector_with_retry_loop(
+          session_id,
           config,
           observations,
           target_size,
@@ -1052,7 +1070,7 @@ defmodule Deft.OM.State do
     # Check circuit breaker before spawning
     if not can_attempt_cycle?(state) do
       Logger.debug(
-        "Skipping Observer spawn for session #{state.session_id} - circuit breaker is open"
+        "#{log_prefix(state.session_id)} Skipping Observer spawn - circuit breaker is open"
       )
 
       state
@@ -1061,7 +1079,7 @@ defmodule Deft.OM.State do
       state = if state.circuit_open, do: reset_circuit(state), else: state
 
       Logger.debug(
-        "Spawning Observer Task for session #{state.session_id} at #{state.pending_message_tokens} tokens"
+        "#{log_prefix(state.session_id)} Spawning Observer Task at #{state.pending_message_tokens} tokens"
       )
 
       # Emit buffering_started event for async buffering
@@ -1085,6 +1103,7 @@ defmodule Deft.OM.State do
         Task.Supervisor.async_nolink(task_supervisor, fn ->
           observer_result =
             run_observer_with_retry(
+              state.session_id,
               state.config,
               unobserved_messages,
               state.active_observations,
@@ -1107,7 +1126,7 @@ defmodule Deft.OM.State do
 
   defp activate_buffered_chunks(state) do
     Logger.info(
-      "Activating #{length(state.buffered_chunks)} buffered chunks for session #{state.session_id}"
+      "#{log_prefix(state.session_id)} Activating #{length(state.buffered_chunks)} buffered chunks"
     )
 
     # Emit activation event
@@ -1125,7 +1144,7 @@ defmodule Deft.OM.State do
 
     if discarded_count > 0 do
       Logger.debug(
-        "Discarded #{discarded_count} stale chunks (epoch < #{state.activation_epoch}) for session #{state.session_id}"
+        "#{log_prefix(state.session_id)} Discarded #{discarded_count} stale chunks (epoch < #{state.activation_epoch})"
       )
     end
 
@@ -1228,14 +1247,14 @@ defmodule Deft.OM.State do
       if state.buffered_reflection_epoch == state.activation_epoch do
         # Buffered reflection is current - activate it instantly
         Logger.info(
-          "Activating buffered reflection for session #{state.session_id} (epoch #{state.activation_epoch})"
+          "#{log_prefix(state.session_id)} Activating buffered reflection (epoch #{state.activation_epoch})"
         )
 
         activate_buffered_reflection(state)
       else
         # Buffered reflection is stale - discard and re-trigger
         Logger.debug(
-          "Discarding stale buffered reflection for session #{state.session_id} (epoch #{state.buffered_reflection_epoch} < #{state.activation_epoch})"
+          "#{log_prefix(state.session_id)} Discarding stale buffered reflection (epoch #{state.buffered_reflection_epoch} < #{state.activation_epoch})"
         )
 
         state = %{state | buffered_reflection: nil, buffered_reflection_epoch: nil}
@@ -1263,7 +1282,7 @@ defmodule Deft.OM.State do
     })
 
     Logger.info(
-      "Activated buffered reflection for session #{state.session_id}: #{before_tokens} -> #{after_tokens} tokens"
+      "#{log_prefix(state.session_id)} Activated buffered reflection: #{before_tokens} -> #{after_tokens} tokens"
     )
 
     # Replace active_observations with buffered reflection
@@ -1343,7 +1362,7 @@ defmodule Deft.OM.State do
     else
       # Epoch is stale - discard the reflection
       Logger.warning(
-        "Discarding stale immediate reflection for session #{state.session_id} (epoch #{result.epoch} < #{state.activation_epoch})"
+        "#{log_prefix(state.session_id)} Discarding stale immediate reflection (epoch #{result.epoch} < #{state.activation_epoch})"
       )
 
       # Clear is_reflecting flag and continue
@@ -1357,7 +1376,7 @@ defmodule Deft.OM.State do
     # Check circuit breaker before spawning
     if not can_attempt_cycle?(state) do
       Logger.debug(
-        "Skipping buffered Reflector spawn for session #{state.session_id} - circuit breaker is open"
+        "#{log_prefix(state.session_id)} Skipping buffered Reflector spawn - circuit breaker is open"
       )
 
       state
@@ -1366,7 +1385,7 @@ defmodule Deft.OM.State do
       state = if state.circuit_open, do: reset_circuit(state), else: state
 
       Logger.debug(
-        "Spawning buffered Reflector Task for session #{state.session_id} with #{state.observation_tokens} tokens (epoch #{state.activation_epoch})"
+        "#{log_prefix(state.session_id)} Spawning buffered Reflector Task with #{state.observation_tokens} tokens (epoch #{state.activation_epoch})"
       )
 
       # Emit buffering_started event
@@ -1387,6 +1406,7 @@ defmodule Deft.OM.State do
         Task.Supervisor.async_nolink(task_supervisor, fn ->
           result =
             Reflector.run(
+              state.session_id,
               state.config,
               state.active_observations,
               target_size,
@@ -1409,7 +1429,7 @@ defmodule Deft.OM.State do
     # Check circuit breaker before spawning
     if not can_attempt_cycle?(state) do
       Logger.debug(
-        "Skipping Reflector spawn for session #{state.session_id} - circuit breaker is open"
+        "#{log_prefix(state.session_id)} Skipping Reflector spawn - circuit breaker is open"
       )
 
       state
@@ -1418,7 +1438,7 @@ defmodule Deft.OM.State do
       state = if state.circuit_open, do: reset_circuit(state), else: state
 
       Logger.debug(
-        "Spawning Reflector Task for session #{state.session_id} with #{state.observation_tokens} tokens"
+        "#{log_prefix(state.session_id)} Spawning Reflector Task with #{state.observation_tokens} tokens"
       )
 
       # Emit reflection_started event (level starts at 0)
@@ -1437,6 +1457,7 @@ defmodule Deft.OM.State do
         Task.Supervisor.async_nolink(task_supervisor, fn ->
           result =
             Reflector.run(
+              state.session_id,
               state.config,
               state.active_observations,
               target_size,
@@ -1480,7 +1501,7 @@ defmodule Deft.OM.State do
 
       if abs(new_factor - state.calibration_factor) > 0.01 do
         Logger.debug(
-          "OM: Calibrated token factor from #{Float.round(state.calibration_factor, 2)} to #{Float.round(new_factor, 2)} (#{actual_chars} chars / #{actual_tokens} tokens)"
+          "#{log_prefix(state.session_id)} Calibrated token factor from #{Float.round(state.calibration_factor, 2)} to #{Float.round(new_factor, 2)} (#{actual_chars} chars / #{actual_tokens} tokens)"
         )
       end
 
@@ -1513,7 +1534,7 @@ defmodule Deft.OM.State do
 
   defp open_circuit(state) do
     Logger.warning(
-      "OM circuit breaker opened for session #{state.session_id} after 3 consecutive failures"
+      "#{log_prefix(state.session_id)} Circuit breaker opened after 3 consecutive failures"
     )
 
     # Emit circuit_open event
@@ -1539,7 +1560,7 @@ defmodule Deft.OM.State do
 
         if elapsed_seconds >= cooldown_seconds do
           Logger.info(
-            "OM circuit breaker cooldown expired for session #{state.session_id}, resuming"
+            "#{log_prefix(state.session_id)} Circuit breaker cooldown expired, resuming"
           )
 
           true
@@ -1577,7 +1598,7 @@ defmodule Deft.OM.State do
 
   defp apply_hard_cap(state, cap) do
     Logger.warning(
-      "OM hard cap exceeded for session #{state.session_id}: #{state.observation_tokens} > #{cap} tokens, truncating Session History"
+      "#{log_prefix(state.session_id)} Hard cap exceeded: #{state.observation_tokens} > #{cap} tokens, truncating Session History"
     )
 
     before_tokens = state.observation_tokens
@@ -1635,7 +1656,7 @@ defmodule Deft.OM.State do
     })
 
     Logger.info(
-      "OM hard cap truncation complete for session #{state.session_id}: #{before_tokens} -> #{after_tokens} tokens"
+      "#{log_prefix(state.session_id)} Hard cap truncation complete: #{before_tokens} -> #{after_tokens} tokens"
     )
 
     # Update state with truncated observations
@@ -1770,12 +1791,12 @@ defmodule Deft.OM.State do
          {:ok, json} <- Jason.encode(entry),
          line <- json <> "\n",
          :ok <- File.write(path, line, [:append]) do
-      Logger.debug("OM snapshot written for session #{state.session_id}")
+      Logger.debug("#{log_prefix(state.session_id)} OM snapshot written")
       :ok
     else
       {:error, reason} = error ->
         Logger.error(
-          "Failed to write OM snapshot for session #{state.session_id}: #{inspect(reason)}"
+          "#{log_prefix(state.session_id)} Failed to write OM snapshot: #{inspect(reason)}"
         )
 
         error
@@ -1811,7 +1832,7 @@ defmodule Deft.OM.State do
         }
 
       {:error, reason} ->
-        Logger.warning("Failed to parse OM snapshot line: #{inspect(reason)}")
+        Logger.warning("[OM] Failed to parse snapshot line: #{inspect(reason)}")
         nil
     end
   end
@@ -1837,4 +1858,9 @@ defmodule Deft.OM.State do
   end
 
   defp parse_datetime_or_nil(%DateTime{} = dt), do: dt
+
+  defp log_prefix(session_id) do
+    prefix = String.slice(session_id, 0, 8)
+    "[OM:#{prefix}]"
+  end
 end

@@ -23,6 +23,7 @@ defmodule Deft.OM.Reflector do
 
   ## Parameters
 
+  - `session_id` - Session identifier for logging
   - `config` - Deft.Config struct with model and provider configuration
   - `active_observations` - Current observations text to compress
   - `target_size` - Target token count for compressed output (default 20,000)
@@ -40,13 +41,13 @@ defmodule Deft.OM.Reflector do
 
   ## Examples
 
-      iex> result = Deft.OM.Reflector.run(config, observations, 20_000, 4.0)
+      iex> result = Deft.OM.Reflector.run(session_id, config, observations, 20_000, 4.0)
       iex> is_binary(result.compressed_observations)
       true
       iex> result.llm_calls <= 2
       true
   """
-  @spec run(Config.t(), String.t(), integer(), float()) ::
+  @spec run(String.t(), Config.t(), String.t(), integer(), float()) ::
           %{
             compressed_observations: String.t(),
             before_tokens: integer(),
@@ -55,8 +56,10 @@ defmodule Deft.OM.Reflector do
             llm_calls: integer(),
             usage: %{input_tokens: integer(), output_tokens: integer()} | nil
           }
-  def run(config, active_observations, target_size \\ 20_000, calibration_factor) do
-    Logger.debug("Reflector: Starting compression with target size #{target_size} tokens")
+  def run(session_id, config, active_observations, target_size \\ 20_000, calibration_factor) do
+    Logger.debug(
+      "#{log_prefix(session_id)} Starting compression with target size #{target_size} tokens"
+    )
 
     before_tokens = Tokens.estimate(active_observations, calibration_factor)
 
@@ -66,6 +69,7 @@ defmodule Deft.OM.Reflector do
     # Try compression with escalating levels (max 2 LLM calls)
     {compressed, level, llm_calls, usage} =
       compress_with_retry(
+        session_id,
         config,
         active_observations,
         target_size,
@@ -76,7 +80,7 @@ defmodule Deft.OM.Reflector do
     after_tokens = Tokens.estimate(compressed, calibration_factor)
 
     Logger.debug(
-      "Reflector: Compressed from #{before_tokens} to #{after_tokens} tokens (level #{level}, #{llm_calls} LLM calls)"
+      "#{log_prefix(session_id)} Compressed from #{before_tokens} to #{after_tokens} tokens (level #{level}, #{llm_calls} LLM calls)"
     )
 
     %{
@@ -93,6 +97,7 @@ defmodule Deft.OM.Reflector do
 
   # Try compression with escalating levels, max 2 LLM calls
   defp compress_with_retry(
+         session_id,
          config,
          observations,
          target_size,
@@ -101,6 +106,7 @@ defmodule Deft.OM.Reflector do
        ) do
     # First attempt: level 0
     case attempt_compression(
+           session_id,
            config,
            observations,
            target_size,
@@ -116,6 +122,7 @@ defmodule Deft.OM.Reflector do
         next_level = min(level + 1, 3)
 
         case attempt_compression(
+               session_id,
                config,
                observations,
                target_size,
@@ -129,7 +136,7 @@ defmodule Deft.OM.Reflector do
           {:retry, compressed, final_level, usage2} ->
             # Level 3 still exceeds target - accept the output from the second call
             Logger.warning(
-              "Reflector: Level #{final_level} still exceeds target, accepting output"
+              "#{log_prefix(session_id)} Level #{final_level} still exceeds target, accepting output"
             )
 
             {compressed, final_level, 2, usage2}
@@ -139,6 +146,7 @@ defmodule Deft.OM.Reflector do
 
   # Attempt compression at a specific level
   defp attempt_compression(
+         session_id,
          config,
          observations,
          target_size,
@@ -146,10 +154,10 @@ defmodule Deft.OM.Reflector do
          calibration_factor,
          correction_markers
        ) do
-    case call_llm_for_compression(config, observations, target_size, level) do
+    case call_llm_for_compression(session_id, config, observations, target_size, level) do
       {:ok, compressed, usage} ->
         # Validate CORRECTION markers survived
-        validated = ensure_correction_markers(compressed, correction_markers)
+        validated = ensure_correction_markers(session_id, compressed, correction_markers)
 
         # Check if output is within target
         token_count = Tokens.estimate(validated, calibration_factor)
@@ -158,21 +166,24 @@ defmodule Deft.OM.Reflector do
           {:ok, validated, level, usage}
         else
           Logger.debug(
-            "Reflector: Level #{level} output (#{token_count} tokens) exceeds target (#{target_size} tokens)"
+            "#{log_prefix(session_id)} Level #{level} output (#{token_count} tokens) exceeds target (#{target_size} tokens)"
           )
 
           {:retry, validated, level, usage}
         end
 
       {:error, reason} ->
-        Logger.warning("Reflector: LLM call failed at level #{level}: #{inspect(reason)}")
+        Logger.warning(
+          "#{log_prefix(session_id)} LLM call failed at level #{level}: #{inspect(reason)}"
+        )
+
         # On error, trigger retry with next compression level
         {:retry, observations, level, nil}
     end
   end
 
   # Make LLM call with specified compression level
-  defp call_llm_for_compression(config, observations, target_size, compression_level) do
+  defp call_llm_for_compression(session_id, config, observations, target_size, compression_level) do
     # Build system prompt with compression level
     system_prompt =
       Prompt.system(target_size: target_size, compression_level: compression_level)
@@ -205,7 +216,7 @@ defmodule Deft.OM.Reflector do
         call_llm_sync(provider_module, [system_message, user_message], llm_config)
 
       {:error, reason} ->
-        Logger.error("Reflector: Failed to resolve provider: #{inspect(reason)}")
+        Logger.error("#{log_prefix(session_id)} Failed to resolve provider: #{inspect(reason)}")
         {:error, reason}
     end
   end
@@ -278,7 +289,7 @@ defmodule Deft.OM.Reflector do
 
   # Ensure all CORRECTION markers from input appear in output
   # If any are missing, append them to the appropriate section
-  defp ensure_correction_markers(compressed, correction_markers) do
+  defp ensure_correction_markers(session_id, compressed, correction_markers) do
     missing_markers =
       Enum.reject(correction_markers, fn marker ->
         String.contains?(compressed, marker)
@@ -288,7 +299,7 @@ defmodule Deft.OM.Reflector do
       compressed
     else
       Logger.warning(
-        "Reflector: #{length(missing_markers)} CORRECTION markers missing, appending"
+        "#{log_prefix(session_id)} #{length(missing_markers)} CORRECTION markers missing, appending"
       )
 
       append_missing_corrections(compressed, missing_markers)
@@ -319,5 +330,10 @@ defmodule Deft.OM.Reflector do
 
   defp generate_message_id do
     "msg_" <> Base.encode16(:crypto.strong_rand_bytes(8), case: :lower)
+  end
+
+  defp log_prefix(session_id) do
+    prefix = String.slice(session_id, 0, 8)
+    "[OM:#{prefix}]"
   end
 end
