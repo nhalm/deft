@@ -8,6 +8,8 @@ defmodule DeftWeb.ChatLive do
 
   use DeftWeb, :live_view
 
+  require Logger
+
   alias Deft.Session.Worker
   alias Deft.Skills.Registry, as: SkillsRegistry
   alias Phoenix.HTML
@@ -31,6 +33,10 @@ defmodule DeftWeb.ChatLive do
         # Subscribe to agent events for this session
         Registry.register(Deft.Registry, {:session, session_id}, [])
         Registry.register(Deft.Registry, {:job_status, session_id}, [])
+
+        # Log session connection
+        id_prefix = String.slice(session_id, 0, 8)
+        Logger.info("[Chat:#{id_prefix}] Session connected")
       end
 
       # Initialize all assigns
@@ -79,6 +85,10 @@ defmodule DeftWeb.ChatLive do
 
   @impl true
   def handle_info({:agent_event, {:text_delta, delta}}, socket) do
+    # Log agent event received
+    id_prefix = String.slice(socket.assigns.session_id, 0, 8)
+    Logger.debug("[Chat:#{id_prefix}] Agent event received: text_delta")
+
     # Flush any pending thinking before starting text
     socket = maybe_flush_thinking(socket, socket.assigns.streaming_thinking)
     socket = assign(socket, :streaming_thinking, "")
@@ -87,6 +97,10 @@ defmodule DeftWeb.ChatLive do
   end
 
   def handle_info({:agent_event, {:thinking_delta, delta}}, socket) do
+    # Log agent event received
+    id_prefix = String.slice(socket.assigns.session_id, 0, 8)
+    Logger.debug("[Chat:#{id_prefix}] Agent event received: thinking_delta")
+
     # Flush any pending text before starting thinking
     socket = maybe_flush_text(socket, socket.assigns.streaming_text)
     socket = assign(socket, :streaming_text, "")
@@ -95,6 +109,10 @@ defmodule DeftWeb.ChatLive do
   end
 
   def handle_info({:agent_event, {:tool_call_start, %{id: id, name: name}}}, socket) do
+    # Log agent event received
+    id_prefix = String.slice(socket.assigns.session_id, 0, 8)
+    Logger.debug("[Chat:#{id_prefix}] Agent event received: tool_call_start")
+
     # Flush any pending thinking and text before starting tool call
     socket = maybe_flush_thinking(socket, socket.assigns.streaming_thinking)
     socket = assign(socket, :streaming_thinking, "")
@@ -116,6 +134,10 @@ defmodule DeftWeb.ChatLive do
   end
 
   def handle_info({:agent_event, {:tool_call_done, %{id: id, args: args}}}, socket) do
+    # Log agent event received
+    id_prefix = String.slice(socket.assigns.session_id, 0, 8)
+    Logger.debug("[Chat:#{id_prefix}] Agent event received: tool_call_done")
+
     active_tools = socket.assigns.active_tools
 
     # Get the tool, or return if missing (can happen on reconnect or missed tool_call_start)
@@ -144,6 +166,10 @@ defmodule DeftWeb.ChatLive do
           %{id: id, success: success, duration: duration_ms, result: result}}},
         socket
       ) do
+    # Log agent event received
+    id_prefix = String.slice(socket.assigns.session_id, 0, 8)
+    Logger.debug("[Chat:#{id_prefix}] Agent event received: tool_execution_complete")
+
     active_tools = socket.assigns.active_tools
 
     # Get the tool from active_tools (may be missing if we missed earlier events)
@@ -169,6 +195,10 @@ defmodule DeftWeb.ChatLive do
   end
 
   def handle_info({:agent_event, {:state_change, state}}, socket) do
+    # Log agent event received
+    id_prefix = String.slice(socket.assigns.session_id, 0, 8)
+    Logger.debug("[Chat:#{id_prefix}] Agent event received: state_change")
+
     socket =
       if state == :idle do
         # Flush only remaining in-progress content (if any) to conversation stream.
@@ -199,6 +229,10 @@ defmodule DeftWeb.ChatLive do
         {:agent_event, {:usage, %{input: input_tokens, output: output_tokens, cost: turn_cost}}},
         socket
       ) do
+    # Log agent event received
+    id_prefix = String.slice(socket.assigns.session_id, 0, 8)
+    Logger.debug("[Chat:#{id_prefix}] Agent event received: usage")
+
     socket =
       socket
       |> assign(:tokens_input, socket.assigns.tokens_input + input_tokens)
@@ -229,6 +263,10 @@ defmodule DeftWeb.ChatLive do
   end
 
   def handle_info({:agent_event, {:error, reason}}, socket) do
+    # Log agent event received
+    id_prefix = String.slice(socket.assigns.session_id, 0, 8)
+    Logger.debug("[Chat:#{id_prefix}] Agent event received: error")
+
     # Display error message in conversation stream
     message = %{
       id: System.unique_integer([:positive, :monotonic]),
@@ -241,6 +279,10 @@ defmodule DeftWeb.ChatLive do
   end
 
   def handle_info({:agent_event, {:turn_limit_reached, count, max}}, socket) do
+    # Log agent event received
+    id_prefix = String.slice(socket.assigns.session_id, 0, 8)
+    Logger.debug("[Chat:#{id_prefix}] Agent event received: turn_limit_reached")
+
     # Display turn limit message and prompt user to continue or abort
     message = %{
       id: System.unique_integer([:positive, :monotonic]),
@@ -343,6 +385,11 @@ defmodule DeftWeb.ChatLive do
 
       # Add user message to conversation
       socket = add_user_message(socket, input)
+
+      # Log user message submit
+      id_prefix = String.slice(socket.assigns.session_id, 0, 8)
+      input_length = String.length(input)
+      Logger.info("[Chat:#{id_prefix}] User submits message, #{input_length} chars")
 
       # Dispatch command or send prompt
       socket =
