@@ -1284,14 +1284,14 @@ defmodule Deft.Job.Lead do
     runner_tasks = Map.put(data.runner_tasks, task.ref, runner_info)
     data = %{data | runner_tasks: runner_tasks}
 
-    Logger.info("#{log_prefix(data.lead_id)} spawned runner: #{task_description}")
+    Logger.debug("#{log_prefix(data.lead_id)} spawned runner: #{task_description}")
 
     {:ok, task.ref, monitor_ref, data}
   end
 
   defp process_runner_result(result, runner_info, data) do
     # Evaluate runner result and update task list
-    Logger.info(
+    Logger.debug(
       "#{log_prefix(data.lead_id)} processing runner result for #{runner_info.task_description}: #{inspect(result)}"
     )
 

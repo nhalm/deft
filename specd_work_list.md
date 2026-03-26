@@ -23,7 +23,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## logging v0.1
 
-- Change runner task spawning/result logs from `:info` to `:debug` in `lib/deft/job/lead.ex` lines 1287, 1294: spec §6 requires "Runner task assignment" at `:debug`
 - Change branch operation success logs from `:info` to `:debug` in `lib/deft/git/job.ex`: spec §6 requires "Branch operations (create, merge, cleanup)" at `:debug`. Applies to success paths (lines 1004, 1017, and similar); failure paths correctly stay at `:error`
 
 ## web-ui v0.4
