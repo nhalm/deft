@@ -23,5 +23,4 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## logging v0.1
 
-- Change Reflector triggered log from `:debug` to `:info` in `lib/deft/om/state.ex` `spawn_reflector_task/1`: spec §7 requires "Reflector triggered (compression ratio)" at `:info`. Add compression ratio to message.
 - Change snapshot persisted log from `:debug` to `:info` in `lib/deft/om/state.ex` `write_snapshot/1`: spec §7 requires "Snapshot persisted" at `:info`.

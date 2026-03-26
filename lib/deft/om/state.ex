@@ -1437,15 +1437,15 @@ defmodule Deft.OM.State do
       # Reset circuit if cooldown has expired
       state = if state.circuit_open, do: reset_circuit(state), else: state
 
-      Logger.debug(
-        "#{log_prefix(state.session_id)} Spawning Reflector Task with #{state.observation_tokens} tokens"
+      # Target size is 50% of reflection threshold (per spec section 4.3)
+      target_size = div(observation_threshold(state.config), 2)
+
+      Logger.info(
+        "#{log_prefix(state.session_id)} Reflector triggered: #{state.observation_tokens} -> #{target_size} tokens"
       )
 
       # Emit reflection_started event (level starts at 0)
       broadcast_event(state.session_id, {:om, :reflection_started, %{level: 0}})
-
-      # Target size is 50% of reflection threshold (per spec section 4.3)
-      target_size = div(observation_threshold(state.config), 2)
 
       task_supervisor = Supervisor.task_supervisor_name(state.session_id)
 
