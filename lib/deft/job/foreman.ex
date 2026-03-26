@@ -3588,7 +3588,7 @@ defmodule Deft.Job.Foreman do
             started_leads = MapSet.put(data.started_leads, deliverable.name)
 
             Logger.info(
-              "#{log_prefix(data.session_id)} Lead #{lead_id} started with PID #{inspect(lead_pid)} and worktree at #{worktree_path}"
+              "#{log_prefix(data.session_id)} Lead #{lead_id} started for deliverable '#{deliverable.name}' with PID #{inspect(lead_pid)} and worktree at #{worktree_path}"
             )
 
             %{data | leads: leads, started_leads: started_leads}
