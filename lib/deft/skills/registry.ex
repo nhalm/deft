@@ -38,7 +38,7 @@ defmodule Deft.Skills.Registry do
           discover_all(project_dir)
         rescue
           e ->
-            Logger.warning("Skills Registry discovery failed: #{inspect(e)}")
+            Logger.warning("[Skills] Skills Registry discovery failed: #{inspect(e)}")
             %{}
         end
       end,
@@ -182,7 +182,7 @@ defmodule Deft.Skills.Registry do
             Map.put(acc, entry.name, entry)
 
           {:error, reason} ->
-            Logger.warning("Skipping skill #{path}: #{inspect(reason)}")
+            Logger.warning("[Skills] Skipping skill #{path}: #{inspect(reason)}")
             acc
         end
       end)
@@ -217,7 +217,7 @@ defmodule Deft.Skills.Registry do
           Map.put(acc, name, entry)
         else
           Logger.warning(
-            "Skipping command #{path}: name does not match #{inspect(@name_pattern)}"
+            "[Skills] Skipping command #{path}: name does not match #{inspect(@name_pattern)}"
           )
 
           acc

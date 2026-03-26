@@ -1,4 +1,5 @@
 # History
+- **logging v0.2 (2026-03-26):** Add `[Skills]` prefix to 3 warning logs in skills/registry.ex (lines 41, 185, 220): spec §2 requires all log messages include bracketed prefix; other logs in same file already have it
 - **logging v0.2 (2026-03-26):** Add deliverable name/task summary to "Lead spawned" info log in foreman.ex:3590: spec §6 requires `Lead spawned/completed (lead ID, task summary)` but log only includes lead ID, PID, and worktree path — `deliverable.name` is in scope but not logged
 - **logging v0.1 (2026-03-26):** Change branch operation success logs from `:info` to `:debug` in `lib/deft/git/job.ex`: spec §6 requires "Branch operations (create, merge, cleanup)" at `:debug`. Applies to success paths (lines 1004, 1017, and similar); failure paths correctly stay at `:error`
 - **logging v0.1 (2026-03-26):** Change runner task spawning/result logs from `:info` to `:debug` in `lib/deft/job/lead.ex` lines 1287, 1294: spec §6 requires "Runner task assignment" at `:debug`
