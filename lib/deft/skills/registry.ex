@@ -199,6 +199,7 @@ defmodule Deft.Skills.Registry do
       |> Path.join("*.md")
       |> Path.wildcard()
       |> Enum.reduce(%{}, fn path, acc ->
+        Logger.debug("[Skills] Parsing command file: #{path}")
         name = path |> Path.basename(".md")
 
         if valid_name?(name) do
@@ -228,6 +229,8 @@ defmodule Deft.Skills.Registry do
   end
 
   defp parse_skill_manifest(path, level) do
+    Logger.debug("[Skills] Parsing skill file: #{path}")
+
     with {:ok, content} <- File.read(path),
          {:ok, name, manifest} <- parse_yaml_manifest(content) do
       if valid_name?(name) do
