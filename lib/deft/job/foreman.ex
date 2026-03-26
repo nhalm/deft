@@ -736,15 +736,29 @@ defmodule Deft.Job.Foreman do
     original_branch = Map.get(data.config, :original_branch, nil)
     keep_failed_branches = Map.get(data.config, :job_keep_failed_branches, false)
 
-    GitJob.abort_job(
-      job_id: data.session_id,
-      original_branch: original_branch,
-      working_dir: data.working_dir,
-      keep_failed_branches: keep_failed_branches
-    )
+    try do
+      GitJob.abort_job(
+        job_id: data.session_id,
+        original_branch: original_branch,
+        working_dir: data.working_dir,
+        keep_failed_branches: keep_failed_branches
+      )
+    rescue
+      error ->
+        Logger.error(
+          "#{log_prefix(data.session_id)} Job abort cleanup failed during git cleanup: #{Exception.message(error)}"
+        )
+    end
 
     # Archive job files for debugging
-    archive_job_files(data.session_id, data.working_dir, :aborted)
+    try do
+      archive_job_files(data.session_id, data.working_dir, :aborted)
+    rescue
+      error ->
+        Logger.error(
+          "#{log_prefix(data.session_id)} Job abort cleanup failed during file archival: #{Exception.message(error)}"
+        )
+    end
 
     # Cancel job timeout timer and clear state
     data = cancel_job_timeout(data)
