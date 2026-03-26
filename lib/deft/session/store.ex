@@ -40,6 +40,8 @@ defmodule Deft.Session.Store do
          {:ok, json} <- Jason.encode(entry),
          line <- json <> "\n",
          :ok <- File.write(path, line, [:append]) do
+      require Logger
+      Logger.info("[Session] Session saved: #{session_id}")
       :ok
     else
       {:error, reason} = error ->
@@ -102,6 +104,9 @@ defmodule Deft.Session.Store do
           |> String.split("\n", trim: true)
           |> Enum.map(&parse_entry/1)
           |> Enum.reject(&is_nil/1)
+
+        require Logger
+        Logger.info("[Session] Session loaded: #{session_id}, #{length(entries)} entries")
 
         {:ok, entries}
 

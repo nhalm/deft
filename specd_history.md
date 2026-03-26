@@ -1,4 +1,5 @@
 # History
+- **logging v0.1 (2026-03-26):** Add `:info` logs for session loaded/saved in `lib/deft/session/store.ex`: spec §9 requires info-level logs for session load and save operations. Currently only has `:error` and `:debug` logs.
 - **logging v0.1 (2026-03-26):** Add error-level log for tool crashes in `lib/deft/agent/tool_runner.ex`: spec §4 requires `Tool crashes (tool name, reason)` at `:error` level. The `{:exit, reason}` branch in `execute_batch/5` silently returns an error tuple — add `Logger.error` with tool name and crash reason.
 - **logging v0.1 (2026-03-26):** Add duration to "Turn complete" log in `lib/deft/agent.ex`: spec §4 requires `Turn complete (total turn duration)`. Record turn start time in agent state when prompt is received, compute elapsed time in idle transition.
 - **logging v0.1 (2026-03-26):** Add duration to "Stream complete" log in `lib/deft/agent.ex`: spec §4 requires `Stream complete (duration)`. Record stream start time in agent state when provider stream starts, compute elapsed time in `handle_stream_done/1`.
