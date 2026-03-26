@@ -21,10 +21,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 - Add error-level logging for job abort cleanup failures in foreman.ex and git/job.ex: spec v0.2 §6 requires "Job abort cleanup failures" at Error level (blocked: need to identify where cleanup failures occur and add error handling)
 
-## logging v0.1
-
-- Change branch operation success logs from `:info` to `:debug` in `lib/deft/git/job.ex`: spec §6 requires "Branch operations (create, merge, cleanup)" at `:debug`. Applies to success paths (lines 1004, 1017, and similar); failure paths correctly stay at `:error`
-
 ## web-ui v0.4
 
 - Implement force-abort for double Ctrl+c in chat_live.ex: both single and double Ctrl+c call `Deft.Agent.abort(agent)`. Spec §6.4 requires double Ctrl+c to force-abort. Need `Deft.Agent.force_abort/1` (or equivalent) that kills the agent process immediately rather than requesting graceful abort. (blocked: harness — Agent module needs force_abort/1)

@@ -1,4 +1,5 @@
 # History
+- **logging v0.1 (2026-03-26):** Change branch operation success logs from `:info` to `:debug` in `lib/deft/git/job.ex`: spec §6 requires "Branch operations (create, merge, cleanup)" at `:debug`. Applies to success paths (lines 1004, 1017, and similar); failure paths correctly stay at `:error`
 - **logging v0.1 (2026-03-26):** Change runner task spawning/result logs from `:info` to `:debug` in `lib/deft/job/lead.ex` lines 1287, 1294: spec §6 requires "Runner task assignment" at `:debug`
 - **logging v0.1 (2026-03-26):** Change lead message dispatch log from `:info` to `:debug` in `lib/deft/job/foreman.ex` line 830: spec §6 requires "Lead message dispatch (message type)" at `:debug`
 - **logging v0.2 (2026-03-26):** Change job abort log from `:error` to `:info` in `lib/deft/git/job.ex:1115` "Job aborted - cleanup completed": spec v0.2 §6 moves "Job abort" to Info level

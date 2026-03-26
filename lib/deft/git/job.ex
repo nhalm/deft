@@ -814,7 +814,7 @@ defmodule Deft.Git.Job do
     Enum.each(orphaned_worktrees, fn worktree ->
       case git.cmd(["worktree", "remove", worktree.path, "--force"]) do
         {_output, 0} ->
-          Logger.info("#{log_prefix(nil)} Removed orphaned worktree: #{worktree.branch}")
+          Logger.debug("#{log_prefix(nil)} Removed orphaned worktree: #{worktree.branch}")
 
         {error_output, _exit_code} ->
           Logger.warning(
@@ -827,7 +827,7 @@ defmodule Deft.Git.Job do
     Enum.each(orphaned_branches, fn branch ->
       case git.cmd(["branch", "-D", branch]) do
         {_output, 0} ->
-          Logger.info("#{log_prefix(nil)} Deleted orphaned branch: #{branch}")
+          Logger.debug("#{log_prefix(nil)} Deleted orphaned branch: #{branch}")
 
         {error_output, _exit_code} ->
           Logger.warning("#{log_prefix(nil)} Failed to delete branch #{branch}: #{error_output}")
@@ -837,7 +837,7 @@ defmodule Deft.Git.Job do
     # Prune stale worktree metadata
     case git.cmd(["worktree", "prune"]) do
       {_output, 0} ->
-        Logger.info("#{log_prefix(nil)} Pruned stale worktree metadata")
+        Logger.debug("#{log_prefix(nil)} Pruned stale worktree metadata")
 
       {error_output, _exit_code} ->
         Logger.warning("#{log_prefix(nil)} Failed to prune worktrees: #{error_output}")
@@ -985,7 +985,7 @@ defmodule Deft.Git.Job do
         if squash do
           commit_squash_merge(git, job_branch, job_id)
         else
-          Logger.info("#{log_prefix(job_id)} Successfully merged #{job_branch} with history")
+          Logger.debug("#{log_prefix(job_id)} Successfully merged #{job_branch} with history")
           {:ok, :merged}
         end
 
@@ -1001,7 +1001,7 @@ defmodule Deft.Git.Job do
 
     case git.cmd(["commit", "-m", commit_message]) do
       {_output, 0} ->
-        Logger.info("#{log_prefix(job_id)} Successfully squash-merged #{job_branch}")
+        Logger.debug("#{log_prefix(job_id)} Successfully squash-merged #{job_branch}")
         {:ok, :merged}
 
       {error_output, exit_code} ->
@@ -1014,7 +1014,7 @@ defmodule Deft.Git.Job do
   defp delete_job_branch(git, job_branch, job_id) do
     case git.cmd(["branch", "-d", job_branch]) do
       {_output, 0} ->
-        Logger.info("#{log_prefix(job_id)} Deleted job branch: #{job_branch}")
+        Logger.debug("#{log_prefix(job_id)} Deleted job branch: #{job_branch}")
         {:ok, :deleted}
 
       {error_output, exit_code} ->
@@ -1124,7 +1124,7 @@ defmodule Deft.Git.Job do
   defp restore_original_branch(git, original_branch, job_id) do
     case checkout_branch(git, original_branch) do
       {:ok, :checkout} ->
-        Logger.info("#{log_prefix(job_id)} Restored original branch: #{original_branch}")
+        Logger.debug("#{log_prefix(job_id)} Restored original branch: #{original_branch}")
 
       {:error, reason} ->
         Logger.warning(
@@ -1145,7 +1145,7 @@ defmodule Deft.Git.Job do
   defp cleanup_job_branch(git, job_branch, _original_branch, false, job_id) do
     case delete_job_branch_force(git, job_branch, job_id) do
       {:ok, :deleted} ->
-        Logger.info("#{log_prefix(job_id)} Deleted job branch: #{job_branch}")
+        Logger.debug("#{log_prefix(job_id)} Deleted job branch: #{job_branch}")
 
       {:error, reason} ->
         Logger.warning(
