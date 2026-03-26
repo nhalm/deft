@@ -23,6 +23,5 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## logging v0.1
 
-- Update existing Git log calls in `lib/deft/git/job.ex` to use `[Git:<id_prefix>]` prefix convention per logging spec §2
 - Update existing OM log calls in `lib/deft/om/state.ex`, `observer.ex`, `reflector.ex` to use `[OM:<id_prefix>]` prefix convention per logging spec §2
 - Update existing infrastructure log calls in Store, Skills, Issues, Session modules to use their respective prefix conventions (`[Store]`, `[Skills]`, `[Issues]`, `[Session]`) per logging spec §2

@@ -56,7 +56,10 @@ defmodule Deft.Git.Job do
     with {:ok, original_branch} <- get_current_branch(git),
          :ok <- verify_clean_working_tree(git, auto_approve, job_id),
          :ok <- create_branch(git, branch_name) do
-      Logger.info("Created job branch: #{branch_name} from #{original_branch}")
+      Logger.info(
+        "#{log_prefix(job_id)} Created job branch: #{branch_name} from #{original_branch}"
+      )
+
       {:ok, branch_name, original_branch}
     end
   end
@@ -68,7 +71,7 @@ defmodule Deft.Git.Job do
         {:ok, String.trim(branch_name)}
 
       {error_output, exit_code} ->
-        Logger.error("Failed to get current branch: #{error_output}")
+        Logger.error("#{log_prefix(nil)} Failed to get current branch: #{error_output}")
         {:error, {:get_branch_failed, exit_code}}
     end
   end
@@ -85,7 +88,7 @@ defmodule Deft.Git.Job do
         handle_dirty_working_tree(git, output, auto_approve, job_id)
 
       {error_output, exit_code} ->
-        Logger.error("Failed to check git status: #{error_output}")
+        Logger.error("#{log_prefix(job_id)} Failed to check git status: #{error_output}")
         {:error, {:git_status_failed, exit_code}}
     end
   end
@@ -95,7 +98,7 @@ defmodule Deft.Git.Job do
     if auto_approve do
       # In auto-approve mode, we can't stash - fail immediately
       Logger.error("""
-      Working tree has uncommitted changes (--auto-approve mode):
+      #{log_prefix(job_id)} Working tree has uncommitted changes (--auto-approve mode):
 
       #{status_output}
 
@@ -152,7 +155,7 @@ defmodule Deft.Git.Job do
         :ok
 
       {error_output, exit_code} ->
-        Logger.error("Failed to stash changes: #{error_output}")
+        Logger.error("#{log_prefix(job_id)} Failed to stash changes: #{error_output}")
         IO.puts("\nFailed to stash changes. Please resolve manually and restart the job.\n")
         {:error, {:stash_failed, exit_code}}
     end
@@ -165,7 +168,7 @@ defmodule Deft.Git.Job do
         :ok
 
       {error_output, exit_code} ->
-        Logger.error("Failed to create branch #{branch_name}: #{error_output}")
+        Logger.error("#{log_prefix(nil)} Failed to create branch #{branch_name}: #{error_output}")
         {:error, {:branch_creation_failed, exit_code}}
     end
   end
@@ -217,24 +220,32 @@ defmodule Deft.Git.Job do
       :ok ->
         # Add .deft-worktrees/ to .gitignore if not already present
         ensure_gitignore_entry(working_dir, ".deft-worktrees/")
-        create_worktree(git, worktree_path, lead_branch, job_branch)
+        create_worktree(git, worktree_path, lead_branch, job_branch, job_id)
 
       {:error, reason} ->
-        Logger.error("Failed to create .deft-worktrees directory: #{inspect(reason)}")
+        Logger.error(
+          "#{log_prefix(job_id)} Failed to create .deft-worktrees directory: #{inspect(reason)}"
+        )
+
         {:error, {:worktrees_dir_creation_failed, reason}}
     end
   end
 
   # Create a git worktree branched from the job branch
-  defp create_worktree(git, worktree_path, lead_branch, job_branch) do
+  defp create_worktree(git, worktree_path, lead_branch, job_branch, job_id) do
     # git worktree add <path> -b <lead_branch> <job_branch>
     case git.cmd(["worktree", "add", worktree_path, "-b", lead_branch, job_branch]) do
       {_output, 0} ->
-        Logger.info("Created worktree at #{worktree_path} (branch: #{lead_branch})")
+        Logger.info(
+          "#{log_prefix(job_id)} Created worktree at #{worktree_path} (branch: #{lead_branch})"
+        )
+
         {:ok, worktree_path}
 
       {error_output, exit_code} ->
-        Logger.error("Failed to create worktree at #{worktree_path}: #{error_output}")
+        Logger.error(
+          "#{log_prefix(job_id)} Failed to create worktree at #{worktree_path}: #{error_output}"
+        )
 
         {:error, {:worktree_creation_failed, exit_code}}
     end
@@ -247,7 +258,7 @@ defmodule Deft.Git.Job do
     normalized_entry = String.trim(entry)
 
     if gitignore_contains?(content, normalized_entry) do
-      Logger.debug("#{entry} already in .gitignore")
+      Logger.debug("#{log_prefix(nil)} #{entry} already in .gitignore")
     else
       write_gitignore_entry(gitignore_path, content, normalized_entry)
     end
@@ -262,7 +273,7 @@ defmodule Deft.Git.Job do
         ""
 
       {:error, reason} ->
-        Logger.warning("Failed to read .gitignore: #{inspect(reason)}")
+        Logger.warning("#{log_prefix(nil)} Failed to read .gitignore: #{inspect(reason)}")
         ""
     end
   end
@@ -286,10 +297,10 @@ defmodule Deft.Git.Job do
 
     case File.write(gitignore_path, new_content) do
       :ok ->
-        Logger.info("Added #{entry} to .gitignore")
+        Logger.info("#{log_prefix(nil)} Added #{entry} to .gitignore")
 
       {:error, reason} ->
-        Logger.error("Failed to write .gitignore: #{inspect(reason)}")
+        Logger.error("#{log_prefix(nil)} Failed to write .gitignore: #{inspect(reason)}")
     end
   end
 
@@ -343,8 +354,9 @@ defmodule Deft.Git.Job do
       Path.join(System.tmp_dir!(), "deft-merge-#{job_id}-#{:erlang.unique_integer([:positive])}")
 
     File.cd!(working_dir, fn ->
-      with {:ok, _} <- create_merge_worktree(git, job_branch, temp_dir),
-           merge_result <- attempt_merge_in_worktree(git, temp_dir, lead_branch, job_branch) do
+      with {:ok, _} <- create_merge_worktree(git, job_branch, temp_dir, job_id),
+           merge_result <-
+             attempt_merge_in_worktree(git, temp_dir, lead_branch, job_branch, job_id) do
         case merge_result do
           {:ok, :conflict, conflicted_files} ->
             # Preserve the temp worktree for the merge-resolution Runner
@@ -365,30 +377,36 @@ defmodule Deft.Git.Job do
   end
 
   # Create a temporary worktree for the job branch to perform the merge
-  defp create_merge_worktree(git, job_branch, temp_dir) do
+  defp create_merge_worktree(git, job_branch, temp_dir, job_id) do
     case git.cmd(["worktree", "add", temp_dir, job_branch]) do
       {_output, 0} ->
         {:ok, :worktree_created}
 
       {error_output, exit_code} ->
-        Logger.error("Failed to create merge worktree for #{job_branch}: #{error_output}")
+        Logger.error(
+          "#{log_prefix(job_id)} Failed to create merge worktree for #{job_branch}: #{error_output}"
+        )
+
         {:error, {:worktree_creation_failed, exit_code}}
     end
   end
 
   # Attempt to merge the Lead branch into the job branch within the temporary worktree
-  defp attempt_merge_in_worktree(git, temp_dir, lead_branch, job_branch) do
+  defp attempt_merge_in_worktree(git, temp_dir, lead_branch, job_branch, job_id) do
     # Ensure directory exists (git worktree add creates it, but mocks may not)
     File.mkdir_p!(temp_dir)
 
     File.cd!(temp_dir, fn ->
       case git.cmd(["merge", "--no-ff", lead_branch]) do
         {_output, 0} ->
-          Logger.info("Successfully merged #{lead_branch} into #{job_branch}")
+          Logger.info(
+            "#{log_prefix(job_id)} Successfully merged #{lead_branch} into #{job_branch}"
+          )
+
           {:ok, :merged}
 
         {output, exit_code} ->
-          handle_merge_failure(git, output, exit_code, lead_branch, job_branch)
+          handle_merge_failure(git, output, exit_code, lead_branch, job_branch, job_id)
       end
     end)
   end
@@ -401,7 +419,10 @@ defmodule Deft.Git.Job do
           :ok
 
         {error_output, _exit_code} ->
-          Logger.warning("Failed to remove merge worktree #{temp_dir}: #{error_output}")
+          Logger.warning(
+            "#{log_prefix(nil)} Failed to remove merge worktree #{temp_dir}: #{error_output}"
+          )
+
           # Try to clean up manually if git worktree remove fails
           File.rm_rf(temp_dir)
           :ok
@@ -410,15 +431,18 @@ defmodule Deft.Git.Job do
   end
 
   # Handle merge failure - either conflict or error
-  defp handle_merge_failure(git, output, exit_code, lead_branch, job_branch) do
+  defp handle_merge_failure(git, output, exit_code, lead_branch, job_branch, job_id) do
     if exit_code == 1 and String.contains?(output, "CONFLICT") do
       # Extract conflicted files
       conflicted_files = extract_conflicted_files(git)
-      Logger.warning("Merge conflict: #{lead_branch} -> #{job_branch}")
-      Logger.warning("Conflicted files: #{inspect(conflicted_files)}")
+      Logger.warning("#{log_prefix(job_id)} Merge conflict: #{lead_branch} -> #{job_branch}")
+      Logger.warning("#{log_prefix(job_id)} Conflicted files: #{inspect(conflicted_files)}")
       {:ok, :conflict, conflicted_files}
     else
-      Logger.error("Failed to merge #{lead_branch} into #{job_branch}: #{output}")
+      Logger.error(
+        "#{log_prefix(job_id)} Failed to merge #{lead_branch} into #{job_branch}: #{output}"
+      )
+
       {:error, {:merge_failed, exit_code}}
     end
   end
@@ -444,7 +468,7 @@ defmodule Deft.Git.Job do
         {:ok, :checkout}
 
       {error_output, exit_code} ->
-        Logger.error("Failed to checkout #{branch}: #{error_output}")
+        Logger.error("#{log_prefix(nil)} Failed to checkout #{branch}: #{error_output}")
         {:error, {:checkout_failed, exit_code}}
     end
   end
@@ -491,12 +515,14 @@ defmodule Deft.Git.Job do
     job_branch = "deft/job-#{job_id}"
     worktree_path = Path.join(working_dir, ".deft-worktrees/job-#{job_id}-test")
 
-    Logger.info("Running post-merge tests on #{job_branch}: #{test_command}")
+    Logger.info(
+      "#{log_prefix(job_id)} Running post-merge tests on #{job_branch}: #{test_command}"
+    )
 
     # Create a temporary worktree for the job branch to run tests in
-    with :ok <- create_test_worktree(git, working_dir, worktree_path, job_branch) do
+    with :ok <- create_test_worktree(git, working_dir, worktree_path, job_branch, job_id) do
       # Run tests in the worktree
-      result = run_tests_in_worktree(worktree_path, test_command, timeout, job_branch)
+      result = run_tests_in_worktree(worktree_path, test_command, timeout, job_branch, job_id)
 
       # Always clean up the worktree, even if tests failed
       cleanup_test_worktree(git, working_dir, worktree_path)
@@ -511,23 +537,23 @@ defmodule Deft.Git.Job do
   end
 
   # Create a temporary worktree for running post-merge tests
-  defp create_test_worktree(git, working_dir, worktree_path, job_branch) do
+  defp create_test_worktree(git, working_dir, worktree_path, job_branch, job_id) do
     File.cd!(working_dir, fn ->
       # git worktree add <path> <job_branch>
       case git.cmd(["worktree", "add", worktree_path, job_branch]) do
         {_output, 0} ->
-          Logger.debug("Created test worktree at #{worktree_path}")
+          Logger.debug("#{log_prefix(job_id)} Created test worktree at #{worktree_path}")
           :ok
 
         {error_output, exit_code} ->
-          Logger.error("Failed to create test worktree: #{error_output}")
+          Logger.error("#{log_prefix(job_id)} Failed to create test worktree: #{error_output}")
           {:error, {:test_worktree_creation_failed, exit_code}}
       end
     end)
   end
 
   # Run tests in the specified worktree with timeout enforcement
-  defp run_tests_in_worktree(worktree_path, test_command, timeout, job_branch) do
+  defp run_tests_in_worktree(worktree_path, test_command, timeout, job_branch, job_id) do
     # Run the test command in a task with timeout enforcement
     task =
       Task.async(fn ->
@@ -543,21 +569,31 @@ defmodule Deft.Git.Job do
     # Wait for the task to complete with timeout
     case Task.yield(task, timeout) do
       {:ok, {_output, 0}} ->
-        Logger.info("Post-merge tests passed on #{job_branch}")
+        Logger.info("#{log_prefix(job_id)} Post-merge tests passed on #{job_branch}")
         {:ok, :passed}
 
       {:ok, {output, exit_code}} ->
-        Logger.error("Post-merge tests failed on #{job_branch} (exit code: #{exit_code})")
+        Logger.error(
+          "#{log_prefix(job_id)} Post-merge tests failed on #{job_branch} (exit code: #{exit_code})"
+        )
+
         {:error, :test_failed, output}
 
       {:exit, reason} ->
-        Logger.error("Post-merge tests crashed on #{job_branch}: #{inspect(reason)}")
+        Logger.error(
+          "#{log_prefix(job_id)} Post-merge tests crashed on #{job_branch}: #{inspect(reason)}"
+        )
+
         {:error, {:test_execution_failed, reason}}
 
       nil ->
         # Task timed out - kill it to prevent process leak
         Task.shutdown(task, :brutal_kill)
-        Logger.error("Post-merge tests timed out on #{job_branch} after #{timeout}ms")
+
+        Logger.error(
+          "#{log_prefix(job_id)} Post-merge tests timed out on #{job_branch} after #{timeout}ms"
+        )
+
         {:error, :timeout}
     end
   end
@@ -567,12 +603,15 @@ defmodule Deft.Git.Job do
     File.cd!(working_dir, fn ->
       case git.cmd(["worktree", "remove", "--force", worktree_path]) do
         {_output, 0} ->
-          Logger.debug("Cleaned up test worktree at #{worktree_path}")
+          Logger.debug("#{log_prefix(nil)} Cleaned up test worktree at #{worktree_path}")
           :ok
 
         {error_output, _exit_code} ->
           # Log warning but don't fail - cleanup failure is non-fatal
-          Logger.warning("Failed to remove test worktree (non-fatal): #{error_output}")
+          Logger.warning(
+            "#{log_prefix(nil)} Failed to remove test worktree (non-fatal): #{error_output}"
+          )
+
           :ok
       end
     end)
@@ -615,7 +654,7 @@ defmodule Deft.Git.Job do
     with {:ok, orphaned_worktrees} <- find_orphaned_worktrees(git, working_dir),
          {:ok, orphaned_branches} <- find_orphaned_branches(git) do
       if Enum.empty?(orphaned_worktrees) and Enum.empty?(orphaned_branches) do
-        Logger.debug("No orphaned artifacts found")
+        Logger.debug("#{log_prefix(nil)} No orphaned artifacts found")
         :ok
       else
         perform_cleanup(git, orphaned_worktrees, orphaned_branches, auto_approve)
@@ -631,7 +670,7 @@ defmodule Deft.Git.Job do
         {:ok, worktrees}
 
       {error_output, exit_code} ->
-        Logger.error("Failed to list worktrees: #{error_output}")
+        Logger.error("#{log_prefix(nil)} Failed to list worktrees: #{error_output}")
         {:error, {:worktree_list_failed, exit_code}}
     end
   end
@@ -691,7 +730,7 @@ defmodule Deft.Git.Job do
         {:ok, orphaned_branches}
 
       {error_output, exit_code} ->
-        Logger.error("Failed to list branches: #{error_output}")
+        Logger.error("#{log_prefix(nil)} Failed to list branches: #{error_output}")
         {:error, {:branch_list_failed, exit_code}}
     end
   end
@@ -728,7 +767,7 @@ defmodule Deft.Git.Job do
     if auto_approve or prompt_user_for_cleanup(orphaned_worktrees, orphaned_branches) do
       do_cleanup(git, orphaned_worktrees, orphaned_branches)
     else
-      Logger.info("Orphan cleanup cancelled by user")
+      Logger.info("#{log_prefix(nil)} Orphan cleanup cancelled by user")
       :ok
     end
   end
@@ -775,10 +814,12 @@ defmodule Deft.Git.Job do
     Enum.each(orphaned_worktrees, fn worktree ->
       case git.cmd(["worktree", "remove", worktree.path, "--force"]) do
         {_output, 0} ->
-          Logger.info("Removed orphaned worktree: #{worktree.branch}")
+          Logger.info("#{log_prefix(nil)} Removed orphaned worktree: #{worktree.branch}")
 
         {error_output, _exit_code} ->
-          Logger.warning("Failed to remove worktree #{worktree.path}: #{error_output}")
+          Logger.warning(
+            "#{log_prefix(nil)} Failed to remove worktree #{worktree.path}: #{error_output}"
+          )
       end
     end)
 
@@ -786,20 +827,20 @@ defmodule Deft.Git.Job do
     Enum.each(orphaned_branches, fn branch ->
       case git.cmd(["branch", "-D", branch]) do
         {_output, 0} ->
-          Logger.info("Deleted orphaned branch: #{branch}")
+          Logger.info("#{log_prefix(nil)} Deleted orphaned branch: #{branch}")
 
         {error_output, _exit_code} ->
-          Logger.warning("Failed to delete branch #{branch}: #{error_output}")
+          Logger.warning("#{log_prefix(nil)} Failed to delete branch #{branch}: #{error_output}")
       end
     end)
 
     # Prune stale worktree metadata
     case git.cmd(["worktree", "prune"]) do
       {_output, 0} ->
-        Logger.info("Pruned stale worktree metadata")
+        Logger.info("#{log_prefix(nil)} Pruned stale worktree metadata")
 
       {error_output, _exit_code} ->
-        Logger.warning("Failed to prune worktrees: #{error_output}")
+        Logger.warning("#{log_prefix(nil)} Failed to prune worktrees: #{error_output}")
     end
 
     :ok
@@ -822,13 +863,16 @@ defmodule Deft.Git.Job do
           # Pop the stash
           case git.cmd(["stash", "pop", "stash@{#{stash_index}}"]) do
             {_output, 0} ->
-              Logger.info("Restored user's stashed changes from job creation")
+              Logger.info(
+                "#{log_prefix(job_id)} Restored user's stashed changes from job creation"
+              )
+
               IO.puts("Your previously stashed changes have been restored.\n")
               :ok
 
             {error_output, _exit_code} ->
               Logger.warning("""
-              Failed to restore stashed changes from job creation.
+              #{log_prefix(job_id)} Failed to restore stashed changes from job creation.
               You may need to manually restore them with: git stash pop stash@{#{stash_index}}
 
               Error: #{error_output}
@@ -847,7 +891,7 @@ defmodule Deft.Git.Job do
         end
 
       {error_output, _exit_code} ->
-        Logger.warning("Failed to list stashes: #{error_output}")
+        Logger.warning("#{log_prefix(job_id)} Failed to list stashes: #{error_output}")
         :ok
     end
   end
@@ -901,8 +945,8 @@ defmodule Deft.Git.Job do
     File.cd!(working_dir, fn ->
       result =
         with {:ok, :checkout} <- checkout_branch(git, original_branch),
-             {:ok, :merged} <- merge_job_branch(git, job_branch, squash),
-             {:ok, :deleted} <- delete_job_branch(git, job_branch) do
+             {:ok, :merged} <- merge_job_branch(git, job_branch, squash, job_id),
+             {:ok, :deleted} <- delete_job_branch(git, job_branch, job_id) do
           :ok
         end
 
@@ -913,7 +957,7 @@ defmodule Deft.Git.Job do
         :ok ->
           case verify_no_worktrees(git) do
             :ok ->
-              Logger.info("Job #{job_id} completed successfully")
+              Logger.info("#{log_prefix(job_id)} Job #{job_id} completed successfully")
               {:ok, :completed}
 
             error ->
@@ -927,7 +971,7 @@ defmodule Deft.Git.Job do
   end
 
   # Merge the job branch into the current branch
-  defp merge_job_branch(git, job_branch, squash) do
+  defp merge_job_branch(git, job_branch, squash, job_id) do
     merge_args =
       if squash do
         ["merge", "--squash", job_branch]
@@ -939,42 +983,45 @@ defmodule Deft.Git.Job do
       {_output, 0} ->
         # If squash merge, we need to commit the squashed changes
         if squash do
-          commit_squash_merge(git, job_branch)
+          commit_squash_merge(git, job_branch, job_id)
         else
-          Logger.info("Successfully merged #{job_branch} with history")
+          Logger.info("#{log_prefix(job_id)} Successfully merged #{job_branch} with history")
           {:ok, :merged}
         end
 
       {error_output, exit_code} ->
-        Logger.error("Failed to merge #{job_branch}: #{error_output}")
+        Logger.error("#{log_prefix(job_id)} Failed to merge #{job_branch}: #{error_output}")
         {:error, {:merge_failed, exit_code}}
     end
   end
 
   # Commit the squashed merge
-  defp commit_squash_merge(git, job_branch) do
+  defp commit_squash_merge(git, job_branch, job_id) do
     commit_message = "Complete job: #{job_branch}\n\nSquash-merged all changes from #{job_branch}"
 
     case git.cmd(["commit", "-m", commit_message]) do
       {_output, 0} ->
-        Logger.info("Successfully squash-merged #{job_branch}")
+        Logger.info("#{log_prefix(job_id)} Successfully squash-merged #{job_branch}")
         {:ok, :merged}
 
       {error_output, exit_code} ->
-        Logger.error("Failed to commit squash merge: #{error_output}")
+        Logger.error("#{log_prefix(job_id)} Failed to commit squash merge: #{error_output}")
         {:error, {:commit_failed, exit_code}}
     end
   end
 
   # Delete the job branch
-  defp delete_job_branch(git, job_branch) do
+  defp delete_job_branch(git, job_branch, job_id) do
     case git.cmd(["branch", "-d", job_branch]) do
       {_output, 0} ->
-        Logger.info("Deleted job branch: #{job_branch}")
+        Logger.info("#{log_prefix(job_id)} Deleted job branch: #{job_branch}")
         {:ok, :deleted}
 
       {error_output, exit_code} ->
-        Logger.error("Failed to delete branch #{job_branch}: #{error_output}")
+        Logger.error(
+          "#{log_prefix(job_id)} Failed to delete branch #{job_branch}: #{error_output}"
+        )
+
         {:error, {:branch_deletion_failed, exit_code}}
     end
   end
@@ -986,15 +1033,15 @@ defmodule Deft.Git.Job do
         worktrees = count_worktrees(output)
 
         if worktrees <= 1 do
-          Logger.debug("Verified only main working tree remains")
+          Logger.debug("#{log_prefix(nil)} Verified only main working tree remains")
           :ok
         else
-          Logger.warning("#{worktrees} worktrees remain (expected 1)")
+          Logger.warning("#{log_prefix(nil)} #{worktrees} worktrees remain (expected 1)")
           {:error, {:worktrees_remain, worktrees}}
         end
 
       {error_output, exit_code} ->
-        Logger.error("Failed to list worktrees: #{error_output}")
+        Logger.error("#{log_prefix(nil)} Failed to list worktrees: #{error_output}")
         {:error, {:worktree_list_failed, exit_code}}
     end
   end
@@ -1050,58 +1097,60 @@ defmodule Deft.Git.Job do
 
     job_branch = "deft/job-#{job_id}"
 
-    Logger.info("Aborting job #{job_id}...")
+    Logger.info("#{log_prefix(job_id)} Aborting job #{job_id}...")
 
     File.cd!(working_dir, fn ->
       # Step 1: Remove all Lead worktrees for this job
       remove_lead_worktrees(git, working_dir, job_id)
 
       # Step 2: Restore the original branch (skip if job branch was never created)
-      restore_original_branch(git, original_branch)
+      restore_original_branch(git, original_branch, job_id)
 
       # Step 3: Delete the job branch if not keeping failed branches (skip if never created)
-      cleanup_job_branch(git, job_branch, original_branch, keep_failed_branches)
+      cleanup_job_branch(git, job_branch, original_branch, keep_failed_branches, job_id)
 
       # Step 4: Restore user's stashed changes if they were stashed during job creation
       pop_job_stash(git, job_id)
 
-      Logger.info("Job #{job_id} aborted - cleanup completed")
+      Logger.info("#{log_prefix(job_id)} Job #{job_id} aborted - cleanup completed")
       :ok
     end)
   end
 
-  defp restore_original_branch(_git, nil) do
-    Logger.info("Skipping branch checkout - job branch was never created")
+  defp restore_original_branch(_git, nil, job_id) do
+    Logger.info("#{log_prefix(job_id)} Skipping branch checkout - job branch was never created")
   end
 
-  defp restore_original_branch(git, original_branch) do
+  defp restore_original_branch(git, original_branch, job_id) do
     case checkout_branch(git, original_branch) do
       {:ok, :checkout} ->
-        Logger.info("Restored original branch: #{original_branch}")
+        Logger.info("#{log_prefix(job_id)} Restored original branch: #{original_branch}")
 
       {:error, reason} ->
         Logger.warning(
-          "Failed to checkout original branch #{original_branch}: #{inspect(reason)}"
+          "#{log_prefix(job_id)} Failed to checkout original branch #{original_branch}: #{inspect(reason)}"
         )
     end
   end
 
-  defp cleanup_job_branch(_git, _job_branch, nil, _keep_failed_branches) do
+  defp cleanup_job_branch(_git, _job_branch, nil, _keep_failed_branches, _job_id) do
     # Job branch was never created, nothing to clean up
     :ok
   end
 
-  defp cleanup_job_branch(_git, job_branch, _original_branch, true) do
-    Logger.info("Keeping job branch #{job_branch} for debugging")
+  defp cleanup_job_branch(_git, job_branch, _original_branch, true, job_id) do
+    Logger.info("#{log_prefix(job_id)} Keeping job branch #{job_branch} for debugging")
   end
 
-  defp cleanup_job_branch(git, job_branch, _original_branch, false) do
-    case delete_job_branch_force(git, job_branch) do
+  defp cleanup_job_branch(git, job_branch, _original_branch, false, job_id) do
+    case delete_job_branch_force(git, job_branch, job_id) do
       {:ok, :deleted} ->
-        Logger.info("Deleted job branch: #{job_branch}")
+        Logger.info("#{log_prefix(job_id)} Deleted job branch: #{job_branch}")
 
       {:error, reason} ->
-        Logger.warning("Failed to delete job branch #{job_branch}: #{inspect(reason)}")
+        Logger.warning(
+          "#{log_prefix(job_id)} Failed to delete job branch #{job_branch}: #{inspect(reason)}"
+        )
     end
   end
 
@@ -1128,27 +1177,43 @@ defmodule Deft.Git.Job do
         Enum.each(job_worktrees, fn worktree ->
           case git.cmd(["worktree", "remove", worktree.path, "--force"]) do
             {_output, 0} ->
-              Logger.info("Removed Lead worktree: #{worktree.branch} at #{worktree.path}")
+              Logger.info(
+                "#{log_prefix(job_id)} Removed Lead worktree: #{worktree.branch} at #{worktree.path}"
+              )
 
             {error_output, _exit_code} ->
-              Logger.warning("Failed to remove worktree #{worktree.path}: #{error_output}")
+              Logger.warning(
+                "#{log_prefix(job_id)} Failed to remove worktree #{worktree.path}: #{error_output}"
+              )
           end
         end)
 
       {error_output, _exit_code} ->
-        Logger.warning("Failed to list worktrees during abort: #{error_output}")
+        Logger.warning(
+          "#{log_prefix(job_id)} Failed to list worktrees during abort: #{error_output}"
+        )
     end
   end
 
   # Delete the job branch forcefully (used during abort)
-  defp delete_job_branch_force(git, job_branch) do
+  defp delete_job_branch_force(git, job_branch, job_id) do
     case git.cmd(["branch", "-D", job_branch]) do
       {_output, 0} ->
         {:ok, :deleted}
 
       {error_output, exit_code} ->
-        Logger.error("Failed to force-delete branch #{job_branch}: #{error_output}")
+        Logger.error(
+          "#{log_prefix(job_id)} Failed to force-delete branch #{job_branch}: #{error_output}"
+        )
+
         {:error, {:branch_deletion_failed, exit_code}}
     end
   end
+
+  defp log_prefix(job_id) when is_binary(job_id) do
+    prefix = String.slice(job_id, 0, 8)
+    "[Git:#{prefix}]"
+  end
+
+  defp log_prefix(nil), do: "[Git]"
 end
