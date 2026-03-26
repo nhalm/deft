@@ -160,14 +160,14 @@ defmodule Deft.Job.Lead do
   def terminate(_reason, _state, data) do
     # Clean up the cache instance if it exists
     if data.cache_pid do
-      Logger.info("Lead #{data.lead_id}: cleaning up cache instance")
+      Logger.info("#{log_prefix(data.lead_id)} cleaning up cache instance")
 
       case Store.cleanup(data.cache_pid) do
         :ok ->
-          Logger.info("Lead #{data.lead_id}: cache cleanup successful")
+          Logger.info("#{log_prefix(data.lead_id)} cache cleanup successful")
 
         {:error, reason} ->
-          Logger.warning("Lead #{data.lead_id}: cache cleanup failed: #{inspect(reason)}")
+          Logger.warning("#{log_prefix(data.lead_id)} cache cleanup failed: #{inspect(reason)}")
       end
     end
 
@@ -185,7 +185,10 @@ defmodule Deft.Job.Lead do
           Store.tid(site_log_pid)
 
         [] ->
-          Logger.warning("Lead #{initial_data.lead_id}: site log not found, reads will fail")
+          Logger.warning(
+            "#{log_prefix(initial_data.lead_id)} site log not found, reads will fail"
+          )
+
           nil
       end
 
@@ -204,7 +207,7 @@ defmodule Deft.Job.Lead do
          ) do
       {:ok, cache_pid} ->
         cache_tid = Store.tid(cache_pid)
-        Logger.info("Lead #{initial_data.lead_id}: started cache instance at #{cache_path}")
+        Logger.info("#{log_prefix(initial_data.lead_id)} started cache instance at #{cache_path}")
 
         initial_data =
           %{initial_data | site_log_tid: site_log_tid, cache_pid: cache_pid, cache_tid: cache_tid}
@@ -214,7 +217,10 @@ defmodule Deft.Job.Lead do
         {:ok, initial_state, initial_data}
 
       {:error, reason} ->
-        Logger.error("Lead #{initial_data.lead_id}: failed to start cache: #{inspect(reason)}")
+        Logger.error(
+          "#{log_prefix(initial_data.lead_id)} failed to start cache: #{inspect(reason)}"
+        )
+
         # Continue without cache
         initial_data = %{initial_data | site_log_tid: site_log_tid}
         initial_state = {:planning, :idle}
@@ -232,7 +238,7 @@ defmodule Deft.Job.Lead do
           [] ->
             # No tasks found - report error to Foreman
             Logger.error(
-              "Lead #{data.lead_id} failed to extract task list from planning response"
+              "#{log_prefix(data.lead_id)} failed to extract task list from planning response"
             )
 
             send_lead_message(
@@ -246,7 +252,9 @@ defmodule Deft.Job.Lead do
 
           tasks ->
             # Tasks extracted successfully - store and transition to executing
-            Logger.info("Lead #{data.lead_id} extracted #{length(tasks)} tasks from planning")
+            Logger.info(
+              "#{log_prefix(data.lead_id)} extracted #{length(tasks)} tasks from planning"
+            )
 
             send_lead_message(
               data.foreman_pid,
@@ -272,7 +280,7 @@ defmodule Deft.Job.Lead do
 
   def handle_event(:enter, _old_state, {:verifying, :idle}, data) do
     # When entering verification phase, spawn a testing runner to run compile checks and tests
-    Logger.info("Lead #{data.lead_id} starting verification")
+    Logger.info("#{log_prefix(data.lead_id)} starting verification")
 
     # Build verification instructions for the testing runner
     verification_instructions = build_verification_prompt(data)
@@ -352,7 +360,7 @@ defmodule Deft.Job.Lead do
         {:next_state, {chunk_phase, :calling}, data}
 
       {:error, reason} ->
-        Logger.error("Lead #{data.lead_id} LLM call failed: #{inspect(reason)}")
+        Logger.error("#{log_prefix(data.lead_id)} LLM call failed: #{inspect(reason)}")
 
         send(
           data.foreman_pid,
@@ -365,7 +373,7 @@ defmodule Deft.Job.Lead do
 
   # Foreman steering (works in any state)
   def handle_event(:info, {:foreman_steering, content}, {chunk_phase, agent_state}, data) do
-    Logger.info("Lead #{data.lead_id} received steering from Foreman")
+    Logger.info("#{log_prefix(data.lead_id)} received steering from Foreman")
 
     # Add steering as a user message
     steering_message = %Message{
@@ -392,7 +400,10 @@ defmodule Deft.Job.Lead do
           {:next_state, {chunk_phase, :calling}, data}
 
         {:error, reason} ->
-          Logger.error("Lead #{data.lead_id} LLM call failed during steering: #{inspect(reason)}")
+          Logger.error(
+            "#{log_prefix(data.lead_id)} LLM call failed during steering: #{inspect(reason)}"
+          )
+
           {:keep_state, data}
       end
     else
@@ -451,7 +462,10 @@ defmodule Deft.Job.Lead do
       Map.has_key?(runner_tasks, ref) ->
         # This is a runner task - handle it using the runner logic
         runner_info = Map.get(runner_tasks, ref)
-        Logger.info("Lead #{data.lead_id} runner completed: #{runner_info.task_description}")
+
+        Logger.info(
+          "#{log_prefix(data.lead_id)} runner completed: #{runner_info.task_description}"
+        )
 
         # Remove completed runner from tracking
         runner_tasks = Map.delete(runner_tasks, ref)
@@ -492,7 +506,9 @@ defmodule Deft.Job.Lead do
         :keep_state_and_data
 
       runner_info ->
-        Logger.info("Lead #{data.lead_id} runner completed: #{runner_info.task_description}")
+        Logger.info(
+          "#{log_prefix(data.lead_id)} runner completed: #{runner_info.task_description}"
+        )
 
         # Cancel the timeout timer since the runner completed
         if runner_info.timeout_ref do
@@ -544,7 +560,7 @@ defmodule Deft.Job.Lead do
 
       {task_ref, runner_info} ->
         Logger.error(
-          "Lead #{data.lead_id} runner crashed: #{runner_info.task_description}, reason: #{inspect(reason)}"
+          "#{log_prefix(data.lead_id)} runner crashed: #{runner_info.task_description}, reason: #{inspect(reason)}"
         )
 
         # Cancel the timeout timer since the runner crashed
@@ -587,7 +603,9 @@ defmodule Deft.Job.Lead do
         :keep_state_and_data
 
       runner_info ->
-        Logger.error("Lead #{data.lead_id} runner timed out: #{runner_info.task_description}")
+        Logger.error(
+          "#{log_prefix(data.lead_id)} runner timed out: #{runner_info.task_description}"
+        )
 
         # Demonitor the task process to prevent DOWN message
         Process.demonitor(runner_info.monitor_ref, [:flush])
@@ -627,7 +645,7 @@ defmodule Deft.Job.Lead do
       )
       when monitor_ref == data.stream_monitor_ref and agent_state in [:calling, :streaming] do
     Logger.error(
-      "Lead #{data.lead_id}: stream process crashed in #{agent_state} state, reason: #{inspect(reason)}"
+      "#{log_prefix(data.lead_id)} stream process crashed in #{agent_state} state, reason: #{inspect(reason)}"
     )
 
     # Send error to Foreman
@@ -865,7 +883,7 @@ defmodule Deft.Job.Lead do
           {:next_state, {chunk_phase, :calling}, data}
 
         {:error, reason} ->
-          Logger.error("Lead #{data.lead_id} LLM call failed: #{inspect(reason)}")
+          Logger.error("#{log_prefix(data.lead_id)} LLM call failed: #{inspect(reason)}")
 
           send(
             data.foreman_pid,
@@ -910,13 +928,16 @@ defmodule Deft.Job.Lead do
             {:ok, stream_ref, monitor_ref, estimated_tokens}
 
           {:error, reason} ->
-            Logger.error("Lead #{data.lead_id} failed to start LLM stream: #{inspect(reason)}")
+            Logger.error(
+              "#{log_prefix(data.lead_id)} failed to start LLM stream: #{inspect(reason)}"
+            )
+
             {:error, reason}
         end
 
       {:error, reason} ->
         Logger.error(
-          "Lead #{data.lead_id} failed to get rate limiter permission: #{inspect(reason)}"
+          "#{log_prefix(data.lead_id)} failed to get rate limiter permission: #{inspect(reason)}"
         )
 
         {:error, reason}
@@ -1263,7 +1284,7 @@ defmodule Deft.Job.Lead do
     runner_tasks = Map.put(data.runner_tasks, task.ref, runner_info)
     data = %{data | runner_tasks: runner_tasks}
 
-    Logger.info("Lead #{data.lead_id} spawned runner: #{task_description}")
+    Logger.info("#{log_prefix(data.lead_id)} spawned runner: #{task_description}")
 
     {:ok, task.ref, monitor_ref, data}
   end
@@ -1271,7 +1292,7 @@ defmodule Deft.Job.Lead do
   defp process_runner_result(result, runner_info, data) do
     # Evaluate runner result and update task list
     Logger.info(
-      "Processing runner result for #{runner_info.task_description}: #{inspect(result)}"
+      "#{log_prefix(data.lead_id)} processing runner result for #{runner_info.task_description}: #{inspect(result)}"
     )
 
     case result do
@@ -1307,14 +1328,14 @@ defmodule Deft.Job.Lead do
               )
 
               Logger.info(
-                "Lead #{data.lead_id} published contract for task: #{runner_info.task_description}"
+                "#{log_prefix(data.lead_id)} published contract for task: #{runner_info.task_description}"
               )
             end
 
             data
 
           {:needs_correction, reason} ->
-            Logger.warning("Lead #{data.lead_id} detected issue: #{reason}")
+            Logger.warning("#{log_prefix(data.lead_id)} detected issue: #{reason}")
 
             send_lead_message(
               data.foreman_pid,
@@ -1334,7 +1355,7 @@ defmodule Deft.Job.Lead do
             %{data | task_list: data.task_list ++ [corrective_task]}
 
           {:critical_issue, issue} ->
-            Logger.error("Lead #{data.lead_id} found critical issue: #{issue}")
+            Logger.error("#{log_prefix(data.lead_id)} found critical issue: #{issue}")
 
             send_lead_message(
               data.foreman_pid,
@@ -1371,7 +1392,7 @@ defmodule Deft.Job.Lead do
 
       if Enum.empty?(failed_tasks) do
         # Verification passed
-        Logger.info("Lead #{data.lead_id} verification complete, reporting to Foreman")
+        Logger.info("#{log_prefix(data.lead_id)} verification complete, reporting to Foreman")
 
         send_lead_message(
           data.foreman_pid,
@@ -1388,7 +1409,7 @@ defmodule Deft.Job.Lead do
       else
         # Verification failed
         Logger.error(
-          "Lead #{data.lead_id} verification failed with #{length(failed_tasks)} failed task(s)"
+          "#{log_prefix(data.lead_id)} verification failed with #{length(failed_tasks)} failed task(s)"
         )
 
         failed_descriptions = Enum.map(failed_tasks, & &1.description) |> Enum.join(", ")
@@ -1423,7 +1444,9 @@ defmodule Deft.Job.Lead do
 
         if Enum.empty?(failed_tasks) do
           # All tasks done - transition to verification
-          Logger.info("Lead #{data.lead_id} all tasks complete, transitioning to verification")
+          Logger.info(
+            "#{log_prefix(data.lead_id)} all tasks complete, transitioning to verification"
+          )
 
           send_lead_message(
             data.foreman_pid,
@@ -1435,7 +1458,7 @@ defmodule Deft.Job.Lead do
           {:next_state, {:verifying, :idle}, data}
         else
           # Some tasks failed - report as blocker
-          Logger.error("Lead #{data.lead_id} has failed tasks, reporting blocker")
+          Logger.error("#{log_prefix(data.lead_id)} has failed tasks, reporting blocker")
           failed_descriptions = Enum.map(failed_tasks, & &1.description)
 
           send_lead_message(
@@ -1450,13 +1473,13 @@ defmodule Deft.Job.Lead do
 
       # Check if we're at max concurrent runners
       length(data.runner_tasks) >= Map.get(data.config, :job_max_runners_per_lead, 3) ->
-        Logger.debug("Lead #{data.lead_id} at max concurrent runners, waiting")
+        Logger.debug("#{log_prefix(data.lead_id)} at max concurrent runners, waiting")
         {:keep_state, data}
 
       # Spawn next pending task
       true ->
         next_task = List.first(pending_tasks)
-        Logger.info("Lead #{data.lead_id} spawning runner for: #{next_task.description}")
+        Logger.info("#{log_prefix(data.lead_id)} spawning runner for: #{next_task.description}")
 
         # Mark task as in-progress
         task_list = update_task_status(data.task_list, next_task.description, :in_progress, nil)
@@ -1744,5 +1767,10 @@ defmodule Deft.Job.Lead do
       end)
 
     %{data | saved_message_ids: new_saved_ids}
+  end
+
+  defp log_prefix(lead_id) do
+    prefix = String.slice(lead_id, 0, 8)
+    "[Lead:#{prefix}]"
   end
 end
