@@ -257,6 +257,7 @@ defmodule Deft.Issues do
              new_issues = [issue | state.issues],
              new_state = %{state | issues: new_issues},
              :ok <- persist_issues(new_state) do
+          Logger.info("[Issues] Issue created: #{issue.id} \"#{issue.title}\"")
           {:reply, {:ok, issue}, new_state}
         else
           {:error, reason} -> {:reply, {:error, reason}, state}
@@ -453,6 +454,7 @@ defmodule Deft.Issues do
          new_issues = List.replace_at(state.issues, index, updated_issue),
          new_state = %{state | issues: new_issues},
          :ok <- persist_issues(new_state) do
+      Logger.info("[Issues] Issue updated: #{updated_issue.id}")
       {:reply, {:ok, updated_issue}, new_state}
     else
       {:error, reason} -> {:reply, {:error, reason}, state}
@@ -465,8 +467,12 @@ defmodule Deft.Issues do
     new_state = %{state | issues: new_issues}
 
     case persist_issues(new_state) do
-      :ok -> {:reply, {:ok, updated_issue}, new_state}
-      {:error, reason} -> {:reply, {:error, reason}, state}
+      :ok ->
+        Logger.info("[Issues] Issue updated: #{updated_issue.id}")
+        {:reply, {:ok, updated_issue}, new_state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
     end
   end
 
