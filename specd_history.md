@@ -1,4 +1,5 @@
 # History
+- **logging v0.2 (2026-03-26):** Change job abort log from `:error` to `:info` in `lib/deft/job/foreman.ex:720` "Foreman aborting job": spec v0.2 §6 moves "Job abort" to Info level (user-initiated, not an error)
 - **logging v0.1 (2026-03-26):** Add skill file parsing debug logs to `lib/deft/skills/registry.ex`: spec §9 requires skill file parsing at debug level. `parse_skill_manifest/2` and `discover_commands/3` have no debug logging during parse.
 - **logging v0.1 (2026-03-26):** Add DETS operation debug logs to `lib/deft/store.ex`: spec §9 requires DETS operations at debug level. `flush_buffer/2` and `open_dets_file/2` success paths have no debug logging.
 - **logging v0.1 (2026-03-26):** Add cache hit/miss debug logs to `lib/deft/store.ex` `read/2`: spec §9 requires cache hits/misses at debug level. Currently returns results silently.
