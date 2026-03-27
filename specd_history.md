@@ -1,4 +1,5 @@
 # History
+- **logging v0.3 (2026-03-27):** Ensure Foreman/Lead callers of git functions log appropriately when git operations fail: review call sites in `lib/deft/job/foreman.ex` and `lib/deft/job/lead.ex` that call `GitJob.*` functions and add warning/error logs where the caller doesn't already handle failures visibly.
 - **logging v0.3 (2026-03-27):** Remove all Logger calls from `lib/deft/provider/anthropic.ex` (6 calls). Provider functions return results to the Agent — Agent logs based on context. Remove `require Logger`.
 - **logging v0.3 (2026-03-27):** Remove all Logger calls from `lib/deft/git/job.ex` (64 calls). Git functions return `{:ok, _}` / `{:error, _}` — callers in Foreman/Lead log based on context. Remove `require Logger`.
 - **logging v0.2 (2026-03-26):** Log DETS corruption at `:error` level for ALL store types in `lib/deft/store.ex:315-329`: spec §9 requires "Data corruption detected" at Error level. Currently logged at `:warning` for sitelog type only, and completely silent for cache type. Change `Logger.warning` to `Logger.error`, remove the `if type == :sitelog` guard so corruption is logged regardless of store type.

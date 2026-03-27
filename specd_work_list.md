@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## logging v0.3
 
-- Ensure Foreman/Lead callers of git functions log appropriately when git operations fail: review call sites in `lib/deft/job/foreman.ex` and `lib/deft/job/lead.ex` that call `GitJob.*` functions and add warning/error logs where the caller doesn't already handle failures visibly.
 - Ensure Agent caller logs provider failures: review `lib/deft/agent.ex` handling of provider error events and connection failures — confirm error-level logs exist at the agent level (not provider level) per spec §4.
 
 ## web-ui v0.4
