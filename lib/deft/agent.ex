@@ -549,6 +549,10 @@ defmodule Deft.Agent do
     cond do
       ref == data.stream_monitor_ref ->
         # Stream process crashed while waiting for first content
+        Logger.error(
+          "#{log_prefix(data.session_id)} Provider connection failure: stream process crashed: #{inspect(reason)}"
+        )
+
         broadcast_event(data.session_id, {:error, "Stream process crashed: #{inspect(reason)}"})
 
         new_data = %{
@@ -841,6 +845,10 @@ defmodule Deft.Agent do
     else
       # Max retries exceeded - transition to idle with error
       error_message = Map.get(error_payload, :message, "Unknown error")
+
+      Logger.error(
+        "#{log_prefix(data.session_id)} Provider failure after #{max_retries} retries: #{error_message}"
+      )
 
       broadcast_event(
         data.session_id,

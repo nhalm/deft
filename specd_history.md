@@ -1,4 +1,5 @@
 # History
+- **logging v0.3 (2026-03-27):** Ensure Agent caller logs provider failures: review `lib/deft/agent.ex` handling of provider error events and connection failures — confirm error-level logs exist at the agent level (not provider level) per spec §4.
 - **logging v0.3 (2026-03-27):** Ensure Foreman/Lead callers of git functions log appropriately when git operations fail: review call sites in `lib/deft/job/foreman.ex` and `lib/deft/job/lead.ex` that call `GitJob.*` functions and add warning/error logs where the caller doesn't already handle failures visibly.
 - **logging v0.3 (2026-03-27):** Remove all Logger calls from `lib/deft/provider/anthropic.ex` (6 calls). Provider functions return results to the Agent — Agent logs based on context. Remove `require Logger`.
 - **logging v0.3 (2026-03-27):** Remove all Logger calls from `lib/deft/git/job.ex` (64 calls). Git functions return `{:ok, _}` / `{:error, _}` — callers in Foreman/Lead log based on context. Remove `require Logger`.
