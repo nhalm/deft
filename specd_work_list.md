@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## logging v0.4
-
-- Remove status code from "Provider stream complete" log in `lib/deft/agent.ex` (line 961): spec §4 now requires only duration (status code removed per v0.4 changelog). Update the log message to match the updated spec.
-
 ## logging v0.3
 
 - Add model name to "Provider stream started" log in `lib/deft/agent.ex` (lines 258 and 1214-1215): spec §4 requires `Provider stream started (provider module, model name)` but both call sites only log the provider module. The model is available in `config_with_session` — include it in the log message.

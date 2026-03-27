@@ -1,4 +1,5 @@
 # History
+- **logging v0.4 (2026-03-27):** Remove status code from "Provider stream complete" log in `lib/deft/agent.ex` (line 961): spec §4 now requires only duration (status code removed per v0.4 changelog). Update the log message to match the updated spec.
 - **logging v0.3 (2026-03-27):** Ensure Agent caller logs provider failures: review `lib/deft/agent.ex` handling of provider error events and connection failures — confirm error-level logs exist at the agent level (not provider level) per spec §4.
 - **logging v0.3 (2026-03-27):** Ensure Foreman/Lead callers of git functions log appropriately when git operations fail: review call sites in `lib/deft/job/foreman.ex` and `lib/deft/job/lead.ex` that call `GitJob.*` functions and add warning/error logs where the caller doesn't already handle failures visibly.
 - **logging v0.3 (2026-03-27):** Remove all Logger calls from `lib/deft/provider/anthropic.ex` (6 calls). Provider functions return results to the Agent — Agent logs based on context. Remove `require Logger`.

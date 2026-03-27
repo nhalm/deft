@@ -958,7 +958,7 @@ defmodule Deft.Agent do
       end
 
     duration_str = if duration_ms, do: " (#{duration_ms}ms)", else: ""
-    Logger.info("#{log_prefix(data.session_id)} Stream complete#{duration_str}")
+    Logger.info("#{log_prefix(data.session_id)} Provider stream complete#{duration_str}")
 
     # Demonitor the stream process
     if data.stream_monitor_ref do
