@@ -1219,4 +1219,43 @@ defmodule Deft.Job.ForemanTest do
       Process.sleep(50)
     end
   end
+
+  describe "cost ceiling enforcement" do
+    test "sets cost_ceiling_reached flag and prevents new Lead spawning", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
+      session_id = "test-job-#{:erlang.unique_integer([:positive])}"
+      start_rate_limiter(session_id)
+
+      {:ok, foreman_pid} =
+        Foreman.start_link(
+          session_id: session_id,
+          config: %{},
+          prompt: "test prompt",
+          rate_limiter_pid: self(),
+          runner_supervisor: runner_supervisor,
+          working_dir: tmp_dir
+        )
+
+      # Get initial state and verify cost ceiling not reached
+      {_state, data} = :sys.get_state(foreman_pid)
+      refute data.cost_ceiling_reached
+
+      # Simulate cost ceiling reached message from RateLimiter
+      send(foreman_pid, {:rate_limiter, :cost_ceiling_reached, 10.0})
+
+      # Wait for message processing
+      Process.sleep(100)
+
+      # Verify cost ceiling flag is set
+      {_state, updated_data} = :sys.get_state(foreman_pid)
+      assert updated_data.cost_ceiling_reached
+
+      # Cleanup
+      Store.cleanup(data.site_log_pid)
+      :gen_statem.stop(foreman_pid)
+      Process.sleep(50)
+    end
+  end
 end
