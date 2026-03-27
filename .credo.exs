@@ -23,9 +23,12 @@
           # Design
           {Credo.Check.Design.AliasUsage, []},
 
-          # Refactoring
-          {Credo.Check.Refactor.CyclomaticComplexity, []},
-          {Credo.Check.Refactor.Nesting, [max_nesting: 3]}
+          # Refactoring — complexity
+          {Credo.Check.Refactor.CyclomaticComplexity, [max_complexity: 7]},
+          {Credo.Check.Refactor.Nesting, [max_nesting: 2]},
+          {Credo.Check.Refactor.FunctionArity, [max_arity: 5]},
+          {Credo.Check.Refactor.PerceivedComplexity, [max_complexity: 9]},
+          {Credo.Check.Refactor.ABCSize, [max_size: 30]}
         ]
       }
     }

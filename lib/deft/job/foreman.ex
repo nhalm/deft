@@ -393,6 +393,13 @@ defmodule Deft.Job.Foreman do
                 model: research_model
               }
 
+              # Pass provider_pid if present (for ScriptedProvider in tests)
+              runner_config =
+                case Map.get(data.config, :provider_pid) do
+                  nil -> runner_config
+                  pid -> Map.put(runner_config, :provider_pid, pid)
+                end
+
               # Call Runner with :research type (read-only tools)
               Runner.run(
                 :research,

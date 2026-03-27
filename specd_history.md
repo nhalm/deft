@@ -1,4 +1,5 @@
 # History
+- **standards v0.2 (2026-03-27):** Update `.credo.exs`: set `CyclomaticComplexity` to `max_complexity: 7`, `Nesting` to `max_nesting: 2`, `FunctionArity` to `max_arity: 5`, add `PerceivedComplexity` with `max_complexity: 9`, add `ABCSize` with `max_size: 30`
 - **unit-testing v0.1 (2026-03-27):** Add integration test: single-agent turn loop using ScriptedProvider — assistant responds with tool call, tool executes, assistant responds with text. Verify full state machine cycle in `test/integration/agent_turn_test.exs`
 - **unit-testing v0.1 (2026-03-27):** Add Foreman unit test: single-agent fallback — verify simple task (1-2 files) skips orchestration and executes directly in `foreman_test.exs`
 - **unit-testing v0.1 (2026-03-27):** Add Foreman unit test: cost ceiling enforcement — simulate `{:rate_limiter, :cost, amount}` message exceeding ceiling, verify Foreman pauses new Lead spawning in `foreman_test.exs`
