@@ -119,6 +119,7 @@ defmodule Deft.Job.Lead do
       turn_count: 0,
       total_input_tokens: 0,
       total_output_tokens: 0,
+      estimated_tokens: 0,
       session_file_path: session_file_path,
       saved_message_ids: MapSet.new()
     }

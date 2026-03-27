@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## unit-testing v0.1
 
-- Add Lead unit tests: deliverable decomposition, Runner spawning via Task.Supervisor, Runner crash/timeout handling, correct message types to Foreman (`:status`, `:decision`, `:contract`, `:complete`), `:foreman_steering` handling
 - Add OM sync fallback unit test: verify forced observation/reflection when async falls behind
 - Fix Foreman auto-approve test to verify actual state transition to `:executing` (currently only asserts config value)
 - Add integration test scenario 2.2: Foreman Research → Decompose → Execute
