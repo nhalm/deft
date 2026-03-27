@@ -8,9 +8,6 @@ erl_crash.dump
 # Burrito builds
 burrito_out/
 
-# Escript builds
-deft
-
 # Test/coverage
 cover/
 doc/
@@ -35,5 +32,5 @@ Thumbs.db
 priv/plts/
 
 # specd lock files
-specd.lock
+*.lock
 .deft-worktrees/
