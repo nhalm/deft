@@ -1,4 +1,5 @@
 # History
+- **unit-testing v0.1 (2026-03-27):** Add agent turn limit enforcement unit test: verify agent pauses after N consecutive LLM calls and waits for user confirmation
 - **testing v0.1 (2026-03-27):** Add `@moduletag :integration` to `test/integration/agent_turn_test.exs` so integration tests are excluded from `make test` and included in `make test.integration`
 - **tui v0.3 (2026-03-23):** Wrap conversation text to avoid the roster area (~30 rightmost columns) during orchestration; collapse roster to header-only when terminal width < 80 columns
 - **tui v0.3 (2026-03-23):** Collapse multiple active Runners into a single `Runners (N)` row instead of listing each individually

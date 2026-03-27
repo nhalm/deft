@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## unit-testing v0.1
 
-- Add agent turn limit enforcement unit test: verify agent pauses after N consecutive LLM calls and waits for user confirmation
 - Add agent error recovery unit test: verify provider errors trigger retry with backoff, exhausted retries → `:idle` with error
 - Add agent abort tests from `:streaming` and `:executing_tools` states (currently only `:calling` is tested)
 - Add Lead unit tests: deliverable decomposition, Runner spawning via Task.Supervisor, Runner crash/timeout handling, correct message types to Foreman (`:status`, `:decision`, `:contract`, `:complete`), `:foreman_steering` handling

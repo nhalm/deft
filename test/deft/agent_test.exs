@@ -4,6 +4,7 @@ defmodule Deft.AgentTest do
   alias Deft.Agent
   alias Deft.Message
   alias Deft.Message.Text
+  alias Deft.ScriptedProvider
 
   setup_all do
     # The Deft.Registry is started by the application, so we don't need to start it here
@@ -153,6 +154,222 @@ defmodule Deft.AgentTest do
       assert state_name == :idle
       assert state_data.stream_ref == nil
       assert state_data.current_message == nil
+    end
+  end
+
+  describe "turn limit enforcement" do
+    setup do
+      # Create unique session ID for each test
+      session_id = "test_session_#{:erlang.unique_integer([:positive])}"
+
+      # Create temp directory for this test session
+      temp_dir = Path.join(System.tmp_dir!(), session_id)
+      File.mkdir_p!(temp_dir)
+
+      # Start a Task.Supervisor for tool execution
+      tool_runner_name = {:via, Registry, {Deft.ProcessRegistry, {:tool_runner, session_id}}}
+      {:ok, tool_supervisor} = Task.Supervisor.start_link(name: tool_runner_name)
+
+      on_exit(fn ->
+        File.rm_rf!(temp_dir)
+      end)
+
+      {:ok, session_id: session_id, temp_dir: temp_dir, tool_supervisor: tool_supervisor}
+    end
+
+    test "pauses after max_turns and waits for user confirmation", %{
+      session_id: session_id,
+      temp_dir: temp_dir,
+      tool_supervisor: tool_supervisor
+    } do
+      # Setup: Script 4 tool call responses (2 turns worth, to exceed max_turns of 2)
+      {:ok, provider_pid} =
+        ScriptedProvider.start_link(
+          responses: [
+            # Turn 1: tool call
+            %{
+              tool_calls: [%{name: "bash", args: %{"command" => "echo 'turn 1'"}}],
+              usage: %{input: 100, output: 50}
+            },
+            # Turn 2: tool call
+            %{
+              tool_calls: [%{name: "bash", args: %{"command" => "echo 'turn 2'"}}],
+              usage: %{input: 100, output: 50}
+            },
+            # Turn 3: tool call (this should trigger the limit)
+            %{
+              tool_calls: [%{name: "bash", args: %{"command" => "echo 'turn 3'"}}],
+              usage: %{input: 100, output: 50}
+            }
+          ]
+        )
+
+      # Start agent with low max_turns
+      {:ok, agent} =
+        Agent.start_link(
+          session_id: session_id,
+          config: %{
+            provider: ScriptedProvider,
+            provider_pid: provider_pid,
+            working_dir: temp_dir,
+            bash_timeout: 5000,
+            tools: [Deft.Tools.Bash],
+            tool_supervisor: tool_supervisor,
+            model: "test-model",
+            max_turns: 2
+          },
+          messages: []
+        )
+
+      # Subscribe to agent events
+      Registry.register(Deft.Registry, {:session, session_id}, [])
+
+      # Send prompt
+      Agent.prompt(agent, "Run some commands")
+
+      # Wait for the turn limit to be reached
+      # The agent should process turns 1 and 2, then hit the limit after turn 2
+      assert_receive {:agent_event, {:turn_limit_reached, turn_count, max_turns}}, 5000
+      assert turn_count == 3
+      assert max_turns == 2
+
+      # Give the agent a moment to stabilize
+      Process.sleep(50)
+
+      # Verify agent is paused in :executing_tools state
+      {state_name, state_data} = :sys.get_state(agent)
+      assert state_name == :executing_tools
+      assert state_data.turn_count == 3
+    end
+
+    test "continues execution when user accepts", %{
+      session_id: session_id,
+      temp_dir: temp_dir,
+      tool_supervisor: tool_supervisor
+    } do
+      # Setup: Script responses to trigger limit and then continue
+      {:ok, provider_pid} =
+        ScriptedProvider.start_link(
+          responses: [
+            # Turn 1: tool call
+            %{
+              tool_calls: [%{name: "bash", args: %{"command" => "echo 'turn 1'"}}],
+              usage: %{input: 100, output: 50}
+            },
+            # Turn 2: tool call
+            %{
+              tool_calls: [%{name: "bash", args: %{"command" => "echo 'turn 2'"}}],
+              usage: %{input: 100, output: 50}
+            },
+            # Turn 3: text response (after user continues)
+            %{
+              text: "Completed all commands.",
+              tool_calls: [],
+              usage: %{input: 100, output: 30}
+            }
+          ]
+        )
+
+      # Start agent with low max_turns
+      {:ok, agent} =
+        Agent.start_link(
+          session_id: session_id,
+          config: %{
+            provider: ScriptedProvider,
+            provider_pid: provider_pid,
+            working_dir: temp_dir,
+            bash_timeout: 5000,
+            tools: [Deft.Tools.Bash],
+            tool_supervisor: tool_supervisor,
+            model: "test-model",
+            max_turns: 2
+          },
+          messages: []
+        )
+
+      # Subscribe to agent events
+      Registry.register(Deft.Registry, {:session, session_id}, [])
+
+      # Send prompt
+      Agent.prompt(agent, "Run some commands")
+
+      # Wait for turn limit
+      assert_receive {:agent_event, {:turn_limit_reached, 3, 2}}, 5000
+
+      # User accepts to continue
+      Agent.continue_turn(agent, true)
+
+      # Wait for the agent to complete and return to idle
+      Process.sleep(500)
+
+      # Verify agent is back in idle state
+      {state_name, state_data} = :sys.get_state(agent)
+      assert state_name == :idle
+
+      # Verify turn counter was reset (should be 1 after the final turn)
+      assert state_data.turn_count == 1
+    end
+
+    test "transitions to idle when user declines", %{
+      session_id: session_id,
+      temp_dir: temp_dir,
+      tool_supervisor: tool_supervisor
+    } do
+      # Setup: Script responses to trigger limit
+      {:ok, provider_pid} =
+        ScriptedProvider.start_link(
+          responses: [
+            # Turn 1: tool call
+            %{
+              tool_calls: [%{name: "bash", args: %{"command" => "echo 'turn 1'"}}],
+              usage: %{input: 100, output: 50}
+            },
+            # Turn 2: tool call
+            %{
+              tool_calls: [%{name: "bash", args: %{"command" => "echo 'turn 2'"}}],
+              usage: %{input: 100, output: 50}
+            }
+          ]
+        )
+
+      # Start agent with low max_turns
+      {:ok, agent} =
+        Agent.start_link(
+          session_id: session_id,
+          config: %{
+            provider: ScriptedProvider,
+            provider_pid: provider_pid,
+            working_dir: temp_dir,
+            bash_timeout: 5000,
+            tools: [Deft.Tools.Bash],
+            tool_supervisor: tool_supervisor,
+            model: "test-model",
+            max_turns: 2
+          },
+          messages: []
+        )
+
+      # Subscribe to agent events
+      Registry.register(Deft.Registry, {:session, session_id}, [])
+
+      # Send prompt
+      Agent.prompt(agent, "Run some commands")
+
+      # Wait for turn limit
+      assert_receive {:agent_event, {:turn_limit_reached, 3, 2}}, 5000
+
+      # User declines to continue
+      Agent.continue_turn(agent, false)
+
+      # Wait for decline event and transition
+      assert_receive {:agent_event, {:turn_limit_declined}}, 1000
+
+      # Give agent time to transition
+      Process.sleep(50)
+
+      # Verify agent is back in idle state
+      {state_name, _state_data} = :sys.get_state(agent)
+      assert state_name == :idle
     end
   end
 end
