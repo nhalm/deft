@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## logging v0.4
-
-- Add debug-level logging to handle_event callbacks missing it in `lib/deft_web/live/chat_live.ex`: `keydown`, `toggle_thinking`, `toggle_tool`, `continue_turn`, `abort_turn` all lack `Logger.debug` calls. Spec §3 requires all LiveView callbacks log at `:debug`. Other handlers in the same file already log correctly.
-
 ## web-ui v0.4
 
 - Implement force-abort for double Ctrl+c in chat_live.ex: both single and double Ctrl+c call `Deft.Agent.abort(agent)`. Spec §6.4 requires double Ctrl+c to force-abort. Need `Deft.Agent.force_abort/1` (or equivalent) that kills the agent process immediately rather than requesting graceful abort. (blocked: harness — Agent module needs force_abort/1)

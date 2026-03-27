@@ -414,6 +414,9 @@ defmodule DeftWeb.ChatLive do
 
   @impl true
   def handle_event("keydown", params, socket) do
+    id_prefix = String.slice(socket.assigns.session_id, 0, 8)
+    Logger.debug("[Chat:#{id_prefix}] Event: keydown")
+
     key = params["key"]
     ctrl = params["ctrlKey"] || false
     socket = handle_vim_key(socket, key, ctrl)
@@ -422,6 +425,9 @@ defmodule DeftWeb.ChatLive do
 
   @impl true
   def handle_event("toggle_thinking", %{"id" => id}, socket) do
+    id_prefix = String.slice(socket.assigns.session_id, 0, 8)
+    Logger.debug("[Chat:#{id_prefix}] Event: toggle_thinking")
+
     current_state = Map.get(socket.assigns.thinking_blocks_expanded, id, true)
     new_expanded_state = Map.put(socket.assigns.thinking_blocks_expanded, id, not current_state)
     {:noreply, assign(socket, :thinking_blocks_expanded, new_expanded_state)}
@@ -429,6 +435,9 @@ defmodule DeftWeb.ChatLive do
 
   @impl true
   def handle_event("toggle_tool", %{"id" => id}, socket) do
+    id_prefix = String.slice(socket.assigns.session_id, 0, 8)
+    Logger.debug("[Chat:#{id_prefix}] Event: toggle_tool")
+
     current_state = Map.get(socket.assigns.tools_expanded, id, false)
     new_expanded_state = Map.put(socket.assigns.tools_expanded, id, not current_state)
     {:noreply, assign(socket, :tools_expanded, new_expanded_state)}
@@ -436,6 +445,9 @@ defmodule DeftWeb.ChatLive do
 
   @impl true
   def handle_event("continue_turn", _params, socket) do
+    id_prefix = String.slice(socket.assigns.session_id, 0, 8)
+    Logger.debug("[Chat:#{id_prefix}] Event: continue_turn")
+
     # Call continue_turn with true to allow the agent to proceed
     agent = Worker.agent_via_tuple(socket.assigns.session_id)
     Deft.Agent.continue_turn(agent, true)
@@ -460,6 +472,9 @@ defmodule DeftWeb.ChatLive do
 
   @impl true
   def handle_event("abort_turn", _params, socket) do
+    id_prefix = String.slice(socket.assigns.session_id, 0, 8)
+    Logger.debug("[Chat:#{id_prefix}] Event: abort_turn")
+
     # Call continue_turn with false to decline continuing
     agent = Worker.agent_via_tuple(socket.assigns.session_id)
     Deft.Agent.continue_turn(agent, false)
