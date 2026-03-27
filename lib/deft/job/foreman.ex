@@ -325,12 +325,23 @@ defmodule Deft.Job.Foreman do
   @impl :gen_statem
   # State entry handlers
   def handle_event(:enter, _old_state, {:planning, :idle} = state, data) do
-    # When entering planning phase, build a structured planning prompt
-    # that asks the LLM to analyze the request and determine research tasks
+    # When entering planning phase, check if single-agent fallback mode is enabled
     broadcast_job_status(state, data)
-    planning_prompt = build_planning_prompt(data.prompt)
-    :gen_statem.cast(self(), {:prompt, planning_prompt})
-    :keep_state_and_data
+
+    if Map.get(data, :single_agent_fallback) do
+      # Single-agent fallback mode - work on the original prompt directly
+      Logger.info(
+        "#{log_prefix(data.session_id)} Single-agent fallback mode - processing original prompt"
+      )
+
+      :gen_statem.cast(self(), {:prompt, data.prompt})
+      :keep_state_and_data
+    else
+      # Normal orchestration - build a structured planning prompt
+      planning_prompt = build_planning_prompt(data.prompt)
+      :gen_statem.cast(self(), {:prompt, planning_prompt})
+      :keep_state_and_data
+    end
   end
 
   def handle_event(:enter, _old_state, {:researching, :idle} = state, data) do
@@ -2947,15 +2958,27 @@ defmodule Deft.Job.Foreman do
   # Determine the next phase after completing current agent loop
   # Returns {next_state, updated_data}
   defp determine_next_phase(:planning, data) do
-    # After planning completes, extract research tasks from the LLM response
-    # and transition to researching
-    research_task_specs = extract_research_tasks_from_messages(data.messages, data.session_id)
+    # Check if the LLM recommended single-agent fallback
+    if check_single_agent_fallback(data.messages) do
+      Logger.info(
+        "#{log_prefix(data.session_id)} Single-agent fallback detected - skipping orchestration"
+      )
 
-    # Store the research task specs in data for use in researching phase
-    # If extraction failed, research_task_specs will be nil and researching phase will use defaults
-    updated_data = Map.put(data, :research_task_specs, research_task_specs)
+      # Skip orchestration and execute directly - set flag and stay in planning phase
+      # The planning entry handler will see this flag and send the original prompt
+      updated_data = Map.put(data, :single_agent_fallback, true)
+      {{:planning, :idle}, updated_data}
+    else
+      # After planning completes, extract research tasks from the LLM response
+      # and transition to researching
+      research_task_specs = extract_research_tasks_from_messages(data.messages, data.session_id)
 
-    {{:researching, :idle}, updated_data}
+      # Store the research task specs in data for use in researching phase
+      # If extraction failed, research_task_specs will be nil and researching phase will use defaults
+      updated_data = Map.put(data, :research_task_specs, research_task_specs)
+
+      {{:researching, :idle}, updated_data}
+    end
   end
 
   defp determine_next_phase(:decomposing, data) do
@@ -3013,9 +3036,16 @@ defmodule Deft.Job.Foreman do
 
     # Your Task
 
-    Analyze this request and determine what research tasks are needed to gather the information necessary
-    for planning the implementation. Each research task will be executed by a research Runner with read-only
-    tools (Read, Grep, Find, Ls) that can explore the codebase.
+    First, determine if this is a simple task that can be executed directly without orchestration:
+    - Touches only 1-2 files
+    - No natural decomposition into parallel work streams
+    - Estimated to require fewer than 3 sub-tasks
+
+    If the task is simple enough, respond with a single line: `SINGLE_AGENT_FALLBACK: true`
+
+    Otherwise, analyze this request and determine what research tasks are needed to gather the information
+    necessary for planning the implementation. Each research task will be executed by a research Runner
+    with read-only tools (Read, Grep, Find, Ls) that can explore the codebase.
 
     Produce a list of 1-5 research tasks. For each task, provide:
 
@@ -3097,6 +3127,26 @@ defmodule Deft.Job.Foreman do
     - Clear interfaces (enables partial unblocking)
     - Single-agent fallback (if task is simple enough, recommend executing directly)
     """
+  end
+
+  # Check if the LLM recommended single-agent fallback
+  # Returns true if the last assistant message contains SINGLE_AGENT_FALLBACK: true
+  defp check_single_agent_fallback(messages) do
+    case Enum.reverse(messages) |> Enum.find(&(&1.role == :assistant)) do
+      nil ->
+        false
+
+      message ->
+        # Extract text content from message
+        text_content =
+          message.content
+          |> Enum.filter(&match?(%Deft.Message.Text{}, &1))
+          |> Enum.map(& &1.text)
+          |> Enum.join("\n")
+
+        # Check for the single-agent fallback marker
+        String.contains?(text_content, "SINGLE_AGENT_FALLBACK: true")
+    end
   end
 
   # Extract research tasks from the last assistant message
