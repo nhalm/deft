@@ -157,7 +157,7 @@ Tool result caching. When a tool result exceeds a token threshold, the tool writ
 | `cache.token_threshold.ls` | `4000` | Directory trees — structural summaries are fine |
 | `cache.token_threshold.find` | `4000` | File listings — structural summaries are fine |
 
-These defaults are provisional. Actual values should be determined by threshold calibration evals (see [evals/spilling.md](evals/spilling.md)).
+These defaults are provisional. Actual values should be determined by threshold calibration evals (see [testing/evals/spilling.md](testing/evals/spilling.md)).
 
 #### 4.3 Write Policy — Lazy/Batched
 

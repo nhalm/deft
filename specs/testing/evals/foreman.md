@@ -3,7 +3,7 @@
 | | |
 |--------|------|
 | Parent | [evals](README.md) |
-| Spec | [orchestration](../orchestration.md) |
+| Spec | [orchestration](../../orchestration.md) |
 
 ## Test Cases
 

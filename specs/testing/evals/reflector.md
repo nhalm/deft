@@ -3,7 +3,7 @@
 | | |
 |--------|------|
 | Parent | [evals](README.md) |
-| Spec | [observational-memory](../observational-memory.md) |
+| Spec | [observational-memory](../../observational-memory.md) |
 
 ## Test Cases
 

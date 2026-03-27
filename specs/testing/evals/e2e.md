@@ -3,7 +3,7 @@
 | | |
 |--------|------|
 | Parent | [evals](README.md) |
-| Specs | [orchestration](../orchestration.md), [issues](../issues.md), [git-strategy](../git-strategy.md) |
+| Specs | [orchestration](../../orchestration.md), [issues](../../issues.md), [git-strategy](../../git-strategy.md) |
 
 ## Task Battery
 

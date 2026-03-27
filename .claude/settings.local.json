@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "Bash(curl -s \"https://hexdocs.pm/dotenvy/readme.html\")",
-      "Bash(curl -s \"https://hexdocs.pm/dotenv_parser/readme.html\")"
+      "Bash(curl -s \"https://hexdocs.pm/dotenv_parser/readme.html\")",
+      "Bash(sed -i '' 's|\\(../observational-memory.md\\)|\\(../../observational-memory.md\\)|g' specs/testing/evals/observer.md specs/testing/evals/reflector.md)",
+      "Bash(sed -i '' 's|\\(../harness.md\\)|\\(../../harness.md\\)|g' specs/testing/evals/actor.md)",
+      "Bash(sed -i '' 's|\\(../orchestration.md\\)|\\(../../orchestration.md\\)|g' specs/testing/evals/foreman.md specs/testing/evals/lead.md specs/testing/evals/e2e.md)",
+      "Bash(sed -i '' 's|\\(../filesystem.md\\)|\\(../../filesystem.md\\)|g' specs/testing/evals/spilling.md)",
+      "Bash(sed -i '' 's|\\(../skills.md\\)|\\(../../skills.md\\)|g' specs/testing/evals/skills.md)"
     ]
   }
 }

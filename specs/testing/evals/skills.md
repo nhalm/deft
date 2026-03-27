@@ -3,7 +3,7 @@
 | | |
 |--------|------|
 | Parent | [evals](README.md) |
-| Spec | [skills](../skills.md) |
+| Spec | [skills](../../skills.md) |
 
 ## Test Cases
 

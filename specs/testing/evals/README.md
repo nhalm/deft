@@ -47,19 +47,19 @@ Evals are the quality gate between "this code compiles and runs" and "this actua
 - Overnight loop safety evals
 
 **Out of scope:**
-- Unit tests for non-LLM code (see [standards.md](../standards.md))
+- Unit tests for non-LLM code (see [standards.md](../../standards.md))
 - The eval framework implementation itself (Tribunal is a dependency)
 - Defining specific built-in skills or commands (individual skill specs)
 
 **Dependencies:**
-- [standards.md](../standards.md) — testing infrastructure, Tribunal setup, test tags
-- [observational-memory.md](../observational-memory.md) — Observer and Reflector behavior
-- [harness.md](../harness.md) — agent loop, message format
-- [providers.md](../providers.md) — provider behavior
-- [orchestration.md](../orchestration.md) — Foreman planning, Lead steering
-- [filesystem.md](../filesystem.md) — tool result spilling, site log, cache
-- [skills.md](../skills.md) — skill auto-selection
-- [issues.md](../issues.md) — interactive issue creation, `deft work`
+- [standards.md](../../standards.md) — testing infrastructure, Tribunal setup, test tags
+- [observational-memory.md](../../observational-memory.md) — Observer and Reflector behavior
+- [harness.md](../../harness.md) — agent loop, message format
+- [providers.md](../../providers.md) — provider behavior
+- [orchestration.md](../../orchestration.md) — Foreman planning, Lead steering
+- [filesystem.md](../../filesystem.md) — tool result spilling, site log, cache
+- [skills.md](../../skills.md) — skill auto-selection
+- [issues.md](../../issues.md) — interactive issue creation, `deft work`
 
 **Design principles:**
 - **Prescriptive, not vague.** Every eval defines exact input, expected output properties, and pass/fail criteria.
@@ -376,9 +376,9 @@ What to build and eval before the full agent exists, in order:
 ## References
 
 - [Tribunal](https://hex.pm/packages/tribunal) — Elixir LLM evaluation framework
-- [standards.md](../standards.md) — testing infrastructure
-- [observational-memory.md](../observational-memory.md) — Observer/Reflector behavior
-- [orchestration.md](../orchestration.md) — Foreman/Lead behavior
-- [filesystem.md](../filesystem.md) — tool result spilling, cache
-- [skills.md](../skills.md) — skill auto-selection
-- [issues.md](../issues.md) — interactive issue creation
+- [standards.md](../../standards.md) — testing infrastructure
+- [observational-memory.md](../../observational-memory.md) — Observer/Reflector behavior
+- [orchestration.md](../../orchestration.md) — Foreman/Lead behavior
+- [filesystem.md](../../filesystem.md) — tool result spilling, cache
+- [skills.md](../../skills.md) — skill auto-selection
+- [issues.md](../../issues.md) — interactive issue creation

@@ -3,7 +3,7 @@
 | | |
 |--------|------|
 | Parent | [evals](README.md) |
-| Spec | [harness](../harness.md) |
+| Spec | [harness](../../harness.md) |
 
 ## Test Cases
 
