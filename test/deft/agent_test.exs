@@ -372,4 +372,195 @@ defmodule Deft.AgentTest do
       assert state_name == :idle
     end
   end
+
+  describe "error recovery" do
+    # ErrorProvider - emits Error events during streaming to test retry logic
+    defmodule ErrorProvider do
+      use GenServer
+      alias Deft.Provider.Event.{Error, TextDelta, Usage, Done}
+
+      @behaviour Deft.Provider
+
+      def start_link(error_count) do
+        GenServer.start_link(__MODULE__, error_count)
+      end
+
+      @impl GenServer
+      def init(error_count) do
+        {:ok, %{errors_remaining: error_count}}
+      end
+
+      @impl GenServer
+      def handle_call(:get_and_decrement, _from, %{errors_remaining: count} = state) do
+        new_count = max(0, count - 1)
+        {:reply, count, %{state | errors_remaining: new_count}}
+      end
+
+      @impl Deft.Provider
+      def stream(_messages, _tools, config) do
+        caller = self()
+        counter_pid = Map.fetch!(config, :error_counter_pid)
+
+        # Get current error count and decrement
+        errors_remaining = GenServer.call(counter_pid, :get_and_decrement)
+
+        # Spawn a process that will emit an Error event or success
+        stream_pid =
+          spawn(fn ->
+            if errors_remaining > 0 do
+              send(caller, {:provider_event, %Error{message: "Provider error"}})
+              # Keep process alive until cancelled (agent will cancel on error)
+              receive do
+                :never -> :ok
+              end
+            else
+              send(caller, {:provider_event, %TextDelta{delta: "Success!"}})
+              send(caller, {:provider_event, %Usage{input: 100, output: 50}})
+              send(caller, {:provider_event, %Done{}})
+            end
+          end)
+
+        {:ok, stream_pid}
+      end
+
+      @impl Deft.Provider
+      def cancel_stream(stream_ref) when is_pid(stream_ref) do
+        Process.exit(stream_ref, :cancelled)
+        :ok
+      end
+
+      @impl Deft.Provider
+      def parse_event(_sse_event), do: :skip
+
+      @impl Deft.Provider
+      def format_messages(messages), do: messages
+
+      @impl Deft.Provider
+      def format_tools(tools), do: tools
+
+      @impl Deft.Provider
+      def model_config(_model_name) do
+        %{
+          context_window: 200_000,
+          max_output: 8192,
+          input_price_per_mtok: 0.0,
+          output_price_per_mtok: 0.0
+        }
+      end
+    end
+
+    setup do
+      # Create unique session ID for each test
+      session_id = "test_session_#{:erlang.unique_integer([:positive])}"
+
+      # Create temp directory for this test session
+      temp_dir = Path.join(System.tmp_dir!(), session_id)
+      File.mkdir_p!(temp_dir)
+
+      on_exit(fn ->
+        File.rm_rf!(temp_dir)
+      end)
+
+      {:ok, session_id: session_id, temp_dir: temp_dir}
+    end
+
+    test "retries with exponential backoff after provider error", %{
+      session_id: session_id,
+      temp_dir: temp_dir
+    } do
+      # Start error counter that will return 2 errors then succeed
+      {:ok, counter_pid} = ErrorProvider.start_link(2)
+
+      # Start agent with ErrorProvider
+      {:ok, agent} =
+        Deft.Agent.start_link(
+          session_id: session_id,
+          config: %{
+            provider: ErrorProvider,
+            error_counter_pid: counter_pid,
+            working_dir: temp_dir,
+            model: "test-model"
+          },
+          messages: []
+        )
+
+      # Subscribe to agent events
+      Registry.register(Deft.Registry, {:session, session_id}, [])
+
+      # Send prompt
+      Deft.Agent.prompt(agent, "Hello")
+
+      # Wait for state change to calling
+      assert_receive {:agent_event, {:state_change, :calling}}, 1000
+
+      # Wait for first retry event (retry_count: 1, max_retries: 3, delay: 1000)
+      assert_receive {:agent_event, {:retry, 1, 3, 1000}}, 2000
+
+      # Wait for second retry event (retry_count: 2, max_retries: 3, delay: 2000)
+      assert_receive {:agent_event, {:retry, 2, 3, 2000}}, 3000
+
+      # Wait for the agent to succeed and transition to streaming
+      assert_receive {:agent_event, {:state_change, :streaming}}, 3000
+
+      # Give the agent time to complete
+      Process.sleep(500)
+
+      # Verify agent is back in idle state
+      {state_name, state_data} = :sys.get_state(agent)
+      assert state_name == :idle
+
+      # Verify retry counters were reset
+      assert state_data.retry_count == 0
+      assert state_data.retry_delay == 1000
+    end
+
+    test "transitions to idle with error after exhausting retries", %{
+      session_id: session_id,
+      temp_dir: temp_dir
+    } do
+      # Start error counter that will return 4 errors (exceeds max_retries of 3)
+      {:ok, counter_pid} = ErrorProvider.start_link(4)
+
+      # Start agent with ErrorProvider
+      {:ok, agent} =
+        Deft.Agent.start_link(
+          session_id: session_id,
+          config: %{
+            provider: ErrorProvider,
+            error_counter_pid: counter_pid,
+            working_dir: temp_dir,
+            model: "test-model"
+          },
+          messages: []
+        )
+
+      # Subscribe to agent events
+      Registry.register(Deft.Registry, {:session, session_id}, [])
+
+      # Send prompt
+      Deft.Agent.prompt(agent, "Hello")
+
+      # Wait for state change to calling
+      assert_receive {:agent_event, {:state_change, :calling}}, 1000
+
+      # Wait for retry events
+      assert_receive {:agent_event, {:retry, 1, 3, 1000}}, 2000
+      assert_receive {:agent_event, {:retry, 2, 3, 2000}}, 3000
+      assert_receive {:agent_event, {:retry, 3, 3, 4000}}, 5000
+
+      # Wait for the error event after exhausting retries (4000ms delay + processing time)
+      assert_receive {:agent_event, {:error, _reason}}, 5000
+
+      # Give the agent time to transition
+      Process.sleep(50)
+
+      # Verify agent is back in idle state
+      {state_name, state_data} = :sys.get_state(agent)
+      assert state_name == :idle
+
+      # Verify retry counters were reset
+      assert state_data.retry_count == 0
+      assert state_data.retry_delay == 1000
+    end
+  end
 end
