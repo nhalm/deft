@@ -2,11 +2,18 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.2 |
-| Status | Implemented |
-| Last Updated | 2026-03-26 |
+| Version | 0.4 |
+| Status | Ready |
+| Last Updated | 2026-03-27 |
 
 ## Changelog
+
+### v0.4 (2026-03-27)
+- Remove status code from "Provider stream complete" requirement — successful stream completion inherently means 200; non-200 responses are logged as provider failures
+
+### v0.3 (2026-03-27)
+- Add logging ownership principle: only callers log, low-level functions return results
+- Remove Git and Provider from logging layers — they are low-level and do not log
 
 ### v0.2 (2026-03-26)
 - Move "Job abort" from Error to Info level (abort is user-initiated, not an error condition)
@@ -36,6 +43,7 @@ Deft uses Elixir's built-in Logger for operational visibility across all layers.
 - [orchestration](orchestration.md) — Foreman/Lead/Runner hierarchy
 
 **Design principles:**
+- **Only callers log.** Low-level functions return deterministic results (`{:ok, _}` / `{:error, _}`). They do not log. The caller has the context to decide whether a failure is expected, recoverable, or fatal — and logs accordingly. This applies to git operations, HTTP calls, file I/O, parsing, and any utility function.
 - `:info` tells you what happened (prompt received, LLM called, tools ran, turn complete)
 - `:debug` tells you the details (individual events, broadcasts, state transitions)
 - High-frequency UI events (keypresses) stay at `:debug` to avoid noise
@@ -81,8 +89,8 @@ The agent logs its message lifecycle:
 **Info level:**
 - Prompt received (input length)
 - Prompt queued when agent is busy (current state, queue depth)
-- Provider stream started (provider module)
-- Stream complete (duration)
+- Provider stream started (provider module, model name)
+- Provider stream complete (duration)
 - Tool execution started (tool count, tool names)
 - Tool execution complete (duration, success/failure count)
 - Turn complete (total turn duration)
@@ -98,24 +106,10 @@ The agent logs its message lifecycle:
 - Stream errors
 
 **Error level:**
-- Unrecoverable provider failures
+- Provider failures (status code, error reason — logged by agent, not provider module)
 - Tool crashes (tool name, reason)
 
-### 5. Provider Layer
-
-**Info level:**
-- API request started (model name, message count, tool count)
-- API request complete (status code, response time)
-
-**Debug level:**
-- SSE chunk received (size in bytes)
-- SSE event parsed (event type)
-
-**Error level:**
-- Non-2xx API responses (status code, truncated error body)
-- Connection failures (error reason)
-
-### 6. Orchestration Layer
+### 5. Orchestration Layer
 
 **Info level:**
 - Job started (job ID, description)
@@ -137,7 +131,7 @@ The agent logs its message lifecycle:
 
 **Error level:**
 - Lead crashes
-- Git operation failures
+- Git operation failures (logged by the orchestration caller, not by git functions)
 - Job abort cleanup failures
 
 ### 7. Observational Memory Layer
