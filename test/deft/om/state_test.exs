@@ -315,6 +315,158 @@ defmodule Deft.OM.StateTest do
     end
   end
 
+  describe "sync fallback" do
+    test "sync observer completion merges observations and replies to caller", %{
+      session_id: session_id
+    } do
+      # Add messages to the state
+      messages = [
+        %Message{
+          id: "msg1",
+          role: :user,
+          content: [%Text{text: "Read the auth file"}],
+          timestamp: DateTime.utc_now()
+        },
+        %Message{
+          id: "msg2",
+          role: :assistant,
+          content: [%Text{text: "I'll read the auth file"}],
+          timestamp: DateTime.utc_now()
+        }
+      ]
+
+      # Set up state as if force_observe was called (sync path)
+      ref = make_ref()
+      test_pid = self()
+
+      :sys.replace_state(via_tuple(session_id), fn state ->
+        %{
+          state
+          | messages: messages,
+            pending_message_tokens: 36_000,
+            observer_ref: ref,
+            is_observing: true,
+            sync_from: {test_pid, make_ref()}
+        }
+      end)
+
+      # Simulate successful Observer task completion
+      pid = GenServer.whereis(via_tuple(session_id))
+
+      fake_observations = """
+      ## Current State
+      - (10:00) Reading auth file
+
+      ## Session History
+      - (10:00) User requested auth file read
+      """
+
+      result = %{
+        observations: fake_observations,
+        message_ids: ["msg1", "msg2"],
+        message_tokens: 1000,
+        current_task: nil,
+        continuation_hint: nil,
+        usage: nil
+      }
+
+      # Send task completion (this should trigger sync completion handler)
+      send(pid, {ref, result})
+      send(pid, {:DOWN, ref, :process, self(), :normal})
+
+      # Give it time to process
+      Process.sleep(100)
+
+      # Verify observations were merged
+      final_state = :sys.get_state(via_tuple(session_id))
+      assert String.contains?(final_state.active_observations, "Reading auth file")
+      assert "msg1" in final_state.observed_message_ids
+      assert "msg2" in final_state.observed_message_ids
+
+      # Verify pending tokens were reduced
+      assert final_state.pending_message_tokens < 36_000
+
+      # Verify sync state was cleared (this is the key part - sync completion happened)
+      assert final_state.sync_from == nil
+      assert final_state.is_observing == false
+      assert final_state.observer_ref == nil
+    end
+
+    test "sync reflector completion replaces observations and replies to caller", %{
+      session_id: session_id
+    } do
+      # Set up large observations
+      large_session_history =
+        Enum.map(1..500, fn i ->
+          "- (10:#{rem(i, 60)}) Event #{i}: User performed action"
+        end)
+        |> Enum.join("\n")
+
+      large_observations = """
+      ## Current State
+      - (10:00) Working on authentication
+
+      ## Session History
+      #{large_session_history}
+      """
+
+      # Set up state as if force_reflect was called (sync path)
+      ref = make_ref()
+      test_pid = self()
+
+      :sys.replace_state(via_tuple(session_id), fn state ->
+        %{
+          state
+          | active_observations: large_observations,
+            observation_tokens: 50_000,
+            reflector_ref: ref,
+            is_reflecting: true,
+            sync_from: {test_pid, make_ref()}
+        }
+      end)
+
+      # Simulate successful Reflector task completion
+      pid = GenServer.whereis(via_tuple(session_id))
+
+      compressed_observations = """
+      ## Current State
+      - (10:00) Working on authentication
+
+      ## Session History
+      - (10:30) Summarized: Processed 500 authentication-related events
+      """
+
+      result = %{
+        compressed_observations: compressed_observations,
+        before_tokens: 50_000,
+        after_tokens: 5_000,
+        compression_level: 0,
+        llm_calls: 1,
+        usage: nil
+      }
+
+      # Send task completion (this should trigger sync completion handler)
+      send(pid, {ref, result})
+      send(pid, {:DOWN, ref, :process, self(), :normal})
+
+      # Give it time to process
+      Process.sleep(100)
+
+      # Verify observations were compressed
+      final_state = :sys.get_state(via_tuple(session_id))
+      assert String.contains?(final_state.active_observations, "Summarized: Processed 500")
+      refute String.contains?(final_state.active_observations, "Event 499:")
+
+      # Verify observation tokens were updated
+      assert final_state.observation_tokens < 50_000
+
+      # Verify sync state was cleared (this is the key part - sync completion happened)
+      assert final_state.sync_from == nil
+      assert final_state.is_reflecting == false
+      assert final_state.reflector_ref == nil
+    end
+  end
+
   describe "hard observation cap" do
     test "truncates Session History when observation_tokens > 60k", %{session_id: session_id} do
       # Build observations that exceed 60k tokens

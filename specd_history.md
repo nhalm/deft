@@ -1,4 +1,5 @@
 # History
+- **unit-testing v0.1 (2026-03-27):** Add OM sync fallback unit test: verify forced observation/reflection when async falls behind
 - **unit-testing v0.1 (2026-03-27):** Add Lead unit tests: deliverable decomposition, Runner spawning via Task.Supervisor, Runner crash/timeout handling, correct message types to Foreman (`:status`, `:decision`, `:contract`, `:complete`), `:foreman_steering` handling
 - **unit-testing v0.1 (2026-03-27):** Add agent abort tests from `:streaming` and `:executing_tools` states (currently only `:calling` is tested)
 - **unit-testing v0.1 (2026-03-27):** Add agent error recovery unit test: verify provider errors trigger retry with backoff, exhausted retries → `:idle` with error
