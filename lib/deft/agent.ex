@@ -343,6 +343,13 @@ defmodule Deft.Agent do
 
     case call_provider_stream(provider, context_messages, tools, config_with_session) do
       {:ok, stream_ref} ->
+        provider_name = if provider, do: inspect(provider), else: "nil"
+        model = Map.get(config_with_session, :model, "unknown")
+
+        Logger.info(
+          "#{log_prefix(data.session_id)} Provider stream started (#{provider_name}, #{model})"
+        )
+
         # Monitor the stream process to detect crashes (only if stream_ref is a PID)
         monitor_ref = if is_pid(stream_ref), do: Process.monitor(stream_ref), else: nil
 

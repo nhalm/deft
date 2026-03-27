@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## logging v0.4
 
-- Add "Provider stream started" info log to inject_skill path in `lib/deft/agent.ex` (lines 344-362): spec §4 requires this log but the inject_skill `{:ok, stream_ref}` branch has no Logger.info call — the regular prompt path at line 260 logs it correctly. Add matching log with provider name and model name.
 - Set `turn_start_time` in inject_skill path in `lib/deft/agent.ex` (line 349): spec §4 requires "Turn complete (total turn duration)" but inject_skill only sets `stream_start_time`, not `turn_start_time`. The turn complete handler at line 1164 uses `turn_start_time` to compute duration — without it, duration is 0 or stale from a previous turn.
 
 ## web-ui v0.4
