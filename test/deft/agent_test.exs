@@ -134,7 +134,7 @@ defmodule Deft.AgentTest do
   end
 
   describe "abort/1" do
-    test "aborts and cleans up state" do
+    test "aborts from :calling state and cleans up state" do
       {:ok, agent} = start_agent()
 
       # Start a prompt
@@ -154,6 +154,174 @@ defmodule Deft.AgentTest do
       assert state_name == :idle
       assert state_data.stream_ref == nil
       assert state_data.current_message == nil
+    end
+
+    test "aborts from :streaming state and cleans up state" do
+      session_id = "test_session_#{:erlang.unique_integer([:positive])}"
+
+      # Create a custom slow-streaming provider
+      defmodule SlowStreamProvider do
+        @behaviour Deft.Provider
+
+        def stream(_messages, _tools, config) do
+          caller = self()
+          test_pid = Map.get(config, :test_pid)
+
+          stream_pid =
+            spawn(fn ->
+              # Send first event to transition to :streaming
+              alias Deft.Provider.Event.{TextDelta, Usage, Done}
+              send(caller, {:provider_event, %TextDelta{delta: "Starting"}})
+
+              # Notify test that streaming has started
+              if test_pid, do: send(test_pid, :streaming_started)
+
+              # Sleep to keep streaming for long enough to abort
+              Process.sleep(5000)
+
+              # These won't execute if aborted
+              send(caller, {:provider_event, %TextDelta{delta: " more text"}})
+              send(caller, {:provider_event, %Usage{input: 100, output: 50}})
+              send(caller, {:provider_event, %Done{}})
+            end)
+
+          {:ok, stream_pid}
+        end
+
+        def cancel_stream(stream_ref) when is_pid(stream_ref) do
+          Process.exit(stream_ref, :cancelled)
+          :ok
+        end
+
+        def parse_event(_), do: :skip
+        def format_messages(messages), do: messages
+        def format_tools(tools), do: tools
+
+        def model_config(_) do
+          %{
+            context_window: 200_000,
+            max_output: 8192,
+            input_price_per_mtok: 0.0,
+            output_price_per_mtok: 0.0
+          }
+        end
+      end
+
+      # Start agent with SlowStreamProvider
+      {:ok, agent} =
+        Agent.start_link(
+          session_id: session_id,
+          config: %{
+            provider: SlowStreamProvider,
+            test_pid: self(),
+            model: "test-model"
+          },
+          messages: []
+        )
+
+      # Subscribe to agent events
+      Registry.register(Deft.Registry, {:session, session_id}, [])
+
+      # Send prompt
+      Agent.prompt(agent, "Hello")
+
+      # Wait for streaming to actually start
+      assert_receive :streaming_started, 1000
+
+      # Also wait for the streaming state change event
+      assert_receive {:agent_event, {:state_change, :streaming}}, 1000
+
+      # Now abort while definitely in streaming state
+      Agent.abort(agent)
+
+      # Wait for abort event from streaming state
+      assert_receive {:agent_event, {:abort, :streaming}}, 1000
+
+      # Give the agent time to process the abort
+      Process.sleep(50)
+
+      # Agent should be back in :idle state with clean state
+      {state_name, state_data} = :sys.get_state(agent)
+      assert state_name == :idle
+      assert state_data.stream_ref == nil
+      assert state_data.current_message == nil
+      assert state_data.tool_call_buffers == %{}
+    end
+
+    test "aborts from :executing_tools state and cleans up state" do
+      # Create unique session ID for each test
+      session_id = "test_session_#{:erlang.unique_integer([:positive])}"
+
+      # Create temp directory for this test session
+      temp_dir = Path.join(System.tmp_dir!(), session_id)
+      File.mkdir_p!(temp_dir)
+
+      # Start a Task.Supervisor for tool execution
+      tool_runner_name = {:via, Registry, {Deft.ProcessRegistry, {:tool_runner, session_id}}}
+      {:ok, _tool_supervisor} = Task.Supervisor.start_link(name: tool_runner_name)
+
+      # Setup: Script a response with a tool call that has a long delay
+      {:ok, provider_pid} =
+        ScriptedProvider.start_link(
+          responses: [
+            %{
+              tool_calls: [
+                %{
+                  name: "bash",
+                  args: %{"command" => "sleep 10"}
+                }
+              ],
+              usage: %{input: 100, output: 50}
+            }
+          ]
+        )
+
+      # Start agent with ScriptedProvider
+      {:ok, agent} =
+        Agent.start_link(
+          session_id: session_id,
+          config: %{
+            provider: ScriptedProvider,
+            provider_pid: provider_pid,
+            working_dir: temp_dir,
+            bash_timeout: 30_000,
+            tools: [Deft.Tools.Bash],
+            model: "test-model"
+          },
+          messages: []
+        )
+
+      # Subscribe to agent events
+      Registry.register(Deft.Registry, {:session, session_id}, [])
+
+      # Send prompt
+      Agent.prompt(agent, "Run a command")
+
+      # Wait for transition to executing_tools
+      assert_receive {:agent_event, {:state_change, :executing_tools}}, 1000
+
+      # Give a moment for tool execution to actually start
+      Process.sleep(100)
+
+      # Abort while executing tools
+      Agent.abort(agent)
+
+      # Wait for abort event
+      assert_receive {:agent_event, {:abort, :executing_tools}}, 1000
+
+      # Give the agent time to process the abort and clean up
+      Process.sleep(100)
+
+      # Agent should be back in :idle state
+      {state_name, state_data} = :sys.get_state(agent)
+      assert state_name == :idle
+      assert state_data.stream_ref == nil
+      assert state_data.current_message == nil
+      assert state_data.tool_tasks == []
+      assert state_data.tool_call_buffers == %{}
+
+      # Cleanup
+      File.rm_rf!(temp_dir)
     end
   end
 
