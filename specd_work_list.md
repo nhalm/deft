@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## unit-testing v0.1
 
-- Add Foreman unit test: conflict detection — send conflicting `:decision` messages from two Leads, verify Foreman detects conflict and pauses affected Leads in `foreman_test.exs`
 - Add Foreman unit test: cost ceiling enforcement — simulate `{:rate_limiter, :cost, amount}` message exceeding ceiling, verify Foreman pauses new Lead spawning in `foreman_test.exs`
 - Add Foreman unit test: single-agent fallback — verify simple task (1-2 files) skips orchestration and executes directly in `foreman_test.exs`
 - Add integration test: single-agent turn loop using ScriptedProvider — assistant responds with tool call, tool executes, assistant responds with text. Verify full state machine cycle in `test/integration/agent_turn_test.exs`

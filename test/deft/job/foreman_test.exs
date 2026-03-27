@@ -1132,4 +1132,91 @@ defmodule Deft.Job.ForemanTest do
       Process.sleep(50)
     end
   end
+
+  describe "conflict detection" do
+    test "detects conflicting decisions from two Leads and pauses them", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
+      session_id = "test-job-#{:erlang.unique_integer([:positive])}"
+      start_rate_limiter(session_id)
+
+      {:ok, foreman_pid} =
+        Foreman.start_link(
+          session_id: session_id,
+          config: %{},
+          prompt: "test prompt",
+          rate_limiter_pid: self(),
+          runner_supervisor: runner_supervisor,
+          working_dir: tmp_dir
+        )
+
+      # Get initial state and manually add two Leads to the leads map
+      {_state, data} = :sys.get_state(foreman_pid)
+
+      lead_1_id = "lead-1"
+      lead_2_id = "lead-2"
+
+      lead_1_info = %{
+        pid: self(),
+        monitor_ref: make_ref(),
+        worktree_path: "/tmp/test-worktree-1",
+        deliverable: "Database Layer",
+        status: :running
+      }
+
+      lead_2_info = %{
+        pid: self(),
+        monitor_ref: make_ref(),
+        worktree_path: "/tmp/test-worktree-2",
+        deliverable: "API Layer",
+        status: :running
+      }
+
+      leads =
+        data.leads
+        |> Map.put(lead_1_id, lead_1_info)
+        |> Map.put(lead_2_id, lead_2_info)
+
+      data = %{data | leads: leads}
+      :sys.replace_state(foreman_pid, fn {s, _d} -> {s, data} end)
+
+      # Send first decision from Lead 1 - use PostgreSQL
+      send(
+        foreman_pid,
+        {:lead_message, :decision, "Use PostgreSQL for database in lib/database/connection.ex",
+         %{lead_id: lead_1_id}}
+      )
+
+      # Wait for processing
+      Process.sleep(100)
+
+      # Send conflicting decision from Lead 2 - avoid PostgreSQL, use MySQL for the same file
+      send(
+        foreman_pid,
+        {:lead_message, :decision, "Avoid PostgreSQL, use MySQL for lib/database/connection.ex",
+         %{lead_id: lead_2_id}}
+      )
+
+      # Wait for processing
+      Process.sleep(100)
+
+      # Verify both Leads were paused due to conflict
+      {_state, updated_data} = :sys.get_state(foreman_pid)
+
+      assert Map.has_key?(updated_data.leads, lead_1_id)
+      assert Map.has_key?(updated_data.leads, lead_2_id)
+
+      lead_1_after = Map.get(updated_data.leads, lead_1_id)
+      lead_2_after = Map.get(updated_data.leads, lead_2_id)
+
+      assert lead_1_after.status == :paused
+      assert lead_2_after.status == :paused
+
+      # Cleanup
+      Store.cleanup(data.site_log_pid)
+      :gen_statem.stop(foreman_pid)
+      Process.sleep(50)
+    end
+  end
 end
