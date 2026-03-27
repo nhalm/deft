@@ -144,21 +144,22 @@ What we have today in `test/`:
 | Session Store | `test/deft/session/store_test.exs` | — | JSONL append, roundtrip |
 | Tools | `test/deft/tools/*.exs` | — | Bash, Edit (per-tool) |
 | ChatLive | `test/deft_web/live/chat_live_test.exs` | — | LiveView mount, events |
+| ScriptedProvider | `test/deft/provider/scripted_provider_test.exs` | — | Provider behaviour, scripted responses, assertions |
+| Integration 2.1 | `test/integration/agent_turn_test.exs` | 3 | Single-agent turn loop (text, tool cycle, event broadcast) |
 
 ### 4. Coverage Gaps
 
 Missing unit tests (known):
-- Foreman partial unblocking logic
-- Foreman conflict detection between Leads
-- Foreman cost ceiling enforcement
-- Foreman single-agent fallback decision
+- Agent turn limit enforcement
+- Agent error recovery (retry with backoff, exhausted retries)
+- Agent abort from `:streaming` and `:executing_tools` states
 - Lead Runner spawning and crash handling
 - Lead steering message handling
-- OM section-aware merge edge cases
 - OM sync fallback path
+- Foreman auto-approve state transition (test only checks config, not transition)
 
-Missing integration tests (all — ScriptedProvider doesn't exist yet):
-- All scenarios in section 2
+Missing integration tests:
+- Scenarios 2.2–2.6 (ScriptedProvider exists; scenario 2.1 is implemented)
 
 ## Notes
 
