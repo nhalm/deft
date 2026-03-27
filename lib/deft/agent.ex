@@ -276,6 +276,7 @@ defmodule Deft.Agent do
             turn_count: 1
         }
 
+        broadcast_event(data.session_id, {:state_change, :calling})
         Logger.debug("#{log_prefix(data.session_id)} State transition: idle -> calling")
         {:next_state, :calling, new_data}
 
@@ -439,25 +440,23 @@ defmodule Deft.Agent do
 
     case event do
       # First content chunk - transition to streaming
-      %TextDelta{} ->
-        # Initialize current assistant message
+      %TextDelta{delta: delta} ->
+        # Initialize current assistant message with first text delta
         current_message = %Message{
           id: generate_message_id(),
           role: :assistant,
-          content: [],
+          content: [%Deft.Message.Text{text: delta}],
           timestamp: DateTime.utc_now()
         }
 
-        new_data = %{
-          data
-          | current_message: current_message
-        }
+        new_data = %{data | current_message: current_message}
 
+        broadcast_event(data.session_id, {:text_delta, delta})
         broadcast_event(data.session_id, {:state_change, :streaming})
         Logger.debug("#{log_prefix(data.session_id)} State transition: calling -> streaming")
         {:next_state, :streaming, new_data}
 
-      %ThinkingDelta{} ->
+      %ThinkingDelta{delta: delta} ->
         # Initialize current assistant message
         current_message = %Message{
           id: generate_message_id(),
@@ -466,29 +465,32 @@ defmodule Deft.Agent do
           timestamp: DateTime.utc_now()
         }
 
-        new_data = %{
-          data
-          | current_message: current_message
-        }
+        new_data = %{data | current_message: current_message}
 
+        # Broadcast the first thinking delta (thinking doesn't get added to content)
+        broadcast_event(data.session_id, {:thinking_delta, delta})
         broadcast_event(data.session_id, {:state_change, :streaming})
         Logger.debug("#{log_prefix(data.session_id)} State transition: calling -> streaming")
         {:next_state, :streaming, new_data}
 
-      %ToolCallStart{} ->
-        # Initialize current assistant message
+      %ToolCallStart{id: id, name: name} ->
+        # Initialize current assistant message with first tool call
+        tool_use = %Deft.Message.ToolUse{id: id, name: name, args: %{}}
+
         current_message = %Message{
           id: generate_message_id(),
           role: :assistant,
-          content: [],
+          content: [tool_use],
           timestamp: DateTime.utc_now()
         }
 
-        new_data = %{
-          data
-          | current_message: current_message
-        }
+        # Initialize buffer for this tool call's JSON args
+        tool_call_buffers = Map.get(data, :tool_call_buffers, %{})
+        new_buffers = Map.put(tool_call_buffers, id, "")
 
+        new_data = %{data | current_message: current_message, tool_call_buffers: new_buffers}
+
+        broadcast_event(data.session_id, {:tool_call_start, %{id: id, name: name}})
         broadcast_event(data.session_id, {:state_change, :streaming})
         Logger.debug("#{log_prefix(data.session_id)} State transition: calling -> streaming")
         {:next_state, :streaming, new_data}

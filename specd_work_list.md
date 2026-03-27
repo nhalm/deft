@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## unit-testing v0.1
 
-- Add integration test: single-agent turn loop using ScriptedProvider — assistant responds with tool call, tool executes, assistant responds with text. Verify full state machine cycle in `test/integration/agent_turn_test.exs`
 - Add integration test: Foreman research → decompose → execute using ScriptedProvider — script planning response, research findings, decomposition with deliverables/DAG. Verify phase transitions and plan storage in `test/integration/foreman_phases_test.exs`
 - Add integration test: partial unblocking flow using ScriptedProvider — Lead A publishes contract, Lead B starts with contract context before Lead A completes. Verify in `test/integration/partial_unblock_test.exs` (blocked: Add integration test Foreman research → decompose → execute)
 - Add integration test: resume from persisted state — write mid-job state (site log + plan.json), start new Foreman with `resume: true`, verify only incomplete deliverables get fresh Leads in `test/integration/resume_test.exs`
