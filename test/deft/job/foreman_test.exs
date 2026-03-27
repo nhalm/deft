@@ -833,7 +833,7 @@ defmodule Deft.Job.ForemanTest do
       {:ok, foreman_pid} =
         Foreman.start_link(
           session_id: session_id,
-          config: %{auto_approve_all: true},
+          config: %{auto_approve_all: true, max_turns: 1},
           prompt: "build a REST API",
           rate_limiter_pid: self(),
           runner_supervisor: runner_supervisor,
@@ -843,6 +843,7 @@ defmodule Deft.Job.ForemanTest do
       Process.sleep(100)
 
       # Set up state in decomposing phase with a mock plan message
+      # Using the format that extract_markdown_deliverables expects
       assistant_message = %Deft.Message{
         id: "msg_123",
         role: :assistant,
@@ -852,16 +853,20 @@ defmodule Deft.Job.ForemanTest do
             # Work Plan
 
             ## Deliverables
-            1. API Layer - Build REST endpoints
-            2. Database Layer - Set up persistence
+
+            - **API Layer** - Build REST endpoints
+            - **Database Layer** - Set up persistence
 
             ## Dependencies
-            API depends_on Database
+
+            API Layer depends_on Database Layer
 
             ## Contracts
-            API needs from Database: User schema with id, email, name fields
+
+            API Layer needs from Database Layer: User schema with id, email, name fields
 
             ## Estimates
+
             Duration: 2 hours
             Cost: $0.50
             """
@@ -870,35 +875,44 @@ defmodule Deft.Job.ForemanTest do
         timestamp: DateTime.utc_now()
       }
 
+      # Set up state in decomposing:executing_tools with plan message, empty tool_tasks,
+      # and turn_count at max so should_continue_turn? returns false
+      # This simulates the state right after all tools complete
       :sys.replace_state(foreman_pid, fn {_s, d} ->
         {
-          {:decomposing, :idle},
-          %{d | messages: [assistant_message]}
+          {:decomposing, :executing_tools},
+          %{
+            d
+            | messages: [assistant_message],
+              tool_tasks: [],
+              tool_results: [],
+              turn_count: 1
+          }
         }
       end)
 
-      # Trigger phase transition logic manually by calling determine_next_phase
-      {_state, data} = :sys.get_state(foreman_pid)
+      # Create a fake task ref and send a valid (but empty) tool completion
+      # with a properly structured tool result tuple
+      fake_task_ref = make_ref()
 
-      # Extract plan
-      _plan = %{
-        raw_plan: "test plan",
-        deliverables: [],
-        dependencies: [],
-        contracts: [],
-        estimates: %{duration: "unknown", cost: "unknown"}
-      }
+      # Send task completion with an empty tool result tuple (no actual tool executed)
+      # We pass a valid tuple structure: {tool_use_id, {:ok, content}}
+      send(foreman_pid, {fake_task_ref, {"tool_1", {:ok, "test result"}}})
 
-      # Simulate plan extraction and auto-approval
-      # The real implementation would do this in determine_next_phase
-      auto_approve = Map.get(data.config, :auto_approve_all, false)
-      assert auto_approve == true
+      # Wait for state machine to process the event and transition
+      Process.sleep(200)
 
-      # In auto-approve mode, should transition directly to executing
-      # We verify the config is set correctly
-      assert data.config.auto_approve_all == true
+      # Verify state transitioned to executing or complete
+      # (will be complete if git job branch creation fails in test env)
+      {state, _data} = :sys.get_state(foreman_pid)
+
+      # In auto-approve mode, should transition to executing (or complete if git fails)
+      # The key is that it should NOT still be in decomposing
+      refute match?({:decomposing, _}, state)
+      assert match?({:executing, :idle}, state) or match?({:complete, :idle}, state)
 
       # Cleanup
+      {_state, data} = :sys.get_state(foreman_pid)
       Store.cleanup(data.site_log_pid)
       :gen_statem.stop(foreman_pid)
       Process.sleep(50)
