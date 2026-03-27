@@ -1,5 +1,6 @@
 defmodule Integration.AgentTurnTest do
   use ExUnit.Case, async: false
+  @moduletag :integration
 
   alias Deft.Agent
   alias Deft.ScriptedProvider

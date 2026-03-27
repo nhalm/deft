@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## testing v0.1
-
-- Add `@moduletag :integration` to `test/integration/agent_turn_test.exs` so integration tests are excluded from `make test` and included in `make test.integration`
-
 ## unit-testing v0.1
 
 - Add agent turn limit enforcement unit test: verify agent pauses after N consecutive LLM calls and waits for user confirmation
@@ -29,8 +25,8 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Add Lead unit tests: deliverable decomposition, Runner spawning via Task.Supervisor, Runner crash/timeout handling, correct message types to Foreman (`:status`, `:decision`, `:contract`, `:complete`), `:foreman_steering` handling
 - Add OM sync fallback unit test: verify forced observation/reflection when async falls behind
 - Fix Foreman auto-approve test to verify actual state transition to `:executing` (currently only asserts config value)
-- Add integration test scenario 2.2: Foreman Research → Decompose → Execute (blocked: testing v0.1)
-- Add integration test scenario 2.3: Partial Unblocking Flow (blocked: testing v0.1, unit-testing v0.1 scenario 2.2)
-- Add integration test scenario 2.4: Resume from Saved State (blocked: testing v0.1)
-- Add integration test scenario 2.5: Rate Limiter Integration (blocked: testing v0.1)
-- Add integration test scenario 2.6: Observation Injection (blocked: testing v0.1)
+- Add integration test scenario 2.2: Foreman Research → Decompose → Execute
+- Add integration test scenario 2.3: Partial Unblocking Flow (blocked: unit-testing v0.1 scenario 2.2)
+- Add integration test scenario 2.4: Resume from Saved State
+- Add integration test scenario 2.5: Rate Limiter Integration
+- Add integration test scenario 2.6: Observation Injection

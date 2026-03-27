@@ -222,49 +222,7 @@ defmodule Deft.Issues do
     if missing_fields != [] do
       {:reply, {:error, {:missing_required_fields, missing_fields}}, state}
     else
-      timestamp = Issue.timestamp()
-      existing_ids = Enum.map(state.issues, & &1.id)
-      id = Id.generate(existing_ids)
-
-      # Extract validated required fields
-      source = attrs.source
-      title = attrs.title
-      # Default priority depends on source: agent defaults to 3 (low), user defaults to 2 (medium)
-      default_priority = if source == :agent, do: 3, else: 2
-
-      dependencies = Map.get(attrs, :dependencies, [])
-
-      # Validate all blocker IDs exist
-      with :ok <- validate_all_blockers_exist(state.issues, dependencies) do
-        issue = %Issue{
-          id: id,
-          title: title,
-          context: Map.get(attrs, :context, ""),
-          acceptance_criteria: Map.get(attrs, :acceptance_criteria, []),
-          constraints: Map.get(attrs, :constraints, []),
-          status: :open,
-          priority: Map.get(attrs, :priority, default_priority),
-          dependencies: dependencies,
-          created_at: timestamp,
-          updated_at: timestamp,
-          closed_at: nil,
-          source: source,
-          job_id: nil
-        }
-
-        # Check for cycles
-        with {:ok, _} <- check_cycle(issue, state.issues),
-             new_issues = [issue | state.issues],
-             new_state = %{state | issues: new_issues},
-             :ok <- persist_issues(new_state) do
-          Logger.info("[Issues] Issue created: #{issue.id} \"#{issue.title}\"")
-          {:reply, {:ok, issue}, new_state}
-        else
-          {:error, reason} -> {:reply, {:error, reason}, state}
-        end
-      else
-        {:error, reason} -> {:reply, {:error, reason}, state}
-      end
+      do_create(attrs, state)
     end
   end
 
@@ -363,24 +321,7 @@ defmodule Deft.Issues do
     with {:ok, _} <- validate_issue_exists(state.issues, issue_id),
          {:ok, _} <- validate_blocker_exists(state.issues, blocker_id),
          index when not is_nil(index) <- find_issue_index(state.issues, issue_id) do
-      issue = Enum.at(state.issues, index)
-      updated_deps = Enum.uniq([blocker_id | issue.dependencies])
-      updated_issue = %{issue | dependencies: updated_deps, updated_at: Issue.timestamp()}
-
-      # Check for cycles with the updated dependency list
-      case check_cycle(updated_issue, List.delete_at(state.issues, index)) do
-        {:ok, _} ->
-          new_issues = List.replace_at(state.issues, index, updated_issue)
-          new_state = %{state | issues: new_issues}
-
-          case persist_issues(new_state) do
-            :ok -> {:reply, {:ok, updated_issue}, new_state}
-            {:error, reason} -> {:reply, {:error, reason}, state}
-          end
-
-        {:error, :cycle_detected} ->
-          {:reply, {:error, :cycle_detected}, state}
-      end
+      do_add_dependency(index, blocker_id, state)
     else
       {:error, :not_found} -> {:reply, {:error, :not_found}, state}
       {:error, :blocker_not_found} -> {:reply, {:error, :blocker_not_found}, state}
@@ -410,6 +351,62 @@ defmodule Deft.Issues do
   end
 
   ## Private Functions
+
+  defp do_create(attrs, state) do
+    timestamp = Issue.timestamp()
+    existing_ids = Enum.map(state.issues, & &1.id)
+    id = Id.generate(existing_ids)
+
+    source = attrs.source
+    default_priority = if source == :agent, do: 3, else: 2
+    dependencies = Map.get(attrs, :dependencies, [])
+
+    with :ok <- validate_all_blockers_exist(state.issues, dependencies),
+         issue <- build_new_issue(id, attrs, source, default_priority, dependencies, timestamp),
+         {:ok, _} <- check_cycle(issue, state.issues),
+         new_issues = [issue | state.issues],
+         new_state = %{state | issues: new_issues},
+         :ok <- persist_issues(new_state) do
+      Logger.info("[Issues] Issue created: #{issue.id} \"#{issue.title}\"")
+      {:reply, {:ok, issue}, new_state}
+    else
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
+
+  defp build_new_issue(id, attrs, source, default_priority, dependencies, timestamp) do
+    %Issue{
+      id: id,
+      title: attrs.title,
+      context: Map.get(attrs, :context, ""),
+      acceptance_criteria: Map.get(attrs, :acceptance_criteria, []),
+      constraints: Map.get(attrs, :constraints, []),
+      status: :open,
+      priority: Map.get(attrs, :priority, default_priority),
+      dependencies: dependencies,
+      created_at: timestamp,
+      updated_at: timestamp,
+      closed_at: nil,
+      source: source,
+      job_id: nil
+    }
+  end
+
+  defp do_add_dependency(index, blocker_id, state) do
+    issue = Enum.at(state.issues, index)
+    updated_deps = Enum.uniq([blocker_id | issue.dependencies])
+    updated_issue = %{issue | dependencies: updated_deps, updated_at: Issue.timestamp()}
+
+    with {:ok, _} <- check_cycle(updated_issue, List.delete_at(state.issues, index)),
+         new_issues = List.replace_at(state.issues, index, updated_issue),
+         new_state = %{state | issues: new_issues},
+         :ok <- persist_issues(new_state) do
+      {:reply, {:ok, updated_issue}, new_state}
+    else
+      {:error, :cycle_detected} -> {:reply, {:error, :cycle_detected}, state}
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
 
   # Performs the actual update logic for an issue
   defp do_update(index, attrs, state) do
@@ -499,23 +496,22 @@ defmodule Deft.Issues do
       |> File.stream!()
       |> Stream.map(&String.trim/1)
       |> Stream.reject(&(&1 == ""))
-      |> Enum.reduce(%{}, fn line, acc ->
-        case Issue.decode(line) do
-          {:ok, issue} ->
-            # Last occurrence wins (dedup-on-read)
-            Map.put(acc, issue.id, issue)
-
-          {:error, reason} ->
-            Logger.warning(
-              "[Issues] Skipping invalid JSON line in #{file_path}: #{inspect(reason)}"
-            )
-
-            acc
-        end
-      end)
+      |> Enum.reduce(%{}, &decode_issue_line(&1, &2, file_path))
       |> Map.values()
     else
       []
+    end
+  end
+
+  defp decode_issue_line(line, acc, file_path) do
+    case Issue.decode(line) do
+      {:ok, issue} ->
+        Map.put(acc, issue.id, issue)
+
+      {:error, reason} ->
+        Logger.warning("[Issues] Skipping invalid JSON line in #{file_path}: #{inspect(reason)}")
+
+        acc
     end
   end
 
@@ -588,38 +584,39 @@ defmodule Deft.Issues do
   # Only clears dependencies for issues that are actual members of cycles,
   # not issues that merely point into a cycle
   defp detect_and_fix_cycles(issues, file_path) do
-    # Build issue map for quick lookup
     issue_map = Map.new(issues, fn issue -> {issue.id, issue} end)
-
-    # Find all issues that are members of cycles using DFS
     cycle_members = find_cycle_members(issue_map)
 
     if MapSet.size(cycle_members) > 0 do
-      # Clear dependencies only for cycle members
-      corrected_issues =
-        Enum.map(issues, fn issue ->
-          if MapSet.member?(cycle_members, issue.id) do
-            Logger.warning(
-              "[Issues] Issue #{issue.id} is part of a dependency cycle. Clearing dependencies."
-            )
-
-            %{issue | dependencies: []}
-          else
-            issue
-          end
-        end)
-
-      # Persist to disk
-      case write_issues_during_init(corrected_issues, file_path) do
-        :ok ->
-          corrected_issues
-
-        {:error, reason} ->
-          Logger.warning("[Issues] Failed to persist cycle fixes: #{inspect(reason)}")
-          corrected_issues
-      end
+      corrected_issues = clear_cycle_dependencies(issues, cycle_members)
+      persist_cycle_fixes(corrected_issues, file_path)
     else
       issues
+    end
+  end
+
+  defp clear_cycle_dependencies(issues, cycle_members) do
+    Enum.map(issues, fn issue ->
+      if MapSet.member?(cycle_members, issue.id) do
+        Logger.warning(
+          "[Issues] Issue #{issue.id} is part of a dependency cycle. Clearing dependencies."
+        )
+
+        %{issue | dependencies: []}
+      else
+        issue
+      end
+    end)
+  end
+
+  defp persist_cycle_fixes(corrected_issues, file_path) do
+    case write_issues_during_init(corrected_issues, file_path) do
+      :ok ->
+        corrected_issues
+
+      {:error, reason} ->
+        Logger.warning("[Issues] Failed to persist cycle fixes: #{inspect(reason)}")
+        corrected_issues
     end
   end
 
@@ -671,22 +668,25 @@ defmodule Deft.Issues do
 
   # Visit an issue node and recursively check its dependencies
   defp visit_issue_node(issue_id, issue_map, path, state) do
-    issue = Map.get(issue_map, issue_id)
+    case Map.get(issue_map, issue_id) do
+      nil ->
+        state
 
-    if issue do
-      state = %{state | visited: MapSet.put(state.visited, issue_id)}
-      path = [issue_id | path]
-
-      Enum.reduce(issue.dependencies, state, fn dep_id, acc ->
-        if Map.has_key?(issue_map, dep_id) do
-          find_cycles_from_node(dep_id, issue_map, path, acc)
-        else
-          acc
-        end
-      end)
-    else
-      state
+      issue ->
+        state = %{state | visited: MapSet.put(state.visited, issue_id)}
+        path = [issue_id | path]
+        visit_issue_dependencies(issue.dependencies, issue_map, path, state)
     end
+  end
+
+  defp visit_issue_dependencies(dependencies, issue_map, path, state) do
+    Enum.reduce(dependencies, state, fn dep_id, acc ->
+      if Map.has_key?(issue_map, dep_id) do
+        find_cycles_from_node(dep_id, issue_map, path, acc)
+      else
+        acc
+      end
+    end)
   end
 
   # Checks if adding/updating an issue would create a cycle
@@ -767,39 +767,40 @@ defmodule Deft.Issues do
     # Ensure .gitattributes has merge=union for issues.jsonl
     ensure_gitattributes(state.file_path)
 
-    lock_path = state.file_path <> ".lock"
-    stale_threshold_ms = 30_000
-    retry_interval_ms = 100
-    timeout_ms = 10_000
-    start_time = System.monotonic_time(:millisecond)
+    lock_opts = %{
+      lock_path: state.file_path <> ".lock",
+      stale_threshold: 30_000,
+      retry_interval: 100,
+      timeout: 10_000,
+      start_time: System.monotonic_time(:millisecond)
+    }
 
-    with_lock(lock_path, stale_threshold_ms, retry_interval_ms, timeout_ms, start_time, fn ->
+    with_lock(lock_opts, fn ->
       write_issues(state)
     end)
   end
 
   # Acquires advisory lock with retry and stale detection
-  defp with_lock(lock_path, stale_threshold, retry_interval, timeout, start_time, fun) do
-    elapsed = System.monotonic_time(:millisecond) - start_time
+  defp with_lock(lock_opts, fun) do
+    elapsed = System.monotonic_time(:millisecond) - lock_opts.start_time
 
-    if elapsed > timeout do
+    if elapsed > lock_opts.timeout do
       {:error, :lock_timeout}
     else
-      case acquire_lock(lock_path, stale_threshold) do
+      case acquire_lock(lock_opts.lock_path, lock_opts.stale_threshold) do
         {:ok, lock_file} ->
           try do
-            result = fun.()
-            result
+            fun.()
           after
             File.close(lock_file)
-            File.rm(lock_path)
+            File.rm(lock_opts.lock_path)
           end
 
         {:error, :locked} ->
           # Add jitter to retry interval
-          jitter = :rand.uniform(retry_interval)
-          Process.sleep(retry_interval + jitter)
-          with_lock(lock_path, stale_threshold, retry_interval, timeout, start_time, fun)
+          jitter = :rand.uniform(lock_opts.retry_interval)
+          Process.sleep(lock_opts.retry_interval + jitter)
+          with_lock(lock_opts, fun)
       end
     end
   end
@@ -808,7 +809,6 @@ defmodule Deft.Issues do
   defp acquire_lock(lock_path, stale_threshold) do
     case File.open(lock_path, [:write, :exclusive]) do
       {:ok, file} ->
-        # Write PID and timestamp as JSON
         lock_data = %{
           pid: System.pid(),
           timestamp: Issue.timestamp()
@@ -818,27 +818,32 @@ defmodule Deft.Issues do
         {:ok, file}
 
       {:error, :eexist} ->
-        # Lock exists, check if stale
-        case File.stat(lock_path) do
-          {:ok, %File.Stat{mtime: mtime}} ->
-            mtime_ms = :calendar.datetime_to_gregorian_seconds(mtime) * 1000
-            now_ms = :calendar.datetime_to_gregorian_seconds(:calendar.universal_time()) * 1000
+        handle_existing_lock(lock_path, stale_threshold)
+    end
+  end
 
-            if now_ms - mtime_ms > stale_threshold do
-              # Stale lock, delete and retry
-              File.rm(lock_path)
-              acquire_lock(lock_path, stale_threshold)
-            else
-              {:error, :locked}
-            end
+  defp handle_existing_lock(lock_path, stale_threshold) do
+    case File.stat(lock_path) do
+      {:ok, %File.Stat{mtime: mtime}} ->
+        check_stale_lock(lock_path, stale_threshold, mtime)
 
-          {:error, :enoent} ->
-            # Lock file disappeared, retry
-            acquire_lock(lock_path, stale_threshold)
+      {:error, :enoent} ->
+        acquire_lock(lock_path, stale_threshold)
 
-          _ ->
-            {:error, :locked}
-        end
+      _ ->
+        {:error, :locked}
+    end
+  end
+
+  defp check_stale_lock(lock_path, stale_threshold, mtime) do
+    mtime_ms = :calendar.datetime_to_gregorian_seconds(mtime) * 1000
+    now_ms = :calendar.datetime_to_gregorian_seconds(:calendar.universal_time()) * 1000
+
+    if now_ms - mtime_ms > stale_threshold do
+      File.rm(lock_path)
+      acquire_lock(lock_path, stale_threshold)
+    else
+      {:error, :locked}
     end
   end
 
