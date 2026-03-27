@@ -17,6 +17,10 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
+## logging v0.3
+
+- Add model name to "Provider stream started" log in `lib/deft/agent.ex` (lines 258 and 1214-1215): spec §4 requires `Provider stream started (provider module, model name)` but both call sites only log the provider module. The model is available in `config_with_session` — include it in the log message.
+
 ## web-ui v0.4
 
 - Implement force-abort for double Ctrl+c in chat_live.ex: both single and double Ctrl+c call `Deft.Agent.abort(agent)`. Spec §6.4 requires double Ctrl+c to force-abort. Need `Deft.Agent.force_abort/1` (or equivalent) that kills the agent process immediately rather than requesting graceful abort. (blocked: harness — Agent module needs force_abort/1)
