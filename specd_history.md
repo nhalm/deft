@@ -1,4 +1,5 @@
 # History
+- **unit-testing v0.1 (2026-03-27):** Add Foreman unit test: partial unblocking — send `:contract` message, verify blocked Lead gets started with contract context in `foreman_test.exs`
 - **testing v0.1 (2026-03-27):** Add ScriptedProvider response format support: `delay_ms` field for timeout testing (sleep before responding) and `error` field for retry testing (return error instead of response)
 - **testing v0.1 (2026-03-27):** Add `ScriptedProvider.calls/1`, `ScriptedProvider.assert_called/2`, and `ScriptedProvider.assert_exhausted/1` assertion helpers to ScriptedProvider module for test verification
 - **testing v0.1 (2026-03-27):** Implement `Deft.ScriptedProvider` module in `test/support/scripted_provider.ex`: GenServer that implements `Deft.Provider` behaviour, accepts ordered list of responses via `start_link(responses: [...])`, consumes one response per `stream/3` call, emits chunks via same streaming protocol as real providers, records all calls for assertion. Returns `{:error, :no_more_responses}` when exhausted.

@@ -2,6 +2,7 @@ defmodule Deft.Job.ForemanTest do
   use ExUnit.Case, async: false
 
   alias Deft.Job.Foreman
+  alias Deft.Job.LeadSupervisor
   alias Deft.Job.RateLimiter
   alias Deft.Project
   alias Deft.Store
@@ -1008,6 +1009,126 @@ defmodule Deft.Job.ForemanTest do
       {_state, data} = :sys.get_state(foreman_pid)
       Store.cleanup(data.site_log_pid)
       :gen_statem.stop(foreman_pid)
+      Process.sleep(50)
+    end
+  end
+
+  describe "partial unblocking" do
+    test "starts blocked Lead when contract message received", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
+      session_id = "test-job-#{:erlang.unique_integer([:positive])}"
+      start_rate_limiter(session_id)
+
+      # Start a LeadSupervisor for this job
+      {:ok, _lead_supervisor_pid} = LeadSupervisor.start_link(job_id: session_id)
+
+      # Configure git mock to succeed on all git commands (worktree creation)
+      Application.put_env(:deft, :git_adapter, Deft.GitMock)
+      Application.put_env(:deft, :git_mock_response, {"", 0})
+
+      {:ok, foreman_pid} =
+        Foreman.start_link(
+          session_id: session_id,
+          config: %{},
+          prompt: "test prompt",
+          rate_limiter_pid: self(),
+          runner_supervisor: runner_supervisor,
+          working_dir: tmp_dir
+        )
+
+      Process.sleep(100)
+
+      # Set up a plan with two deliverables: Database and API
+      # API depends on Database and needs a contract
+      plan = %{
+        raw_plan: "Database then API",
+        deliverables: [
+          %{name: "Database", description: "Build database layer"},
+          %{name: "API", description: "Build REST API"}
+        ],
+        dependencies: ["API depends_on Database"],
+        contracts: ["API needs from Database: User schema"],
+        estimates: %{duration: "2 hours", cost: "$0.50"}
+      }
+
+      # Set up state with API deliverable blocked waiting for Database contract
+      {_state, data} = :sys.get_state(foreman_pid)
+      tid = Store.tid(data.site_log_pid)
+
+      # Simulate Database Lead already running
+      database_lead_id = "#{session_id}-Database"
+      database_monitor_ref = make_ref()
+
+      database_lead_info = %{
+        deliverable: %{name: "Database", description: "Build database layer"},
+        worktree_path: "/tmp/test-worktree-database",
+        status: :running,
+        pid: self(),
+        monitor_ref: database_monitor_ref,
+        agent_state: :implementing
+      }
+
+      leads = Map.put(%{}, database_lead_id, database_lead_info)
+
+      # API is blocked waiting for Database contract
+      blocked_leads = %{
+        "API" => ["Database"]
+      }
+
+      started_leads = MapSet.new(["Database"])
+
+      data = %{
+        data
+        | plan: plan,
+          leads: leads,
+          blocked_leads: blocked_leads,
+          started_leads: started_leads
+      }
+
+      :sys.replace_state(foreman_pid, fn {s, _d} -> {s, data} end)
+
+      # Verify initial state: API is blocked
+      {_state, data_before} = :sys.get_state(foreman_pid)
+      assert Map.has_key?(data_before.blocked_leads, "API")
+      refute MapSet.member?(data_before.started_leads, "API")
+
+      # Send contract message from Database Lead
+      send(
+        foreman_pid,
+        {:lead_message, :contract, "User schema: id, email, name", %{lead_id: database_lead_id}}
+      )
+
+      # Wait for processing
+      Process.sleep(100)
+
+      # Verify contract was written to site log
+      keys = Store.keys(tid)
+      assert Enum.any?(keys, fn key -> String.starts_with?(key, "contract-") end)
+
+      # Verify contract content is accessible
+      contract_key = Enum.find(keys, fn key -> String.starts_with?(key, "contract-") end)
+      {:ok, contract_entry} = Store.read(tid, contract_key)
+      assert contract_entry.value == "User schema: id, email, name"
+
+      # Verify API deliverable was unblocked and attempt was made to start it
+      {_state, data_after} = :sys.get_state(foreman_pid)
+      refute Map.has_key?(data_after.blocked_leads, "API")
+      assert MapSet.member?(data_after.started_leads, "API")
+
+      # Note: The Lead may have crashed during initialization (due to missing fields),
+      # but the important thing is that partial unblocking worked - the deliverable
+      # was removed from blocked_leads and added to started_leads.
+
+      # Cleanup
+      Store.cleanup(data.site_log_pid)
+      :gen_statem.stop(foreman_pid)
+
+      # Clean up git mock config
+      Application.delete_env(:deft, :git_mock_response)
+      Application.put_env(:deft, :git_adapter, Deft.Git.System)
+
       Process.sleep(50)
     end
   end

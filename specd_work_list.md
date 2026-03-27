@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## unit-testing v0.1
 
-- Add Foreman unit test: partial unblocking — send `:contract` message, verify blocked Lead gets started with contract context in `foreman_test.exs`
 - Add Foreman unit test: conflict detection — send conflicting `:decision` messages from two Leads, verify Foreman detects conflict and pauses affected Leads in `foreman_test.exs`
 - Add Foreman unit test: cost ceiling enforcement — simulate `{:rate_limiter, :cost, amount}` message exceeding ceiling, verify Foreman pauses new Lead spawning in `foreman_test.exs`
 - Add Foreman unit test: single-agent fallback — verify simple task (1-2 files) skips orchestration and executes directly in `foreman_test.exs`
