@@ -358,6 +358,7 @@ defmodule Deft.Agent do
           | stream_ref: stream_ref,
             stream_monitor_ref: monitor_ref,
             stream_start_time: System.monotonic_time(:millisecond),
+            turn_start_time: System.monotonic_time(:millisecond),
             current_message: nil,
             tool_call_buffers: %{},
             retry_count: 0,
