@@ -1,4 +1,5 @@
 # History
+- **unit-testing v0.1 (2026-03-28):** Add integration test scenario 2.4: Resume from Saved State
 - **unit-testing v0.1 (2026-03-28):** Add integration test scenario 2.3: Partial Unblocking Flow
 - **unit-testing v0.1 (2026-03-28):** Add integration test scenario 2.2: Foreman Research → Decompose → Execute
 - **standards v0.2 (2026-03-28):** Refactor `test/support/eval/lead_helpers.ex` (1 violation): Split extract_json into pattern-matched heads

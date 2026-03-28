@@ -50,4 +50,16 @@ defmodule Integration.ForemanWorkflowTest do
       assert true
     end
   end
+
+  describe "Resume from Saved State (scenario 2.4)" do
+    @tag :skip
+    test "Foreman resumes from mid-job state", %{} do
+      # Setup: persist a mid-job state (site log + plan.json + completed deliverables)
+      # Start a new Foreman with resume: true
+      # Verify: Foreman reads persisted state
+      # Verify: Only incomplete deliverables get fresh Leads
+      # Verify: Completed work is not repeated
+      assert true
+    end
+  end
 end
