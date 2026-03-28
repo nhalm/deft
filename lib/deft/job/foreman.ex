@@ -609,9 +609,11 @@ defmodule Deft.Job.Foreman do
             :testing,
             verification_instructions,
             verification_context,
-            data.session_id,
-            runner_config,
-            data.working_dir
+            %{
+              job_id: data.session_id,
+              config: runner_config,
+              worktree_path: data.working_dir
+            }
           )
         end
       )
@@ -1268,9 +1270,11 @@ defmodule Deft.Job.Foreman do
               :research,
               instructions,
               context,
-              data.session_id,
-              runner_config,
-              data.working_dir
+              %{
+                job_id: data.session_id,
+                config: runner_config,
+                worktree_path: data.working_dir
+              }
             )
           end
         )
@@ -2545,9 +2549,11 @@ defmodule Deft.Job.Foreman do
             :merge_resolution,
             instructions,
             context,
-            data.session_id,
-            runner_config,
-            merge_worktree_path
+            %{
+              job_id: data.session_id,
+              config: runner_config,
+              worktree_path: merge_worktree_path
+            }
           )
         end
       )

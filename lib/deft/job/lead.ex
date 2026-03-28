@@ -1245,9 +1245,11 @@ defmodule Deft.Job.Lead do
           runner_type,
           instructions,
           context,
-          data.session_id,
-          runner_config,
-          data.worktree_path
+          %{
+            job_id: data.session_id,
+            config: runner_config,
+            worktree_path: data.worktree_path
+          }
         )
       end)
 

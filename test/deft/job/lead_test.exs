@@ -103,7 +103,7 @@ defmodule Deft.Job.LeadTest do
       {:ok, task_ref, monitor_ref, updated_data} =
         Lead.spawn_runner(
           data,
-          :read_only,
+          :research,
           "test task",
           "test instructions",
           context
@@ -118,7 +118,7 @@ defmodule Deft.Job.LeadTest do
       runner_info = Map.get(updated_data.runner_tasks, task_ref)
 
       assert runner_info.task_description == "test task"
-      assert runner_info.runner_type == :read_only
+      assert runner_info.runner_type == :research
       assert is_pid(runner_info.pid)
       assert runner_info.monitor_ref == monitor_ref
       assert is_reference(runner_info.timeout_ref)

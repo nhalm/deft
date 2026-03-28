@@ -48,6 +48,38 @@ defmodule Deft.Job.Runner do
   @type runner_type :: :research | :implementation | :testing | :review | :merge_resolution
   @type result :: {:ok, String.t()} | {:error, String.t()}
 
+  # Loop context struct to reduce parameter passing
+  defmodule LoopContext do
+    @moduledoc false
+    @enforce_keys [:messages, :tools, :tool_context, :job_id, :provider, :config, :max_turns]
+    defstruct [:messages, :tools, :tool_context, :job_id, :provider, :config, :max_turns]
+
+    @type t :: %__MODULE__{
+            messages: [Message.t()],
+            tools: [module()],
+            tool_context: Deft.Tool.Context.t(),
+            job_id: String.t(),
+            provider: module(),
+            config: map(),
+            max_turns: pos_integer()
+          }
+  end
+
+  # Stream collection state to reduce parameter passing in collect_loop helpers
+  defmodule StreamState do
+    @moduledoc false
+    @enforce_keys [:stream_ref, :current_message, :tool_call_buffers, :usage, :timeout]
+    defstruct [:stream_ref, :current_message, :tool_call_buffers, :usage, :timeout]
+
+    @type t :: %__MODULE__{
+            stream_ref: reference(),
+            current_message: Message.t(),
+            tool_call_buffers: map(),
+            usage: map() | nil,
+            timeout: pos_integer()
+          }
+  end
+
   # Tool sets per runner type
   @tool_sets %{
     research: [Deft.Tools.Read, Deft.Tools.Grep, Deft.Tools.Find, Deft.Tools.Ls],
@@ -73,16 +105,20 @@ defmodule Deft.Job.Runner do
   - `type` — Runner type (:research, :implementation, etc.)
   - `instructions` — Task instructions from the Lead
   - `context` — Curated context (findings, contracts, etc.)
-  - `job_id` — Job identifier for RateLimiter registry lookup
-  - `config` — Configuration map (model, provider, etc.)
-  - `worktree_path` — Path to Lead's worktree
+  - `opts` — Options map with:
+    - `:job_id` — Job identifier for RateLimiter registry lookup
+    - `:config` — Configuration map (model, provider, etc.)
+    - `:worktree_path` — Path to Lead's worktree
 
   ## Returns
 
   - `{:ok, output}` — Task completed successfully, output is collected text
   - `{:error, reason}` — Task failed
   """
-  def run(type, instructions, context, job_id, config, worktree_path) do
+  def run(type, instructions, context, opts) do
+    job_id = Map.fetch!(opts, :job_id)
+    config = Map.fetch!(opts, :config)
+    worktree_path = Map.fetch!(opts, :worktree_path)
     # Validate runner type
     tools = Map.get(@tool_sets, type)
 
@@ -113,88 +149,59 @@ defmodule Deft.Job.Runner do
       cache_config: nil
     }
 
+    # Build loop context
+    loop_ctx = %LoopContext{
+      messages: [initial_message],
+      tools: tools,
+      tool_context: tool_context,
+      job_id: job_id,
+      provider: provider,
+      config: config,
+      max_turns: 20
+    }
+
     # Start agent loop
-    messages = [initial_message]
-    loop(messages, tools, tool_context, job_id, provider, config, max_turns: 20)
+    loop(loop_ctx, current_turn: 1)
   rescue
     exception ->
       {:error, "Runner crashed: #{Exception.message(exception)}"}
   end
 
   # Main agent loop
-  defp loop(messages, tools, tool_context, job_id, provider, config, opts) do
-    max_turns = Keyword.get(opts, :max_turns, 20)
+  defp loop(%LoopContext{} = ctx, opts) do
     current_turn = Keyword.get(opts, :current_turn, 1)
 
     cond do
-      current_turn > max_turns ->
-        {:error, "Runner exceeded maximum turns (#{max_turns})"}
+      current_turn > ctx.max_turns ->
+        {:error, "Runner exceeded maximum turns (#{ctx.max_turns})"}
 
       true ->
-        do_loop_iteration(
-          messages,
-          tools,
-          tool_context,
-          job_id,
-          provider,
-          config,
-          max_turns,
-          current_turn
-        )
+        do_loop_iteration(ctx, current_turn)
     end
   end
 
-  defp do_loop_iteration(
-         messages,
-         tools,
-         tool_context,
-         job_id,
-         provider,
-         config,
-         max_turns,
-         current_turn
-       ) do
-    with {:ok, estimated_tokens} <- request_llm_call(job_id, messages, tools, provider, config),
-         {:ok, assistant_message, usage} <- call_provider(messages, tools, provider, config) do
+  defp do_loop_iteration(%LoopContext{} = ctx, current_turn) do
+    with {:ok, estimated_tokens} <- request_llm_call(ctx),
+         {:ok, assistant_message, usage} <- call_provider(ctx) do
       # Reconcile estimated vs actual token usage
-      provider_name = Map.get(config, :provider_name, "anthropic")
-      RateLimiter.reconcile(job_id, provider_name, estimated_tokens, usage)
+      provider_name = Map.get(ctx.config, :provider_name, "anthropic")
+      RateLimiter.reconcile(ctx.job_id, provider_name, estimated_tokens, usage)
 
-      handle_assistant_message(
-        assistant_message,
-        messages,
-        tools,
-        tool_context,
-        job_id,
-        provider,
-        config,
-        max_turns,
-        current_turn
-      )
+      handle_assistant_message(ctx, assistant_message, current_turn)
     else
       {:error, reason} -> {:error, "Call failed: #{reason}"}
     end
   end
 
-  defp handle_assistant_message(
-         assistant_message,
-         messages,
-         tools,
-         tool_context,
-         job_id,
-         provider,
-         config,
-         max_turns,
-         current_turn
-       ) do
+  defp handle_assistant_message(%LoopContext{} = ctx, assistant_message, current_turn) do
     if has_tool_calls?(assistant_message) do
-      {:ok, tool_result_message} = execute_tools_inline(assistant_message, tools, tool_context)
-      result_messages = messages ++ [assistant_message, tool_result_message]
+      {:ok, tool_result_message} =
+        execute_tools_inline(assistant_message, ctx.tools, ctx.tool_context)
 
-      loop(result_messages, tools, tool_context, job_id, provider, config,
-        max_turns: max_turns,
-        current_turn: current_turn + 1
-      )
+      result_messages = ctx.messages ++ [assistant_message, tool_result_message]
+
+      updated_ctx = %{ctx | messages: result_messages}
+      loop(updated_ctx, current_turn: current_turn + 1)
     else
       output = extract_text_from_message(assistant_message)
       {:ok, output}
@@ -228,22 +235,22 @@ defmodule Deft.Job.Runner do
   end
 
   # Request permission from rate limiter to make LLM call
-  defp request_llm_call(job_id, messages, _tools, _provider, config) do
-    provider_name = Map.get(config, :provider_name, "anthropic")
+  defp request_llm_call(%LoopContext{} = ctx) do
+    provider_name = Map.get(ctx.config, :provider_name, "anthropic")
 
-    case RateLimiter.request(job_id, provider_name, messages, :runner) do
+    case RateLimiter.request(ctx.job_id, provider_name, ctx.messages, :runner) do
       {:ok, estimated_tokens} -> {:ok, estimated_tokens}
       {:error, reason} -> {:error, reason}
     end
   end
 
   # Call provider and collect full response (non-streaming for simplicity)
-  defp call_provider(messages, tools, provider, config) do
+  defp call_provider(%LoopContext{} = ctx) do
     # For Runner, we'll use a simplified approach:
     # Start stream and collect all events inline
-    case provider.stream(messages, tools, config) do
+    case ctx.provider.stream(ctx.messages, ctx.tools, ctx.config) do
       {:ok, stream_ref} ->
-        collect_stream_events(stream_ref, provider)
+        collect_stream_events(stream_ref, ctx.provider)
 
       {:error, reason} ->
         {:error, reason}
@@ -261,84 +268,103 @@ defmodule Deft.Job.Runner do
       timestamp: DateTime.utc_now()
     }
 
-    tool_call_buffers = %{}
-    usage = nil
+    state = %StreamState{
+      stream_ref: stream_ref,
+      current_message: current_message,
+      tool_call_buffers: %{},
+      usage: nil,
+      timeout: timeout
+    }
 
-    collect_loop(stream_ref, current_message, tool_call_buffers, usage, timeout)
+    collect_loop(state)
   end
 
-  defp collect_loop(stream_ref, current_message, tool_call_buffers, usage, timeout) do
+  defp collect_loop(%StreamState{} = state) do
     receive do
-      {:provider_event, %TextDelta{delta: text}} ->
-        # Append text to content
-        new_content = append_text_delta(current_message.content, text)
-        new_message = %{current_message | content: new_content}
-        collect_loop(stream_ref, new_message, tool_call_buffers, usage, timeout)
-
-      {:provider_event, %ThinkingDelta{}} ->
-        # Ignore thinking deltas for now
-        collect_loop(stream_ref, current_message, tool_call_buffers, usage, timeout)
-
-      {:provider_event, %ToolCallStart{id: tool_id, name: tool_name}} ->
-        # Initialize tool call buffer
-        new_buffers = Map.put(tool_call_buffers, tool_id, %{name: tool_name, args_json: ""})
-        collect_loop(stream_ref, current_message, new_buffers, usage, timeout)
-
-      {:provider_event, %ToolCallDelta{id: tool_id, delta: args_delta}} ->
-        # Append to tool call buffer
-        new_buffers =
-          Map.update!(tool_call_buffers, tool_id, fn buffer ->
-            %{buffer | args_json: buffer.args_json <> args_delta}
-          end)
-
-        collect_loop(stream_ref, current_message, new_buffers, usage, timeout)
-
-      {:provider_event, %ToolCallDone{id: tool_id}} ->
-        # Finalize tool call
-        buffer = Map.fetch!(tool_call_buffers, tool_id)
-
-        case Jason.decode(buffer.args_json) do
-          {:ok, args} ->
-            tool_use = %ToolUse{
-              id: tool_id,
-              name: buffer.name,
-              args: args
-            }
-
-            new_content = current_message.content ++ [tool_use]
-            new_message = %{current_message | content: new_content}
-            collect_loop(stream_ref, new_message, tool_call_buffers, usage, timeout)
-
-          {:error, _} ->
-            {:error, "Failed to parse tool arguments for #{tool_id}"}
-        end
-
-      {:provider_event, %Usage{input: input_tokens, output: output_tokens}} ->
-        # Accumulate usage across multiple events (message_start has input only, message_delta has output only)
-        new_usage =
-          case usage do
-            nil ->
-              %{input: input_tokens, output: output_tokens}
-
-            existing ->
-              %{
-                input: existing.input + input_tokens,
-                output: existing.output + output_tokens
-              }
-          end
-
-        collect_loop(stream_ref, current_message, tool_call_buffers, new_usage, timeout)
-
-      {:provider_event, %Done{}} ->
-        # Stream complete - return message and usage
-        {:ok, current_message, usage}
-
-      {:provider_event, %Error{message: error_msg}} ->
-        {:error, error_msg}
+      {:provider_event, event} ->
+        handle_provider_event(state, event)
     after
-      timeout ->
-        {:error, "Stream timeout after #{timeout}ms"}
+      state.timeout ->
+        {:error, "Stream timeout after #{state.timeout}ms"}
     end
+  end
+
+  defp handle_provider_event(state, %TextDelta{delta: text}), do: handle_text_delta(state, text)
+  defp handle_provider_event(state, %ThinkingDelta{}), do: collect_loop(state)
+
+  defp handle_provider_event(state, %ToolCallStart{id: id, name: name}),
+    do: handle_tool_call_start(state, id, name)
+
+  defp handle_provider_event(state, %ToolCallDelta{id: id, delta: delta}),
+    do: handle_tool_call_delta(state, id, delta)
+
+  defp handle_provider_event(state, %ToolCallDone{id: id}), do: handle_tool_call_done(state, id)
+
+  defp handle_provider_event(state, %Usage{input: input, output: output}),
+    do: handle_usage(state, input, output)
+
+  defp handle_provider_event(state, %Done{}), do: {:ok, state.current_message, state.usage}
+  defp handle_provider_event(_state, %Error{message: error_msg}), do: {:error, error_msg}
+
+  defp handle_text_delta(%StreamState{} = state, text) do
+    new_content = append_text_delta(state.current_message.content, text)
+    new_message = %{state.current_message | content: new_content}
+    new_state = %{state | current_message: new_message}
+    collect_loop(new_state)
+  end
+
+  defp handle_tool_call_start(%StreamState{} = state, tool_id, tool_name) do
+    new_buffers = Map.put(state.tool_call_buffers, tool_id, %{name: tool_name, args_json: ""})
+    new_state = %{state | tool_call_buffers: new_buffers}
+    collect_loop(new_state)
+  end
+
+  defp handle_tool_call_delta(%StreamState{} = state, tool_id, args_delta) do
+    new_buffers =
+      Map.update!(state.tool_call_buffers, tool_id, fn buffer ->
+        %{buffer | args_json: buffer.args_json <> args_delta}
+      end)
+
+    new_state = %{state | tool_call_buffers: new_buffers}
+    collect_loop(new_state)
+  end
+
+  defp handle_tool_call_done(%StreamState{} = state, tool_id) do
+    buffer = Map.fetch!(state.tool_call_buffers, tool_id)
+
+    case Jason.decode(buffer.args_json) do
+      {:ok, args} ->
+        tool_use = %ToolUse{
+          id: tool_id,
+          name: buffer.name,
+          args: args
+        }
+
+        new_content = state.current_message.content ++ [tool_use]
+        new_message = %{state.current_message | content: new_content}
+        new_state = %{state | current_message: new_message}
+        collect_loop(new_state)
+
+      {:error, _} ->
+        {:error, "Failed to parse tool arguments for #{tool_id}"}
+    end
+  end
+
+  defp handle_usage(%StreamState{} = state, input_tokens, output_tokens) do
+    new_usage =
+      case state.usage do
+        nil ->
+          %{input: input_tokens, output: output_tokens}
+
+        existing ->
+          %{
+            input: existing.input + input_tokens,
+            output: existing.output + output_tokens
+          }
+      end
+
+    new_state = %{state | usage: new_usage}
+    collect_loop(new_state)
   end
 
   # Append text delta to content blocks
@@ -366,64 +392,9 @@ defmodule Deft.Job.Runner do
 
   # Execute tool calls inline with try/catch
   defp execute_tools_inline(message, tools, tool_context) do
-    tool_map = Map.new(tools, fn tool_module -> {tool_module.name(), tool_module} end)
-
-    tool_uses =
-      Enum.filter(message.content, fn
-        %ToolUse{} -> true
-        _ -> false
-      end)
-
-    tool_result_blocks =
-      Enum.map(tool_uses, fn %ToolUse{id: tool_id, name: tool_name, args: args} = _tool_use ->
-        case Map.get(tool_map, tool_name) do
-          nil ->
-            %ToolResult{
-              tool_use_id: tool_id,
-              name: tool_name,
-              content: "Error: Tool '#{tool_name}' not found",
-              is_error: true
-            }
-
-          tool_module ->
-            try do
-              case tool_module.execute(args, tool_context) do
-                {:ok, content_blocks} ->
-                  # Convert content blocks to string
-                  content_text =
-                    content_blocks
-                    |> Enum.map(fn
-                      %Text{text: text} -> text
-                      _ -> ""
-                    end)
-                    |> Enum.join("\n")
-
-                  %ToolResult{
-                    tool_use_id: tool_id,
-                    name: tool_name,
-                    content: content_text,
-                    is_error: false
-                  }
-
-                {:error, error_msg} ->
-                  %ToolResult{
-                    tool_use_id: tool_id,
-                    name: tool_name,
-                    content: error_msg,
-                    is_error: true
-                  }
-              end
-            rescue
-              exception ->
-                %ToolResult{
-                  tool_use_id: tool_id,
-                  name: tool_name,
-                  content: "Tool execution error: #{Exception.message(exception)}",
-                  is_error: true
-                }
-            end
-        end
-      end)
+    tool_map = build_tool_map(tools)
+    tool_uses = extract_tool_uses(message.content)
+    tool_result_blocks = Enum.map(tool_uses, &execute_single_tool(&1, tool_map, tool_context))
 
     result_message = %Message{
       id: generate_message_id(),
@@ -433,6 +404,75 @@ defmodule Deft.Job.Runner do
     }
 
     {:ok, result_message}
+  end
+
+  defp build_tool_map(tools) do
+    Map.new(tools, fn tool_module -> {tool_module.name(), tool_module} end)
+  end
+
+  defp extract_tool_uses(content) do
+    Enum.filter(content, fn
+      %ToolUse{} -> true
+      _ -> false
+    end)
+  end
+
+  defp execute_single_tool(
+         %ToolUse{id: tool_id, name: tool_name, args: args},
+         tool_map,
+         tool_context
+       ) do
+    case Map.get(tool_map, tool_name) do
+      nil ->
+        build_error_result(tool_id, tool_name, "Error: Tool '#{tool_name}' not found")
+
+      tool_module ->
+        try do
+          execute_tool_with_module(tool_id, tool_name, args, tool_module, tool_context)
+        rescue
+          exception ->
+            build_error_result(
+              tool_id,
+              tool_name,
+              "Tool execution error: #{Exception.message(exception)}"
+            )
+        end
+    end
+  end
+
+  defp execute_tool_with_module(tool_id, tool_name, args, tool_module, tool_context) do
+    case tool_module.execute(args, tool_context) do
+      {:ok, content_blocks} ->
+        content_text = convert_content_blocks_to_text(content_blocks)
+
+        %ToolResult{
+          tool_use_id: tool_id,
+          name: tool_name,
+          content: content_text,
+          is_error: false
+        }
+
+      {:error, error_msg} ->
+        build_error_result(tool_id, tool_name, error_msg)
+    end
+  end
+
+  defp convert_content_blocks_to_text(content_blocks) do
+    content_blocks
+    |> Enum.map(fn
+      %Text{text: text} -> text
+      _ -> ""
+    end)
+    |> Enum.join("\n")
+  end
+
+  defp build_error_result(tool_id, tool_name, error_msg) do
+    %ToolResult{
+      tool_use_id: tool_id,
+      name: tool_name,
+      content: error_msg,
+      is_error: true
+    }
   end
 
   # Extract text from assistant message
