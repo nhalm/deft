@@ -135,87 +135,93 @@ defmodule Deft.CLI do
     end
   end
 
-  # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
   defp determine_command(positional, flags) do
-    cond do
-      flags[:help] ->
-        :help
-
-      flags[:version] ->
-        :version
-
-      flags[:prompt] ->
-        {:non_interactive, flags[:prompt]}
-
-      # Piped stdin: detect non-TTY input and read prompt from stdin
-      Enum.empty?(positional) and stdin_piped?() ->
-        prompt = read_stdin()
-        {:non_interactive, prompt}
-
-      positional == ["config"] ->
-        :config
-
-      positional == ["resume"] ->
-        {:error, "Use the web UI to pick a session. Run: deft"}
-
-      match?(["resume", _], positional) ->
-        [_cmd, session_id] = positional
-        {:resume_session, session_id}
-
-      # Issue commands
-      match?(["issue", "create" | _], positional) ->
-        ["issue", "create" | title_parts] = positional
-
-        if Enum.empty?(title_parts) do
-          {:error, "Issue title is required"}
-        else
-          title = Enum.join(title_parts, " ")
-          {:issue_create, title}
-        end
-
-      match?(["issue", "show", _], positional) ->
-        [_cmd, _subcmd, issue_id] = positional
-        {:issue_show, issue_id}
-
-      match?(["issue", "close", _], positional) ->
-        [_cmd, _subcmd, issue_id] = positional
-        {:issue_close, issue_id}
-
-      match?(["issue", "update", _], positional) ->
-        [_cmd, _subcmd, issue_id] = positional
-        {:issue_update, issue_id}
-
-      positional == ["issue", "list"] ->
-        :issue_list
-
-      positional == ["issue", "ready"] ->
-        :issue_ready
-
-      match?(["issue", "dep", "add", _], positional) ->
-        [_cmd, _subcmd, _action, issue_id] = positional
-        {:issue_dep_add, issue_id}
-
-      match?(["issue", "dep", "remove", _], positional) ->
-        [_cmd, _subcmd, _action, issue_id] = positional
-        {:issue_dep_remove, issue_id}
-
-      # Work commands
-      positional == ["work"] and flags[:loop] ->
-        :work_loop
-
-      positional == ["work"] ->
-        :work
-
-      match?(["work", _], positional) ->
-        [_cmd, issue_id] = positional
-        {:work_issue, issue_id}
-
-      Enum.empty?(positional) ->
-        :new_session
-
-      true ->
-        {:error, "Unknown command: #{Enum.join(positional, " ")}"}
+    # Check flags first (higher priority)
+    case check_flag_commands(flags) do
+      nil -> determine_positional_command(positional, flags)
+      command -> command
     end
+  end
+
+  # Check for flag-based commands
+  defp check_flag_commands(flags) do
+    cond do
+      flags[:help] -> :help
+      flags[:version] -> :version
+      flags[:prompt] -> {:non_interactive, flags[:prompt]}
+      true -> nil
+    end
+  end
+
+  # Determine command from positional arguments
+  defp determine_positional_command([], _flags) do
+    if stdin_piped?() do
+      prompt = read_stdin()
+      {:non_interactive, prompt}
+    else
+      :new_session
+    end
+  end
+
+  defp determine_positional_command(["config"], _flags), do: :config
+
+  defp determine_positional_command(["resume"], _flags) do
+    {:error, "Use the web UI to pick a session. Run: deft"}
+  end
+
+  defp determine_positional_command(["resume", session_id], _flags) do
+    {:resume_session, session_id}
+  end
+
+  defp determine_positional_command(["issue" | rest], flags) do
+    determine_issue_command(rest, flags)
+  end
+
+  defp determine_positional_command(["work" | rest], flags) do
+    determine_work_command(rest, flags)
+  end
+
+  defp determine_positional_command(positional, _flags) do
+    {:error, "Unknown command: #{Enum.join(positional, " ")}"}
+  end
+
+  # Determine issue subcommand
+  defp determine_issue_command(["create" | title_parts], _flags) do
+    if Enum.empty?(title_parts) do
+      {:error, "Issue title is required"}
+    else
+      title = Enum.join(title_parts, " ")
+      {:issue_create, title}
+    end
+  end
+
+  defp determine_issue_command(["show", issue_id], _flags), do: {:issue_show, issue_id}
+  defp determine_issue_command(["close", issue_id], _flags), do: {:issue_close, issue_id}
+  defp determine_issue_command(["update", issue_id], _flags), do: {:issue_update, issue_id}
+  defp determine_issue_command(["list"], _flags), do: :issue_list
+  defp determine_issue_command(["ready"], _flags), do: :issue_ready
+
+  defp determine_issue_command(["dep", "add", issue_id], _flags) do
+    {:issue_dep_add, issue_id}
+  end
+
+  defp determine_issue_command(["dep", "remove", issue_id], _flags) do
+    {:issue_dep_remove, issue_id}
+  end
+
+  defp determine_issue_command(args, _flags) do
+    {:error, "Unknown issue command: issue #{Enum.join(args, " ")}"}
+  end
+
+  # Determine work subcommand
+  defp determine_work_command([], flags) do
+    if flags[:loop], do: :work_loop, else: :work
+  end
+
+  defp determine_work_command([issue_id], _flags), do: {:work_issue, issue_id}
+
+  defp determine_work_command(args, _flags) do
+    {:error, "Unknown work command: work #{Enum.join(args, " ")}"}
   end
 
   defp execute_command(:help, _flags) do
@@ -274,24 +280,11 @@ defmodule Deft.CLI do
     previously_blocked = find_issues_blocked_by(all_issues, issue_id)
 
     # Close the issue
-    case Issues.close(issue_id) do
-      {:ok, _issue} ->
-        IO.puts("Issue #{issue_id} closed successfully.")
-
-        # Check if any previously blocked issues are now unblocked
-        newly_unblocked = find_newly_unblocked(previously_blocked)
-
-        unless Enum.empty?(newly_unblocked) do
-          IO.puts("")
-          IO.puts("Newly unblocked issues:")
-
-          Enum.each(newly_unblocked, fn issue ->
-            IO.puts("  - #{issue.id}: #{issue.title}")
-          end)
-        end
-
-        :ok
-
+    with {:ok, _issue} <- Issues.close(issue_id) do
+      IO.puts("Issue #{issue_id} closed successfully.")
+      display_newly_unblocked_issues(previously_blocked)
+      :ok
+    else
       {:error, :not_found} ->
         IO.puts(:stderr, "Error: Issue not found: #{issue_id}")
         exit({:shutdown, 1})
@@ -524,43 +517,10 @@ defmodule Deft.CLI do
     cleanup_git_orphans(working_dir, flags[:auto_approve_all])
 
     # Load the session state
-    case Store.resume(session_id, working_dir) do
-      {:ok, state} ->
-        # Display session summary
-        display_session_summary(session_id, state)
-
-        # Check if non-interactive continuation was requested
-        case flags[:prompt] do
-          nil ->
-            # No prompt flag - start interactive session
-            cli_flags = build_cli_flags(flags)
-            config = Config.load(cli_flags, state.working_dir)
-
-            verify_api_key()
-            :ok = Deft.Provider.Registry.register("anthropic", Deft.Provider.Anthropic)
-
-            _agent_pid =
-              start_agent(
-                session_id,
-                state.working_dir,
-                config,
-                state.messages,
-                state.session_cost,
-                state.om_snapshot
-              )
-
-            Registry.register(Deft.Registry, {:session, session_id}, [])
-
-            IO.puts("Deft session #{session_id} resumed.")
-
-            # Start interactive web UI
-            start_web_ui(session_id)
-
-          prompt ->
-            # Non-interactive continuation
-            continue_session_non_interactive(session_id, state, prompt, flags)
-        end
-
+    with {:ok, state} <- Store.resume(session_id, working_dir) do
+      display_session_summary(session_id, state)
+      resume_session_with_state(session_id, state, flags)
+    else
       {:error, :enoent} ->
         IO.puts(:stderr, "Error: Session not found: #{session_id}")
         exit({:shutdown, 1})
@@ -628,6 +588,48 @@ defmodule Deft.CLI do
     exit({:shutdown, 1})
   end
 
+  # Display newly unblocked issues after closing a blocker
+  defp display_newly_unblocked_issues(previously_blocked) do
+    newly_unblocked = find_newly_unblocked(previously_blocked)
+
+    unless Enum.empty?(newly_unblocked) do
+      IO.puts("")
+      IO.puts("Newly unblocked issues:")
+
+      Enum.each(newly_unblocked, fn issue ->
+        IO.puts("  - #{issue.id}: #{issue.title}")
+      end)
+    end
+  end
+
+  # Resume a session with loaded state (interactive or non-interactive)
+  defp resume_session_with_state(session_id, state, flags) do
+    case flags[:prompt] do
+      nil -> resume_interactive_session(session_id, state, flags)
+      prompt -> continue_session_non_interactive(session_id, state, prompt, flags)
+    end
+  end
+
+  # Resume session in interactive mode
+  defp resume_interactive_session(session_id, state, flags) do
+    cli_flags = build_cli_flags(flags)
+    config = Config.load(cli_flags, state.working_dir)
+
+    verify_api_key()
+    :ok = Deft.Provider.Registry.register("anthropic", Deft.Provider.Anthropic)
+
+    _agent_pid =
+      start_agent(session_id, state.working_dir, config, %{
+        initial_messages: state.messages,
+        initial_session_cost: state.session_cost,
+        om_snapshot: state.om_snapshot
+      })
+
+    Registry.register(Deft.Registry, {:session, session_id}, [])
+    IO.puts("Deft session #{session_id} resumed.")
+    start_web_ui(session_id)
+  end
+
   # Display a summary of the session's last 10 messages
   defp display_session_summary(session_id, state) do
     IO.puts("Session: #{session_id}")
@@ -683,14 +685,11 @@ defmodule Deft.CLI do
 
     # Start agent with existing messages, cost, and OM snapshot from the session
     agent_pid =
-      start_agent(
-        session_id,
-        working_dir,
-        config,
-        state.messages,
-        state.session_cost,
-        state.om_snapshot
-      )
+      start_agent(session_id, working_dir, config, %{
+        initial_messages: state.messages,
+        initial_session_cost: state.session_cost,
+        om_snapshot: state.om_snapshot
+      })
 
     # Subscribe to agent events
     Registry.register(Deft.Registry, {:session, session_id}, [])
@@ -821,14 +820,11 @@ defmodule Deft.CLI do
   end
 
   # Start the Agent process for a session
-  defp start_agent(
-         session_id,
-         working_dir,
-         config,
-         initial_messages \\ [],
-         initial_session_cost \\ 0.0,
-         om_snapshot \\ nil
-       ) do
+  defp start_agent(session_id, working_dir, config, opts \\ %{}) do
+    initial_messages = Map.get(opts, :initial_messages, [])
+    initial_session_cost = Map.get(opts, :initial_session_cost, 0.0)
+    om_snapshot = Map.get(opts, :om_snapshot, nil)
+
     agent_config = %{
       model: config.model,
       provider: Deft.Provider.Anthropic,
@@ -1174,39 +1170,48 @@ defmodule Deft.CLI do
   end
 
   defp display_issue_list(issues) do
-    # Calculate column widths
+    widths = calculate_column_widths(issues)
+    print_issue_table_header(widths)
+    print_issue_table_rows(issues, widths)
+  end
+
+  # Calculate column widths for issue table
+  defp calculate_column_widths(issues) do
     id_width =
       max(
         2,
         Enum.max_by(issues, &String.length(&1.id), fn -> %{id: "id"} end).id |> String.length()
       )
 
-    priority_width = 8
-
     status_width =
       max(6, Enum.max_by(issues, &status_length/1, fn -> %{status: :open} end) |> status_length())
 
-    # Title width is flexible - use remaining space, but at least 20 chars
-    title_width = 60
+    %{id: id_width, priority: 8, status: status_width, title: 60}
+  end
 
-    # Print header
+  # Print the header row of the issue table
+  defp print_issue_table_header(widths) do
     header = [
-      String.pad_trailing("ID", id_width),
-      String.pad_trailing("Priority", priority_width),
-      String.pad_trailing("Status", status_width),
+      String.pad_trailing("ID", widths.id),
+      String.pad_trailing("Priority", widths.priority),
+      String.pad_trailing("Status", widths.status),
       "Title"
     ]
 
     IO.puts(Enum.join(header, "  "))
-    IO.puts(String.duplicate("-", id_width + priority_width + status_width + title_width + 6))
 
-    # Print each issue
+    separator_width = widths.id + widths.priority + widths.status + widths.title + 6
+    IO.puts(String.duplicate("-", separator_width))
+  end
+
+  # Print each issue row in the table
+  defp print_issue_table_rows(issues, widths) do
     Enum.each(issues, fn issue ->
       row = [
-        String.pad_trailing(issue.id, id_width),
-        String.pad_trailing(format_priority_short(issue.priority), priority_width),
-        String.pad_trailing(format_status(issue.status), status_width),
-        truncate_title(issue.title, title_width)
+        String.pad_trailing(issue.id, widths.id),
+        String.pad_trailing(format_priority_short(issue.priority), widths.priority),
+        String.pad_trailing(format_status(issue.status), widths.status),
+        truncate_title(issue.title, widths.title)
       ]
 
       IO.puts(Enum.join(row, "  "))
@@ -1240,64 +1245,72 @@ defmodule Deft.CLI do
 
   # Display a single issue with all structured fields
   defp display_issue(issue) do
+    print_issue_header(issue)
+    print_issue_context(issue.context)
+    print_issue_acceptance_criteria(issue.acceptance_criteria)
+    print_issue_constraints(issue.constraints)
+    print_issue_dependencies(issue.dependencies)
+    print_issue_timestamps(issue)
+  end
+
+  # Print issue header fields
+  defp print_issue_header(issue) do
     IO.puts("Issue: #{issue.id}")
     IO.puts("Title: #{issue.title}")
     IO.puts("Status: #{issue.status}")
     IO.puts("Priority: #{format_priority(issue.priority)}")
     IO.puts("Source: #{issue.source}")
     IO.puts("")
+  end
 
-    # Context
+  # Print issue context section
+  defp print_issue_context(context) do
     IO.puts("Context:")
-
-    if issue.context == "" do
-      IO.puts("  (none)")
-    else
-      IO.puts("  #{issue.context}")
-    end
-
+    IO.puts(if context == "", do: "  (none)", else: "  #{context}")
     IO.puts("")
+  end
 
-    # Acceptance Criteria
+  # Print issue acceptance criteria section
+  defp print_issue_acceptance_criteria(criteria) do
     IO.puts("Acceptance Criteria:")
 
-    if Enum.empty?(issue.acceptance_criteria) do
+    if Enum.empty?(criteria) do
       IO.puts("  (none)")
     else
-      Enum.each(issue.acceptance_criteria, fn criterion ->
-        IO.puts("  - #{criterion}")
-      end)
+      Enum.each(criteria, fn criterion -> IO.puts("  - #{criterion}") end)
     end
 
     IO.puts("")
+  end
 
-    # Constraints
+  # Print issue constraints section
+  defp print_issue_constraints(constraints) do
     IO.puts("Constraints:")
 
-    if Enum.empty?(issue.constraints) do
+    if Enum.empty?(constraints) do
       IO.puts("  (none)")
     else
-      Enum.each(issue.constraints, fn constraint ->
-        IO.puts("  - #{constraint}")
-      end)
+      Enum.each(constraints, fn constraint -> IO.puts("  - #{constraint}") end)
     end
 
     IO.puts("")
+  end
 
-    # Dependencies
+  # Print issue dependencies section
+  defp print_issue_dependencies(dependencies) do
     IO.puts("Dependencies:")
 
-    if Enum.empty?(issue.dependencies) do
+    if Enum.empty?(dependencies) do
       IO.puts("  (none)")
     else
-      Enum.each(issue.dependencies, fn dep_id ->
-        IO.puts("  - #{dep_id}")
-      end)
+      Enum.each(dependencies, fn dep_id -> IO.puts("  - #{dep_id}") end)
     end
 
     IO.puts("")
+  end
 
-    # Timestamps
+  # Print issue timestamps
+  defp print_issue_timestamps(issue) do
     IO.puts("Created: #{format_timestamp(issue.created_at)}")
     IO.puts("Updated: #{format_timestamp(issue.updated_at)}")
 
@@ -1385,19 +1398,25 @@ defmodule Deft.CLI do
   # Create an issue in interactive mode with AI elicitation
   defp create_interactive_issue(title, flags) do
     working_dir = flags[:working_dir] || File.cwd!()
-
-    # Verify API key and register provider
     verify_api_key()
     :ok = Deft.Provider.Registry.register("anthropic", Deft.Provider.Anthropic)
 
-    # Get open issues for context
     open_issues = Issues.list(status: :open)
+    elicitation_prompt = ElicitationPrompt.build(title, flags[:priority], open_issues)
 
-    # Build elicitation prompt as initial user message
-    priority = flags[:priority]
-    elicitation_prompt = ElicitationPrompt.build(title, priority, open_issues)
+    agent_pid = start_elicitation_agent(working_dir, flags, elicitation_prompt)
 
-    # Create system message with elicitation instructions
+    IO.puts("Let's create a structured issue for: #{title}")
+    IO.puts("")
+
+    case run_elicitation_loop(agent_pid, title, flags) do
+      {:ok, draft} -> present_issue_draft(draft, title, flags)
+      {:error, reason} -> handle_elicitation_error(reason)
+    end
+  end
+
+  # Start an elicitation agent for interactive issue creation
+  defp start_elicitation_agent(working_dir, flags, elicitation_prompt) do
     system_message = %Deft.Message{
       id: "elicit_sys",
       role: :system,
@@ -1405,10 +1424,8 @@ defmodule Deft.CLI do
       timestamp: DateTime.utc_now()
     }
 
-    # Create a temporary session for elicitation
     session_id = generate_session_id()
 
-    # Build config for elicitation agent (lightweight, tools for issue_draft only)
     agent_config = %{
       model: flags[:model] || "claude-sonnet-4-20250514",
       provider: Deft.Provider.Anthropic,
@@ -1420,7 +1437,6 @@ defmodule Deft.CLI do
       tools: [Deft.Tools.UseSkill, Deft.Tools.IssueDraft]
     }
 
-    # Start the elicitation agent with the elicitation prompt as first message
     {:ok, _worker_pid} =
       Deft.Session.Supervisor.start_session(
         session_id: session_id,
@@ -1429,98 +1445,45 @@ defmodule Deft.CLI do
         project_dir: working_dir
       )
 
-    # Look up the Agent PID from the registry
     [{agent_pid, _}] = Registry.lookup(Deft.ProcessRegistry, {:agent, session_id})
-
-    # Subscribe to agent events
     Registry.register(Deft.Registry, {:session, session_id}, [])
+    agent_pid
+  end
 
-    IO.puts("Let's create a structured issue for: #{title}")
-    IO.puts("")
-
-    # Start the interactive elicitation loop
-    case run_elicitation_loop(agent_pid, title, flags) do
-      {:ok, draft} ->
-        # Present the draft to the user
-        present_issue_draft(draft, title, flags)
-
-      {:error, reason} ->
-        IO.puts(:stderr, "Error during issue elicitation: #{reason}")
-        exit({:shutdown, 1})
-    end
+  # Handle elicitation error
+  defp handle_elicitation_error(reason) do
+    IO.puts(:stderr, "Error during issue elicitation: #{reason}")
+    exit({:shutdown, 1})
   end
 
   defp update_interactive_issue(issue_id, flags) do
     working_dir = flags[:working_dir] || File.cwd!()
 
-    # Get the existing issue
-    case Issues.get(issue_id) do
+    with {:ok, issue} <- Issues.get(issue_id) do
+      update_issue_with_elicitation(issue, issue_id, working_dir, flags)
+    else
       {:error, :not_found} ->
         IO.puts(:stderr, "Error: Issue not found: #{issue_id}")
         exit({:shutdown, 1})
+    end
+  end
 
-      {:ok, issue} ->
-        # Verify API key and register provider
-        verify_api_key()
-        :ok = Deft.Provider.Registry.register("anthropic", Deft.Provider.Anthropic)
+  # Update an issue using AI elicitation
+  defp update_issue_with_elicitation(issue, issue_id, working_dir, flags) do
+    verify_api_key()
+    :ok = Deft.Provider.Registry.register("anthropic", Deft.Provider.Anthropic)
 
-        # Get open issues for context
-        open_issues = Issues.list(status: :open)
+    open_issues = Issues.list(status: :open)
+    elicitation_prompt = ElicitationPrompt.build_for_edit(issue, open_issues)
 
-        # Build elicitation prompt for editing with existing issue fields
-        elicitation_prompt = ElicitationPrompt.build_for_edit(issue, open_issues)
+    agent_pid = start_elicitation_agent(working_dir, flags, elicitation_prompt)
 
-        # Create system message with elicitation instructions
-        system_message = %Deft.Message{
-          id: "elicit_sys",
-          role: :system,
-          content: [%Deft.Message.Text{text: elicitation_prompt}],
-          timestamp: DateTime.utc_now()
-        }
+    IO.puts("Let's refine issue #{issue_id}: #{issue.title}")
+    IO.puts("")
 
-        # Create a temporary session for elicitation
-        session_id = generate_session_id()
-
-        # Build config for elicitation agent (lightweight, tools for issue_draft only)
-        agent_config = %{
-          model: flags[:model] || "claude-sonnet-4-20250514",
-          provider: Deft.Provider.Anthropic,
-          working_dir: working_dir,
-          turn_limit: 10,
-          tool_timeout: 30_000,
-          bash_timeout: 30_000,
-          max_turns: 10,
-          tools: [Deft.Tools.UseSkill, Deft.Tools.IssueDraft]
-        }
-
-        # Start the elicitation agent with the elicitation prompt as first message
-        {:ok, _worker_pid} =
-          Deft.Session.Supervisor.start_session(
-            session_id: session_id,
-            config: agent_config,
-            messages: [system_message],
-            project_dir: working_dir
-          )
-
-        # Look up the Agent PID from the registry
-        [{agent_pid, _}] = Registry.lookup(Deft.ProcessRegistry, {:agent, session_id})
-
-        # Subscribe to agent events
-        Registry.register(Deft.Registry, {:session, session_id}, [])
-
-        IO.puts("Let's refine issue #{issue_id}: #{issue.title}")
-        IO.puts("")
-
-        # Start the interactive elicitation loop for updating
-        case run_update_elicitation_loop(agent_pid, issue) do
-          {:ok, draft} ->
-            # Present the draft to the user
-            present_issue_update_draft(draft, issue, flags)
-
-          {:error, reason} ->
-            IO.puts(:stderr, "Error during issue elicitation: #{reason}")
-            exit({:shutdown, 1})
-        end
+    case run_update_elicitation_loop(agent_pid, issue) do
+      {:ok, draft} -> present_issue_update_draft(draft, issue, flags)
+      {:error, reason} -> handle_elicitation_error(reason)
     end
   end
 
@@ -1550,19 +1513,13 @@ defmodule Deft.CLI do
         elicitation_response_loop(agent_pid, draft_acc, title, flags)
 
       {:agent_event, {:tool_call_done, %{id: _tool_id, args: args}}} ->
-        # Check if this is the issue_draft tool by looking at the args structure
-        if Map.has_key?(args, "title") and Map.has_key?(args, "context") and
-             Map.has_key?(args, "acceptance_criteria") do
-          elicitation_response_loop(agent_pid, args, title, flags)
-        else
-          elicitation_response_loop(agent_pid, draft_acc, title, flags)
-        end
+        updated_draft = handle_tool_call_done(args, draft_acc)
+        elicitation_response_loop(agent_pid, updated_draft, title, flags)
 
       {:agent_event, {:tool_execution_complete, %{name: "issue_draft", result: result}}} ->
         handle_tool_result(result, agent_pid, draft_acc, title, flags)
 
       {:agent_event, {:tool_execution_complete, _}} ->
-        # Ignore completion events for other tools
         elicitation_response_loop(agent_pid, draft_acc, title, flags)
 
       {:agent_event, {:state_change, :idle}} ->
@@ -1577,6 +1534,15 @@ defmodule Deft.CLI do
       300_000 ->
         {:error, "Timeout waiting for response"}
     end
+  end
+
+  # Handle tool call done event - check if it's an issue_draft tool
+  defp handle_tool_call_done(args, draft_acc) do
+    is_draft =
+      Map.has_key?(args, "title") and Map.has_key?(args, "context") and
+        Map.has_key?(args, "acceptance_criteria")
+
+    if is_draft, do: args, else: draft_acc
   end
 
   # Handle tool result in elicitation loop
@@ -1648,22 +1614,23 @@ defmodule Deft.CLI do
   end
 
   # Extract draft from tool result
-  defp extract_draft_from_result(result) do
-    case result do
-      {:ok, [%Deft.Message.Text{text: text}]} ->
-        if String.starts_with?(text, "ISSUE_DRAFT:") do
-          json_str = String.replace_prefix(text, "ISSUE_DRAFT:", "")
+  defp extract_draft_from_result({:ok, [%Deft.Message.Text{text: text}]}) do
+    extract_draft_from_text(text)
+  end
 
-          case Jason.decode(json_str) do
-            {:ok, draft} -> {:ok, draft}
-            {:error, _} -> :not_draft
-          end
-        else
-          :not_draft
-        end
+  defp extract_draft_from_result(_result), do: :not_draft
 
-      _ ->
-        :not_draft
+  # Extract draft from text content
+  defp extract_draft_from_text(text) do
+    if String.starts_with?(text, "ISSUE_DRAFT:") do
+      json_str = String.replace_prefix(text, "ISSUE_DRAFT:", "")
+
+      case Jason.decode(json_str) do
+        {:ok, draft} -> {:ok, draft}
+        {:error, _} -> :not_draft
+      end
+    else
+      :not_draft
     end
   end
 
@@ -1980,52 +1947,70 @@ defmodule Deft.CLI do
 
   # Continue the work loop - check for ready issues and process them
   defp continue_work_loop(flags, config, cumulative_cost, iteration) do
-    # Get ready issues (sorted by priority, then created_at)
-    ready_issues = Issues.ready()
-
-    case ready_issues do
-      [] ->
-        IO.puts("No more ready issues. Loop complete.")
-        IO.puts("Total cost: $#{Float.round(cumulative_cost, 2)}")
-        :ok
-
-      [issue | _] ->
-        # Check cost ceiling before starting next job
-        if cumulative_cost >= config.work_cost_ceiling do
-          IO.puts(
-            "Cost ceiling reached ($#{config.work_cost_ceiling}). Total cost: $#{Float.round(cumulative_cost, 2)}"
-          )
-
-          :ok
-        else
-          IO.puts("\n--- Job #{iteration} ---")
-          IO.puts("Starting work on issue #{issue.id}: #{issue.title}")
-          IO.puts("Cumulative cost so far: $#{Float.round(cumulative_cost, 2)}")
-          IO.puts("")
-
-          # Run the job and get the cost
-          case run_work_on_issue_with_cost(issue, flags) do
-            {:ok, job_cost} ->
-              new_cumulative_cost = cumulative_cost + job_cost
-              IO.puts("Job cost: $#{Float.round(job_cost, 2)}")
-              IO.puts("Total cost: $#{Float.round(new_cumulative_cost, 2)}")
-
-              # Continue the loop with updated cost
-              run_work_loop(flags, config, new_cumulative_cost, iteration + 1)
-
-            {:error, :aborted, job_cost} ->
-              new_cumulative_cost = cumulative_cost + job_cost
-              IO.puts("Job aborted by user.")
-              IO.puts("Total cost: $#{Float.round(new_cumulative_cost, 2)}")
-              :ok
-
-            {:error, reason} ->
-              IO.puts(:stderr, "Job failed: #{inspect(reason)}")
-              IO.puts("Total cost: $#{Float.round(cumulative_cost, 2)}")
-              exit({:shutdown, 1})
-          end
-        end
+    case Issues.ready() do
+      [] -> complete_work_loop(cumulative_cost)
+      [issue | _] -> process_next_job(issue, flags, config, cumulative_cost, iteration)
     end
+  end
+
+  # Complete the work loop when no more ready issues
+  defp complete_work_loop(cumulative_cost) do
+    IO.puts("No more ready issues. Loop complete.")
+    IO.puts("Total cost: $#{Float.round(cumulative_cost, 2)}")
+    :ok
+  end
+
+  # Process next job in work loop
+  defp process_next_job(issue, flags, config, cumulative_cost, iteration) do
+    if cumulative_cost >= config.work_cost_ceiling do
+      report_cost_ceiling_reached(config.work_cost_ceiling, cumulative_cost)
+    else
+      run_next_job(issue, flags, config, cumulative_cost, iteration)
+    end
+  end
+
+  # Report that cost ceiling was reached
+  defp report_cost_ceiling_reached(ceiling, cumulative_cost) do
+    IO.puts("Cost ceiling reached ($#{ceiling}). Total cost: $#{Float.round(cumulative_cost, 2)}")
+
+    :ok
+  end
+
+  # Run the next job and handle result
+  defp run_next_job(issue, flags, config, cumulative_cost, iteration) do
+    IO.puts("\n--- Job #{iteration} ---")
+    IO.puts("Starting work on issue #{issue.id}: #{issue.title}")
+    IO.puts("Cumulative cost so far: $#{Float.round(cumulative_cost, 2)}")
+    IO.puts("")
+
+    case run_work_on_issue_with_cost(issue, flags) do
+      {:ok, job_cost} -> handle_job_success(job_cost, cumulative_cost, flags, config, iteration)
+      {:error, :aborted, job_cost} -> handle_job_abort(job_cost, cumulative_cost)
+      {:error, reason} -> handle_job_failure(reason, cumulative_cost)
+    end
+  end
+
+  # Handle successful job completion
+  defp handle_job_success(job_cost, cumulative_cost, flags, config, iteration) do
+    new_cumulative_cost = cumulative_cost + job_cost
+    IO.puts("Job cost: $#{Float.round(job_cost, 2)}")
+    IO.puts("Total cost: $#{Float.round(new_cumulative_cost, 2)}")
+    run_work_loop(flags, config, new_cumulative_cost, iteration + 1)
+  end
+
+  # Handle job abort
+  defp handle_job_abort(job_cost, cumulative_cost) do
+    new_cumulative_cost = cumulative_cost + job_cost
+    IO.puts("Job aborted by user.")
+    IO.puts("Total cost: $#{Float.round(new_cumulative_cost, 2)}")
+    :ok
+  end
+
+  # Handle job failure
+  defp handle_job_failure(reason, cumulative_cost) do
+    IO.puts(:stderr, "Job failed: #{inspect(reason)}")
+    IO.puts("Total cost: $#{Float.round(cumulative_cost, 2)}")
+    exit({:shutdown, 1})
   end
 
   # Run a Foreman job for an issue and return the cost
@@ -2192,64 +2177,76 @@ defmodule Deft.CLI do
   defp wait_for_job_completion(foreman_pid, ref) do
     receive do
       {:DOWN, ^ref, :process, ^foreman_pid, reason} ->
-        case reason do
-          :normal -> {:ok, :completed}
-          :shutdown -> {:error, :aborted}
-          other -> {:error, other}
-        end
+        handle_foreman_down(reason)
 
       {:plan_approval_needed, plan} ->
-        # Foreman needs plan approval - display and prompt user
         handle_plan_approval(foreman_pid, plan)
-        # Continue waiting for job completion
         wait_for_job_completion(foreman_pid, ref)
 
       {:job_message, message} ->
-        # Display message from Foreman (e.g., verification failure, merge error)
-        IO.puts("\n" <> String.duplicate("=", 80))
-        IO.puts("JOB MESSAGE")
-        IO.puts(String.duplicate("=", 80))
-        IO.puts("\n#{message}\n")
-        IO.puts(String.duplicate("=", 80))
-        # Continue waiting for job completion
+        display_job_message(message)
         wait_for_job_completion(foreman_pid, ref)
 
       {:signal, :sigint} ->
-        # SIGINT received - initiate graceful shutdown
-        IO.puts("\nReceived Ctrl+C. Sending shutdown to Foreman...")
-        Foreman.abort(foreman_pid)
-
-        # Wait up to 5 seconds for Foreman to shut down and rollback issue status
-        receive do
-          {:DOWN, ^ref, :process, ^foreman_pid, _reason} ->
-            IO.puts("Foreman shut down gracefully.")
-            {:error, :sigint_shutdown}
-        after
-          5_000 ->
-            # Timeout expired - forcefully stop the Foreman
-            IO.puts(
-              "Warning: Foreman did not shut down within 5 seconds. Issue may be left at :in_progress."
-            )
-
-            Process.demonitor(ref, [:flush])
-
-            if Process.alive?(foreman_pid) do
-              :gen_statem.stop(foreman_pid)
-            end
-
-            {:error, :sigint_timeout}
-        end
+        handle_sigint_shutdown(foreman_pid, ref)
     after
-      # Timeout after 1 hour
       3_600_000 ->
-        Process.demonitor(ref, [:flush])
-
-        if Process.alive?(foreman_pid) do
-          :gen_statem.stop(foreman_pid)
-        end
-
-        {:error, :timeout}
+        handle_job_timeout(foreman_pid, ref)
     end
+  end
+
+  # Handle Foreman process termination
+  defp handle_foreman_down(:normal), do: {:ok, :completed}
+  defp handle_foreman_down(:shutdown), do: {:error, :aborted}
+  defp handle_foreman_down(other), do: {:error, other}
+
+  # Display a message from the Foreman
+  defp display_job_message(message) do
+    IO.puts("\n" <> String.duplicate("=", 80))
+    IO.puts("JOB MESSAGE")
+    IO.puts(String.duplicate("=", 80))
+    IO.puts("\n#{message}\n")
+    IO.puts(String.duplicate("=", 80))
+  end
+
+  # Handle SIGINT graceful shutdown
+  defp handle_sigint_shutdown(foreman_pid, ref) do
+    IO.puts("\nReceived Ctrl+C. Sending shutdown to Foreman...")
+    Foreman.abort(foreman_pid)
+
+    receive do
+      {:DOWN, ^ref, :process, ^foreman_pid, _reason} ->
+        IO.puts("Foreman shut down gracefully.")
+        {:error, :sigint_shutdown}
+    after
+      5_000 -> handle_sigint_timeout(foreman_pid, ref)
+    end
+  end
+
+  # Handle SIGINT shutdown timeout
+  defp handle_sigint_timeout(foreman_pid, ref) do
+    IO.puts(
+      "Warning: Foreman did not shut down within 5 seconds. Issue may be left at :in_progress."
+    )
+
+    Process.demonitor(ref, [:flush])
+
+    if Process.alive?(foreman_pid) do
+      :gen_statem.stop(foreman_pid)
+    end
+
+    {:error, :sigint_timeout}
+  end
+
+  # Handle job timeout (1 hour)
+  defp handle_job_timeout(foreman_pid, ref) do
+    Process.demonitor(ref, [:flush])
+
+    if Process.alive?(foreman_pid) do
+      :gen_statem.stop(foreman_pid)
+    end
+
+    {:error, :timeout}
   end
 
   # Handle plan approval request from Foreman
@@ -2284,30 +2281,9 @@ defmodule Deft.CLI do
 
   # Handle the result of a job
   defp handle_job_result({:ok, :completed}, issue, job_id, _cost) do
-    # Job completed successfully - close the issue
     case Issues.close(issue.id, job_id) do
-      {:ok, _issue} ->
-        IO.puts("\nJob #{job_id} completed successfully!")
-        IO.puts("Issue #{issue.id} closed.")
-
-        # Check for newly unblocked issues
-        all_issues = Issues.list(status: [:open, :in_progress])
-        previously_blocked = find_issues_blocked_by(all_issues, issue.id)
-        newly_unblocked = find_newly_unblocked(previously_blocked)
-
-        unless Enum.empty?(newly_unblocked) do
-          IO.puts("\nNewly unblocked issues:")
-
-          Enum.each(newly_unblocked, fn issue ->
-            IO.puts("  - #{issue.id}: #{issue.title}")
-          end)
-        end
-
-        :ok
-
-      {:error, reason} ->
-        IO.puts(:stderr, "Warning: Failed to close issue: #{inspect(reason)}")
-        :ok
+      {:ok, _issue} -> handle_successful_job_completion(issue, job_id)
+      {:error, reason} -> handle_job_close_error(reason)
     end
   end
 
@@ -2396,5 +2372,23 @@ defmodule Deft.CLI do
 
     # Return error to stop the work loop
     {:error, reason}
+  end
+
+  # Handle successful job completion and display unblocked issues
+  defp handle_successful_job_completion(issue, job_id) do
+    IO.puts("\nJob #{job_id} completed successfully!")
+    IO.puts("Issue #{issue.id} closed.")
+
+    all_issues = Issues.list(status: [:open, :in_progress])
+    previously_blocked = find_issues_blocked_by(all_issues, issue.id)
+    display_newly_unblocked_issues(previously_blocked)
+
+    :ok
+  end
+
+  # Handle error when closing issue after job completion
+  defp handle_job_close_error(reason) do
+    IO.puts(:stderr, "Warning: Failed to close issue: #{inspect(reason)}")
+    :ok
   end
 end
