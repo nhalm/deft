@@ -137,40 +137,12 @@ defmodule Deft.Tools.Ls do
 
   @impl Deft.Tool
   def summarize(content_blocks, cache_key) do
-    # Extract text from content blocks
-    text =
-      content_blocks
-      |> Enum.map(fn
-        %{text: t} -> t
-        _ -> ""
-      end)
-      |> Enum.join("\n")
-
-    # Parse the ls output to count entries and show top-level structure
+    text = extract_text(content_blocks)
     lines = String.split(text, "\n", trim: true)
 
-    # Extract entry count from last line if present (format: "(X entries)")
-    entry_count =
-      case List.last(lines) do
-        line when is_binary(line) ->
-          case Regex.run(~r/\((\d+) (?:entry|entries)\)/, line) do
-            [_, count] -> String.to_integer(count)
-            _ -> length(lines) - 1
-          end
-
-        _ ->
-          length(lines)
-      end
-
-    # Count directories vs files
-    dir_count = Enum.count(lines, &String.starts_with?(&1, "d "))
-    file_count = Enum.count(lines, &String.starts_with?(&1, "f "))
-
-    # Get top-level structure (first 20 entries)
-    structure =
-      lines
-      |> Enum.take(20)
-      |> Enum.join("\n")
+    entry_count = parse_entry_count(lines)
+    {dir_count, file_count} = count_types(lines)
+    structure = build_structure_preview(lines)
 
     """
     Directory with #{entry_count} entries (#{dir_count} directories, #{file_count} files). Top-level structure:
@@ -179,5 +151,39 @@ defmodule Deft.Tools.Ls do
 
     Full results: cache://#{cache_key}
     """
+  end
+
+  defp extract_text(content_blocks) do
+    content_blocks
+    |> Enum.map(fn
+      %{text: t} -> t
+      _ -> ""
+    end)
+    |> Enum.join("\n")
+  end
+
+  defp parse_entry_count(lines) do
+    case List.last(lines) do
+      line when is_binary(line) ->
+        case Regex.run(~r/\((\d+) (?:entry|entries)\)/, line) do
+          [_, count] -> String.to_integer(count)
+          _ -> length(lines) - 1
+        end
+
+      _ ->
+        length(lines)
+    end
+  end
+
+  defp count_types(lines) do
+    dir_count = Enum.count(lines, &String.starts_with?(&1, "d "))
+    file_count = Enum.count(lines, &String.starts_with?(&1, "f "))
+    {dir_count, file_count}
+  end
+
+  defp build_structure_preview(lines) do
+    lines
+    |> Enum.take(20)
+    |> Enum.join("\n")
   end
 end

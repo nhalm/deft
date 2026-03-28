@@ -1,4 +1,5 @@
 # History
+- **standards v0.2 (2026-03-28):** Refactor `lib/deft/tools/ls.ex` (1 violation): Extract helpers from summarize
 - **standards v0.2 (2026-03-28):** Refactor `lib/deft/eval/judge_calibration.ex` (5 violations): Extract helpers from load_latest_result and calculate_metrics. Split calculate_metrics into count_classifications + compute_rates. Flatten 2 nesting violations
 - **standards v0.2 (2026-03-28):** Refactor `lib/deft/skills/registry.ex` (5 violations): Flatten 5 nesting violations by extracting inner case/if branches into named functions with pattern-matched heads
 - **standards v0.2 (2026-03-28):** Refactor `lib/deft/git/job.ex` (5 violations): Group handle_merge_failure params into map. Flatten 4 nesting violations in merge_lead_branch, pop_job_stash, complete_job by extracting inner branches
