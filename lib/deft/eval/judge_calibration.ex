@@ -53,25 +53,9 @@ defmodule Deft.Eval.JudgeCalibration do
   def load_examples(filename) do
     path = Path.join(@calibration_dir, filename)
 
-    with {:ok, content} <- File.read(path) do
-      examples =
-        content
-        |> String.split("\n", trim: true)
-        |> Enum.with_index(1)
-        |> Enum.reduce_while([], fn {line, line_num}, acc ->
-          case Jason.decode(line) do
-            {:ok, example} ->
-              {:cont, [parse_example(example) | acc]}
-
-            {:error, reason} ->
-              {:halt, {:error, "Line #{line_num}: #{inspect(reason)}"}}
-          end
-        end)
-
-      case examples do
-        {:error, _} = error -> error
-        examples -> {:ok, Enum.reverse(examples)}
-      end
+    with {:ok, content} <- File.read(path),
+         {:ok, examples} <- parse_calibration_lines(content) do
+      {:ok, examples}
     end
   end
 
@@ -176,25 +160,10 @@ defmodule Deft.Eval.JudgeCalibration do
   """
   @spec load_latest_result(String.t()) :: {:ok, calibration_result()} | {:error, term()}
   def load_latest_result(judge_name) do
-    with {:ok, files} <- File.ls(@calibration_dir) do
-      matching_files =
-        files
-        |> Enum.filter(&String.starts_with?(&1, "#{judge_name}_"))
-        |> Enum.filter(&String.ends_with?(&1, ".json"))
-        |> Enum.sort(:desc)
-
-      case matching_files do
-        [] ->
-          {:error, :not_found}
-
-        [latest | _] ->
-          path = Path.join(@calibration_dir, latest)
-
-          with {:ok, content} <- File.read(path),
-               {:ok, result} <- Jason.decode(content, keys: :atoms) do
-            {:ok, result}
-          end
-      end
+    with {:ok, files} <- File.ls(@calibration_dir),
+         {:ok, latest_file} <- find_latest_calibration_file(files, judge_name),
+         {:ok, result} <- read_calibration_file(latest_file) do
+      {:ok, result}
     else
       {:error, :enoent} -> {:error, :not_found}
       error -> error
@@ -247,18 +216,27 @@ defmodule Deft.Eval.JudgeCalibration do
   end
 
   defp calculate_metrics(results) do
-    {tp, fp, tn, false_neg} =
-      Enum.reduce(results, {0, 0, 0, 0}, fn {example, judge_result}, {tp, fp, tn, false_neg} ->
-        case {example.gold_label, judge_result} do
-          {true, true} -> {tp + 1, fp, tn, false_neg}
-          {false, true} -> {tp, fp + 1, tn, false_neg}
-          {false, false} -> {tp, fp, tn + 1, false_neg}
-          {true, false} -> {tp, fp, tn, false_neg + 1}
-        end
-      end)
+    {tp, fp, tn, false_neg} = count_classifications(results)
+    compute_rates(tp, fp, tn, false_neg)
+  end
 
+  defp count_classifications(results) do
+    Enum.reduce(results, {0, 0, 0, 0}, fn {example, judge_result}, acc ->
+      update_classification_counts(example.gold_label, judge_result, acc)
+    end)
+  end
+
+  defp update_classification_counts(gold_label, judge_result, {tp, fp, tn, false_neg}) do
+    case {gold_label, judge_result} do
+      {true, true} -> {tp + 1, fp, tn, false_neg}
+      {false, true} -> {tp, fp + 1, tn, false_neg}
+      {false, false} -> {tp, fp, tn + 1, false_neg}
+      {true, false} -> {tp, fp, tn, false_neg + 1}
+    end
+  end
+
+  defp compute_rates(tp, fp, tn, false_neg) do
     total = tp + fp + tn + false_neg
-
     precision = if tp + fp > 0, do: tp / (tp + fp), else: 0.0
     recall = if tp + false_neg > 0, do: tp / (tp + false_neg), else: 0.0
     accuracy = if total > 0, do: (tp + tn) / total, else: 0.0
@@ -273,6 +251,47 @@ defmodule Deft.Eval.JudgeCalibration do
       false_negatives: false_neg,
       total: total
     }
+  end
+
+  defp parse_calibration_lines(content) do
+    content
+    |> String.split("\n", trim: true)
+    |> Enum.with_index(1)
+    |> Enum.reduce_while([], fn {line, line_num}, acc ->
+      case Jason.decode(line) do
+        {:ok, example} ->
+          {:cont, [parse_example(example) | acc]}
+
+        {:error, reason} ->
+          {:halt, {:error, "Line #{line_num}: #{inspect(reason)}"}}
+      end
+    end)
+    |> case do
+      {:error, _} = error -> error
+      examples -> {:ok, Enum.reverse(examples)}
+    end
+  end
+
+  defp find_latest_calibration_file(files, judge_name) do
+    matching_files =
+      files
+      |> Enum.filter(&String.starts_with?(&1, "#{judge_name}_"))
+      |> Enum.filter(&String.ends_with?(&1, ".json"))
+      |> Enum.sort(:desc)
+
+    case matching_files do
+      [] -> {:error, :not_found}
+      [latest | _] -> {:ok, latest}
+    end
+  end
+
+  defp read_calibration_file(filename) do
+    path = Path.join(@calibration_dir, filename)
+
+    with {:ok, content} <- File.read(path),
+         {:ok, result} <- Jason.decode(content, keys: :atoms) do
+      {:ok, result}
+    end
   end
 
   defp format_percent(value) do

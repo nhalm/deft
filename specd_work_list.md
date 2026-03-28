@@ -19,10 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## standards v0.2 — Credo violation fixes
 
-### Tier 2: Medium files (5-8 violations each)
-
-- Refactor `lib/deft/eval/judge_calibration.ex` (5 violations): Extract helpers from load_latest_result and calculate_metrics. Split calculate_metrics into count_classifications + compute_rates. Flatten 2 nesting violations
-
 ### Tier 3: Small files (2-4 violations each)
 
 - Refactor `lib/deft/tools/bash.ex` (4 violations): Extract truncate_by_bytes/truncate_by_lines from truncate_output. Split execute into dispatch + pattern-matched handlers
