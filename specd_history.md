@@ -1,4 +1,5 @@
 # History
+- **standards v0.2 (2026-03-28):** Refactor `lib/deft/om/observer/parse.ex` (3 violations): Extract helpers from parse_sections. Split extract_xml_blocks into pattern-matched per-tag functions
 - **standards v0.2 (2026-03-28):** Refactor `lib/deft/om/observer.ex` (3 violations): Extract helpers from run (ABC 53) to flatten nesting. Group collect_stream_text_loop accumulator into state map
 - **standards v0.2 (2026-03-28):** Refactor `lib/deft/issues.ex` (1 violation): Group with_lock params into map
 - **standards v0.2 (2026-03-28):** Refactor `lib/mix/tasks/eval.compare.ex` (4 violations): Extract helpers from compare and print_soft_floor_violations. Flatten 2 nesting violations

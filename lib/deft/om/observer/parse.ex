@@ -156,66 +156,79 @@ defmodule Deft.OM.Observer.Parse do
     lines = String.split(observations, "\n")
 
     {sections, current_section, current_lines} =
-      Enum.reduce(lines, {%{}, nil, []}, fn line, {sections, current_section, current_lines} ->
-        case Regex.run(~r/^## (.+)$/, line, capture: :all_but_first) do
-          [section_name] ->
-            # New section header - save previous section if exists
-            sections =
-              if current_section do
-                content = current_lines |> Enum.reverse() |> Enum.join("\n") |> String.trim()
-                Map.put(sections, current_section, content)
-              else
-                sections
-              end
-
-            {sections, String.trim(section_name), []}
-
-          nil ->
-            # Content line - accumulate
-            {sections, current_section, [line | current_lines]}
-        end
+      Enum.reduce(lines, {%{}, nil, []}, fn line, acc ->
+        process_section_line(line, acc)
       end)
 
     # Save the last section
-    if current_section do
-      content = current_lines |> Enum.reverse() |> Enum.join("\n") |> String.trim()
-      Map.put(sections, current_section, content)
-    else
-      sections
-    end
+    finalize_sections(sections, current_section, current_lines)
   end
 
   ## Private Functions
 
+  # Process a single line during section parsing
+  defp process_section_line(line, {sections, current_section, current_lines}) do
+    case Regex.run(~r/^## (.+)$/, line, capture: :all_but_first) do
+      [section_name] ->
+        # New section header - save previous section if exists
+        updated_sections = save_section_content(sections, current_section, current_lines)
+        {updated_sections, String.trim(section_name), []}
+
+      nil ->
+        # Content line - accumulate
+        {sections, current_section, [line | current_lines]}
+    end
+  end
+
+  # Save accumulated section content to the sections map
+  defp save_section_content(sections, nil, _lines), do: sections
+
+  defp save_section_content(sections, section_name, lines) do
+    content = lines |> Enum.reverse() |> Enum.join("\n") |> String.trim()
+    Map.put(sections, section_name, content)
+  end
+
+  # Finalize sections by saving the last accumulated section
+  defp finalize_sections(sections, current_section, current_lines) do
+    save_section_content(sections, current_section, current_lines)
+  end
+
   # Extract content from XML tags
   defp extract_xml_blocks(output) do
-    # Extract <observations>...</observations>
-    observations =
-      case Regex.run(~r/<observations>(.*?)<\/observations>/s, output, capture: :all_but_first) do
-        [content] -> String.trim(content)
-        _ -> nil
-      end
-
-    # Extract <current-task>...</current-task>
-    current_task =
-      case Regex.run(~r/<current-task>(.*?)<\/current-task>/s, output, capture: :all_but_first) do
-        [content] -> String.trim(content)
-        _ -> nil
-      end
-
-    # Extract <continuation-hint>...</continuation-hint>
-    continuation_hint =
-      case Regex.run(~r/<continuation-hint>(.*?)<\/continuation-hint>/s, output,
-             capture: :all_but_first
-           ) do
-        [content] -> String.trim(content)
-        _ -> nil
-      end
+    observations = extract_observations_tag(output)
+    current_task = extract_current_task_tag(output)
+    continuation_hint = extract_continuation_hint_tag(output)
 
     if observations do
       {:ok, observations, current_task, continuation_hint}
     else
       :error
+    end
+  end
+
+  # Extract <observations>...</observations>
+  defp extract_observations_tag(output) do
+    case Regex.run(~r/<observations>(.*?)<\/observations>/s, output, capture: :all_but_first) do
+      [content] -> String.trim(content)
+      _ -> nil
+    end
+  end
+
+  # Extract <current-task>...</current-task>
+  defp extract_current_task_tag(output) do
+    case Regex.run(~r/<current-task>(.*?)<\/current-task>/s, output, capture: :all_but_first) do
+      [content] -> String.trim(content)
+      _ -> nil
+    end
+  end
+
+  # Extract <continuation-hint>...</continuation-hint>
+  defp extract_continuation_hint_tag(output) do
+    case Regex.run(~r/<continuation-hint>(.*?)<\/continuation-hint>/s, output,
+           capture: :all_but_first
+         ) do
+      [content] -> String.trim(content)
+      _ -> nil
     end
   end
 
