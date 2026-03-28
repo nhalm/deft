@@ -87,51 +87,39 @@ defmodule Deft.Agent.Context do
   # Per spec section 6.3, implements sync fallback:
   # - If pending_message_tokens >= 36,000 (1.2x observation threshold), force observe
   # - If observation_tokens >= 48,000 (1.2x reflection threshold), force reflect
+  defp get_om_context(_session_id, %{om_enabled: false}), do: {"", [], nil, 4.0}
+
   defp get_om_context(session_id, config) do
-    # Check if OM is enabled in config
-    om_enabled = Map.get(config, :om_enabled, true)
+    case Registry.lookup(Deft.ProcessRegistry, {:om_state, session_id}) do
+      [{_pid, _}] -> fetch_om_state_with_sync(session_id, config)
+      [] -> {"", [], nil, 4.0}
+    end
+  end
 
-    if om_enabled do
-      # Check if OM.State process exists for this session
-      case Registry.lookup(Deft.ProcessRegistry, {:om_state, session_id}) do
-        [{_pid, _}] ->
-          # Process exists, safe to call
-          try do
-            case OMState.get_context(session_id) do
-              {_observations, _observed_ids, _continuation_hint, _calibration_factor,
-               pending_message_tokens, observation_tokens} ->
-                # Sync fallback: check hard thresholds per spec section 6.3
-                # Observation hard threshold: hard_threshold_multiplier * message_token_threshold
-                # Reflection hard threshold: hard_threshold_multiplier * observation_token_threshold
-                check_sync_fallback(
-                  session_id,
-                  config,
-                  pending_message_tokens,
-                  observation_tokens
-                )
+  # Fetches OM state and applies sync fallback if needed
+  defp fetch_om_state_with_sync(session_id, config) do
+    try do
+      case OMState.get_context(session_id) do
+        {_obs, _ids, _hint, _cal, pending_tokens, obs_tokens} ->
+          check_sync_fallback(session_id, config, pending_tokens, obs_tokens)
+          extract_context_after_sync(session_id)
 
-                # Re-fetch context after sync fallback to get freshly observed/reflected data
-                case OMState.get_context(session_id) do
-                  {observations, observed_ids, continuation_hint, calibration_factor, _, _} ->
-                    {observations, observed_ids, continuation_hint, calibration_factor}
-
-                  _ ->
-                    {"", [], nil, 4.0}
-                end
-
-              _ ->
-                {"", [], nil, 4.0}
-            end
-          catch
-            :exit, _ -> {"", [], nil, 4.0}
-          end
-
-        [] ->
-          # OM.State process doesn't exist - session not initialized with OM
+        _ ->
           {"", [], nil, 4.0}
       end
-    else
-      {"", [], nil, 4.0}
+    catch
+      :exit, _ -> {"", [], nil, 4.0}
+    end
+  end
+
+  # Extracts context tuple after sync fallback
+  defp extract_context_after_sync(session_id) do
+    case OMState.get_context(session_id) do
+      {observations, observed_ids, continuation_hint, calibration_factor, _, _} ->
+        {observations, observed_ids, continuation_hint, calibration_factor}
+
+      _ ->
+        {"", [], nil, 4.0}
     end
   end
 
