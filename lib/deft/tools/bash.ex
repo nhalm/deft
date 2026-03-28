@@ -58,29 +58,31 @@ defmodule Deft.Tools.Bash do
 
     try do
       result = run_command(command, working_dir, timeout, emit, temp_path)
-
-      case result do
-        {:ok, output, exit_code} ->
-          {truncated_output, was_truncated} = truncate_output(output)
-
-          result_text =
-            format_result(command, truncated_output, exit_code, temp_path, was_truncated)
-
-          {:ok, [%Text{text: result_text}]}
-
-        {:error, :timeout} ->
-          {:error, "Command timed out after #{timeout}ms"}
-
-        {:error, reason} ->
-          {:error, "Failed to execute command: #{reason}"}
-      end
+      handle_command_result(result, command, temp_path, timeout)
     after
-      # Clean up temp file if it's empty or on error
-      if File.exists?(temp_path) do
-        case File.stat(temp_path) do
-          {:ok, %{size: 0}} -> File.rm(temp_path)
-          _ -> :ok
-        end
+      cleanup_temp_file(temp_path)
+    end
+  end
+
+  defp handle_command_result({:ok, output, exit_code}, command, temp_path, _timeout) do
+    {truncated_output, was_truncated} = truncate_output(output)
+    result_text = format_result(command, truncated_output, exit_code, temp_path, was_truncated)
+    {:ok, [%Text{text: result_text}]}
+  end
+
+  defp handle_command_result({:error, :timeout}, _command, _temp_path, timeout) do
+    {:error, "Command timed out after #{timeout}ms"}
+  end
+
+  defp handle_command_result({:error, reason}, _command, _temp_path, _timeout) do
+    {:error, "Failed to execute command: #{reason}"}
+  end
+
+  defp cleanup_temp_file(temp_path) do
+    if File.exists?(temp_path) do
+      case File.stat(temp_path) do
+        {:ok, %{size: 0}} -> File.rm(temp_path)
+        _ -> :ok
       end
     end
   end
@@ -189,51 +191,55 @@ defmodule Deft.Tools.Bash do
   end
 
   defp truncate_output(output) do
-    # First, truncate by byte size if needed
-    {output_by_bytes, truncated_by_bytes?} =
-      if byte_size(output) > @max_output_bytes do
-        # Take last 30KB
-        {binary_part(output, byte_size(output) - @max_output_bytes, @max_output_bytes), true}
-      else
-        {output, false}
-      end
-
-    # Then, truncate by line count if needed
-    # Split into lines, preserving whether there's a trailing newline
-    {lines, has_trailing_newline} =
-      case String.split(output_by_bytes, "\n") do
-        # If last element is empty, we had a trailing newline
-        parts when is_list(parts) ->
-          case List.last(parts) do
-            "" -> {Enum.drop(parts, -1), true}
-            _ -> {parts, false}
-          end
-      end
-
-    actual_line_count = length(lines)
-
-    {truncated_output, truncated_by_lines?} =
-      if actual_line_count > @max_output_lines do
-        # Take last 100 lines
-        truncated =
-          lines
-          |> Enum.take(-@max_output_lines)
-          |> Enum.join("\n")
-
-        final_output =
-          if has_trailing_newline do
-            truncated <> "\n"
-          else
-            truncated
-          end
-
-        {final_output, true}
-      else
-        {output_by_bytes, false}
-      end
-
+    {output_by_bytes, truncated_by_bytes?} = truncate_by_bytes(output)
+    {truncated_output, truncated_by_lines?} = truncate_by_lines(output_by_bytes)
     was_truncated = truncated_by_bytes? or truncated_by_lines?
     {truncated_output, was_truncated}
+  end
+
+  defp truncate_by_bytes(output) do
+    if byte_size(output) > @max_output_bytes do
+      # Take last 30KB
+      {binary_part(output, byte_size(output) - @max_output_bytes, @max_output_bytes), true}
+    else
+      {output, false}
+    end
+  end
+
+  defp truncate_by_lines(output) do
+    # Split into lines, preserving whether there's a trailing newline
+    {lines, has_trailing_newline} = parse_lines_with_trailing_newline(output)
+    actual_line_count = length(lines)
+
+    if actual_line_count > @max_output_lines do
+      # Take last 100 lines
+      truncated =
+        lines
+        |> Enum.take(-@max_output_lines)
+        |> Enum.join("\n")
+
+      final_output =
+        if has_trailing_newline do
+          truncated <> "\n"
+        else
+          truncated
+        end
+
+      {final_output, true}
+    else
+      {output, false}
+    end
+  end
+
+  defp parse_lines_with_trailing_newline(output) do
+    case String.split(output, "\n") do
+      # If last element is empty, we had a trailing newline
+      parts when is_list(parts) ->
+        case List.last(parts) do
+          "" -> {Enum.drop(parts, -1), true}
+          _ -> {parts, false}
+        end
+    end
   end
 
   defp format_result(_command, output, exit_code, temp_path, was_truncated) do

@@ -1,4 +1,5 @@
 # History
+- **standards v0.2 (2026-03-28):** Refactor `lib/deft/tools/bash.ex` (4 violations): Extract truncate_by_bytes/truncate_by_lines from truncate_output. Split execute into dispatch + pattern-matched handlers
 - **standards v0.2 (2026-03-28):** Refactor `lib/deft/tools/ls.ex` (1 violation): Extract helpers from summarize
 - **standards v0.2 (2026-03-28):** Refactor `lib/deft/eval/judge_calibration.ex` (5 violations): Extract helpers from load_latest_result and calculate_metrics. Split calculate_metrics into count_classifications + compute_rates. Flatten 2 nesting violations
 - **standards v0.2 (2026-03-28):** Refactor `lib/deft/skills/registry.ex` (5 violations): Flatten 5 nesting violations by extracting inner case/if branches into named functions with pattern-matched heads

@@ -21,7 +21,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ### Tier 3: Small files (2-4 violations each)
 
-- Refactor `lib/deft/tools/bash.ex` (4 violations): Extract truncate_by_bytes/truncate_by_lines from truncate_output. Split execute into dispatch + pattern-matched handlers
 - Refactor `lib/deft/om/reflector.ex` (4 violations): Group compress_with_retry/attempt_compression args into context map. Group collect_stream_text_loop accumulator into state map
 - Refactor `lib/mix/tasks/eval.compare.ex` (4 violations): Extract helpers from compare and print_soft_floor_violations. Flatten 2 nesting violations
 - Refactor `lib/deft/om/observer.ex` (3 violations): Extract helpers from run (ABC 53) to flatten nesting. Group collect_stream_text_loop accumulator into state map
