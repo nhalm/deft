@@ -30,54 +30,11 @@ defmodule DeftWeb.ChatLive do
       {:ok, push_navigate(socket, to: "/sessions")}
     else
       if connected?(socket) do
-        # Subscribe to agent events for this session
-        Registry.register(Deft.Registry, {:session, session_id}, [])
-        Registry.register(Deft.Registry, {:job_status, session_id}, [])
-
-        # Log session connection
-        id_prefix = String.slice(session_id, 0, 8)
-        Logger.info("[Chat:#{id_prefix}] Session connected")
+        subscribe_to_session(session_id)
       end
 
       # Initialize all assigns
-      socket =
-        socket
-        |> assign(:session_id, session_id)
-        |> assign(:messages, [])
-        |> assign(:streaming_text, "")
-        |> assign(:streaming_thinking, "")
-        |> assign(:agent_state, :idle)
-        |> assign(:input, "")
-        |> assign(:active_tools, %{})
-        |> assign(:tools_expanded, %{})
-        |> assign(:tokens_input, 0)
-        |> assign(:tokens_output, 0)
-        |> assign(:cost, 0.0)
-        |> assign(:turn_count, 0)
-        |> assign(:turn_limit, 25)
-        |> assign(:om_observation_count, 0)
-        |> assign(:om_memory_tokens, 0)
-        |> assign(:agent_statuses, [])
-        |> assign(:job_active, false)
-        |> assign(:job_budget, 10.0)
-        |> assign(:job_started_at, nil)
-        |> assign(:vim_mode, :insert)
-        |> assign(:scroll_offset, 0)
-        |> assign(:pending_g, false)
-        |> assign(:tmux_prefix, false)
-        |> assign(:roster_visible, false)
-        |> assign(:zoom, false)
-        |> assign(:active_pane, :left)
-        |> assign(:repo_name, get_repo_name())
-        |> assign(:agent_identity, "Solo")
-        |> assign(:thinking_blocks_expanded, %{})
-        |> assign(:last_ctrl_c, nil)
-        |> assign(:input_history, [])
-        |> assign(:input_history_index, nil)
-        |> assign(:turn_limit_reached, false)
-        |> assign(:turn_limit_count, 0)
-        |> assign(:turn_limit_max, 0)
-        |> stream(:conversation, [])
+      socket = initialize_socket_assigns(socket, session_id)
 
       {:ok, socket}
     end
@@ -310,6 +267,93 @@ defmodule DeftWeb.ChatLive do
     # Actually stop the server and exit
     System.stop(0)
     {:noreply, socket}
+  end
+
+  # Private helpers for socket initialization
+
+  defp subscribe_to_session(session_id) do
+    # Subscribe to agent events for this session
+    Registry.register(Deft.Registry, {:session, session_id}, [])
+    Registry.register(Deft.Registry, {:job_status, session_id}, [])
+
+    # Log session connection
+    id_prefix = String.slice(session_id, 0, 8)
+    Logger.info("[Chat:#{id_prefix}] Session connected")
+  end
+
+  defp initialize_socket_assigns(socket, session_id) do
+    socket
+    |> assign_session_state(session_id)
+    |> assign_message_state()
+    |> assign_input_state()
+    |> assign_tool_state()
+    |> assign_metrics_state()
+    |> assign_job_state()
+    |> assign_ui_state()
+    |> stream(:conversation, [])
+  end
+
+  defp assign_session_state(socket, session_id) do
+    socket
+    |> assign(:session_id, session_id)
+    |> assign(:repo_name, get_repo_name())
+  end
+
+  defp assign_message_state(socket) do
+    socket
+    |> assign(:messages, [])
+    |> assign(:streaming_text, "")
+    |> assign(:streaming_thinking, "")
+    |> assign(:agent_state, :idle)
+  end
+
+  defp assign_input_state(socket) do
+    socket
+    |> assign(:input, "")
+    |> assign(:input_history, [])
+    |> assign(:input_history_index, nil)
+  end
+
+  defp assign_tool_state(socket) do
+    socket
+    |> assign(:active_tools, %{})
+    |> assign(:tools_expanded, %{})
+    |> assign(:thinking_blocks_expanded, %{})
+  end
+
+  defp assign_metrics_state(socket) do
+    socket
+    |> assign(:tokens_input, 0)
+    |> assign(:tokens_output, 0)
+    |> assign(:cost, 0.0)
+    |> assign(:turn_count, 0)
+    |> assign(:turn_limit, 25)
+    |> assign(:turn_limit_reached, false)
+    |> assign(:turn_limit_count, 0)
+    |> assign(:turn_limit_max, 0)
+    |> assign(:om_observation_count, 0)
+    |> assign(:om_memory_tokens, 0)
+  end
+
+  defp assign_job_state(socket) do
+    socket
+    |> assign(:agent_statuses, [])
+    |> assign(:job_active, false)
+    |> assign(:job_budget, 10.0)
+    |> assign(:job_started_at, nil)
+    |> assign(:agent_identity, "Solo")
+  end
+
+  defp assign_ui_state(socket) do
+    socket
+    |> assign(:vim_mode, :insert)
+    |> assign(:scroll_offset, 0)
+    |> assign(:pending_g, false)
+    |> assign(:tmux_prefix, false)
+    |> assign(:roster_visible, false)
+    |> assign(:zoom, false)
+    |> assign(:active_pane, :left)
+    |> assign(:last_ctrl_c, nil)
   end
 
   # Private helpers for flushing content to conversation stream
@@ -676,18 +720,14 @@ defmodule DeftWeb.ChatLive do
     end
   end
 
-  defp handle_scroll_key(socket, key, ctrl, pending_g) do
-    case {key, ctrl, pending_g} do
-      {"j", false, _} -> scroll_down(socket, 1, 50)
-      {"k", false, _} -> scroll_up(socket, 1, 50)
-      {"G", false, _} -> scroll_to_bottom(socket)
-      {"g", false, false} -> assign(socket, :pending_g, true)
-      {"g", false, true} -> scroll_to_top(socket)
-      {"u", true, _} -> scroll_up(socket, 10, 250)
-      {"d", true, _} -> scroll_down(socket, 10, 250)
-      _ -> assign(socket, :pending_g, false)
-    end
-  end
+  defp handle_scroll_key(socket, "j", false, _pending_g), do: scroll_down(socket, 1, 50)
+  defp handle_scroll_key(socket, "k", false, _pending_g), do: scroll_up(socket, 1, 50)
+  defp handle_scroll_key(socket, "G", false, _pending_g), do: scroll_to_bottom(socket)
+  defp handle_scroll_key(socket, "g", false, false), do: assign(socket, :pending_g, true)
+  defp handle_scroll_key(socket, "g", false, true), do: scroll_to_top(socket)
+  defp handle_scroll_key(socket, "u", true, _pending_g), do: scroll_up(socket, 10, 250)
+  defp handle_scroll_key(socket, "d", true, _pending_g), do: scroll_down(socket, 10, 250)
+  defp handle_scroll_key(socket, _key, _ctrl, _pending_g), do: assign(socket, :pending_g, false)
 
   defp scroll_down(socket, offset_delta, pixel_delta) do
     current_offset = normalize_scroll_offset(socket.assigns.scroll_offset)
@@ -724,47 +764,49 @@ defmodule DeftWeb.ChatLive do
   defp normalize_scroll_offset(:bottom), do: 0
   defp normalize_scroll_offset(offset) when is_integer(offset), do: offset
 
-  defp handle_tmux_key(socket, key) do
-    case key do
-      # % - toggle roster panel visibility
-      "%" ->
+  # % - toggle roster panel visibility
+  defp handle_tmux_key(socket, "%") do
+    socket
+    |> assign(:roster_visible, not socket.assigns.roster_visible)
+    |> assign(:tmux_prefix, false)
+  end
+
+  # x - close active panel
+  defp handle_tmux_key(socket, "x") do
+    socket =
+      if socket.assigns.active_pane == :right and socket.assigns.roster_visible do
+        assign(socket, :roster_visible, false)
+      else
         socket
-        |> assign(:roster_visible, not socket.assigns.roster_visible)
-        |> assign(:tmux_prefix, false)
+      end
 
-      # x - close active panel
-      "x" ->
-        socket =
-          if socket.assigns.active_pane == :right and socket.assigns.roster_visible do
-            assign(socket, :roster_visible, false)
-          else
-            socket
-          end
+    assign(socket, :tmux_prefix, false)
+  end
 
-        assign(socket, :tmux_prefix, false)
+  # h - focus left pane (main chat area)
+  defp handle_tmux_key(socket, "h") do
+    socket
+    |> assign(:active_pane, :left)
+    |> assign(:tmux_prefix, false)
+  end
 
-      # h - focus left pane (main chat area)
-      "h" ->
-        socket
-        |> assign(:active_pane, :left)
-        |> assign(:tmux_prefix, false)
+  # l - focus right pane (roster)
+  defp handle_tmux_key(socket, "l") do
+    socket
+    |> assign(:active_pane, :right)
+    |> assign(:tmux_prefix, false)
+  end
 
-      # l - focus right pane (roster)
-      "l" ->
-        socket
-        |> assign(:active_pane, :right)
-        |> assign(:tmux_prefix, false)
+  # z - toggle zoom
+  defp handle_tmux_key(socket, "z") do
+    socket
+    |> assign(:zoom, not socket.assigns.zoom)
+    |> assign(:tmux_prefix, false)
+  end
 
-      # z - toggle zoom
-      "z" ->
-        socket
-        |> assign(:zoom, not socket.assigns.zoom)
-        |> assign(:tmux_prefix, false)
-
-      # Any other key clears tmux_prefix
-      _ ->
-        assign(socket, :tmux_prefix, false)
-    end
+  # Any other key clears tmux_prefix
+  defp handle_tmux_key(socket, _key) do
+    assign(socket, :tmux_prefix, false)
   end
 
   defp get_repo_name do
