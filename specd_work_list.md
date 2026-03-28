@@ -19,10 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## standards v0.2 — Credo violation fixes
 
-### Tier 1: Largest files (10+ violations each)
-
-- Refactor `lib/deft/agent.ex` (14 violations): Extract shared start_provider_stream helper (deduplicates 3 call sites). Split handle_event(:calling) case into pattern-matched function heads. Extract helpers from handle_tool_execution_complete (ABC 80), handle_idle_transition, save_tool_results, start_compaction_task. Flatten 4 nesting violations
-
 ### Tier 2: Medium files (5-8 violations each)
 
 - Refactor `lib/deft/job/lead.ex` (8 violations): Extract helpers from handle_event(:info, runner_result), read_site_log_context, process_runner_result. Split evaluate_runner_output into pattern-matched heads. Flatten 4 nesting violations

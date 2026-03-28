@@ -225,67 +225,12 @@ defmodule Deft.Agent do
       timestamp: DateTime.utc_now()
     }
 
-    # Append to conversation history
-    new_messages = data.messages ++ [user_message]
-
-    # Check if compaction is needed before calling provider
-    data_with_messages = %{data | messages: new_messages}
-    compacted_data = maybe_compact_messages(data_with_messages)
-
-    # Notify OM about new messages
-    notify_om_messages_added(data.session_id, [user_message], data.config)
-
-    # Assemble context
-    context_messages =
-      Context.build(compacted_data.messages,
-        config: compacted_data.config,
-        session_id: data.session_id
-      )
-
-    # Get provider from config (default to nil for now)
-    provider = Map.get(compacted_data.config, :provider)
-
-    # Get tools from config
-    tools = Map.get(compacted_data.config, :tools, [])
-
-    # Add session_id to config for provider logging
-    config_with_session = Map.put(compacted_data.config, :session_id, data.session_id)
-
-    # Call provider.stream/3
-    case call_provider_stream(provider, context_messages, tools, config_with_session) do
-      {:ok, stream_ref} ->
-        provider_name = if provider, do: inspect(provider), else: "nil"
-        model = Map.get(config_with_session, :model, "unknown")
-
-        Logger.info(
-          "#{log_prefix(data.session_id)} Provider stream started (#{provider_name}, #{model})"
-        )
-
-        # Monitor the stream process to detect crashes (only if stream_ref is a PID)
-        monitor_ref = if is_pid(stream_ref), do: Process.monitor(stream_ref), else: nil
-
-        # Store stream ref and updated messages, reset retry state and turn count, transition to :calling
-        new_data = %{
-          compacted_data
-          | stream_ref: stream_ref,
-            stream_monitor_ref: monitor_ref,
-            stream_start_time: System.monotonic_time(:millisecond),
-            turn_start_time: System.monotonic_time(:millisecond),
-            retry_count: 0,
-            retry_delay: 1000,
-            turn_count: 1
-        }
-
-        broadcast_event(data.session_id, {:state_change, :calling})
-        Logger.debug("#{log_prefix(data.session_id)} State transition: idle -> calling")
-        {:next_state, :calling, new_data}
-
-      {:error, reason} ->
-        # On error, stay in :idle and emit error event
-        # Error recovery with retries will be implemented in :calling → :streaming transition
-        broadcast_event(data.session_id, {:error, reason})
-        :keep_state_and_data
-    end
+    # Append to conversation history and process
+    data
+    |> Map.put(:messages, data.messages ++ [user_message])
+    |> maybe_compact_messages()
+    |> tap(fn _ -> notify_om_messages_added(data.session_id, [user_message], data.config) end)
+    |> start_provider_stream_transition(:idle, turn_count: 1)
   end
 
   def handle_event(:cast, {:prompt, text}, state, data) do
@@ -310,71 +255,16 @@ defmodule Deft.Agent do
       timestamp: DateTime.utc_now()
     }
 
-    # Append to conversation history
-    new_messages = data.messages ++ [system_message]
-
     # Notify OM about new message
     notify_om_messages_added(data.session_id, [system_message], data.config)
 
-    # If args provided, queue them as a user message to be processed after skill
-    updated_data =
-      if args && String.trim(args) != "" do
-        new_queue = :queue.in(args, data.prompt_queue)
-        %{data | messages: new_messages, prompt_queue: new_queue}
-      else
-        %{data | messages: new_messages}
-      end
+    # Update data with new message and optionally queue args
+    updated_data = add_skill_message_and_queue_args(data, system_message, args)
 
-    # Check if compaction is needed before calling provider
-    compacted_data = maybe_compact_messages(updated_data)
-
-    # Immediately call provider with the updated message history
-    # Build context from all messages
-    context_messages =
-      Context.build(compacted_data.messages,
-        config: compacted_data.config,
-        session_id: compacted_data.session_id
-      )
-
-    provider = Map.get(compacted_data.config, :provider)
-    tools = Map.get(compacted_data.config, :tools, [])
-
-    # Add session_id to config for provider logging
-    config_with_session = Map.put(compacted_data.config, :session_id, compacted_data.session_id)
-
-    case call_provider_stream(provider, context_messages, tools, config_with_session) do
-      {:ok, stream_ref} ->
-        provider_name = if provider, do: inspect(provider), else: "nil"
-        model = Map.get(config_with_session, :model, "unknown")
-
-        Logger.info(
-          "#{log_prefix(data.session_id)} Provider stream started (#{provider_name}, #{model})"
-        )
-
-        # Monitor the stream process to detect crashes (only if stream_ref is a PID)
-        monitor_ref = if is_pid(stream_ref), do: Process.monitor(stream_ref), else: nil
-
-        new_data = %{
-          compacted_data
-          | stream_ref: stream_ref,
-            stream_monitor_ref: monitor_ref,
-            stream_start_time: System.monotonic_time(:millisecond),
-            turn_start_time: System.monotonic_time(:millisecond),
-            current_message: nil,
-            tool_call_buffers: %{},
-            retry_count: 0,
-            retry_delay: 1000,
-            turn_count: 1
-        }
-
-        broadcast_event(data.session_id, {:state_change, :calling})
-        {:next_state, :calling, new_data}
-
-      {:error, reason} ->
-        # On error, stay in :idle and emit error event
-        broadcast_event(data.session_id, {:error, reason})
-        :keep_state_and_data
-    end
+    # Check if compaction is needed and call provider
+    updated_data
+    |> maybe_compact_messages()
+    |> start_provider_stream_transition(:idle, turn_count: 1, clear_buffers: true)
   end
 
   def handle_event(:cast, {:inject_skill, definition, args}, _state, data) do
@@ -433,99 +323,40 @@ defmodule Deft.Agent do
     end
   end
 
-  def handle_event(:info, {:provider_event, event}, :calling, data) do
-    Logger.debug(
-      "#{log_prefix(data.session_id)} SSE event received: #{event.__struct__ |> to_string() |> String.split(".") |> List.last()}"
-    )
+  # Split handle_event(:calling) into pattern-matched function heads
+  def handle_event(:info, {:provider_event, %TextDelta{delta: delta}}, :calling, data) do
+    Logger.debug("#{log_prefix(data.session_id)} SSE event received: TextDelta")
+    handle_calling_text_delta(delta, data)
+  end
 
-    case event do
-      # First content chunk - transition to streaming
-      %TextDelta{delta: delta} ->
-        # Initialize current assistant message with first text delta
-        current_message = %Message{
-          id: generate_message_id(),
-          role: :assistant,
-          content: [%Deft.Message.Text{text: delta}],
-          timestamp: DateTime.utc_now()
-        }
+  def handle_event(:info, {:provider_event, %ThinkingDelta{delta: delta}}, :calling, data) do
+    Logger.debug("#{log_prefix(data.session_id)} SSE event received: ThinkingDelta")
+    handle_calling_thinking_delta(delta, data)
+  end
 
-        new_data = %{data | current_message: current_message}
+  def handle_event(:info, {:provider_event, %ToolCallStart{id: id, name: name}}, :calling, data) do
+    Logger.debug("#{log_prefix(data.session_id)} SSE event received: ToolCallStart")
+    handle_calling_tool_start(id, name, data)
+  end
 
-        broadcast_event(data.session_id, {:text_delta, delta})
-        broadcast_event(data.session_id, {:state_change, :streaming})
-        Logger.debug("#{log_prefix(data.session_id)} State transition: calling -> streaming")
-        {:next_state, :streaming, new_data}
+  def handle_event(:info, {:provider_event, %Error{} = error_event}, :calling, data) do
+    Logger.debug("#{log_prefix(data.session_id)} SSE event received: Error")
+    handle_calling_error(error_event, data)
+  end
 
-      %ThinkingDelta{delta: delta} ->
-        # Initialize current assistant message
-        current_message = %Message{
-          id: generate_message_id(),
-          role: :assistant,
-          content: [],
-          timestamp: DateTime.utc_now()
-        }
+  def handle_event(:info, {:provider_event, %Usage{} = usage_event}, :calling, data) do
+    Logger.debug("#{log_prefix(data.session_id)} SSE event received: Usage")
+    handle_usage(usage_event, data)
+  end
 
-        new_data = %{data | current_message: current_message}
+  def handle_event(:info, {:provider_event, %Done{}}, :calling, data) do
+    Logger.debug("#{log_prefix(data.session_id)} SSE event received: Done")
+    handle_calling_done(data)
+  end
 
-        # Broadcast the first thinking delta (thinking doesn't get added to content)
-        broadcast_event(data.session_id, {:thinking_delta, delta})
-        broadcast_event(data.session_id, {:state_change, :streaming})
-        Logger.debug("#{log_prefix(data.session_id)} State transition: calling -> streaming")
-        {:next_state, :streaming, new_data}
-
-      %ToolCallStart{id: id, name: name} ->
-        # Initialize current assistant message with first tool call
-        tool_use = %Deft.Message.ToolUse{id: id, name: name, args: %{}}
-
-        current_message = %Message{
-          id: generate_message_id(),
-          role: :assistant,
-          content: [tool_use],
-          timestamp: DateTime.utc_now()
-        }
-
-        # Initialize buffer for this tool call's JSON args
-        tool_call_buffers = Map.get(data, :tool_call_buffers, %{})
-        new_buffers = Map.put(tool_call_buffers, id, "")
-
-        new_data = %{data | current_message: current_message, tool_call_buffers: new_buffers}
-
-        broadcast_event(data.session_id, {:tool_call_start, %{id: id, name: name}})
-        broadcast_event(data.session_id, {:state_change, :streaming})
-        Logger.debug("#{log_prefix(data.session_id)} State transition: calling -> streaming")
-        {:next_state, :streaming, new_data}
-
-      # Error event - retry with exponential backoff
-      %Error{} = error_event ->
-        handle_calling_error(error_event, data)
-
-      # Usage event - update token tracking even before first content
-      %Usage{} = usage_event ->
-        handle_usage(usage_event, data)
-
-      # Done event - stream completed without content (edge case)
-      %Done{} ->
-        # Demonitor the stream process
-        if data.stream_monitor_ref do
-          Process.demonitor(data.stream_monitor_ref, [:flush])
-        end
-
-        # Clean up stream references and transition to idle
-        new_data = %{
-          data
-          | stream_ref: nil,
-            stream_monitor_ref: nil,
-            stream_start_time: nil,
-            retry_count: 0,
-            retry_delay: 1000
-        }
-
-        handle_idle_transition(new_data)
-
-      # Other events - keep waiting for first content
-      _ ->
-        :keep_state_and_data
-    end
+  def handle_event(:info, {:provider_event, _event}, :calling, _data) do
+    # Other events - keep waiting for first content
+    :keep_state_and_data
   end
 
   def handle_event(:info, {:retry_stream}, :calling, data) do
@@ -740,6 +571,145 @@ defmodule Deft.Agent do
   end
 
   # Private helpers
+
+  # Shared helper to start provider stream and transition to :calling state
+  # Used by handle_event(:prompt), handle_event(:inject_skill), process_queued_message, continue_after_tools
+  defp start_provider_stream_transition(data, from_state, opts) do
+    context_messages =
+      Context.build(data.messages, config: data.config, session_id: data.session_id)
+
+    provider = Map.get(data.config, :provider)
+    tools = Map.get(data.config, :tools, [])
+    config_with_session = Map.put(data.config, :session_id, data.session_id)
+
+    case call_provider_stream(provider, context_messages, tools, config_with_session) do
+      {:ok, stream_ref} ->
+        log_provider_stream_started(data.session_id, provider, config_with_session)
+        new_data = build_calling_state_data(data, stream_ref, opts)
+        broadcast_event(data.session_id, {:state_change, :calling})
+        Logger.debug("#{log_prefix(data.session_id)} State transition: #{from_state} -> calling")
+        {:next_state, :calling, new_data}
+
+      {:error, reason} ->
+        broadcast_event(data.session_id, {:error, reason})
+        if from_state == :idle, do: :keep_state_and_data, else: handle_idle_transition(data)
+    end
+  end
+
+  defp log_provider_stream_started(session_id, provider, config) do
+    provider_name = if provider, do: inspect(provider), else: "nil"
+    model = Map.get(config, :model, "unknown")
+    Logger.info("#{log_prefix(session_id)} Provider stream started (#{provider_name}, #{model})")
+  end
+
+  defp build_calling_state_data(data, stream_ref, opts) do
+    monitor_ref = if is_pid(stream_ref), do: Process.monitor(stream_ref), else: nil
+    turn_count = Keyword.get(opts, :turn_count, data.turn_count + 1)
+    clear_buffers = Keyword.get(opts, :clear_buffers, false)
+
+    base_data = %{
+      data
+      | stream_ref: stream_ref,
+        stream_monitor_ref: monitor_ref,
+        retry_count: 0,
+        retry_delay: 1000,
+        turn_count: turn_count
+    }
+
+    base_data =
+      if Keyword.has_key?(opts, :turn_count) do
+        %{
+          base_data
+          | stream_start_time: System.monotonic_time(:millisecond),
+            turn_start_time: System.monotonic_time(:millisecond)
+        }
+      else
+        base_data
+      end
+
+    if clear_buffers do
+      %{base_data | current_message: nil, tool_call_buffers: %{}}
+    else
+      base_data
+    end
+  end
+
+  defp add_skill_message_and_queue_args(data, system_message, args) do
+    new_messages = data.messages ++ [system_message]
+
+    if args && String.trim(args) != "" do
+      new_queue = :queue.in(args, data.prompt_queue)
+      %{data | messages: new_messages, prompt_queue: new_queue}
+    else
+      %{data | messages: new_messages}
+    end
+  end
+
+  # Handle :calling state events - split into separate functions
+  defp handle_calling_text_delta(delta, data) do
+    current_message = %Message{
+      id: generate_message_id(),
+      role: :assistant,
+      content: [%Deft.Message.Text{text: delta}],
+      timestamp: DateTime.utc_now()
+    }
+
+    new_data = %{data | current_message: current_message}
+    broadcast_event(data.session_id, {:text_delta, delta})
+    broadcast_event(data.session_id, {:state_change, :streaming})
+    Logger.debug("#{log_prefix(data.session_id)} State transition: calling -> streaming")
+    {:next_state, :streaming, new_data}
+  end
+
+  defp handle_calling_thinking_delta(delta, data) do
+    current_message = %Message{
+      id: generate_message_id(),
+      role: :assistant,
+      content: [],
+      timestamp: DateTime.utc_now()
+    }
+
+    new_data = %{data | current_message: current_message}
+    broadcast_event(data.session_id, {:thinking_delta, delta})
+    broadcast_event(data.session_id, {:state_change, :streaming})
+    Logger.debug("#{log_prefix(data.session_id)} State transition: calling -> streaming")
+    {:next_state, :streaming, new_data}
+  end
+
+  defp handle_calling_tool_start(id, name, data) do
+    tool_use = %Deft.Message.ToolUse{id: id, name: name, args: %{}}
+
+    current_message = %Message{
+      id: generate_message_id(),
+      role: :assistant,
+      content: [tool_use],
+      timestamp: DateTime.utc_now()
+    }
+
+    tool_call_buffers = Map.get(data, :tool_call_buffers, %{})
+    new_buffers = Map.put(tool_call_buffers, id, "")
+    new_data = %{data | current_message: current_message, tool_call_buffers: new_buffers}
+
+    broadcast_event(data.session_id, {:tool_call_start, %{id: id, name: name}})
+    broadcast_event(data.session_id, {:state_change, :streaming})
+    Logger.debug("#{log_prefix(data.session_id)} State transition: calling -> streaming")
+    {:next_state, :streaming, new_data}
+  end
+
+  defp handle_calling_done(data) do
+    if data.stream_monitor_ref, do: Process.demonitor(data.stream_monitor_ref, [:flush])
+
+    new_data = %{
+      data
+      | stream_ref: nil,
+        stream_monitor_ref: nil,
+        stream_start_time: nil,
+        retry_count: 0,
+        retry_delay: 1000
+    }
+
+    handle_idle_transition(new_data)
+  end
 
   defp get_context_window(config) do
     # Get context window from provider's model config
@@ -1142,53 +1112,53 @@ defmodule Deft.Agent do
   end
 
   defp handle_idle_transition(data) do
-    # Save any unsaved messages before transitioning to idle
     data_with_saved = save_unsaved_messages(data)
 
-    # Check if there are queued prompts or skill injections
     case :queue.out(data_with_saved.prompt_queue) do
       {{:value, {:skill, definition}}, new_queue} ->
-        # Process the queued skill injection - create system message
-        message = %Message{
-          id: generate_message_id(),
-          role: :system,
-          content: [%Text{text: definition}],
-          timestamp: DateTime.utc_now()
-        }
-
-        process_queued_message(message, new_queue, data_with_saved)
+        create_system_message(definition)
+        |> then(&process_queued_message(&1, new_queue, data_with_saved))
 
       {{:value, text}, new_queue} when is_binary(text) ->
-        # Process the queued prompt - create user message
-        message = %Message{
-          id: generate_message_id(),
-          role: :user,
-          content: [%Text{text: text}],
-          timestamp: DateTime.utc_now()
-        }
-
-        process_queued_message(message, new_queue, data_with_saved)
+        create_user_message(text)
+        |> then(&process_queued_message(&1, new_queue, data_with_saved))
 
       {:empty, _} ->
-        # No queued prompts - transition to idle
-        turn_duration_ms =
-          if data_with_saved.turn_start_time do
-            System.monotonic_time(:millisecond) - data_with_saved.turn_start_time
-          else
-            0
-          end
+        complete_turn_and_transition_idle(data_with_saved)
+    end
+  end
 
-        Logger.info(
-          "#{log_prefix(data_with_saved.session_id)} Turn complete (#{turn_duration_ms}ms)"
-        )
+  defp create_system_message(text) do
+    %Message{
+      id: generate_message_id(),
+      role: :system,
+      content: [%Text{text: text}],
+      timestamp: DateTime.utc_now()
+    }
+  end
 
-        broadcast_event(data_with_saved.session_id, {:state_change, :idle})
+  defp create_user_message(text) do
+    %Message{
+      id: generate_message_id(),
+      role: :user,
+      content: [%Text{text: text}],
+      timestamp: DateTime.utc_now()
+    }
+  end
 
-        Logger.debug(
-          "#{log_prefix(data_with_saved.session_id)} State transition: executing_tools -> idle"
-        )
+  defp complete_turn_and_transition_idle(data) do
+    turn_duration_ms = calculate_turn_duration(data)
+    Logger.info("#{log_prefix(data.session_id)} Turn complete (#{turn_duration_ms}ms)")
+    broadcast_event(data.session_id, {:state_change, :idle})
+    Logger.debug("#{log_prefix(data.session_id)} State transition: executing_tools -> idle")
+    {:next_state, :idle, data}
+  end
 
-        {:next_state, :idle, data_with_saved}
+  defp calculate_turn_duration(data) do
+    if data.turn_start_time do
+      System.monotonic_time(:millisecond) - data.turn_start_time
+    else
+      0
     end
   end
 
@@ -1199,59 +1169,15 @@ defmodule Deft.Agent do
       "#{log_prefix(data.session_id)} Processing queued prompt (remaining queue depth: #{queue_depth})"
     )
 
-    # Update data with new message and queue
-    new_data = %{data | prompt_queue: new_queue, messages: data.messages ++ [message]}
-
-    # Notify OM about new message
-    notify_om_messages_added(new_data.session_id, [message], new_data.config)
-
-    # Check if compaction is needed before calling provider
-    compacted_data = maybe_compact_messages(new_data)
-
-    # Build context and call provider
-    context_messages =
-      Context.build(compacted_data.messages,
-        config: compacted_data.config,
-        session_id: compacted_data.session_id
-      )
-
-    provider = Map.get(compacted_data.config, :provider)
-    tools = Map.get(compacted_data.config, :tools, [])
-
-    # Add session_id to config for provider logging
-    config_with_session = Map.put(compacted_data.config, :session_id, compacted_data.session_id)
-
-    case call_provider_stream(provider, context_messages, tools, config_with_session) do
-      {:ok, stream_ref} ->
-        provider_name = if provider, do: inspect(provider), else: "nil"
-        model = Map.get(config_with_session, :model, "unknown")
-
-        Logger.info(
-          "#{log_prefix(compacted_data.session_id)} Provider stream started (#{provider_name}, #{model})"
-        )
-
-        # Monitor the stream process to detect crashes (only if stream_ref is a PID)
-        monitor_ref = if is_pid(stream_ref), do: Process.monitor(stream_ref), else: nil
-
-        updated_data = %{
-          compacted_data
-          | stream_ref: stream_ref,
-            stream_monitor_ref: monitor_ref,
-            turn_start_time: System.monotonic_time(:millisecond),
-            retry_count: 0,
-            retry_delay: 1000,
-            turn_count: 1
-        }
-
-        broadcast_event(compacted_data.session_id, {:state_change, :calling})
-        Logger.debug("#{log_prefix(compacted_data.session_id)} State transition: idle -> calling")
-        {:next_state, :calling, updated_data}
-
-      {:error, reason} ->
-        broadcast_event(new_data.session_id, {:error, reason})
-        Logger.debug("#{log_prefix(new_data.session_id)} State transition: idle -> idle (error)")
-        {:next_state, :idle, new_data}
-    end
+    # Update data with new message and queue, notify OM, and start provider stream
+    data
+    |> Map.put(:prompt_queue, new_queue)
+    |> Map.put(:messages, data.messages ++ [message])
+    |> tap(fn updated ->
+      notify_om_messages_added(updated.session_id, [message], updated.config)
+    end)
+    |> maybe_compact_messages()
+    |> start_provider_stream_transition(:idle, turn_count: 1)
   end
 
   defp cancel_operations_for_abort(state, data) do
@@ -1476,42 +1402,61 @@ defmodule Deft.Agent do
   end
 
   defp handle_tool_execution_complete(ref, results, data) do
-    # Clean up the task process (only if ref is present, not needed for Task.Supervisor.async_nolink)
     if ref, do: Process.demonitor(ref, [:flush])
 
-    # Calculate durations and prepare tool results for persistence
     end_time = System.monotonic_time(:millisecond)
     batch_duration_ms = calculate_batch_duration(results, data.tool_execution_times, end_time)
-
-    # Log tool execution complete with duration and success/failure counts
-    success_count = Enum.count(results, fn {_id, result} -> match?({:ok, _}, result) end)
-    failure_count = Enum.count(results, fn {_id, result} -> match?({:error, _}, result) end)
-
-    Logger.info(
-      "#{log_prefix(data.session_id)} Tool execution complete (#{batch_duration_ms}ms, #{success_count} succeeded, #{failure_count} failed)"
-    )
+    log_tool_execution_complete(data.session_id, results, batch_duration_ms)
 
     tool_calls = extract_tool_calls(data.messages)
 
     tool_results_with_timing =
-      Enum.map(results, fn {tool_use_id, result} ->
-        start_time = Map.get(data.tool_execution_times, tool_use_id, end_time)
-        duration_ms = max(0, end_time - start_time)
+      add_timing_to_results(results, tool_calls, data.tool_execution_times, end_time)
 
-        # Find the tool name from the original tool call
-        tool_name =
-          Enum.find_value(tool_calls, fn tool_use ->
-            if tool_use.id == tool_use_id, do: tool_use.name
-          end) || "unknown"
+    broadcast_tool_completion_events(data.session_id, tool_results_with_timing)
+    save_tool_results(tool_results_with_timing, data)
 
-        {tool_use_id, tool_name, result, duration_ms}
-      end)
+    {use_skill_success_results, regular_results} = split_use_skill_results(results, tool_calls)
 
-    # Broadcast tool execution completion events for UI display
+    messages_to_add =
+      build_tool_result_messages(regular_results, use_skill_success_results, tool_calls)
+
+    data
+    |> update_messages_after_tool_execution(messages_to_add)
+    |> tap(fn _ -> notify_om_messages_added(data.session_id, messages_to_add, data.config) end)
+    |> maybe_activate_cache_read()
+    |> continue_after_tools()
+  end
+
+  defp log_tool_execution_complete(session_id, results, batch_duration_ms) do
+    success_count = Enum.count(results, fn {_id, result} -> match?({:ok, _}, result) end)
+    failure_count = Enum.count(results, fn {_id, result} -> match?({:error, _}, result) end)
+
+    Logger.info(
+      "#{log_prefix(session_id)} Tool execution complete (#{batch_duration_ms}ms, #{success_count} succeeded, #{failure_count} failed)"
+    )
+  end
+
+  defp add_timing_to_results(results, tool_calls, execution_times, end_time) do
+    Enum.map(results, fn {tool_use_id, result} ->
+      start_time = Map.get(execution_times, tool_use_id, end_time)
+      duration_ms = max(0, end_time - start_time)
+      tool_name = find_tool_name(tool_use_id, tool_calls)
+      {tool_use_id, tool_name, result, duration_ms}
+    end)
+  end
+
+  defp find_tool_name(tool_use_id, tool_calls) do
+    Enum.find_value(tool_calls, "unknown", fn tool_use ->
+      if tool_use.id == tool_use_id, do: tool_use.name
+    end)
+  end
+
+  defp broadcast_tool_completion_events(session_id, tool_results_with_timing) do
     Enum.each(tool_results_with_timing, fn {tool_use_id, tool_name, result, duration_ms} ->
       is_error = match?({:error, _}, result)
 
-      broadcast_event(data.session_id, {
+      broadcast_event(session_id, {
         :tool_execution_complete,
         %{
           id: tool_use_id,
@@ -1522,83 +1467,67 @@ defmodule Deft.Agent do
         }
       })
     end)
+  end
 
-    # Save tool result entries to session file
-    save_tool_results(tool_results_with_timing, data)
+  defp split_use_skill_results(results, tool_calls) do
+    Enum.split_with(results, fn {tool_use_id, result} ->
+      tool_name = find_tool_name(tool_use_id, tool_calls)
+      tool_name == "use_skill" and match?({:ok, _}, result)
+    end)
+  end
 
-    # Separate successful use_skill results from other tool results
-    # Only successful use_skill results are injected as system messages
-    # Failed use_skill results are treated as regular tool results
-    {use_skill_success_results, regular_results} =
-      Enum.split_with(results, fn {tool_use_id, result} ->
-        tool_name =
-          Enum.find_value(tool_calls, fn tool_use ->
-            if tool_use.id == tool_use_id, do: tool_use.name
-          end)
+  defp build_tool_result_messages(regular_results, use_skill_success_results, tool_calls) do
+    tool_result_message =
+      build_combined_tool_result_message(regular_results, use_skill_success_results, tool_calls)
 
-        tool_name == "use_skill" and match?({:ok, _}, result)
-      end)
+    use_skill_messages = build_use_skill_messages(use_skill_success_results)
 
-    # Build messages from the results
-    messages_to_add =
-      [
-        # All tool results go in a user message with ToolResult blocks
-        # This includes both regular results and use_skill results
-        # (use_skill needs a tool_result block even though the definition goes in a system message)
-        if regular_results != [] or use_skill_success_results != [] do
-          # Build tool result blocks for regular results
-          regular_tool_results = build_tool_result_blocks(regular_results, tool_calls)
+    [tool_result_message | use_skill_messages]
+    |> Enum.reject(&is_nil/1)
+  end
 
-          # Build simple tool result blocks for use_skill (just "Skill loaded")
-          # The full skill definition is injected separately as a system message
-          use_skill_tool_results =
-            Enum.map(use_skill_success_results, fn {tool_use_id, _result} ->
-              %Deft.Message.ToolResult{
-                tool_use_id: tool_use_id,
-                name: "use_skill",
-                content: "Skill loaded",
-                is_error: false
-              }
-            end)
+  defp build_combined_tool_result_message(regular_results, use_skill_success_results, tool_calls) do
+    if regular_results == [] and use_skill_success_results == [],
+      do: nil,
+      else: do_build_message(regular_results, use_skill_success_results, tool_calls)
+  end
 
-          tool_result_blocks = regular_tool_results ++ use_skill_tool_results
+  defp do_build_message(regular_results, use_skill_success_results, tool_calls) do
+    regular_tool_results = build_tool_result_blocks(regular_results, tool_calls)
+    use_skill_tool_results = build_use_skill_tool_results(use_skill_success_results)
+    tool_result_blocks = regular_tool_results ++ use_skill_tool_results
 
-          %Message{
-            id: generate_message_id(),
-            role: :user,
-            content: tool_result_blocks,
-            timestamp: DateTime.utc_now()
-          }
-        end,
-        # use_skill results are also injected as system messages (skill definitions)
-        build_use_skill_messages(use_skill_success_results)
-      ]
-      |> List.flatten()
-      |> Enum.reject(&is_nil/1)
+    %Message{
+      id: generate_message_id(),
+      role: :user,
+      content: tool_result_blocks,
+      timestamp: DateTime.utc_now()
+    }
+  end
 
-    # Append to messages, clear task list and execution times
-    new_messages = data.messages ++ messages_to_add
+  defp build_use_skill_tool_results(use_skill_success_results) do
+    Enum.map(use_skill_success_results, fn {tool_use_id, _result} ->
+      %Deft.Message.ToolResult{
+        tool_use_id: tool_use_id,
+        name: "use_skill",
+        content: "Skill loaded",
+        is_error: false
+      }
+    end)
+  end
 
-    # Notify OM about new messages
-    notify_om_messages_added(data.session_id, messages_to_add, data.config)
-
-    new_data = %{data | messages: new_messages, tool_tasks: [], tool_execution_times: %{}}
-
-    # Activate cache_read tool if cache has entries
-    new_data_with_cache = maybe_activate_cache_read(new_data)
-
-    # Continue the conversation by calling the provider again
-    continue_after_tools(new_data_with_cache)
+  defp update_messages_after_tool_execution(data, messages_to_add) do
+    %{
+      data
+      | messages: data.messages ++ messages_to_add,
+        tool_tasks: [],
+        tool_execution_times: %{}
+    }
   end
 
   defp build_tool_result_blocks(results, tool_calls) do
     Enum.map(results, fn {tool_use_id, result} ->
-      # Find the tool name from the original tool call
-      tool_name =
-        Enum.find_value(tool_calls, fn tool_use ->
-          if tool_use.id == tool_use_id, do: tool_use.name
-        end) || "unknown"
-
+      tool_name = find_tool_name(tool_use_id, tool_calls)
       build_tool_result_block(tool_use_id, tool_name, result)
     end)
   end
@@ -1655,64 +1584,26 @@ defmodule Deft.Agent do
   end
 
   defp continue_after_tools(data) do
-    # Increment turn counter
     new_turn_count = data.turn_count + 1
-
-    # Check turn limit (default: 25)
     max_turns = Map.get(data.config, :max_turns, 25)
 
     if new_turn_count > max_turns do
-      # Turn limit reached - pause and ask user to continue
-      broadcast_event(data.session_id, {:turn_limit_reached, new_turn_count, max_turns})
-      # Stay in :executing_tools state and wait for user response via continue_turn/2
-      updated_data = %{data | turn_count: new_turn_count}
-      {:keep_state, updated_data}
+      handle_turn_limit_reached(data, new_turn_count, max_turns)
     else
-      # Check if compaction is needed before calling provider
-      compacted_data = maybe_compact_messages(data)
-
-      # Continue with provider call
-      context_messages =
-        Context.build(compacted_data.messages,
-          config: compacted_data.config,
-          session_id: compacted_data.session_id
-        )
-
-      provider = Map.get(compacted_data.config, :provider)
-      tools = Map.get(compacted_data.config, :tools, [])
-
-      # Add session_id to config for provider logging
-      config_with_session = Map.put(compacted_data.config, :session_id, compacted_data.session_id)
-
-      case call_provider_stream(provider, context_messages, tools, config_with_session) do
-        {:ok, stream_ref} ->
-          # Monitor the stream process to detect crashes (only if stream_ref is a PID)
-          monitor_ref = if is_pid(stream_ref), do: Process.monitor(stream_ref), else: nil
-
-          updated_data = %{
-            compacted_data
-            | stream_ref: stream_ref,
-              stream_monitor_ref: monitor_ref,
-              retry_count: 0,
-              retry_delay: 1000,
-              turn_count: new_turn_count
-          }
-
-          broadcast_event(compacted_data.session_id, {:state_change, :calling})
-
-          Logger.debug(
-            "#{log_prefix(compacted_data.session_id)} State transition: executing_tools -> calling"
-          )
-
-          {:next_state, :calling, updated_data}
-
-        {:error, reason} ->
-          broadcast_event(compacted_data.session_id, {:error, reason})
-          # Keep turn count even on error
-          new_data = %{compacted_data | turn_count: new_turn_count}
-          handle_idle_transition(new_data)
-      end
+      continue_calling_provider(data, new_turn_count)
     end
+  end
+
+  defp handle_turn_limit_reached(data, new_turn_count, max_turns) do
+    broadcast_event(data.session_id, {:turn_limit_reached, new_turn_count, max_turns})
+    updated_data = %{data | turn_count: new_turn_count}
+    {:keep_state, updated_data}
+  end
+
+  defp continue_calling_provider(data, new_turn_count) do
+    data
+    |> maybe_compact_messages()
+    |> start_provider_stream_transition(:executing_tools, turn_count: new_turn_count)
   end
 
   # Session persistence helpers
@@ -1746,34 +1637,29 @@ defmodule Deft.Agent do
 
     working_dir = Map.get(data.config, :working_dir, File.cwd!())
 
-    # Save each tool result as a separate entry with timing information
     Enum.each(tool_results, fn {tool_use_id, tool_name, result, duration_ms} ->
-      is_error =
-        case result do
-          {:ok, _} -> false
-          {:error, _} -> true
-        end
-
-      result_text =
-        case result do
-          {:ok, content_blocks} ->
-            content_blocks
-            |> Enum.map(fn
-              %Deft.Message.Text{text: text} -> text
-              other -> inspect(other)
-            end)
-            |> Enum.join("\n")
-
-          {:error, error_message} ->
-            error_message
-        end
-
+      is_error = result_is_error?(result)
+      result_text = extract_result_text(result)
       entry = Entry.ToolResult.new(tool_use_id, tool_name, result_text, duration_ms, is_error)
       Store.append(data.session_id, entry, working_dir)
     end)
 
     :ok
   end
+
+  defp result_is_error?({:ok, _}), do: false
+  defp result_is_error?({:error, _}), do: true
+
+  defp extract_result_text({:ok, content_blocks}) do
+    content_blocks
+    |> Enum.map(fn
+      %Deft.Message.Text{text: text} -> text
+      other -> inspect(other)
+    end)
+    |> Enum.join("\n")
+  end
+
+  defp extract_result_text({:error, error_message}), do: error_message
 
   defp maybe_compact_messages(data) do
     # Check if compaction is needed
@@ -1795,60 +1681,56 @@ defmodule Deft.Agent do
   end
 
   defp start_compaction_task(data) do
-    # Compact messages - remove oldest non-system messages until we're at ~50% of window
     target_tokens = trunc(data.context_window * 0.5)
     tokens_to_remove = data.current_context_tokens - target_tokens
-
-    # Estimate tokens per message (rough heuristic)
-    # We'll remove messages until we estimate we've removed enough tokens
-    avg_tokens_per_message =
-      if length(data.messages) > 0 do
-        div(data.current_context_tokens, max(1, length(data.messages)))
-      else
-        1000
-      end
-
+    avg_tokens_per_message = calculate_avg_tokens_per_message(data)
     messages_to_remove = max(1, div(tokens_to_remove, max(1, avg_tokens_per_message)))
 
-    # Separate system messages from conversation messages
-    {system_messages, conversation_messages} =
-      Enum.split_with(data.messages, fn msg -> msg.role == :system end)
-
-    # Take the oldest N conversation messages to remove
+    {system_messages, conversation_messages} = split_system_and_conversation(data.messages)
     {to_remove, to_keep} = Enum.split(conversation_messages, messages_to_remove)
 
     if length(to_remove) > 0 do
-      # Spawn task to generate LLM summary asynchronously
-      provider = Map.get(data.config, :provider)
-      session_id = data.session_id
-      # Add session_id to config for provider logging
-      config = Map.put(data.config, :session_id, session_id)
-
-      # Spawn task using the ToolRunner supervisor
-      tool_runner = Worker.tool_runner_via_tuple(session_id)
-
-      task =
-        Task.Supervisor.async_nolink(tool_runner, fn ->
-          summarize_messages_with_llm(to_remove, provider, config)
-        end)
-
-      # Store task ref, pid, and compaction context in state
-      pending_data = %{
-        to_remove: to_remove,
-        to_keep: to_keep,
-        system_messages: system_messages,
-        messages_to_remove_count: length(to_remove)
-      }
-
-      %{
-        data
-        | compaction_task_ref: task.ref,
-          compaction_task_pid: task.pid,
-          pending_compaction_data: pending_data
-      }
+      spawn_compaction_task(data, to_remove, to_keep, system_messages)
     else
       data
     end
+  end
+
+  defp calculate_avg_tokens_per_message(data) do
+    if length(data.messages) > 0 do
+      div(data.current_context_tokens, max(1, length(data.messages)))
+    else
+      1000
+    end
+  end
+
+  defp split_system_and_conversation(messages) do
+    Enum.split_with(messages, fn msg -> msg.role == :system end)
+  end
+
+  defp spawn_compaction_task(data, to_remove, to_keep, system_messages) do
+    provider = Map.get(data.config, :provider)
+    config = Map.put(data.config, :session_id, data.session_id)
+    tool_runner = Worker.tool_runner_via_tuple(data.session_id)
+
+    task =
+      Task.Supervisor.async_nolink(tool_runner, fn ->
+        summarize_messages_with_llm(to_remove, provider, config)
+      end)
+
+    pending_data = %{
+      to_remove: to_remove,
+      to_keep: to_keep,
+      system_messages: system_messages,
+      messages_to_remove_count: length(to_remove)
+    }
+
+    %{
+      data
+      | compaction_task_ref: task.ref,
+        compaction_task_pid: task.pid,
+        pending_compaction_data: pending_data
+    }
   end
 
   defp handle_compaction_complete(result, data) do
