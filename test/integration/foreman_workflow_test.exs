@@ -40,4 +40,14 @@ defmodule Integration.ForemanWorkflowTest do
       assert true
     end
   end
+
+  describe "Partial Unblocking Flow (scenario 2.3)" do
+    @tag :skip
+    test "Lead B starts with contract context from Lead A", %{} do
+      # Scripted: Lead A publishes contract → Foreman receives → Lead B starts with contract context
+      # Verify: Lead B's starting context includes the contract from Lead A
+      # Verify: Lead B started before Lead A completes
+      assert true
+    end
+  end
 end
