@@ -287,74 +287,100 @@ defmodule Deft.Session.Store do
   end
 
   defp deserialize_content(content) when is_list(content) do
-    Enum.map(content, fn
-      %{type: "text", text: text} ->
-        %Deft.Message.Text{text: text}
-
-      %{type: "tool_use", id: id, name: name, args: args} ->
-        %Deft.Message.ToolUse{id: id, name: name, args: args}
-
-      %{
-        type: "tool_result",
-        tool_use_id: tool_use_id,
-        name: name,
-        content: content,
-        is_error: is_error
-      } ->
-        %Deft.Message.ToolResult{
-          tool_use_id: tool_use_id,
-          name: name,
-          content: content,
-          is_error: is_error
-        }
-
-      %{type: "thinking", text: text} ->
-        %Deft.Message.Thinking{text: text}
-
-      %{type: "image", media_type: media_type, data: data} = content ->
-        %Deft.Message.Image{
-          media_type: media_type,
-          data: data,
-          filename: Map.get(content, :filename)
-        }
-
-      # Handle string keys as well (from JSON parsing)
-      %{"type" => "text", "text" => text} ->
-        %Deft.Message.Text{text: text}
-
-      %{"type" => "tool_use", "id" => id, "name" => name, "args" => args} ->
-        %Deft.Message.ToolUse{id: id, name: name, args: args}
-
-      %{
-        "type" => "tool_result",
-        "tool_use_id" => tool_use_id,
-        "name" => name,
-        "content" => content,
-        "is_error" => is_error
-      } ->
-        %Deft.Message.ToolResult{
-          tool_use_id: tool_use_id,
-          name: name,
-          content: content,
-          is_error: is_error
-        }
-
-      %{"type" => "thinking", "text" => text} ->
-        %Deft.Message.Thinking{text: text}
-
-      %{"type" => "image", "media_type" => media_type, "data" => data} = content ->
-        %Deft.Message.Image{
-          media_type: media_type,
-          data: data,
-          filename: Map.get(content, "filename")
-        }
-
-      _other ->
-        # Unknown content type - skip
-        nil
-    end)
+    content
+    |> Enum.map(&deserialize_content_block/1)
     |> Enum.reject(&is_nil/1)
   end
+
+  # Text content with atom keys
+  defp deserialize_content_block(%{type: "text", text: text}) do
+    %Deft.Message.Text{text: text}
+  end
+
+  # Text content with string keys
+  defp deserialize_content_block(%{"type" => "text", "text" => text}) do
+    %Deft.Message.Text{text: text}
+  end
+
+  # Tool use with atom keys
+  defp deserialize_content_block(%{type: "tool_use", id: id, name: name, args: args}) do
+    %Deft.Message.ToolUse{id: id, name: name, args: args}
+  end
+
+  # Tool use with string keys
+  defp deserialize_content_block(%{
+         "type" => "tool_use",
+         "id" => id,
+         "name" => name,
+         "args" => args
+       }) do
+    %Deft.Message.ToolUse{id: id, name: name, args: args}
+  end
+
+  # Tool result with atom keys
+  defp deserialize_content_block(%{
+         type: "tool_result",
+         tool_use_id: tool_use_id,
+         name: name,
+         content: content,
+         is_error: is_error
+       }) do
+    %Deft.Message.ToolResult{
+      tool_use_id: tool_use_id,
+      name: name,
+      content: content,
+      is_error: is_error
+    }
+  end
+
+  # Tool result with string keys
+  defp deserialize_content_block(%{
+         "type" => "tool_result",
+         "tool_use_id" => tool_use_id,
+         "name" => name,
+         "content" => content,
+         "is_error" => is_error
+       }) do
+    %Deft.Message.ToolResult{
+      tool_use_id: tool_use_id,
+      name: name,
+      content: content,
+      is_error: is_error
+    }
+  end
+
+  # Thinking content with atom keys
+  defp deserialize_content_block(%{type: "thinking", text: text}) do
+    %Deft.Message.Thinking{text: text}
+  end
+
+  # Thinking content with string keys
+  defp deserialize_content_block(%{"type" => "thinking", "text" => text}) do
+    %Deft.Message.Thinking{text: text}
+  end
+
+  # Image content with atom keys
+  defp deserialize_content_block(%{type: "image", media_type: media_type, data: data} = content) do
+    %Deft.Message.Image{
+      media_type: media_type,
+      data: data,
+      filename: Map.get(content, :filename)
+    }
+  end
+
+  # Image content with string keys
+  defp deserialize_content_block(
+         %{"type" => "image", "media_type" => media_type, "data" => data} = content
+       ) do
+    %Deft.Message.Image{
+      media_type: media_type,
+      data: data,
+      filename: Map.get(content, "filename")
+    }
+  end
+
+  # Unknown content type - skip
+  defp deserialize_content_block(_other), do: nil
 
   defp find_latest_model(entries, session_start) do
     # Find the most recent model_change entry, or use session_start model
