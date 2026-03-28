@@ -21,7 +21,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ### Tier 1: Largest files (10+ violations each)
 
-- Refactor `lib/deft/tools/edit.ex` (16 violations): Group Myers diff params (old_lines, new_lines, n, m, max_d) into a ctx map — fixes 5 arity violations + nesting. Extract helpers from calculate_hunk_header, group_into_hunks, build_lcs_table, lcs_backtrack. Split execute/string_match_mode cyclomatic complexity via pattern-matched heads
 - Refactor `lib/deft/cli.ex` (15 violations): Extract helpers from determine_command (CC 24, split into flag vs positional dispatch). Group start_agent optional params into opts map. Extract display helpers from display_issue_list, display_issue, create/update_interactive_issue, wait_for_job_completion. Flatten 4 nesting violations
 - Refactor `lib/deft/agent.ex` (14 violations): Extract shared start_provider_stream helper (deduplicates 3 call sites). Split handle_event(:calling) case into pattern-matched function heads. Extract helpers from handle_tool_execution_complete (ABC 80), handle_idle_transition, save_tool_results, start_compaction_task. Flatten 4 nesting violations
 

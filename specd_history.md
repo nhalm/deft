@@ -1,4 +1,5 @@
 # History
+- **standards v0.2 (2026-03-28):** Refactor `lib/deft/tools/edit.ex` (16 violations): Group Myers diff params (old_lines, new_lines, n, m, max_d) into a ctx map — fixes 5 arity violations + nesting. Extract helpers from calculate_hunk_header, group_into_hunks, build_lcs_table, lcs_backtrack. Split execute/string_match_mode cyclomatic complexity via pattern-matched heads
 - **standards v0.2 (2026-03-27):** Refactor `lib/deft/tools/find.ex` (2 violations): Extract helpers from summarize to reduce ABC and cyclomatic complexity
 - **standards v0.2 (2026-03-27):** Refactor `lib/deft/tools/read.ex` (1 violation): Flatten nesting
 - **standards v0.2 (2026-03-27):** Refactor `lib/deft/job/foreman.ex` (32 violations): Extract helpers from init, handle_event handlers, start_lead, handle_lead_crash. Group merge conflict/resolution params into maps (arity 6→map). Split analyze_verification_results into pattern-matched heads. Flatten 12 nesting violations by extracting inner branches to named functions

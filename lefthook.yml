@@ -8,7 +8,8 @@ pre-commit:
       run: mix format --check-formatted
       glob: "*.{ex,exs}"
     lint:
-      run: mix credo --strict
+      run: mix credo --strict {staged_files}
+      glob: "*.{ex,exs}"
     compile:
       run: mix compile --warnings-as-errors
 
