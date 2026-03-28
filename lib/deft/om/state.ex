@@ -342,14 +342,14 @@ defmodule Deft.OM.State do
       # Spawn Observer Task with 1 retry max (sync path)
       task =
         Task.Supervisor.async_nolink(task_supervisor, fn ->
-          run_observer_with_retry(
-            state.session_id,
-            state.config,
-            unobserved_messages,
-            state.active_observations,
-            state.calibration_factor,
-            1
-          )
+          run_observer_with_retry(%{
+            session_id: state.session_id,
+            config: state.config,
+            messages: unobserved_messages,
+            existing_observations: state.active_observations,
+            calibration_factor: state.calibration_factor,
+            max_retries: 1
+          })
         end)
 
       # Stash the caller's from, spawn Task, return {:noreply, state}
@@ -388,14 +388,14 @@ defmodule Deft.OM.State do
       # Spawn Reflector Task with 1 retry max (sync path)
       task =
         Task.Supervisor.async_nolink(task_supervisor, fn ->
-          run_reflector_with_retry(
-            state.session_id,
-            state.config,
-            state.active_observations,
-            target_size,
-            state.calibration_factor,
-            1
-          )
+          run_reflector_with_retry(%{
+            session_id: state.session_id,
+            config: state.config,
+            observations: state.active_observations,
+            target_size: target_size,
+            calibration_factor: state.calibration_factor,
+            max_retries: 1
+          })
         end)
 
       # Stash the caller's from, spawn Task, return {:noreply, state}
@@ -524,71 +524,16 @@ defmodule Deft.OM.State do
     is_success = result.observations != ""
 
     # Emit observation_complete event if successful
-    if is_success do
-      tokens_produced = Tokens.estimate(result.observations, state.calibration_factor)
-
-      broadcast_event(state.session_id, {
-        :om,
-        :observation_complete,
-        %{tokens_observed: result.message_tokens, tokens_produced: tokens_produced}
-      })
-    end
+    emit_observation_complete_event(state, result, is_success)
 
     # Record success/failure for circuit breaker
-    state =
-      if is_success do
-        record_cycle_success(state)
-      else
-        record_cycle_failure(state, :observation, :empty_observations)
-      end
+    state = record_observer_result(state, is_success)
 
     # Check if this is a sync fallback call
     if state.sync_from do
       handle_sync_observer_completion(state, result, is_success)
     else
-      # Normal async buffering path - only store the chunk if successful
-      state =
-        if is_success do
-          # Emit buffering_complete event for async path
-          broadcast_event(state.session_id, {:om, :buffering_complete, %{type: :observation}})
-
-          chunk = %BufferedChunk{
-            observations: result.observations,
-            token_count: Tokens.estimate(result.observations, state.calibration_factor),
-            message_ids: result.message_ids,
-            message_tokens: result.message_tokens,
-            epoch: result.spawn_epoch,
-            continuation_hint: result.continuation_hint
-          }
-
-          %{
-            state
-            | buffered_chunks: state.buffered_chunks ++ [chunk],
-              is_observing: false,
-              observer_ref: nil
-          }
-        else
-          %{
-            state
-            | is_observing: false,
-              observer_ref: nil
-          }
-        end
-
-      # Check if we need to re-observe (coalescing)
-      state =
-        if state.needs_rebuffer do
-          %{state | needs_rebuffer: false}
-          |> check_and_spawn_observer()
-        else
-          state
-        end
-
-      # After Observer completes, check if reflection should be triggered
-      # (now that is_observing is false)
-      state = check_and_spawn_reflector(state)
-
-      {:noreply, state}
+      handle_async_observer_completion(state, result, is_success)
     end
   end
 
@@ -851,6 +796,80 @@ defmodule Deft.OM.State do
     {:noreply, state}
   end
 
+  # Emit observation_complete event if observer was successful
+  defp emit_observation_complete_event(state, result, is_success) do
+    if is_success do
+      tokens_produced = Tokens.estimate(result.observations, state.calibration_factor)
+
+      broadcast_event(state.session_id, {
+        :om,
+        :observation_complete,
+        %{tokens_observed: result.message_tokens, tokens_produced: tokens_produced}
+      })
+    end
+  end
+
+  # Record observer success or failure for circuit breaker
+  defp record_observer_result(state, is_success) do
+    if is_success do
+      record_cycle_success(state)
+    else
+      record_cycle_failure(state, :observation, :empty_observations)
+    end
+  end
+
+  # Handle async observer completion - buffer the chunk and check for follow-up work
+  defp handle_async_observer_completion(state, result, is_success) do
+    # Normal async buffering path - only store the chunk if successful
+    state =
+      if is_success do
+        # Emit buffering_complete event for async path
+        broadcast_event(state.session_id, {:om, :buffering_complete, %{type: :observation}})
+
+        chunk = build_buffered_chunk(result, state.calibration_factor)
+
+        %{
+          state
+          | buffered_chunks: state.buffered_chunks ++ [chunk],
+            is_observing: false,
+            observer_ref: nil
+        }
+      else
+        %{
+          state
+          | is_observing: false,
+            observer_ref: nil
+        }
+      end
+
+    # Check if we need to re-observe (coalescing)
+    state =
+      if state.needs_rebuffer do
+        %{state | needs_rebuffer: false}
+        |> check_and_spawn_observer()
+      else
+        state
+      end
+
+    # After Observer completes, check if reflection should be triggered
+    # (now that is_observing is false)
+    state = check_and_spawn_reflector(state)
+
+    {:noreply, state}
+  end
+
+  # Build a BufferedChunk from observer result
+  defp build_buffered_chunk(result, calibration_factor) do
+    %BufferedChunk{
+      observations: result.observations,
+      token_count: Tokens.estimate(result.observations, calibration_factor),
+      message_ids: result.message_ids,
+      message_tokens: result.message_tokens,
+      epoch: result.spawn_epoch,
+      continuation_hint: result.continuation_hint
+    }
+  end
+
   # Handle sync reflector completion (spec section 6.3)
   # Per spec: replace active_observations with compressed result BEFORE replying
   defp handle_sync_reflector_completion(state, result, is_success) do
@@ -915,54 +934,29 @@ defmodule Deft.OM.State do
     {:via, Registry, {Deft.ProcessRegistry, {:om_state, session_id}}}
   end
 
-  defp run_observer_with_retry(
-         session_id,
-         config,
-         messages,
-         existing_observations,
-         calibration_factor,
-         max_retries
-       ) do
-    run_observer_with_retry_loop(
-      session_id,
-      config,
-      messages,
-      existing_observations,
-      calibration_factor,
-      max_retries,
-      0
-    )
+  defp run_observer_with_retry(context) do
+    run_observer_with_retry_loop(Map.put(context, :attempt, 0))
   end
 
-  defp run_observer_with_retry_loop(
-         session_id,
-         config,
-         messages,
-         existing_observations,
-         calibration_factor,
-         max_retries,
-         attempt
-       ) do
-    case Observer.run(session_id, config, messages, existing_observations, calibration_factor) do
-      %{observations: ""} when attempt < max_retries ->
+  defp run_observer_with_retry_loop(context) do
+    case Observer.run(
+           context.session_id,
+           context.config,
+           context.messages,
+           context.existing_observations,
+           context.calibration_factor
+         ) do
+      %{observations: ""} when context.attempt < context.max_retries ->
         # Empty observations means failure - retry with exponential backoff
-        backoff_ms = trunc(:math.pow(2, attempt) * 1000)
+        backoff_ms = trunc(:math.pow(2, context.attempt) * 1000)
 
         Logger.warning(
-          "#{log_prefix(session_id)} Observer attempt #{attempt + 1} failed, retrying after #{backoff_ms}ms"
+          "#{log_prefix(context.session_id)} Observer attempt #{context.attempt + 1} failed, retrying after #{backoff_ms}ms"
         )
 
         Process.sleep(backoff_ms)
 
-        run_observer_with_retry_loop(
-          session_id,
-          config,
-          messages,
-          existing_observations,
-          calibration_factor,
-          max_retries,
-          attempt + 1
-        )
+        run_observer_with_retry_loop(%{context | attempt: context.attempt + 1})
 
       result ->
         # Success or max retries reached
@@ -970,54 +964,29 @@ defmodule Deft.OM.State do
     end
   end
 
-  defp run_reflector_with_retry(
-         session_id,
-         config,
-         observations,
-         target_size,
-         calibration_factor,
-         max_retries
-       ) do
-    run_reflector_with_retry_loop(
-      session_id,
-      config,
-      observations,
-      target_size,
-      calibration_factor,
-      max_retries,
-      0
-    )
+  defp run_reflector_with_retry(context) do
+    run_reflector_with_retry_loop(Map.put(context, :attempt, 0))
   end
 
-  defp run_reflector_with_retry_loop(
-         session_id,
-         config,
-         observations,
-         target_size,
-         calibration_factor,
-         max_retries,
-         attempt
-       ) do
-    case Reflector.run(session_id, config, observations, target_size, calibration_factor) do
-      %{compressed_observations: ""} when attempt < max_retries ->
+  defp run_reflector_with_retry_loop(context) do
+    case Reflector.run(
+           context.session_id,
+           context.config,
+           context.observations,
+           context.target_size,
+           context.calibration_factor
+         ) do
+      %{compressed_observations: ""} when context.attempt < context.max_retries ->
         # Empty compressed observations means failure - retry with exponential backoff
-        backoff_ms = trunc(:math.pow(2, attempt) * 1000)
+        backoff_ms = trunc(:math.pow(2, context.attempt) * 1000)
 
         Logger.warning(
-          "#{log_prefix(session_id)} Reflector attempt #{attempt + 1} failed, retrying after #{backoff_ms}ms"
+          "#{log_prefix(context.session_id)} Reflector attempt #{context.attempt + 1} failed, retrying after #{backoff_ms}ms"
         )
 
         Process.sleep(backoff_ms)
 
-        run_reflector_with_retry_loop(
-          session_id,
-          config,
-          observations,
-          target_size,
-          calibration_factor,
-          max_retries,
-          attempt + 1
-        )
+        run_reflector_with_retry_loop(%{context | attempt: context.attempt + 1})
 
       result ->
         # Success or max retries reached
@@ -1102,14 +1071,14 @@ defmodule Deft.OM.State do
       task =
         Task.Supervisor.async_nolink(task_supervisor, fn ->
           observer_result =
-            run_observer_with_retry(
-              state.session_id,
-              state.config,
-              unobserved_messages,
-              state.active_observations,
-              state.calibration_factor,
-              3
-            )
+            run_observer_with_retry(%{
+              session_id: state.session_id,
+              config: state.config,
+              messages: unobserved_messages,
+              existing_observations: state.active_observations,
+              calibration_factor: state.calibration_factor,
+              max_retries: 3
+            })
 
           # Include the spawn-time epoch in the result
           Map.put(observer_result, :spawn_epoch, spawn_epoch)
@@ -1132,8 +1101,43 @@ defmodule Deft.OM.State do
     # Emit activation event
     broadcast_event(state.session_id, {:om, :activation, %{type: :observation}})
 
-    # Filter out stale chunks (epoch < current activation_epoch) per spec section 6.1
-    # Stale chunks were computed against pre-reflection state
+    # Filter out stale chunks and log discarded count
+    current_chunks = filter_stale_chunks(state)
+
+    # Merge chunks and calculate new state values
+    merged_data = merge_buffered_chunks(current_chunks, state)
+
+    # Get continuation hint from most recent chunk
+    new_continuation_hint = extract_continuation_hint(current_chunks, state.continuation_hint)
+
+    state = %{
+      state
+      | active_observations: merged_data.observations,
+        observation_tokens: merged_data.observation_tokens,
+        buffered_chunks: [],
+        observed_message_ids: merged_data.observed_message_ids,
+        pending_message_tokens: merged_data.pending_tokens,
+        activation_epoch: state.activation_epoch + 1,
+        snapshot_dirty: true,
+        last_observed_at: DateTime.utc_now(),
+        continuation_hint: new_continuation_hint
+    }
+
+    # Write snapshot after observation activation (spec section 9.1)
+    case write_snapshot(state) do
+      :ok ->
+        state = %{state | snapshot_dirty: false}
+        # Check if we should trigger reflection
+        check_and_spawn_reflector(state)
+
+      {:error, _reason} ->
+        # Log already happened in write_snapshot, continue with dirty flag set
+        check_and_spawn_reflector(state)
+    end
+  end
+
+  # Filter out stale chunks (epoch < current activation_epoch) per spec section 6.1
+  defp filter_stale_chunks(state) do
     current_chunks =
       Enum.filter(state.buffered_chunks, fn chunk ->
         chunk.epoch >= state.activation_epoch
@@ -1148,6 +1152,11 @@ defmodule Deft.OM.State do
       )
     end
 
+    current_chunks
+  end
+
+  # Merge buffered chunks into active observations and calculate updated values
+  defp merge_buffered_chunks(current_chunks, state) do
     # Section-aware merge all current (non-stale) chunks into active_observations
     merged_observations =
       Enum.reduce(current_chunks, state.active_observations, fn chunk, acc ->
@@ -1171,36 +1180,19 @@ defmodule Deft.OM.State do
     # Subtract observed tokens from pending
     new_pending = max(0, state.pending_message_tokens - observed_tokens)
 
-    # Get the most recent continuation hint (from the last chunk)
-    new_continuation_hint =
-      case List.last(current_chunks) do
-        %BufferedChunk{continuation_hint: hint} when not is_nil(hint) -> hint
-        _ -> state.continuation_hint
-      end
-
-    state = %{
-      state
-      | active_observations: merged_observations,
-        observation_tokens: new_observation_tokens,
-        buffered_chunks: [],
-        observed_message_ids: new_observed_message_ids,
-        pending_message_tokens: new_pending,
-        activation_epoch: state.activation_epoch + 1,
-        snapshot_dirty: true,
-        last_observed_at: DateTime.utc_now(),
-        continuation_hint: new_continuation_hint
+    %{
+      observations: merged_observations,
+      observation_tokens: new_observation_tokens,
+      observed_message_ids: new_observed_message_ids,
+      pending_tokens: new_pending
     }
+  end
 
-    # Write snapshot after observation activation (spec section 9.1)
-    case write_snapshot(state) do
-      :ok ->
-        state = %{state | snapshot_dirty: false}
-        # Check if we should trigger reflection
-        check_and_spawn_reflector(state)
-
-      {:error, _reason} ->
-        # Log already happened in write_snapshot, continue with dirty flag set
-        check_and_spawn_reflector(state)
+  # Extract continuation hint from the most recent chunk
+  defp extract_continuation_hint(current_chunks, default_hint) do
+    case List.last(current_chunks) do
+      %BufferedChunk{continuation_hint: hint} when not is_nil(hint) -> hint
+      _ -> default_hint
     end
   end
 
@@ -1688,30 +1680,48 @@ defmodule Deft.OM.State do
 
     # Separate CORRECTION markers from regular lines
     {correction_lines, regular_lines} =
-      Enum.split_with(lines, fn line ->
-        Enum.any?(correction_markers, fn marker ->
-          String.contains?(line, marker)
-        end)
-      end)
+      separate_correction_lines(lines, correction_markers)
 
     # Calculate tokens for CORRECTION markers (these must be kept)
-    correction_tokens =
-      correction_lines
-      |> Enum.map(&Tokens.estimate(&1, calibration_factor))
-      |> Enum.sum()
+    correction_tokens = calculate_correction_tokens(correction_lines, calibration_factor)
 
     # Calculate available tokens for regular lines
     available_for_regular = max(0, target_tokens - correction_tokens)
 
     # Keep as many recent lines as possible within the available tokens
-    # Process from end (most recent) to beginning (oldest)
+    kept_lines = accumulate_recent_lines(regular_lines, available_for_regular, calibration_factor)
+
+    # Reconstruct Session History: kept lines + CORRECTION markers at end
+    all_lines = kept_lines ++ correction_lines
+
+    Enum.join(all_lines, "\n")
+  end
+
+  # Separate correction marker lines from regular lines
+  defp separate_correction_lines(lines, correction_markers) do
+    Enum.split_with(lines, fn line ->
+      Enum.any?(correction_markers, fn marker ->
+        String.contains?(line, marker)
+      end)
+    end)
+  end
+
+  # Calculate total tokens for correction lines
+  defp calculate_correction_tokens(correction_lines, calibration_factor) do
+    correction_lines
+    |> Enum.map(&Tokens.estimate(&1, calibration_factor))
+    |> Enum.sum()
+  end
+
+  # Accumulate as many recent lines as possible within available tokens
+  defp accumulate_recent_lines(regular_lines, available_tokens, calibration_factor) do
     {kept_lines, _accumulated_tokens} =
       regular_lines
       |> Enum.reverse()
       |> Enum.reduce_while({[], 0}, fn line, {kept, tokens_so_far} ->
         line_tokens = Tokens.estimate(line, calibration_factor)
 
-        if tokens_so_far + line_tokens <= available_for_regular do
+        if tokens_so_far + line_tokens <= available_tokens do
           # Can keep this line
           {:cont, {[line | kept], tokens_so_far + line_tokens}}
         else
@@ -1720,10 +1730,7 @@ defmodule Deft.OM.State do
         end
       end)
 
-    # Reconstruct Session History: kept lines + CORRECTION markers at end
-    all_lines = kept_lines ++ correction_lines
-
-    Enum.join(all_lines, "\n")
+    kept_lines
   end
 
   # Reconstruct observations from sections in canonical order
