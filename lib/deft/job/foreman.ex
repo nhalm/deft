@@ -179,40 +179,30 @@ defmodule Deft.Job.Foreman do
     plan_path = Path.join(job_dir, "plan.json")
 
     # Check if plan.json exists
-    if File.exists?(plan_path) do
-      # Read and parse plan.json
-      case File.read(plan_path) do
-        {:ok, json_content} ->
-          case Jason.decode(json_content) do
-            {:ok, plan_data} ->
-              # Start Foreman with plan loaded
-              config = Keyword.fetch!(opts, :config)
-              rate_limiter_pid = Keyword.fetch!(opts, :rate_limiter_pid)
-              runner_supervisor = Keyword.fetch!(opts, :runner_supervisor)
+    with true <- File.exists?(plan_path),
+         {:ok, json_content} <- File.read(plan_path),
+         {:ok, plan_data} <- Jason.decode(json_content) do
+      # Start Foreman with plan loaded
+      config = Keyword.fetch!(opts, :config)
+      rate_limiter_pid = Keyword.fetch!(opts, :rate_limiter_pid)
+      runner_supervisor = Keyword.fetch!(opts, :runner_supervisor)
 
-              # Convert plan data to the expected format
-              plan = parse_plan_from_json(plan_data)
+      # Convert plan data to the expected format
+      plan = parse_plan_from_json(plan_data)
 
-              # Start Foreman with resume: true flag to trigger resume logic
-              start_link(
-                session_id: session_id,
-                config: Map.put(config, :resume, true),
-                prompt: "Resuming job #{session_id}",
-                rate_limiter_pid: rate_limiter_pid,
-                runner_supervisor: runner_supervisor,
-                working_dir: working_dir,
-                resumed_plan: plan
-              )
-
-            {:error, reason} ->
-              {:error, {:invalid_plan_json, reason}}
-          end
-
-        {:error, reason} ->
-          {:error, {:plan_read_failed, reason}}
-      end
+      # Start Foreman with resume: true flag to trigger resume logic
+      start_link(
+        session_id: session_id,
+        config: Map.put(config, :resume, true),
+        prompt: "Resuming job #{session_id}",
+        rate_limiter_pid: rate_limiter_pid,
+        runner_supervisor: runner_supervisor,
+        working_dir: working_dir,
+        resumed_plan: plan
+      )
     else
-      {:error, :plan_not_found}
+      false -> {:error, :plan_not_found}
+      {:error, reason} -> {:error, {:plan_read_failed, reason}}
     end
   end
 
@@ -444,15 +434,7 @@ defmodule Deft.Job.Foreman do
       :keep_state_and_data
     else
       # Execute tools
-      tasks =
-        Enum.map(tool_calls, fn tool_call ->
-          Task.Supervisor.async_nolink(
-            data.runner_supervisor,
-            fn ->
-              execute_tool(tool_call, data)
-            end
-          )
-        end)
+      tasks = Enum.map(tool_calls, &spawn_tool_task(&1, data))
 
       {:keep_state, %{data | tool_tasks: tasks}}
     end
@@ -1041,31 +1023,7 @@ defmodule Deft.Job.Foreman do
 
     # If all tasks done, loop back to call LLM or check for continuation
     if Enum.empty?(tasks) do
-      if should_continue_turn?(data) do
-        # Make another LLM call
-        case call_llm(data) do
-          {:ok, stream_ref, monitor_ref, estimated_tokens} ->
-            data = %{
-              data
-              | stream_ref: stream_ref,
-                stream_monitor_ref: monitor_ref,
-                estimated_tokens: estimated_tokens
-            }
-
-            {:next_state, {job_phase, :calling}, data}
-
-          {:error, reason} ->
-            Logger.error(
-              "#{log_prefix(data.session_id)} Foreman LLM call failed in #{job_phase}: #{inspect(reason)}"
-            )
-
-            {:next_state, {:complete, :idle}, data}
-        end
-      else
-        # Check if we need to transition to next phase
-        {next_state, updated_data} = determine_next_phase(job_phase, data)
-        {:next_state, next_state, updated_data}
-      end
+      maybe_continue_or_advance(job_phase, data)
     else
       {:keep_state, data}
     end
@@ -1116,23 +1074,7 @@ defmodule Deft.Job.Foreman do
             handle_merge_resolution_success(resolution_ctx, data)
 
           {:error, reason} ->
-            Logger.error(
-              "#{log_prefix(data.session_id)} Merge-resolution Runner failed for Lead #{lead_id}: #{inspect(reason)}"
-            )
-
-            send_to_self =
-              {:lead_message, :critical_finding,
-               "Merge conflict for Lead #{lead_id} could not be automatically resolved: #{Enum.join(conflicted_files, ", ")}. Manual intervention required.\n\nRunner error: #{inspect(reason)}",
-               %{lead_id: lead_id, conflicted_files: conflicted_files}}
-
-            send(self(), send_to_self)
-
-            # Clean up the Lead's worktree
-            cleanup_worktree(lead_info.worktree_path, data.working_dir, data.session_id)
-
-            # Remove Lead from tracking
-            leads = Map.delete(data.leads, lead_id)
-            {:keep_state, %{data | leads: leads}}
+            handle_merge_resolution_failure(reason, lead_id, lead_info, conflicted_files, data)
         end
     end
   end
@@ -1692,6 +1634,12 @@ defmodule Deft.Job.Foreman do
     end
   end
 
+  defp spawn_tool_task(tool_call, data) do
+    Task.Supervisor.async_nolink(data.runner_supervisor, fn ->
+      execute_tool(tool_call, data)
+    end)
+  end
+
   defp execute_tool(tool_call, data) do
     # Build tool context for execution
     tool_context = build_tool_context(data)
@@ -2028,14 +1976,10 @@ defmodule Deft.Job.Foreman do
   end
 
   defp build_tool_result_blocks(accumulated_results, tool_calls) do
-    Enum.map(accumulated_results, fn {tool_use_id, tool_result} ->
-      # Find the tool name from the original tool call
-      tool_name =
-        Enum.find_value(tool_calls, fn tool_use ->
-          if tool_use.id == tool_use_id, do: tool_use.name
-        end) || "unknown"
+    tool_names = Map.new(tool_calls, &{&1.id, &1.name})
 
-      # Build the ToolResult block based on result type
+    Enum.map(accumulated_results, fn {tool_use_id, tool_result} ->
+      tool_name = Map.get(tool_names, tool_use_id, "unknown")
       build_tool_result_block(tool_use_id, tool_name, tool_result)
     end)
   end
@@ -2187,39 +2131,10 @@ defmodule Deft.Job.Foreman do
     )
 
     # Send steering messages to dependent Leads
-    Enum.each(dependent_leads, fn lead_id ->
-      case Map.get(data.leads, lead_id) do
-        nil ->
-          Logger.warning(
-            "#{log_prefix(data.session_id)} Could not find Lead #{lead_id} to re-steer"
-          )
-
-        lead_info ->
-          steering_content = """
-          INTERFACE CONTRACT REVISION
-
-          The upstream deliverable "#{publishing_deliverable}" has revised its contract.
-
-          Updated contract:
-          #{content}
-
-          Please review this revision and adjust your implementation accordingly.
-          """
-
-          # Send steering message to Lead process
-          if lead_pid = Map.get(lead_info, :pid) do
-            send(lead_pid, {:foreman_steering, steering_content})
-
-            Logger.info(
-              "#{log_prefix(data.session_id)} Sent contract revision steering to Lead #{lead_id}"
-            )
-          else
-            Logger.warning(
-              "#{log_prefix(data.session_id)} Lead #{lead_id} has no PID stored, cannot send steering (Lead process not yet started)"
-            )
-          end
-      end
-    end)
+    Enum.each(
+      dependent_leads,
+      &send_contract_revision_steering(&1, publishing_deliverable, content, data)
+    )
 
     data
   end
@@ -2269,6 +2184,45 @@ defmodule Deft.Job.Foreman do
   defp process_lead_message(type, content, _metadata, data) do
     Logger.debug("#{log_prefix(data.session_id)} Lead message (#{type}): #{inspect(content)}")
     data
+  end
+
+  defp send_contract_revision_steering(lead_id, publishing_deliverable, content, data) do
+    case Map.get(data.leads, lead_id) do
+      nil ->
+        Logger.warning(
+          "#{log_prefix(data.session_id)} Could not find Lead #{lead_id} to re-steer"
+        )
+
+      lead_info ->
+        steering_content = """
+        INTERFACE CONTRACT REVISION
+
+        The upstream deliverable "#{publishing_deliverable}" has revised its contract.
+
+        Updated contract:
+        #{content}
+
+        Please review this revision and adjust your implementation accordingly.
+        """
+
+        send_steering_to_lead(lead_id, lead_info, steering_content, data)
+    end
+  end
+
+  defp send_steering_to_lead(lead_id, lead_info, steering_content, data) do
+    case Map.get(lead_info, :pid) do
+      nil ->
+        Logger.warning(
+          "#{log_prefix(data.session_id)} Lead #{lead_id} has no PID stored, cannot send steering"
+        )
+
+      lead_pid ->
+        send(lead_pid, {:foreman_steering, steering_content})
+
+        Logger.info(
+          "#{log_prefix(data.session_id)} Sent contract revision steering to Lead #{lead_id}"
+        )
+    end
   end
 
   defp get_publishing_deliverable(lead_id, data) do
@@ -2572,6 +2526,23 @@ defmodule Deft.Job.Foreman do
       })
 
     %{data | merge_resolution_tasks: merge_resolution_tasks}
+  end
+
+  defp handle_merge_resolution_failure(reason, lead_id, lead_info, conflicted_files, data) do
+    Logger.error(
+      "#{log_prefix(data.session_id)} Merge-resolution Runner failed for Lead #{lead_id}: #{inspect(reason)}"
+    )
+
+    send(
+      self(),
+      {:lead_message, :critical_finding,
+       "Merge conflict for Lead #{lead_id} could not be automatically resolved: #{Enum.join(conflicted_files, ", ")}. Manual intervention required.\n\nRunner error: #{inspect(reason)}",
+       %{lead_id: lead_id, conflicted_files: conflicted_files}}
+    )
+
+    cleanup_worktree(lead_info.worktree_path, data.working_dir, data.session_id)
+    leads = Map.delete(data.leads, lead_id)
+    {:keep_state, %{data | leads: leads}}
   end
 
   # Handle successful merge-resolution Runner completion
@@ -2985,6 +2956,36 @@ defmodule Deft.Job.Foreman do
     |> String.downcase()
   end
 
+  defp maybe_continue_or_advance(job_phase, data) do
+    if should_continue_turn?(data) do
+      continue_llm_call(job_phase, data)
+    else
+      {next_state, updated_data} = determine_next_phase(job_phase, data)
+      {:next_state, next_state, updated_data}
+    end
+  end
+
+  defp continue_llm_call(job_phase, data) do
+    case call_llm(data) do
+      {:ok, stream_ref, monitor_ref, estimated_tokens} ->
+        data = %{
+          data
+          | stream_ref: stream_ref,
+            stream_monitor_ref: monitor_ref,
+            estimated_tokens: estimated_tokens
+        }
+
+        {:next_state, {job_phase, :calling}, data}
+
+      {:error, reason} ->
+        Logger.error(
+          "#{log_prefix(data.session_id)} Foreman LLM call failed in #{job_phase}: #{inspect(reason)}"
+        )
+
+        {:next_state, {:complete, :idle}, data}
+    end
+  end
+
   # Determine the next phase after completing current agent loop
   # Returns {next_state, updated_data}
   defp determine_next_phase(:planning, data) do
@@ -3182,32 +3183,26 @@ defmodule Deft.Job.Foreman do
   # Extract research tasks from the last assistant message
   # Returns a list of research task specs, or nil if parsing fails
   defp extract_research_tasks_from_messages(messages, session_id) do
-    # Get the last assistant message
-    case Enum.reverse(messages) |> Enum.find(&(&1.role == :assistant)) do
+    with message when not is_nil(message) <- find_last_assistant_message(messages),
+         text_content = extract_text_content_from_message(message),
+         {:ok, tasks} when is_list(tasks) and length(tasks) > 0 <-
+           parse_research_tasks_json(text_content) do
+      tasks
+    else
       nil ->
         nil
 
-      message ->
-        # Extract text content from message
-        text_content =
-          message.content
-          |> Enum.filter(&match?(%Deft.Message.Text{}, &1))
-          |> Enum.map(& &1.text)
-          |> Enum.join("\n")
+      _ ->
+        Logger.warning(
+          "#{log_prefix(session_id)} Failed to parse research tasks from planning response, using defaults"
+        )
 
-        # Try to extract JSON array of research tasks
-        case parse_research_tasks_json(text_content) do
-          {:ok, tasks} when is_list(tasks) and length(tasks) > 0 ->
-            tasks
-
-          _ ->
-            Logger.warning(
-              "#{log_prefix(session_id)} Failed to parse research tasks from planning response, using defaults"
-            )
-
-            nil
-        end
+        nil
     end
+  end
+
+  defp find_last_assistant_message(messages) do
+    messages |> Enum.reverse() |> Enum.find(&(&1.role == :assistant))
   end
 
   # Parse research tasks from JSON format
@@ -3277,31 +3272,28 @@ defmodule Deft.Job.Foreman do
   # Parse plan from JSON format
   # Expects {"deliverables": [...], "dependencies": [...], "contracts": [...], "estimates": {...}}
   defp parse_json_plan(text) do
-    # Extract JSON from code blocks if present
-    json_text =
-      case Regex.run(~r/```(?:json)?\s*\n(.*?)\n```/s, text) do
-        [_, json] -> json
-        nil -> text
-      end
+    json_text = extract_json_from_text(text)
 
     case Jason.decode(json_text) do
-      {:ok, data} ->
-        deliverables = parse_deliverables(data["deliverables"] || [])
-        dependencies = parse_dependencies(data["dependencies"] || [])
-        contracts = parse_contracts(data["contracts"] || [])
-        estimates = parse_estimates(data["estimates"] || %{})
-
-        {:ok,
-         %{
-           deliverables: deliverables,
-           dependencies: dependencies,
-           contracts: contracts,
-           estimates: estimates
-         }}
-
-      {:error, _} ->
-        :error
+      {:ok, data} -> {:ok, build_plan_from_json(data)}
+      {:error, _} -> :error
     end
+  end
+
+  defp extract_json_from_text(text) do
+    case Regex.run(~r/```(?:json)?\s*\n(.*?)\n```/s, text) do
+      [_, json] -> json
+      nil -> text
+    end
+  end
+
+  defp build_plan_from_json(data) do
+    %{
+      deliverables: parse_deliverables(data["deliverables"] || []),
+      dependencies: parse_dependencies(data["dependencies"] || []),
+      contracts: parse_contracts(data["contracts"] || []),
+      estimates: parse_estimates(data["estimates"] || %{})
+    }
   end
 
   # Parse plan from markdown format
@@ -3823,34 +3815,36 @@ defmodule Deft.Job.Foreman do
     |> MapSet.new()
   end
 
-  # Check for contradictory keywords between two decision contents
   defp has_contradictory_keywords?(content1, content2) do
-    # Extract libraries/technologies mentioned with action verbs
+    has_use_avoid_conflict?(content1, content2) or has_add_remove_conflict?(content1, content2)
+  end
+
+  defp has_use_avoid_conflict?(content1, content2) do
     use_in_1 = extract_keywords(content1, ~r/\buse\s+(\w+)/i)
     use_in_2 = extract_keywords(content2, ~r/\buse\s+(\w+)/i)
-    avoid_in_1 = extract_keywords(content1, ~r/\bavoid\s+(\w+)/i)
-    avoid_in_2 = extract_keywords(content2, ~r/\bavoid\s+(\w+)/i)
-    not_use_in_1 = extract_keywords(content1, ~r/\bnot\s+use\s+(\w+)/i)
-    not_use_in_2 = extract_keywords(content2, ~r/\bnot\s+use\s+(\w+)/i)
 
-    # Check if one Lead wants to use something the other wants to avoid
-    use_avoid_conflict =
-      not MapSet.disjoint?(use_in_1, avoid_in_2) or
-        not MapSet.disjoint?(use_in_2, avoid_in_1) or
-        not MapSet.disjoint?(use_in_1, not_use_in_2) or
-        not MapSet.disjoint?(use_in_2, not_use_in_1)
+    negative_1 =
+      MapSet.union(
+        extract_keywords(content1, ~r/\bavoid\s+(\w+)/i),
+        extract_keywords(content1, ~r/\bnot\s+use\s+(\w+)/i)
+      )
 
-    # Check for add/remove conflicts
+    negative_2 =
+      MapSet.union(
+        extract_keywords(content2, ~r/\bavoid\s+(\w+)/i),
+        extract_keywords(content2, ~r/\bnot\s+use\s+(\w+)/i)
+      )
+
+    not MapSet.disjoint?(use_in_1, negative_2) or not MapSet.disjoint?(use_in_2, negative_1)
+  end
+
+  defp has_add_remove_conflict?(content1, content2) do
     add_in_1 = extract_keywords(content1, ~r/\badd\s+(\w+)/i)
     add_in_2 = extract_keywords(content2, ~r/\badd\s+(\w+)/i)
     remove_in_1 = extract_keywords(content1, ~r/\bremove\s+(\w+)/i)
     remove_in_2 = extract_keywords(content2, ~r/\bremove\s+(\w+)/i)
 
-    add_remove_conflict =
-      not MapSet.disjoint?(add_in_1, remove_in_2) or
-        not MapSet.disjoint?(add_in_2, remove_in_1)
-
-    use_avoid_conflict or add_remove_conflict
+    not MapSet.disjoint?(add_in_1, remove_in_2) or not MapSet.disjoint?(add_in_2, remove_in_1)
   end
 
   # Extract keywords from content using a regex pattern with one capture group
@@ -3995,71 +3989,56 @@ defmodule Deft.Job.Foreman do
 
   # Verification helpers
 
+  defp analyze_verification_results({:ok, inner}, session_id),
+    do: analyze_verification_results(inner, session_id)
+
+  defp analyze_verification_results(%{success: true}, _session_id), do: true
+  defp analyze_verification_results(%{success: false}, _session_id), do: false
+
+  defp analyze_verification_results(result_str, _session_id) when is_binary(result_str) do
+    not String.contains?(result_str, ["failed", "error", "FAILED"])
+  end
+
   defp analyze_verification_results(results, session_id) do
-    # Results from the verification Runner - check for test failures or quality issues
-    # The Runner returns {:ok, output} tuple
-    case results do
-      # Unwrap {:ok, output} tuple from Runner.run
-      {:ok, inner_results} ->
-        analyze_verification_results(inner_results, session_id)
+    Logger.warning(
+      "#{log_prefix(session_id)} Unexpected verification result format: #{inspect(results)}"
+    )
 
-      %{success: true} ->
-        true
-
-      %{success: false} ->
-        false
-
-      # If results is a string, check for common failure indicators
-      result_str when is_binary(result_str) ->
-        # Check for test failure patterns
-        not (String.contains?(result_str, "failed") or
-               String.contains?(result_str, "error") or
-               String.contains?(result_str, "FAILED"))
-
-      # Default to failed if structure is unexpected
-      _ ->
-        Logger.warning(
-          "#{log_prefix(session_id)} Unexpected verification result format: #{inspect(results)}"
-        )
-
-        false
-    end
+    false
   end
 
   defp identify_responsible_lead(results, data) do
-    # Try to map failures to specific Leads based on file paths
-    # This is a best-effort attempt - may not always be accurate
+    failed_files = results |> extract_failure_info() |> extract_failed_files()
+    leads_by_files = build_lead_file_map(data.leads)
+    find_lead_with_most_overlap(leads_by_files, failed_files)
+  end
 
-    failure_info = extract_failure_info(results)
+  defp build_lead_file_map(leads) do
+    Map.new(leads, fn {lead_id, lead_info} ->
+      files = get_in(lead_info, [:deliverable, :files]) || []
+      {lead_id, files}
+    end)
+  end
 
-    # Get file paths mentioned in failures
-    failed_files = extract_failed_files(failure_info)
-
-    # Match files to Leads based on their deliverables
-    leads_by_files =
-      Enum.reduce(data.leads, %{}, fn {lead_id, lead_info}, acc ->
-        deliverable = Map.get(lead_info, :deliverable, %{})
-        files = Map.get(deliverable, :files, [])
-        Map.put(acc, lead_id, files)
-      end)
-
-    # Find Lead with most overlap
-    lead_scores =
-      Enum.map(leads_by_files, fn {lead_id, lead_files} ->
-        overlap =
-          Enum.count(failed_files, fn failed_file ->
-            Enum.any?(lead_files, fn lead_file ->
-              String.contains?(failed_file, lead_file) or String.contains?(lead_file, failed_file)
-            end)
-          end)
-
-        {lead_id, overlap}
-      end)
-
-    case Enum.max_by(lead_scores, fn {_id, score} -> score end, fn -> nil end) do
+  defp find_lead_with_most_overlap(leads_by_files, failed_files) do
+    leads_by_files
+    |> Enum.map(fn {lead_id, lead_files} ->
+      {lead_id, count_file_overlap(failed_files, lead_files)}
+    end)
+    |> Enum.max_by(fn {_id, score} -> score end, fn -> nil end)
+    |> case do
       {lead_id, score} when score > 0 -> lead_id
       _ -> nil
     end
+  end
+
+  defp count_file_overlap(failed_files, lead_files) do
+    Enum.count(failed_files, fn failed_file ->
+      Enum.any?(
+        lead_files,
+        &(String.contains?(failed_file, &1) or String.contains?(&1, failed_file))
+      )
+    end)
   end
 
   defp extract_failure_info(results) when is_binary(results), do: results
@@ -4167,71 +4146,29 @@ defmodule Deft.Job.Foreman do
   end
 
   defp determine_completed_deliverables(data) do
-    # Read the site log to find completed deliverables
-    # Deliverables are complete if the site log contains a `:complete` message from their Lead
-
-    # Get all keys from the site log
-    tid = Store.tid(data.site_log_pid)
-    site_log_keys = Store.keys(tid)
-
-    # Look for "complete-*" entries and extract deliverable names from metadata
-    completed_deliverables =
-      site_log_keys
-      |> Enum.filter(&String.starts_with?(&1, "complete-"))
-      |> Enum.map(fn key ->
-        # Read the entry to get metadata instead of parsing the key
-        case Store.read(tid, key) do
-          {:ok, entry} ->
-            # Extract deliverable name from lead_id (format: "#{session_id}-#{deliverable_name}")
-            lead_id = get_in(entry, [:metadata, :lead_id])
-
-            if lead_id do
-              String.replace_prefix(lead_id, "#{data.session_id}-", "")
-            else
-              nil
-            end
-
-          _ ->
-            nil
-        end
-      end)
-      |> Enum.reject(&is_nil/1)
-
-    completed_deliverables
+    extract_deliverable_names_by_prefix("complete-", data)
   end
 
   defp determine_failed_deliverables(data) do
-    # Read the site log to find failed deliverables
-    # Deliverables are failed if the site log contains a `:failed` message
+    extract_deliverable_names_by_prefix("failed-", data)
+  end
 
-    # Get all keys from the site log
+  defp extract_deliverable_names_by_prefix(prefix, data) do
     tid = Store.tid(data.site_log_pid)
-    site_log_keys = Store.keys(tid)
 
-    # Look for "failed-*" entries and extract deliverable names from metadata
-    failed_deliverables =
-      site_log_keys
-      |> Enum.filter(&String.starts_with?(&1, "failed-"))
-      |> Enum.map(fn key ->
-        # Read the entry to get metadata instead of parsing the key
-        case Store.read(tid, key) do
-          {:ok, entry} ->
-            # Extract deliverable name from lead_id (format: "#{session_id}-#{deliverable_name}")
-            lead_id = get_in(entry, [:metadata, :lead_id])
+    Store.keys(tid)
+    |> Enum.filter(&String.starts_with?(&1, prefix))
+    |> Enum.map(&extract_deliverable_name_from_entry(tid, &1, data.session_id))
+    |> Enum.reject(&is_nil/1)
+  end
 
-            if lead_id do
-              String.replace_prefix(lead_id, "#{data.session_id}-", "")
-            else
-              nil
-            end
-
-          _ ->
-            nil
-        end
-      end)
-      |> Enum.reject(&is_nil/1)
-
-    failed_deliverables
+  defp extract_deliverable_name_from_entry(tid, key, session_id) do
+    with {:ok, entry} <- Store.read(tid, key),
+         lead_id when not is_nil(lead_id) <- get_in(entry, [:metadata, :lead_id]) do
+      String.replace_prefix(lead_id, "#{session_id}-", "")
+    else
+      _ -> nil
+    end
   end
 
   defp write_failure_marker(lead_id, deliverable_name, reason, data) do
