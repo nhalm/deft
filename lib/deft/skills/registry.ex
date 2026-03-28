@@ -84,27 +84,30 @@ defmodule Deft.Skills.Registry do
   @spec load_definition(String.t()) :: {:ok, String.t()} | {:error, atom() | String.t()}
   def load_definition(name) do
     Agent.get_and_update(__MODULE__, fn registry ->
-      case Map.get(registry, name) do
-        nil ->
-          {{:error, :not_found}, registry}
-
-        %Entry{loaded: true, definition: definition} ->
-          # Already loaded - return cached definition
-          {{:ok, definition}, registry}
-
-        entry ->
-          # First load - read, cache, and mark as loaded
-          case read_definition(entry) do
-            {:ok, definition} = result ->
-              updated_entry = %{entry | loaded: true, definition: definition}
-              updated_registry = Map.put(registry, name, updated_entry)
-              {result, updated_registry}
-
-            error ->
-              {error, registry}
-          end
-      end
+      handle_load_definition(Map.get(registry, name), name, registry)
     end)
+  end
+
+  defp handle_load_definition(nil, _name, registry) do
+    {{:error, :not_found}, registry}
+  end
+
+  defp handle_load_definition(%Entry{loaded: true, definition: definition}, _name, registry) do
+    # Already loaded - return cached definition
+    {{:ok, definition}, registry}
+  end
+
+  defp handle_load_definition(entry, name, registry) do
+    # First load - read, cache, and mark as loaded
+    case read_definition(entry) do
+      {:ok, definition} = result ->
+        updated_entry = %{entry | loaded: true, definition: definition}
+        updated_registry = Map.put(registry, name, updated_entry)
+        {result, updated_registry}
+
+      error ->
+        {error, registry}
+    end
   end
 
   @doc """
@@ -176,19 +179,21 @@ defmodule Deft.Skills.Registry do
       |> Path.join("*.yaml")
       |> Path.wildcard()
       |> Enum.reduce(%{}, fn path, acc ->
-        case parse_skill_manifest(path, level) do
-          {:ok, entry} ->
-            Logger.info("[Skills] Skill registered: #{entry.name} (level: #{level})")
-            Map.put(acc, entry.name, entry)
-
-          {:error, reason} ->
-            Logger.warning("[Skills] Skipping skill #{path}: #{inspect(reason)}")
-            acc
-        end
+        accumulate_skill(parse_skill_manifest(path, level), path, level, acc)
       end)
     else
       %{}
     end
+  end
+
+  defp accumulate_skill({:ok, entry}, _path, level, acc) do
+    Logger.info("[Skills] Skill registered: #{entry.name} (level: #{level})")
+    Map.put(acc, entry.name, entry)
+  end
+
+  defp accumulate_skill({:error, reason}, path, _level, acc) do
+    Logger.warning("[Skills] Skipping skill #{path}: #{inspect(reason)}")
+    acc
   end
 
   defp discover_commands(base_dir, level) do
@@ -199,32 +204,36 @@ defmodule Deft.Skills.Registry do
       |> Path.join("*.md")
       |> Path.wildcard()
       |> Enum.reduce(%{}, fn path, acc ->
-        Logger.debug("[Skills] Parsing command file: #{path}")
-        name = path |> Path.basename(".md")
-
-        if valid_name?(name) do
-          description = extract_command_description(path)
-
-          entry = %Entry{
-            name: name,
-            type: :command,
-            level: level,
-            description: description,
-            path: path,
-            loaded: false
-          }
-
-          Map.put(acc, name, entry)
-        else
-          Logger.warning(
-            "[Skills] Skipping command #{path}: name does not match #{inspect(@name_pattern)}"
-          )
-
-          acc
-        end
+        accumulate_command(path, level, acc)
       end)
     else
       %{}
+    end
+  end
+
+  defp accumulate_command(path, level, acc) do
+    Logger.debug("[Skills] Parsing command file: #{path}")
+    name = path |> Path.basename(".md")
+
+    if valid_name?(name) do
+      description = extract_command_description(path)
+
+      entry = %Entry{
+        name: name,
+        type: :command,
+        level: level,
+        description: description,
+        path: path,
+        loaded: false
+      }
+
+      Map.put(acc, name, entry)
+    else
+      Logger.warning(
+        "[Skills] Skipping command #{path}: name does not match #{inspect(@name_pattern)}"
+      )
+
+      acc
     end
   end
 
@@ -233,49 +242,59 @@ defmodule Deft.Skills.Registry do
 
     with {:ok, content} <- File.read(path),
          {:ok, name, manifest} <- parse_yaml_manifest(content) do
-      if valid_name?(name) do
-        entry = %Entry{
-          name: name,
-          type: :skill,
-          level: level,
-          description: manifest["description"],
-          path: path,
-          loaded: false
-        }
-
-        if entry.description do
-          {:ok, entry}
-        else
-          {:error, :missing_description}
-        end
-      else
-        {:error, :invalid_name}
-      end
+      validate_and_build_skill_entry(name, manifest, path, level)
     end
   end
+
+  defp validate_and_build_skill_entry(name, manifest, path, level) do
+    if valid_name?(name) do
+      entry = %Entry{
+        name: name,
+        type: :skill,
+        level: level,
+        description: manifest["description"],
+        path: path,
+        loaded: false
+      }
+
+      validate_skill_entry_description(entry)
+    else
+      {:error, :invalid_name}
+    end
+  end
+
+  defp validate_skill_entry_description(%Entry{description: nil}),
+    do: {:error, :missing_description}
+
+  defp validate_skill_entry_description(entry), do: {:ok, entry}
 
   defp parse_yaml_manifest(content) do
     case String.split(content, "\n---\n", parts: 2) do
       [yaml_part | _rest] ->
-        case YamlElixir.read_from_string(yaml_part) do
-          {:ok, manifest} when is_map(manifest) ->
-            name = manifest["name"]
-
-            if name do
-              {:ok, name, manifest}
-            else
-              {:error, :missing_name}
-            end
-
-          {:error, reason} ->
-            {:error, {:yaml_parse_error, reason}}
-
-          _ ->
-            {:error, :invalid_yaml_format}
-        end
+        parse_yaml_string(yaml_part)
 
       [] ->
         {:error, :empty_file}
+    end
+  end
+
+  defp parse_yaml_string(yaml_part) do
+    case YamlElixir.read_from_string(yaml_part) do
+      {:ok, manifest} when is_map(manifest) ->
+        extract_manifest_name(manifest)
+
+      {:error, reason} ->
+        {:error, {:yaml_parse_error, reason}}
+
+      _ ->
+        {:error, :invalid_yaml_format}
+    end
+  end
+
+  defp extract_manifest_name(manifest) do
+    case manifest["name"] do
+      nil -> {:error, :missing_name}
+      name -> {:ok, name, manifest}
     end
   end
 
