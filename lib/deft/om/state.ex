@@ -1777,16 +1777,16 @@ defmodule Deft.OM.State do
   defp write_snapshot(state) do
     # Create snapshot entry with all persisted fields from spec section 9.2
     entry =
-      ObservationEntry.new(
-        state.active_observations,
-        state.observation_tokens,
-        state.observed_message_ids,
-        state.pending_message_tokens,
-        state.generation_count,
-        state.last_observed_at,
-        state.activation_epoch,
-        state.calibration_factor
-      )
+      ObservationEntry.new(%{
+        active_observations: state.active_observations,
+        observation_tokens: state.observation_tokens,
+        observed_message_ids: state.observed_message_ids,
+        pending_message_tokens: state.pending_message_tokens,
+        generation_count: state.generation_count,
+        last_observed_at: state.last_observed_at,
+        activation_epoch: state.activation_epoch,
+        calibration_factor: state.calibration_factor
+      })
 
     # Extract working_dir from config
     working_dir = Map.get(state.config, :working_dir, File.cwd!())

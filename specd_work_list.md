@@ -21,7 +21,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ### Tier 4: Single-violation files (1 each)
 
-- Refactor `lib/deft/session/entry.ex` (2 violations): Replace anonymous fn in serialize_content with named pattern-matched function. Reduce Observation.new arity
 - Refactor `lib/deft/eval/fixture_validator.ex` (1 violation): Flatten nesting
 - Refactor `test/support/scripted_provider.ex` (1 violation): Flatten nesting
 - Refactor `test/deft/git/job_test.exs` (1 violation): Split mock cmd into pattern-matched heads

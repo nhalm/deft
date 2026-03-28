@@ -97,34 +97,43 @@ defmodule Deft.Session.Entry.Message do
 
   # Serialize content blocks to JSON-friendly format
   defp serialize_content(content) when is_list(content) do
-    Enum.map(content, fn
-      %Deft.Message.Text{text: text} ->
-        %{type: "text", text: text}
+    Enum.map(content, &serialize_content_block/1)
+  end
 
-      %Deft.Message.ToolUse{id: id, name: name, args: args} ->
-        %{type: "tool_use", id: id, name: name, args: args}
+  defp serialize_content_block(%Deft.Message.Text{text: text}) do
+    %{type: "text", text: text}
+  end
 
-      %Deft.Message.ToolResult{
-        tool_use_id: tool_use_id,
-        name: name,
-        content: content,
-        is_error: is_error
-      } ->
-        %{
-          type: "tool_result",
-          tool_use_id: tool_use_id,
-          name: name,
-          content: content,
-          is_error: is_error
-        }
+  defp serialize_content_block(%Deft.Message.ToolUse{id: id, name: name, args: args}) do
+    %{type: "tool_use", id: id, name: name, args: args}
+  end
 
-      %Deft.Message.Thinking{text: text} ->
-        %{type: "thinking", text: text}
+  defp serialize_content_block(%Deft.Message.ToolResult{
+         tool_use_id: tool_use_id,
+         name: name,
+         content: content,
+         is_error: is_error
+       }) do
+    %{
+      type: "tool_result",
+      tool_use_id: tool_use_id,
+      name: name,
+      content: content,
+      is_error: is_error
+    }
+  end
 
-      %Deft.Message.Image{media_type: media_type, data: data, filename: filename} ->
-        %{type: "image", media_type: media_type, data: data}
-        |> maybe_add_filename(filename)
-    end)
+  defp serialize_content_block(%Deft.Message.Thinking{text: text}) do
+    %{type: "thinking", text: text}
+  end
+
+  defp serialize_content_block(%Deft.Message.Image{
+         media_type: media_type,
+         data: data,
+         filename: filename
+       }) do
+    %{type: "image", media_type: media_type, data: data}
+    |> maybe_add_filename(filename)
   end
 
   # Helper to conditionally add filename to image serialization
@@ -259,27 +268,20 @@ defmodule Deft.Session.Entry.Observation do
   - last_observed_at
   - activation_epoch
   - calibration_factor
+
+  Accepts a map with the required fields.
   """
-  def new(
-        active_observations,
-        observation_tokens,
-        observed_message_ids,
-        pending_message_tokens,
-        generation_count,
-        last_observed_at,
-        activation_epoch,
-        calibration_factor
-      ) do
+  def new(attrs) when is_map(attrs) do
     %__MODULE__{
       type: :observation,
-      active_observations: active_observations,
-      observation_tokens: observation_tokens,
-      observed_message_ids: observed_message_ids,
-      pending_message_tokens: pending_message_tokens,
-      generation_count: generation_count,
-      last_observed_at: last_observed_at,
-      activation_epoch: activation_epoch,
-      calibration_factor: calibration_factor,
+      active_observations: Map.fetch!(attrs, :active_observations),
+      observation_tokens: Map.fetch!(attrs, :observation_tokens),
+      observed_message_ids: Map.fetch!(attrs, :observed_message_ids),
+      pending_message_tokens: Map.fetch!(attrs, :pending_message_tokens),
+      generation_count: Map.fetch!(attrs, :generation_count),
+      last_observed_at: Map.get(attrs, :last_observed_at),
+      activation_epoch: Map.fetch!(attrs, :activation_epoch),
+      calibration_factor: Map.fetch!(attrs, :calibration_factor),
       timestamp: DateTime.utc_now()
     }
   end

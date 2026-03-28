@@ -265,16 +265,16 @@ defmodule Deft.Session.StoreTest do
       last_observed = DateTime.utc_now()
 
       entry =
-        Observation.new(
-          "Some observations",
-          1500,
-          ["msg-1", "msg-2"],
-          1000,
-          2,
-          last_observed,
-          5,
-          4.0
-        )
+        Observation.new(%{
+          active_observations: "Some observations",
+          observation_tokens: 1500,
+          observed_message_ids: ["msg-1", "msg-2"],
+          pending_message_tokens: 1000,
+          generation_count: 2,
+          last_observed_at: last_observed,
+          activation_epoch: 5,
+          calibration_factor: 4.0
+        })
 
       append_with_dir(session_id, entry)
       assert {:ok, [loaded]} = load_with_dir(session_id)
