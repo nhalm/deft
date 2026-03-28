@@ -382,15 +382,18 @@ defmodule Deft.Job.RateLimiter do
         {:noreply, new_state}
       else
         # Clear backoff if we've passed the backoff period
-        buckets =
-          if buckets.backoff_until != nil and now >= buckets.backoff_until do
-            %{buckets | backoff_until: nil}
-          else
-            buckets
-          end
-
+        buckets = maybe_clear_backoff(buckets, now)
         state = put_in(state, [:providers, provider], buckets)
-        try_request_or_enqueue(state, provider, buckets, estimated_tokens, priority, from)
+
+        request_ctx = %{
+          provider: provider,
+          buckets: buckets,
+          estimated_tokens: estimated_tokens,
+          priority: priority,
+          from: from
+        }
+
+        try_request_or_enqueue(state, request_ctx)
       end
     end
   end
@@ -507,7 +510,15 @@ defmodule Deft.Job.RateLimiter do
 
   # Private helpers
 
-  defp try_request_or_enqueue(state, provider, buckets, estimated_tokens, priority, from) do
+  defp try_request_or_enqueue(state, request_ctx) do
+    %{
+      provider: provider,
+      buckets: buckets,
+      estimated_tokens: estimated_tokens,
+      priority: priority,
+      from: from
+    } = request_ctx
+
     # Check if there are queued requests - if so, maintain FIFO ordering
     if :gb_trees.is_empty(state.queue) do
       # Queue is empty - try to serve immediately if capacity available
@@ -538,56 +549,64 @@ defmodule Deft.Job.RateLimiter do
   defp track_cost(state, actual_usage) do
     input_tokens = Map.get(actual_usage, :input, 0)
     output_tokens = Map.get(actual_usage, :output, 0)
-
-    # Calculate cost for this request
     cost = calculate_cost(state.model, input_tokens, output_tokens)
 
-    # Previous cumulative cost (before this request)
-    prev_cumulative = state.cumulative_cost
+    state
+    |> update_cumulative_cost(cost)
+    |> maybe_report_cost()
+    |> maybe_trigger_cost_warning()
+    |> maybe_trigger_cost_ceiling()
+  end
 
-    # Update cumulative cost
+  defp update_cumulative_cost(state, cost) do
+    prev_cumulative = state.cumulative_cost
     new_cumulative = state.cumulative_cost + cost
 
-    # Check if we should report to Foreman (every $0.50 increment)
-    new_state = %{state | cumulative_cost: new_cumulative}
+    state
+    |> Map.put(:cumulative_cost, new_cumulative)
+    |> Map.put(:prev_cumulative_cost, prev_cumulative)
+  end
 
-    new_state =
-      if should_report_cost?(state.last_cost_report, new_cumulative) do
-        report_cost_to_foreman(new_state, new_cumulative)
-        %{new_state | last_cost_report: new_cumulative}
-      else
-        new_state
-      end
+  defp maybe_report_cost(state) do
+    if should_report_cost?(state.last_cost_report, state.cumulative_cost) do
+      report_cost_to_foreman(state, state.cumulative_cost)
+      %{state | last_cost_report: state.cumulative_cost}
+    else
+      state
+    end
+  end
 
-    # Check if we've JUST crossed the cost warning threshold
-    # Only trigger if we haven't sent the warning yet and we just crossed it
-    new_state =
-      if !new_state.cost_warning_sent and prev_cumulative < new_state.cost_warning and
-           new_cumulative >= new_state.cost_warning do
-        Logger.info(
-          "Cost warning reached: $#{Float.round(new_cumulative, 2)} (warning threshold: $#{new_state.cost_warning})"
-        )
+  defp maybe_trigger_cost_warning(state) do
+    prev = Map.get(state, :prev_cumulative_cost, 0)
+    new_cumulative = state.cumulative_cost
 
-        report_cost_warning_to_foreman(new_state, new_cumulative)
-        %{new_state | cost_warning_sent: true}
-      else
-        new_state
-      end
-
-    # Check if we've JUST crossed the cost ceiling threshold (with $1.00 buffer)
-    # Only trigger if we weren't already at the ceiling and we just crossed it
-    threshold = new_state.cost_ceiling - @cost_ceiling_buffer
-
-    if !new_state.cost_ceiling_reached and prev_cumulative < threshold and
-         new_cumulative >= threshold do
-      Logger.warning(
-        "Cost ceiling reached: $#{Float.round(new_cumulative, 2)} (ceiling: $#{new_state.cost_ceiling}), pausing job"
+    if !state.cost_warning_sent and prev < state.cost_warning and
+         new_cumulative >= state.cost_warning do
+      Logger.info(
+        "Cost warning reached: $#{Float.round(new_cumulative, 2)} (warning threshold: $#{state.cost_warning})"
       )
 
-      report_cost_ceiling_reached(new_state, new_cumulative)
-      %{new_state | cost_ceiling_reached: true}
+      report_cost_warning_to_foreman(state, new_cumulative)
+      %{state | cost_warning_sent: true}
     else
-      new_state
+      state
+    end
+  end
+
+  defp maybe_trigger_cost_ceiling(state) do
+    prev = Map.get(state, :prev_cumulative_cost, 0)
+    new_cumulative = state.cumulative_cost
+    threshold = state.cost_ceiling - @cost_ceiling_buffer
+
+    if !state.cost_ceiling_reached and prev < threshold and new_cumulative >= threshold do
+      Logger.warning(
+        "Cost ceiling reached: $#{Float.round(new_cumulative, 2)} (ceiling: $#{state.cost_ceiling}), pausing job"
+      )
+
+      report_cost_ceiling_reached(state, new_cumulative)
+      %{state | cost_ceiling_reached: true}
+    else
+      state
     end
   end
 
@@ -683,33 +702,44 @@ defmodule Deft.Job.RateLimiter do
     Process.send_after(self(), :check_queue, @queue_check_interval_ms)
   end
 
+  defp maybe_clear_backoff(buckets, now) do
+    if buckets.backoff_until != nil and now >= buckets.backoff_until do
+      %{buckets | backoff_until: nil}
+    else
+      buckets
+    end
+  end
+
   defp restore_provider_capacities(state) do
     now = state.time_source.(:millisecond)
 
-    # Iterate through providers and restore capacity where appropriate
     new_providers =
       Enum.reduce(state.providers, %{}, fn {provider, buckets}, acc ->
-        if should_restore_capacity?(buckets, now) do
-          restored_buckets = ProviderBuckets.restore_capacity(buckets)
-
-          # Reset consecutive 429s counter after grace period (60s without any 429s)
-          # This allows exponential backoff to work properly
-          restored_buckets = %{restored_buckets | consecutive_429s: 0, last_restore_at: now}
-
-          # Check if we've fully restored to original capacity
-          if restored_buckets.rpm.capacity >= buckets.rpm_original_capacity and
-               restored_buckets.tpm.capacity >= buckets.tpm_original_capacity do
-            # Fully restored, clear last_429_at and last_restore_at
-            Map.put(acc, provider, %{restored_buckets | last_429_at: nil, last_restore_at: nil})
-          else
-            Map.put(acc, provider, restored_buckets)
-          end
-        else
-          Map.put(acc, provider, buckets)
-        end
+        updated_buckets = maybe_restore_provider_capacity(buckets, now)
+        Map.put(acc, provider, updated_buckets)
       end)
 
     %{state | providers: new_providers}
+  end
+
+  defp maybe_restore_provider_capacity(buckets, now) do
+    if should_restore_capacity?(buckets, now) do
+      buckets
+      |> ProviderBuckets.restore_capacity()
+      |> Map.merge(%{consecutive_429s: 0, last_restore_at: now})
+      |> maybe_clear_429_tracking()
+    else
+      buckets
+    end
+  end
+
+  defp maybe_clear_429_tracking(buckets) do
+    if buckets.rpm.capacity >= buckets.rpm_original_capacity and
+         buckets.tpm.capacity >= buckets.tpm_original_capacity do
+      %{buckets | last_429_at: nil, last_restore_at: nil}
+    else
+      buckets
+    end
   end
 
   defp should_restore_capacity?(buckets, now) do
@@ -750,37 +780,44 @@ defmodule Deft.Job.RateLimiter do
     else
       now = state.time_source.(:millisecond)
       threshold = now - @starvation_threshold_ms
-
-      # Scan queue for requests older than threshold
-      queue_list = :gb_trees.to_list(state.queue)
-
-      {to_promote, _remaining} =
-        Enum.split_with(queue_list, fn {_key, request} ->
-          request.enqueued_at < threshold
-        end)
+      to_promote = find_starved_requests(state.queue, threshold)
 
       if Enum.empty?(to_promote) do
         state
       else
-        # Remove old keys and re-insert with highest priority
-        new_queue =
-          Enum.reduce(to_promote, state.queue, fn {key, _request}, acc ->
-            :gb_trees.delete(key, acc)
-          end)
-
-        # Re-insert promoted requests with highest priority
-        {new_queue, next_id} =
-          Enum.reduce(to_promote, {new_queue, state.next_queue_id}, fn {_old_key, request},
-                                                                       {queue_acc, id} ->
-            promoted_request = %{request | priority: @priority_foreman}
-            queue_key = {-@priority_foreman, id}
-            new_queue_acc = :gb_trees.insert(queue_key, promoted_request, queue_acc)
-            {new_queue_acc, id + 1}
-          end)
-
-        %{state | queue: new_queue, next_queue_id: next_id}
+        apply_promotions(state, to_promote)
       end
     end
+  end
+
+  defp find_starved_requests(queue, threshold) do
+    queue
+    |> :gb_trees.to_list()
+    |> Enum.filter(fn {_key, request} ->
+      request.enqueued_at < threshold
+    end)
+  end
+
+  defp apply_promotions(state, to_promote) do
+    # Remove old keys and re-insert with highest priority
+    new_queue = remove_old_keys(state.queue, to_promote)
+    {new_queue, next_id} = reinsert_with_priority(new_queue, to_promote, state.next_queue_id)
+    %{state | queue: new_queue, next_queue_id: next_id}
+  end
+
+  defp remove_old_keys(queue, to_promote) do
+    Enum.reduce(to_promote, queue, fn {key, _request}, acc ->
+      :gb_trees.delete(key, acc)
+    end)
+  end
+
+  defp reinsert_with_priority(queue, to_promote, next_queue_id) do
+    Enum.reduce(to_promote, {queue, next_queue_id}, fn {_old_key, request}, {queue_acc, id} ->
+      promoted_request = %{request | priority: @priority_foreman}
+      queue_key = {-@priority_foreman, id}
+      new_queue_acc = :gb_trees.insert(queue_key, promoted_request, queue_acc)
+      {new_queue_acc, id + 1}
+    end)
   end
 
   defp process_queue(state) do
@@ -915,37 +952,44 @@ defmodule Deft.Job.RateLimiter do
 
       # Conditions met for scale-up eligibility
       queue_is_empty and buckets_healthy ->
-        if state.scale_up_eligible_since == nil do
-          # Start tracking eligibility
-          %{state | scale_up_eligible_since: now}
-        else
-          # Check if we've been eligible long enough
-          elapsed = now - state.scale_up_eligible_since
-
-          if elapsed >= @scale_up_duration_ms do
-            new_concurrency = state.current_concurrency + 1
-
-            Logger.info(
-              "Scaling up concurrency from #{state.current_concurrency} to #{new_concurrency} (buckets >60%, queue empty for 30s)"
-            )
-
-            notify_concurrency_change(state, new_concurrency)
-
-            # Reset tracking after scaling up (including scale-down cooldown)
-            %{
-              state
-              | current_concurrency: new_concurrency,
-                scale_up_eligible_since: nil,
-                last_scale_down_at: nil
-            }
-          else
-            state
-          end
-        end
+        handle_scale_up_eligibility(state, now)
 
       # Conditions not met - reset tracking
       true ->
         %{state | scale_up_eligible_since: nil}
+    end
+  end
+
+  defp handle_scale_up_eligibility(state, now) do
+    if state.scale_up_eligible_since == nil do
+      # Start tracking eligibility
+      %{state | scale_up_eligible_since: now}
+    else
+      maybe_perform_scale_up(state, now)
+    end
+  end
+
+  defp maybe_perform_scale_up(state, now) do
+    elapsed = now - state.scale_up_eligible_since
+
+    if elapsed >= @scale_up_duration_ms do
+      new_concurrency = state.current_concurrency + 1
+
+      Logger.info(
+        "Scaling up concurrency from #{state.current_concurrency} to #{new_concurrency} (buckets >60%, queue empty for 30s)"
+      )
+
+      notify_concurrency_change(state, new_concurrency)
+
+      # Reset tracking after scaling up (including scale-down cooldown)
+      %{
+        state
+        | current_concurrency: new_concurrency,
+          scale_up_eligible_since: nil,
+          last_scale_down_at: nil
+      }
+    else
+      state
     end
   end
 
