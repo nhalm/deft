@@ -60,8 +60,8 @@ Decision reasoning is logged in [specd_decisions.jsonl](../specd_decisions.jsonl
 | Spec | Version | Status | Description |
 |------|---------|--------|-------------|
 | [standards](standards.md) | v0.1 | Implemented | Elixir coding standards, Makefile, git hooks, testing strategy |
-| [testing](testing/README.md) | v0.1 | Ready | Testing strategy — three layers (unit, integration, eval), ScriptedProvider, coverage expectations |
-| [unit-testing](testing/unit-testing.md) | v0.1 | Ready | Unit testing philosophy, critical path coverage, ScriptedProvider integration scenarios |
+| [testing](testing/README.md) | v0.1 | Implemented | Testing strategy — three layers (unit, integration, eval), ScriptedProvider, coverage expectations |
+| [unit-testing](testing/unit-testing.md) | v0.1 | Implemented | Unit testing philosophy, critical path coverage, ScriptedProvider integration scenarios |
 | [evals](testing/evals/README.md) | v0.4 | Implemented | AI eval infrastructure, methodology, and component eval definitions |
 | [harness](harness.md) | v0.2 | Implemented | Agent loop (gen_statem), message format, process architecture, context assembly |
 | [tools](tools.md) | v0.2 | Implemented | Tool behaviour, 7 built-in tools, tool execution model |
