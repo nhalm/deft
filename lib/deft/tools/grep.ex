@@ -227,15 +227,20 @@ defmodule Deft.Tools.Grep do
           {:cont, acc}
 
         file_matches ->
-          new_acc = acc ++ file_matches
-
-          if length(new_acc) >= @max_matches do
-            {:halt, Enum.take(new_acc, @max_matches)}
-          else
-            {:cont, new_acc}
-          end
+          accumulate_matches(acc, file_matches)
       end
     end)
+  end
+
+  # Accumulate matches and halt if limit is reached
+  defp accumulate_matches(acc, file_matches) do
+    new_acc = acc ++ file_matches
+
+    if length(new_acc) >= @max_matches do
+      {:halt, Enum.take(new_acc, @max_matches)}
+    else
+      {:cont, new_acc}
+    end
   end
 
   # Search a single file
@@ -246,12 +251,7 @@ defmodule Deft.Tools.Grep do
 
         lines
         |> Enum.with_index(1)
-        |> Enum.filter(fn {line, _idx} ->
-          case :re.run(line, compiled_pattern) do
-            {:match, _} -> true
-            :nomatch -> false
-          end
-        end)
+        |> Enum.filter(fn {line, _idx} -> line_matches?(line, compiled_pattern) end)
         |> Enum.map(fn {line, line_num} ->
           context = get_context(lines, line_num, context_lines)
           {file, line_num, line, context}
@@ -259,6 +259,14 @@ defmodule Deft.Tools.Grep do
 
       {:error, _} ->
         []
+    end
+  end
+
+  # Check if a line matches the compiled pattern
+  defp line_matches?(line, compiled_pattern) do
+    case :re.run(line, compiled_pattern) do
+      {:match, _} -> true
+      :nomatch -> false
     end
   end
 
