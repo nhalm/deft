@@ -1,4 +1,5 @@
 # History
+- **standards v0.2 (2026-03-28):** Refactor `lib/deft/config.ex` (1 violation): Extract helpers from validate_and_build to reduce ABC size
 - **standards v0.2 (2026-03-28):** Refactor `lib/deft/session/store.ex` (1 violation): Flatten nesting
 - **standards v0.2 (2026-03-28):** Refactor `lib/deft/tools/bash.ex` (4 violations): Extract truncate_by_bytes/truncate_by_lines from truncate_output. Split execute into dispatch + pattern-matched handlers
 - **standards v0.2 (2026-03-28):** Refactor `lib/deft/tools/ls.ex` (1 violation): Extract helpers from summarize

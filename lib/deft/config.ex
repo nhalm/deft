@@ -362,18 +362,30 @@ defmodule Deft.Config do
 
   # Validate and build the Config struct
   defp validate_and_build(config) do
-    om_config = Map.get(config, :om, %{})
-    cache_config = Map.get(config, :cache, %{})
-    issues_config = Map.get(config, :issues, %{})
-    work_config = Map.get(config, :work, %{})
-    job_config = Map.get(config, :job, %{})
-
-    %__MODULE__{
+    base_config = %{
       model: Map.fetch!(config, :model),
       provider: Map.fetch!(config, :provider),
       turn_limit: Map.fetch!(config, :turn_limit),
       tool_timeout: Map.fetch!(config, :tool_timeout),
-      bash_timeout: Map.fetch!(config, :bash_timeout),
+      bash_timeout: Map.fetch!(config, :bash_timeout)
+    }
+
+    all_fields =
+      base_config
+      |> Map.merge(extract_om_config(config))
+      |> Map.merge(extract_cache_config(config))
+      |> Map.merge(extract_issues_config(config))
+      |> Map.merge(extract_work_config(config))
+      |> Map.merge(extract_job_config(config))
+
+    struct!(__MODULE__, all_fields)
+  end
+
+  # Extract OM config fields
+  defp extract_om_config(config) do
+    om_config = Map.get(config, :om, %{})
+
+    %{
       om_enabled: Map.get(om_config, :enabled, true),
       om_observer_model: Map.get(om_config, :observer_model, "claude-haiku-4.5"),
       om_reflector_model: Map.get(om_config, :reflector_model, "claude-haiku-4.5"),
@@ -386,14 +398,46 @@ defmodule Deft.Config do
       om_buffer_interval: Map.get(om_config, :buffer_interval, 0.2),
       om_buffer_tail_retention: Map.get(om_config, :buffer_tail_retention, 0.2),
       om_hard_threshold_multiplier: Map.get(om_config, :hard_threshold_multiplier, 1.2),
-      om_previous_observer_tokens: Map.get(om_config, :previous_observer_tokens, 8_000),
+      om_previous_observer_tokens: Map.get(om_config, :previous_observer_tokens, 8_000)
+    }
+  end
+
+  # Extract cache config fields
+  defp extract_cache_config(config) do
+    cache_config = Map.get(config, :cache, %{})
+
+    %{
       cache_token_threshold: Map.get(cache_config, :token_threshold, 10_000),
       cache_token_threshold_read: Map.get(cache_config, :token_threshold_read, 20_000),
       cache_token_threshold_grep: Map.get(cache_config, :token_threshold_grep, 8_000),
       cache_token_threshold_ls: Map.get(cache_config, :token_threshold_ls, 4_000),
-      cache_token_threshold_find: Map.get(cache_config, :token_threshold_find, 4_000),
-      issues_compaction_days: Map.get(issues_config, :compaction_days, 90),
-      work_cost_ceiling: Map.get(work_config, :cost_ceiling, 50.0),
+      cache_token_threshold_find: Map.get(cache_config, :token_threshold_find, 4_000)
+    }
+  end
+
+  # Extract issues config fields
+  defp extract_issues_config(config) do
+    issues_config = Map.get(config, :issues, %{})
+
+    %{
+      issues_compaction_days: Map.get(issues_config, :compaction_days, 90)
+    }
+  end
+
+  # Extract work config fields
+  defp extract_work_config(config) do
+    work_config = Map.get(config, :work, %{})
+
+    %{
+      work_cost_ceiling: Map.get(work_config, :cost_ceiling, 50.0)
+    }
+  end
+
+  # Extract job config fields
+  defp extract_job_config(config) do
+    job_config = Map.get(config, :job, %{})
+
+    %{
       job_test_command: Map.get(job_config, :test_command, "mix test"),
       job_keep_failed_branches: Map.get(job_config, :keep_failed_branches, false),
       job_squash_on_complete: Map.get(job_config, :squash_on_complete, true),
