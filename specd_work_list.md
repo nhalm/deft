@@ -21,14 +21,13 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ### Tier 1: Largest files (10+ violations each)
 
-- Refactor `lib/deft/job/foreman.ex` (32 violations): Extract helpers from init, handle_event handlers, start_lead, handle_lead_crash. Group merge conflict/resolution params into maps (arity 6→map). Split analyze_verification_results into pattern-matched heads. Flatten 12 nesting violations by extracting inner branches to named functions
 - Refactor `lib/deft/tools/edit.ex` (16 violations): Group Myers diff params (old_lines, new_lines, n, m, max_d) into a ctx map — fixes 5 arity violations + nesting. Extract helpers from calculate_hunk_header, group_into_hunks, build_lcs_table, lcs_backtrack. Split execute/string_match_mode cyclomatic complexity via pattern-matched heads
 - Refactor `lib/deft/cli.ex` (15 violations): Extract helpers from determine_command (CC 24, split into flag vs positional dispatch). Group start_agent optional params into opts map. Extract display helpers from display_issue_list, display_issue, create/update_interactive_issue, wait_for_job_completion. Flatten 4 nesting violations
 - Refactor `lib/deft/agent.ex` (14 violations): Extract shared start_provider_stream helper (deduplicates 3 call sites). Split handle_event(:calling) case into pattern-matched function heads. Extract helpers from handle_tool_execution_complete (ABC 80), handle_idle_transition, save_tool_results, start_compaction_task. Flatten 4 nesting violations
 
 ### Tier 2: Medium files (5-8 violations each)
 
-- Refactor `lib/deft/job/lead.ex` (8 violations): Extract helpers from handle_event(:info, runner_result), read_site_log_context, process_runner_result. Split evaluate_runner_output into pattern-matched heads. Flatten 4 nesting violations (blocked: Refactor lib/deft/job/foreman.ex)
+- Refactor `lib/deft/job/lead.ex` (8 violations): Extract helpers from handle_event(:info, runner_result), read_site_log_context, process_runner_result. Split evaluate_runner_output into pattern-matched heads. Flatten 4 nesting violations
 - Refactor `lib/deft/om/state.ex` (7 violations): Group retry function args into context maps — fixes 4 arity violations (run_observer/reflector_with_retry and their loop variants). Extract helpers from handle_info observer completion, activate_buffered_chunks, truncate_session_history_to_target
 - Refactor `lib/deft/job/rate_limiter.ex` (7 violations): Group try_request_or_enqueue params into map. Split track_cost into pipeline of pattern-matched helpers. Extract helpers from promote_starved_requests. Flatten 4 nesting violations
 - Refactor `lib/deft/job/runner.ex` (6 violations): Create loop context struct/map bundling messages, tools, tool_context, job_id, provider, config, max_turns — fixes 4 arity violations (run, loop, do_loop_iteration, handle_assistant_message). Extract helpers from collect_loop (ABC 68) and execute_tools_inline

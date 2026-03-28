@@ -225,15 +225,24 @@ defmodule Deft.Job.Foreman do
 
   @impl :gen_statem
   def init(initial_data) do
-    # Create site log instance for curated job knowledge
-    site_log_name = {:sitelog, initial_data.session_id}
     foreman_name = {:foreman, initial_data.session_id}
 
     # Register ourselves for site log access control
     {:ok, _} = Registry.register(Deft.ProcessRegistry, foreman_name, nil)
 
-    # Look up the already-started site log instance (started by Deft.Job.Supervisor)
-    # In tests, the Store may not be started yet (Foreman started in isolation), so start it if needed
+    data = setup_site_log(initial_data, foreman_name)
+    data = setup_job_timeout(data)
+
+    # Check if we're resuming
+    if Map.get(initial_data.config, :resume) && initial_data.plan do
+      initialize_resume(data)
+    else
+      initialize_normal_start(data)
+    end
+  end
+
+  defp setup_site_log(initial_data, foreman_name) do
+    site_log_name = {:sitelog, initial_data.session_id}
     site_log_via = {:via, Registry, {Deft.ProcessRegistry, site_log_name}}
     site_log_pid = GenServer.whereis(site_log_via)
 
@@ -256,53 +265,51 @@ defmodule Deft.Job.Foreman do
         {site_log_pid, false}
       end
 
-    data = %{initial_data | site_log_pid: site_log_pid, started_site_log: started_site_log}
+    %{initial_data | site_log_pid: site_log_pid, started_site_log: started_site_log}
+  end
 
-    # Set up job-level timeout
-    job_max_duration = Map.get(initial_data.config, :job_max_duration, 1_800_000)
+  defp setup_job_timeout(data) do
+    job_max_duration = Map.get(data.config, :job_max_duration, 1_800_000)
     job_timeout_ref = Process.send_after(self(), :job_timeout, job_max_duration)
-    data = %{data | job_timeout_ref: job_timeout_ref}
+    %{data | job_timeout_ref: job_timeout_ref}
+  end
 
-    # Check if we're resuming
-    if Map.get(initial_data.config, :resume) && initial_data.plan do
-      Logger.info(
-        "#{log_prefix(initial_data.session_id)} Resuming job #{initial_data.session_id}"
-      )
+  defp initialize_resume(data) do
+    Logger.info("#{log_prefix(data.session_id)} Resuming job #{data.session_id}")
 
-      # Build dependency structures from the resumed plan
-      data = store_plan_and_build_dependencies(initial_data.plan, data)
+    # Build dependency structures from the resumed plan
+    data = store_plan_and_build_dependencies(data.plan, data)
 
-      # Determine which deliverables are complete by checking site log
-      completed_deliverables = determine_completed_deliverables(data)
+    # Determine which deliverables are complete by checking site log
+    completed_deliverables = determine_completed_deliverables(data)
 
-      Logger.info(
-        "#{log_prefix(initial_data.session_id)} Completed deliverables: #{inspect(completed_deliverables)}"
-      )
+    Logger.info(
+      "#{log_prefix(data.session_id)} Completed deliverables: #{inspect(completed_deliverables)}"
+    )
 
-      # Update started_leads to reflect completed work
-      started_leads = MapSet.new(completed_deliverables)
+    # Update started_leads to reflect completed work
+    started_leads = MapSet.new(completed_deliverables)
 
-      data = %{
-        data
-        | started_leads: started_leads,
-          job_start_time: System.monotonic_time(:millisecond)
-      }
+    data = %{
+      data
+      | started_leads: started_leads,
+        job_start_time: System.monotonic_time(:millisecond)
+    }
 
-      # Start in executing phase, ready to resume incomplete work
-      initial_state = {:executing, :idle}
-      {:ok, initial_state, data}
-    else
-      Logger.info(
-        "#{log_prefix(initial_data.session_id)} Job started (#{initial_data.session_id}, #{initial_data.prompt})"
-      )
+    # Start in executing phase, ready to resume incomplete work
+    initial_state = {:executing, :idle}
+    {:ok, initial_state, data}
+  end
 
-      # Set job start time for duration tracking
-      data = %{data | job_start_time: System.monotonic_time(:millisecond)}
+  defp initialize_normal_start(data) do
+    Logger.info("#{log_prefix(data.session_id)} Job started (#{data.session_id}, #{data.prompt})")
 
-      # Normal start in planning phase, idle agent state
-      initial_state = {:planning, :idle}
-      {:ok, initial_state, data}
-    end
+    # Set job start time for duration tracking
+    data = %{data | job_start_time: System.monotonic_time(:millisecond)}
+
+    # Normal start in planning phase, idle agent state
+    initial_state = {:planning, :idle}
+    {:ok, initial_state, data}
   end
 
   @impl :gen_statem
@@ -345,79 +352,12 @@ defmodule Deft.Job.Foreman do
   end
 
   def handle_event(:enter, _old_state, {:researching, :idle} = state, data) do
-    # Spawn research Runners in parallel
     Logger.info("#{log_prefix(data.session_id)} Foreman starting research phase")
     broadcast_job_status(state, data)
 
-    # Use research task specs from planning phase if available, otherwise fall back to defaults
-    research_specs =
-      case Map.get(data, :research_task_specs) do
-        nil ->
-          Logger.info(
-            "#{log_prefix(data.session_id)} No research tasks from planning, using defaults"
-          )
-
-          determine_research_tasks(data.prompt)
-
-        specs ->
-          Logger.info(
-            "#{log_prefix(data.session_id)} Using #{length(specs)} research tasks from planning phase"
-          )
-
-          specs
-      end
-
-    # Get research timeout from config (default 120s)
+    research_specs = get_research_specs(data)
     research_timeout = Map.get(data.config, :job_research_timeout, 120_000)
-
-    # Spawn research Runners via Task.Supervisor.async_nolink
-    tasks =
-      Enum.map(research_specs, fn %{instructions: instructions, context: context} ->
-        task =
-          Task.Supervisor.async_nolink(
-            data.runner_supervisor,
-            fn ->
-              # Get research runner model from config (defaults to same as lead model)
-              research_model =
-                Map.get(
-                  data.config,
-                  :job_research_runner_model,
-                  Map.get(data.config, :job_lead_model)
-                )
-
-              provider_name = Map.get(data.config, :provider, "anthropic")
-
-              runner_config = %{
-                provider: get_provider(data),
-                provider_name: provider_name,
-                model: research_model
-              }
-
-              # Pass provider_pid if present (for ScriptedProvider in tests)
-              runner_config =
-                case Map.get(data.config, :provider_pid) do
-                  nil -> runner_config
-                  pid -> Map.put(runner_config, :provider_pid, pid)
-                end
-
-              # Call Runner with :research type (read-only tools)
-              Runner.run(
-                :research,
-                instructions,
-                context,
-                data.session_id,
-                runner_config,
-                data.working_dir
-              )
-            end
-          )
-
-        # Monitor the task for timeout
-        Process.monitor(task.pid)
-        task
-      end)
-
-    # Set timeout timer
+    tasks = spawn_research_tasks(research_specs, data)
     timeout_ref = Process.send_after(self(), :research_timeout, research_timeout)
 
     data = %{
@@ -427,10 +367,73 @@ defmodule Deft.Job.Foreman do
         research_timeout_ref: timeout_ref
     }
 
-    # Broadcast updated status with Runners
     broadcast_job_status(state, data)
 
     {:keep_state, data}
+  end
+
+  defp get_research_specs(data) do
+    case Map.get(data, :research_task_specs) do
+      nil ->
+        Logger.info(
+          "#{log_prefix(data.session_id)} No research tasks from planning, using defaults"
+        )
+
+        determine_research_tasks(data.prompt)
+
+      specs ->
+        Logger.info(
+          "#{log_prefix(data.session_id)} Using #{length(specs)} research tasks from planning phase"
+        )
+
+        specs
+    end
+  end
+
+  defp spawn_research_tasks(research_specs, data) do
+    Enum.map(research_specs, fn %{instructions: instructions, context: context} ->
+      task =
+        Task.Supervisor.async_nolink(
+          data.runner_supervisor,
+          fn ->
+            runner_config = build_research_runner_config(data)
+
+            Runner.run(
+              :research,
+              instructions,
+              context,
+              data.session_id,
+              runner_config,
+              data.working_dir
+            )
+          end
+        )
+
+      Process.monitor(task.pid)
+      task
+    end)
+  end
+
+  defp build_research_runner_config(data) do
+    research_model =
+      Map.get(
+        data.config,
+        :job_research_runner_model,
+        Map.get(data.config, :job_lead_model)
+      )
+
+    provider_name = Map.get(data.config, :provider, "anthropic")
+
+    runner_config = %{
+      provider: get_provider(data),
+      provider_name: provider_name,
+      model: research_model
+    }
+
+    case Map.get(data.config, :provider_pid) do
+      nil -> runner_config
+      pid -> Map.put(runner_config, :provider_pid, pid)
+    end
   end
 
   def handle_event(:enter, _old_state, {:decomposing, :idle} = state, data) do
@@ -525,58 +528,55 @@ defmodule Deft.Job.Foreman do
 
   # Prompt handling
   def handle_event(:cast, {:prompt, text}, {job_phase, :idle}, data) do
-    # Check if this is a job correction (explicit user course-correction)
     case String.split(text, "__JOB_CORRECTION__: ", parts: 2) do
       [_prefix, correction_content] ->
-        # This is a correction - auto-promote to site log
-        Logger.info(
-          "#{log_prefix(data.session_id)} User correction received: #{correction_content}"
-        )
-
-        metadata = %{source: "user", timestamp: DateTime.utc_now()}
-        write_to_site_log(:correction, correction_content, metadata, data)
-
-        # Send acknowledgment message to user
-        data = send_user_message("Correction recorded and promoted to site log.", data)
-
-        # Stay in idle state
-        {:keep_state, data}
+        handle_job_correction(correction_content, data)
 
       [_] ->
-        # Normal prompt - proceed with LLM call
-        # Add user message to conversation
-        user_message = %Message{
-          id: generate_message_id(),
-          role: :user,
-          content: [%Deft.Message.Text{text: text}],
-          timestamp: DateTime.utc_now()
+        handle_normal_prompt(text, job_phase, data)
+    end
+  end
+
+  defp handle_job_correction(correction_content, data) do
+    Logger.info("#{log_prefix(data.session_id)} User correction received: #{correction_content}")
+
+    metadata = %{source: "user", timestamp: DateTime.utc_now()}
+    write_to_site_log(:correction, correction_content, metadata, data)
+
+    data = send_user_message("Correction recorded and promoted to site log.", data)
+
+    {:keep_state, data}
+  end
+
+  defp handle_normal_prompt(text, job_phase, data) do
+    user_message = %Message{
+      id: generate_message_id(),
+      role: :user,
+      content: [%Deft.Message.Text{text: text}],
+      timestamp: DateTime.utc_now()
+    }
+
+    messages = data.messages ++ [user_message]
+    data = %{data | messages: messages, turn_count: data.turn_count + 1}
+    data = save_unsaved_messages(data)
+
+    case call_llm(data) do
+      {:ok, stream_ref, monitor_ref, estimated_tokens} ->
+        data = %{
+          data
+          | stream_ref: stream_ref,
+            stream_monitor_ref: monitor_ref,
+            estimated_tokens: estimated_tokens
         }
 
-        messages = data.messages ++ [user_message]
+        {:next_state, {job_phase, :calling}, data}
 
-        # Save the user message to session
-        data = %{data | messages: messages, turn_count: data.turn_count + 1}
-        data = save_unsaved_messages(data)
+      {:error, reason} ->
+        Logger.error(
+          "#{log_prefix(data.session_id)} Foreman LLM call failed in #{job_phase}: #{inspect(reason)}"
+        )
 
-        # Start LLM call
-        case call_llm(data) do
-          {:ok, stream_ref, monitor_ref, estimated_tokens} ->
-            data = %{
-              data
-              | stream_ref: stream_ref,
-                stream_monitor_ref: monitor_ref,
-                estimated_tokens: estimated_tokens
-            }
-
-            {:next_state, {job_phase, :calling}, data}
-
-          {:error, reason} ->
-            Logger.error(
-              "#{log_prefix(data.session_id)} Foreman LLM call failed in #{job_phase}: #{inspect(reason)}"
-            )
-
-            {:next_state, {:complete, :idle}, data}
-        end
+        {:next_state, {:complete, :idle}, data}
     end
   end
 
@@ -909,42 +909,62 @@ defmodule Deft.Job.Foreman do
         {job_phase, agent_state} = state,
         data
       ) do
-    # Extract ref from DOWN message
     {:DOWN, ref, :process, _pid, reason} = down_msg
+    task_type = identify_crashed_task(ref, data)
 
-    # Check if this ref matches any research task
+    crash_ctx = %{
+      ref: ref,
+      reason: reason,
+      job_phase: job_phase,
+      agent_state: agent_state,
+      down_msg: down_msg,
+      state: state,
+      data: data
+    }
+
+    dispatch_task_crash(task_type, crash_ctx)
+  end
+
+  defp identify_crashed_task(ref, data) do
     research_tasks = Map.get(data, :research_tasks, [])
     crashed_research_task = Enum.find(research_tasks, fn task -> task.ref == ref end)
 
-    # Check if this ref matches any tool task
     tool_tasks = Map.get(data, :tool_tasks, [])
     crashed_tool_task = Enum.find(tool_tasks, fn task -> task.ref == ref end)
 
-    # Check if this ref matches any merge resolution task
     merge_resolution_tasks = Map.get(data, :merge_resolution_tasks, %{})
     crashed_merge_task = Map.get(merge_resolution_tasks, ref)
 
-    # Check if this ref matches any post-merge test task
     post_merge_test_tasks = Map.get(data, :post_merge_test_tasks, %{})
     crashed_test_task = Map.get(post_merge_test_tasks, ref)
 
     cond do
-      crashed_research_task ->
-        handle_research_task_crash(ref, reason, job_phase, agent_state, data)
-
-      crashed_tool_task ->
-        handle_tool_task_crash(ref, reason, job_phase, agent_state, data)
-
-      crashed_merge_task ->
-        handle_merge_task_crash(ref, reason, crashed_merge_task, data)
-
-      crashed_test_task ->
-        handle_post_merge_test_crash(ref, reason, crashed_test_task, data)
-
-      true ->
-        # Not a research, tool, merge, or test task - fall through to Lead crash handler
-        handle_lead_crash(down_msg, state, data)
+      crashed_research_task -> {:research, crashed_research_task}
+      crashed_tool_task -> {:tool, crashed_tool_task}
+      crashed_merge_task -> {:merge, crashed_merge_task}
+      crashed_test_task -> {:test, crashed_test_task}
+      true -> :lead
     end
+  end
+
+  defp dispatch_task_crash({:research, _task}, ctx) do
+    handle_research_task_crash(ctx.ref, ctx.reason, ctx.job_phase, ctx.agent_state, ctx.data)
+  end
+
+  defp dispatch_task_crash({:tool, _task}, ctx) do
+    handle_tool_task_crash(ctx.ref, ctx.reason, ctx.job_phase, ctx.agent_state, ctx.data)
+  end
+
+  defp dispatch_task_crash({:merge, task}, ctx) do
+    handle_merge_task_crash(ctx.ref, ctx.reason, task, ctx.data)
+  end
+
+  defp dispatch_task_crash({:test, task}, ctx) do
+    handle_post_merge_test_crash(ctx.ref, ctx.reason, task, ctx.data)
+  end
+
+  defp dispatch_task_crash(:lead, ctx) do
+    handle_lead_crash(ctx.down_msg, ctx.state, ctx.data)
   end
 
   # Rate limiter messages
@@ -1232,14 +1252,15 @@ defmodule Deft.Job.Foreman do
 
         case result do
           {:ok, _output} ->
-            handle_merge_resolution_success(
-              lead_id,
-              lead_info,
-              conflicted_files,
-              retry_count,
-              max_retries,
-              data
-            )
+            resolution_ctx = %{
+              lead_id: lead_id,
+              lead_info: lead_info,
+              conflicted_files: conflicted_files,
+              retry_count: retry_count,
+              max_retries: max_retries
+            }
+
+            handle_merge_resolution_success(resolution_ctx, data)
 
           {:error, reason} ->
             Logger.error(
@@ -1273,39 +1294,37 @@ defmodule Deft.Job.Foreman do
       when is_reference(ref) do
     case Map.pop(tasks, ref) do
       {nil, _tasks} ->
-        # Not a post-merge test task, ignore
         :keep_state_and_data
 
       {task_context, remaining_tasks} ->
-        %{
-          lead_id: lead_id,
-          lead_info: lead_info
-        } = task_context
-
         data = %{data | post_merge_test_tasks: remaining_tasks}
-
-        case result do
-          {:ok, :passed} ->
-            new_data = handle_test_success(lead_id, lead_info, data)
-
-            # Check if all Leads are complete after test success
-            case check_phase_transition(:complete, :executing, new_data) do
-              {:transition, new_phase} ->
-                {:next_state, {new_phase, :idle}, new_data}
-
-              :no_transition ->
-                {:keep_state, new_data}
-            end
-
-          {:error, :test_failed, test_output} ->
-            new_data = handle_test_failure(lead_id, lead_info, test_output, data)
-            {:keep_state, new_data}
-
-          {:error, reason} ->
-            new_data = handle_test_error(lead_id, lead_info, reason, data)
-            {:keep_state, new_data}
-        end
+        handle_post_merge_test_result(result, task_context, data)
     end
+  end
+
+  defp handle_post_merge_test_result({:ok, :passed}, task_context, data) do
+    %{lead_id: lead_id, lead_info: lead_info} = task_context
+    new_data = handle_test_success(lead_id, lead_info, data)
+
+    case check_phase_transition(:complete, :executing, new_data) do
+      {:transition, new_phase} ->
+        {:next_state, {new_phase, :idle}, new_data}
+
+      :no_transition ->
+        {:keep_state, new_data}
+    end
+  end
+
+  defp handle_post_merge_test_result({:error, :test_failed, test_output}, task_context, data) do
+    %{lead_id: lead_id, lead_info: lead_info} = task_context
+    new_data = handle_test_failure(lead_id, lead_info, test_output, data)
+    {:keep_state, new_data}
+  end
+
+  defp handle_post_merge_test_result({:error, reason}, task_context, data) do
+    %{lead_id: lead_id, lead_info: lead_info} = task_context
+    new_data = handle_test_error(lead_id, lead_info, reason, data)
+    {:keep_state, new_data}
   end
 
   # Verification task completion
@@ -1320,12 +1339,7 @@ defmodule Deft.Job.Foreman do
     tasks = Enum.reject(tasks, fn task -> task.ref == ref end)
     data = %{data | tool_tasks: tasks}
 
-    # Cancel timeout timer
-    if data.verification_timeout_ref do
-      Process.cancel_timer(data.verification_timeout_ref)
-    end
-
-    data = %{data | verification_timeout_ref: nil}
+    data = cancel_verification_timeout(data)
 
     Logger.info("#{log_prefix(data.session_id)} Verification Runner completed")
 
@@ -1333,140 +1347,144 @@ defmodule Deft.Job.Foreman do
     verification_passed = analyze_verification_results(results, data.session_id)
 
     if verification_passed do
-      Logger.info(
-        "#{log_prefix(data.session_id)} Verification passed - proceeding with squash-merge"
+      handle_verification_passed(data)
+    else
+      handle_verification_failed(results, data)
+    end
+  end
+
+  defp cancel_verification_timeout(data) do
+    if data.verification_timeout_ref do
+      Process.cancel_timer(data.verification_timeout_ref)
+    end
+
+    %{data | verification_timeout_ref: nil}
+  end
+
+  defp handle_verification_passed(data) do
+    Logger.info(
+      "#{log_prefix(data.session_id)} Verification passed - proceeding with squash-merge"
+    )
+
+    # Get original branch (stored in config or default to current branch)
+    original_branch = Map.get(data.config, :original_branch, "main")
+
+    # Get squash setting from config (default true per git-strategy.md section 7)
+    squash = Map.get(data.config, :job_squash_on_complete, true)
+
+    # Trigger squash-merge
+    merge_result =
+      GitJob.complete_job(
+        job_id: data.session_id,
+        original_branch: original_branch,
+        squash: squash,
+        working_dir: data.working_dir
       )
 
-      # Get original branch (stored in config or default to current branch)
-      original_branch = Map.get(data.config, :original_branch, "main")
+    handle_merge_completion(merge_result, data)
+  end
 
-      # Get squash setting from config (default true per git-strategy.md section 7)
-      squash = Map.get(data.config, :job_squash_on_complete, true)
+  defp handle_merge_completion({:ok, :completed}, data) do
+    # Calculate job duration
+    duration_ms = System.monotonic_time(:millisecond) - data.job_start_time
+    duration_sec = Float.round(duration_ms / 1000, 1)
 
-      # Trigger squash-merge
-      case GitJob.complete_job(
-             job_id: data.session_id,
-             original_branch: original_branch,
-             squash: squash,
-             working_dir: data.working_dir
-           ) do
-        {:ok, :completed} ->
-          # Calculate job duration
-          duration_ms = System.monotonic_time(:millisecond) - data.job_start_time
-          duration_sec = Float.round(duration_ms / 1000, 1)
+    Logger.info(
+      "#{log_prefix(data.session_id)} Job complete (#{duration_sec}s, $#{Float.round(data.session_cost, 2)})"
+    )
 
-          Logger.info(
-            "#{log_prefix(data.session_id)} Job complete (#{duration_sec}s, $#{Float.round(data.session_cost, 2)})"
-          )
+    cleanup_all_lead_worktrees(data)
+    archive_job_files(data.session_id, data.working_dir, :completed)
+    data = cancel_job_timeout(data)
 
-          # Clean up any remaining Lead worktrees
-          cleanup_all_lead_worktrees(data)
+    {:next_state, {:complete, :idle}, data}
+  end
 
-          # Archive job files for debugging
-          archive_job_files(data.session_id, data.working_dir, :completed)
+  defp handle_merge_completion({:error, {:worktrees_remain, count}}, data) do
+    # Merge succeeded and branch was deleted, but orphan worktrees remain
+    Logger.warning(
+      "#{log_prefix(data.session_id)} Job completed but #{count} orphan worktrees remain"
+    )
 
-          # Cancel job timeout timer
-          data = cancel_job_timeout(data)
+    cleanup_all_lead_worktrees(data)
+    archive_job_files(data.session_id, data.working_dir, :completed)
 
-          {:next_state, {:complete, :idle}, data}
+    # Report as a warning, not a failure
+    warning_message = """
+    Job completed successfully, but #{count} orphan worktrees were detected.
 
-        {:error, {:worktrees_remain, count}} ->
-          # Merge succeeded and branch was deleted, but orphan worktrees remain
-          Logger.warning(
-            "#{log_prefix(data.session_id)} Job completed but #{count} orphan worktrees remain"
-          )
+    These are likely from incomplete cleanup and can be removed with:
+      git worktree list
+      git worktree remove <path>
+    """
 
-          # Clean up any remaining Lead worktrees
-          cleanup_all_lead_worktrees(data)
+    data = send_user_message(warning_message, data)
+    data = cancel_job_timeout(data)
 
-          # Archive job files for debugging
-          archive_job_files(data.session_id, data.working_dir, :completed)
+    {:next_state, {:complete, :idle}, data}
+  end
 
-          # Report as a warning, not a failure
-          warning_message = """
-          Job completed successfully, but #{count} orphan worktrees were detected.
+  defp handle_merge_completion({:error, reason}, data) do
+    Logger.error("#{log_prefix(data.session_id)} Failed to complete job: #{inspect(reason)}")
 
-          These are likely from incomplete cleanup and can be removed with:
-            git worktree list
-            git worktree remove <path>
-          """
+    cleanup_all_lead_worktrees(data)
+    archive_job_files(data.session_id, data.working_dir, :merge_failed)
 
-          data = send_user_message(warning_message, data)
+    # Report error to user
+    error_message = """
+    Verification passed but failed to merge changes: #{inspect(reason)}
 
-          # Cancel job timeout timer
-          data = cancel_job_timeout(data)
+    You may need to manually merge the job branch: deft/job-#{data.session_id}
+    """
 
-          {:next_state, {:complete, :idle}, data}
+    data = send_user_message(error_message, data)
+    data = cancel_job_timeout(data)
 
-        {:error, reason} ->
-          Logger.error(
-            "#{log_prefix(data.session_id)} Failed to complete job: #{inspect(reason)}"
-          )
+    {:next_state, {:complete, :idle}, data}
+  end
 
-          # Clean up any remaining Lead worktrees even on merge failure
-          cleanup_all_lead_worktrees(data)
+  defp handle_verification_failed(results, data) do
+    Logger.warning("#{log_prefix(data.session_id)} Verification failed")
 
-          # Archive job files for debugging
-          archive_job_files(data.session_id, data.working_dir, :merge_failed)
+    cleanup_all_lead_worktrees(data)
 
-          # Report error to user
-          error_message = """
-          Verification passed but failed to merge changes: #{inspect(reason)}
+    # Delete job branch unless configured to keep it
+    keep_branch = Map.get(data.config, :job_keep_failed_branches, false)
 
-          You may need to manually merge the job branch: deft/job-#{data.session_id}
-          """
+    unless keep_branch do
+      delete_job_branch_on_failure(data.session_id, data.working_dir)
+    end
 
-          data = send_user_message(error_message, data)
+    archive_job_files(data.session_id, data.working_dir, :verification_failed)
 
-          # Cancel job timeout timer
-          data = cancel_job_timeout(data)
+    # Identify responsible Lead based on test failures
+    responsible_lead = identify_responsible_lead(results, data)
 
-          {:next_state, {:complete, :idle}, data}
-      end
+    # Build failure message, noting if branch was kept
+    branch_status = build_failure_branch_status(keep_branch, data.session_id)
+
+    # Report failure to user
+    failure_message = """
+    Verification failed. Test suite or code review found issues.
+
+    #{format_verification_failures(results)}
+
+    #{if responsible_lead, do: "Most likely responsible: #{responsible_lead}", else: ""}
+
+    #{branch_status}
+    """
+
+    data = send_user_message(failure_message, data)
+    data = cancel_job_timeout(data)
+
+    {:next_state, {:complete, :idle}, data}
+  end
+
+  defp build_failure_branch_status(keep_branch, session_id) do
+    if keep_branch do
+      "The job has been stopped. Changes remain in the job branch: deft/job-#{session_id}\nYou can review the changes and decide how to proceed."
     else
-      Logger.warning("#{log_prefix(data.session_id)} Verification failed")
-
-      # Clean up all Lead worktrees
-      cleanup_all_lead_worktrees(data)
-
-      # Delete job branch unless configured to keep it
-      keep_branch = Map.get(data.config, :job_keep_failed_branches, false)
-
-      unless keep_branch do
-        delete_job_branch_on_failure(data.session_id, data.working_dir)
-      end
-
-      # Archive job files for debugging
-      archive_job_files(data.session_id, data.working_dir, :verification_failed)
-
-      # Identify responsible Lead based on test failures
-      responsible_lead = identify_responsible_lead(results, data)
-
-      # Build failure message, noting if branch was kept
-      branch_status =
-        if keep_branch do
-          "The job has been stopped. Changes remain in the job branch: deft/job-#{data.session_id}\nYou can review the changes and decide how to proceed."
-        else
-          "The job has been stopped and the job branch has been deleted.\nChanges were not merged to your original branch."
-        end
-
-      # Report failure to user
-      failure_message = """
-      Verification failed. Test suite or code review found issues.
-
-      #{format_verification_failures(results)}
-
-      #{if responsible_lead, do: "Most likely responsible: #{responsible_lead}", else: ""}
-
-      #{branch_status}
-      """
-
-      data = send_user_message(failure_message, data)
-
-      # Cancel job timeout timer
-      data = cancel_job_timeout(data)
-
-      {:next_state, {:complete, :idle}, data}
+      "The job has been stopped and the job branch has been deleted.\nChanges were not merged to your original branch."
     end
   end
 
@@ -1621,7 +1639,6 @@ defmodule Deft.Job.Foreman do
          {job_phase, _agent_state} = _state,
          %{leads: leads} = data
        ) do
-    # Find crashed Lead by monitor ref
     crashed_lead =
       Enum.find(leads, fn {_lead_id, info} ->
         info.monitor_ref == monitor_ref
@@ -1629,35 +1646,32 @@ defmodule Deft.Job.Foreman do
 
     case crashed_lead do
       nil ->
-        # Not a Lead monitor, ignore
         :keep_state_and_data
 
       {lead_id, lead_info} ->
-        Logger.error(
-          "#{log_prefix(data.session_id)} Lead #{lead_id} crashed, cleaning up worktree: #{lead_info.worktree_path}, reason: #{inspect(reason)}"
-        )
+        process_lead_crash(lead_id, lead_info, reason, job_phase, data)
+    end
+  end
 
-        # Extract deliverable name from lead_id (format: "#{session_id}-#{deliverable_name}")
-        deliverable_name = String.replace_prefix(lead_id, "#{data.session_id}-", "")
+  defp process_lead_crash(lead_id, lead_info, reason, job_phase, data) do
+    Logger.error(
+      "#{log_prefix(data.session_id)} Lead #{lead_id} crashed, cleaning up worktree: #{lead_info.worktree_path}, reason: #{inspect(reason)}"
+    )
 
-        # Write failure marker to site log to allow completion check to be satisfied
-        write_failure_marker(lead_id, deliverable_name, "Lead crashed: #{inspect(reason)}", data)
+    deliverable_name = String.replace_prefix(lead_id, "#{data.session_id}-", "")
 
-        # Clean up the Lead's worktree
-        cleanup_worktree(lead_info.worktree_path, data.working_dir, data.session_id)
+    write_failure_marker(lead_id, deliverable_name, "Lead crashed: #{inspect(reason)}", data)
+    cleanup_worktree(lead_info.worktree_path, data.working_dir, data.session_id)
 
-        # Remove crashed Lead from tracking
-        leads = Map.delete(leads, lead_id)
-        data = %{data | leads: leads}
+    leads = Map.delete(data.leads, lead_id)
+    data = %{data | leads: leads}
 
-        # Check if all Leads are complete after crash
-        case check_phase_transition(:complete, job_phase, data) do
-          {:transition, new_phase} ->
-            {:next_state, {new_phase, :idle}, data}
+    case check_phase_transition(:complete, job_phase, data) do
+      {:transition, new_phase} ->
+        {:next_state, {new_phase, :idle}, data}
 
-          :no_transition ->
-            {:keep_state, data}
-        end
+      :no_transition ->
+        {:keep_state, data}
     end
   end
 
@@ -2088,70 +2102,70 @@ defmodule Deft.Job.Foreman do
 
   defp process_lead_message(:contract, content, metadata, data) do
     Logger.info("#{log_prefix(data.session_id)} Lead published contract")
-    # Auto-promote to site log
     write_to_site_log(:contract, content, metadata, data)
 
-    # Check for blocked Leads that can now start
-    # Extract which deliverable published this contract
     lead_id = Map.get(metadata, :lead_id)
-    # Derive publishing_deliverable from the Lead tracking map
-    publishing_deliverable =
-      case Map.get(data.leads, lead_id) do
-        %{deliverable: %{name: name}} -> name
-        _ -> nil
-      end
-
-    # Check blocked_leads for any that depend on this contract
-    unblocked_deliverables =
-      data.blocked_leads
-      |> Enum.filter(fn {_deliverable_name, contracts_needed} ->
-        # Check if this contract satisfies any of the needed contracts
-        Enum.any?(contracts_needed, fn needed_contract ->
-          contract_matches?(needed_contract, publishing_deliverable, content)
-        end)
-      end)
-      |> Enum.map(fn {deliverable_name, _} -> deliverable_name end)
+    publishing_deliverable = get_publishing_deliverable(lead_id, data)
+    unblocked_deliverables = find_unblocked_deliverables(publishing_deliverable, content, data)
 
     Logger.info(
       "#{log_prefix(data.session_id)} Contract from #{publishing_deliverable || lead_id} unblocked #{length(unblocked_deliverables)} deliverable(s)"
     )
 
-    # Start each unblocked Lead (unless cost ceiling reached)
-    updated_data =
-      Enum.reduce(unblocked_deliverables, data, fn deliverable_name, acc_data ->
-        # Find deliverable details from plan
-        deliverable =
-          Enum.find(acc_data.plan.deliverables, fn d ->
-            d.name == deliverable_name
-          end)
+    start_unblocked_leads(unblocked_deliverables, data)
+  end
 
-        if deliverable do
-          # Remove from blocked_leads
-          acc_data = %{
-            acc_data
-            | blocked_leads: Map.delete(acc_data.blocked_leads, deliverable_name)
-          }
+  defp get_publishing_deliverable(lead_id, data) do
+    case Map.get(data.leads, lead_id) do
+      %{deliverable: %{name: name}} -> name
+      _ -> nil
+    end
+  end
 
-          # Start the Lead if cost ceiling not reached
-          if acc_data.cost_ceiling_reached do
-            Logger.info(
-              "#{log_prefix(acc_data.session_id)} Cost ceiling reached - not starting unblocked Lead #{deliverable_name} until spending approved"
-            )
-
-            acc_data
-          else
-            start_lead(deliverable, acc_data)
-          end
-        else
-          Logger.warning(
-            "#{log_prefix(data.session_id)} Could not find deliverable #{deliverable_name} in plan"
-          )
-
-          acc_data
-        end
+  defp find_unblocked_deliverables(publishing_deliverable, content, data) do
+    data.blocked_leads
+    |> Enum.filter(fn {_deliverable_name, contracts_needed} ->
+      Enum.any?(contracts_needed, fn needed_contract ->
+        contract_matches?(needed_contract, publishing_deliverable, content)
       end)
+    end)
+    |> Enum.map(fn {deliverable_name, _} -> deliverable_name end)
+  end
 
-    updated_data
+  defp start_unblocked_leads(unblocked_deliverables, data) do
+    Enum.reduce(unblocked_deliverables, data, fn deliverable_name, acc_data ->
+      deliverable =
+        Enum.find(acc_data.plan.deliverables, fn d ->
+          d.name == deliverable_name
+        end)
+
+      start_unblocked_lead_if_found(deliverable, deliverable_name, acc_data, data)
+    end)
+  end
+
+  defp start_unblocked_lead_if_found(nil, deliverable_name, acc_data, data) do
+    Logger.warning(
+      "#{log_prefix(data.session_id)} Could not find deliverable #{deliverable_name} in plan"
+    )
+
+    acc_data
+  end
+
+  defp start_unblocked_lead_if_found(deliverable, deliverable_name, acc_data, _data) do
+    acc_data = %{
+      acc_data
+      | blocked_leads: Map.delete(acc_data.blocked_leads, deliverable_name)
+    }
+
+    if acc_data.cost_ceiling_reached do
+      Logger.info(
+        "#{log_prefix(acc_data.session_id)} Cost ceiling reached - not starting unblocked Lead #{deliverable_name} until spending approved"
+      )
+
+      acc_data
+    else
+      start_lead(deliverable, acc_data)
+    end
   end
 
   defp process_lead_message(:critical_finding, content, metadata, data) do
@@ -2325,14 +2339,15 @@ defmodule Deft.Job.Foreman do
         handle_successful_merge(lead_id, lead_info, data)
 
       {:ok, :conflict, conflicted_files, merge_worktree_path} ->
-        handle_merge_conflict(
-          lead_id,
-          conflicted_files,
-          merge_worktree_path,
-          lead_info,
-          data,
-          retry_count
-        )
+        conflict_ctx = %{
+          lead_id: lead_id,
+          conflicted_files: conflicted_files,
+          merge_worktree_path: merge_worktree_path,
+          lead_info: lead_info,
+          retry_count: retry_count
+        }
+
+        handle_merge_conflict(conflict_ctx, data)
 
       {:error, reason} ->
         handle_merge_error(lead_id, reason, lead_info, data)
@@ -2479,14 +2494,15 @@ defmodule Deft.Job.Foreman do
   end
 
   # Handle merge conflict
-  defp handle_merge_conflict(
-         lead_id,
-         conflicted_files,
-         merge_worktree_path,
-         lead_info,
-         data,
-         retry_count
-       ) do
+  defp handle_merge_conflict(conflict_ctx, data) do
+    %{
+      lead_id: lead_id,
+      conflicted_files: conflicted_files,
+      merge_worktree_path: merge_worktree_path,
+      lead_info: lead_info,
+      retry_count: retry_count
+    } = conflict_ctx
+
     Logger.info(
       "#{log_prefix(data.session_id)} Merge conflict for Lead #{lead_id}, spawning merge-resolution Runner (attempt #{retry_count + 1})"
     )
@@ -2553,14 +2569,15 @@ defmodule Deft.Job.Foreman do
   end
 
   # Handle successful merge-resolution Runner completion
-  defp handle_merge_resolution_success(
-         lead_id,
-         lead_info,
-         conflicted_files,
-         retry_count,
-         max_retries,
-         data
-       ) do
+  defp handle_merge_resolution_success(resolution_ctx, data) do
+    %{
+      lead_id: lead_id,
+      lead_info: lead_info,
+      conflicted_files: conflicted_files,
+      retry_count: retry_count,
+      max_retries: max_retries
+    } = resolution_ctx
+
     cond do
       retry_count >= max_retries - 1 ->
         handle_merge_retry_exhausted(lead_id, lead_info, conflicted_files, max_retries, data)
@@ -3224,34 +3241,30 @@ defmodule Deft.Job.Foreman do
   # Returns a map with deliverables, dag, contracts, and estimates
   # Returns nil if no valid plan found
   defp extract_plan_from_messages(messages, session_id) do
-    # Get the last assistant message
     case Enum.reverse(messages) |> Enum.find(&(&1.role == :assistant)) do
       nil ->
         nil
 
       message ->
-        # Extract text content from message
-        text_content =
-          message.content
-          |> Enum.filter(&match?(%Deft.Message.Text{}, &1))
-          |> Enum.map(& &1.text)
-          |> Enum.join("\n")
+        text_content = extract_text_content_from_message(message)
+        parse_plan_from_text(text_content, session_id)
+    end
+  end
 
-        # Try to parse as JSON first, then fall back to markdown
-        case parse_json_plan(text_content) do
-          {:ok, plan} ->
-            Map.put(plan, :raw_plan, text_content)
+  defp extract_text_content_from_message(message) do
+    message.content
+    |> Enum.filter(&match?(%Deft.Message.Text{}, &1))
+    |> Enum.map(& &1.text)
+    |> Enum.join("\n")
+  end
 
-          :error ->
-            case parse_markdown_plan(text_content) do
-              {:ok, plan} ->
-                Map.put(plan, :raw_plan, text_content)
-
-              :error ->
-                Logger.warning("#{log_prefix(session_id)} Failed to parse plan from response")
-                nil
-            end
-        end
+  defp parse_plan_from_text(text_content, session_id) do
+    with :error <- parse_json_plan(text_content),
+         :error <- parse_markdown_plan(text_content) do
+      Logger.warning("#{log_prefix(session_id)} Failed to parse plan from response")
+      nil
+    else
+      {:ok, plan} -> Map.put(plan, :raw_plan, text_content)
     end
   end
 
@@ -3612,96 +3625,110 @@ defmodule Deft.Job.Foreman do
       "#{log_prefix(data.session_id)} Starting Lead for deliverable: #{deliverable.name} (#{lead_id})"
     )
 
-    # Create worktree for this Lead
-    case GitJob.create_lead_worktree(
-           lead_id: lead_id,
-           job_id: data.session_id,
-           working_dir: data.working_dir
-         ) do
-      {:ok, worktree_path} ->
-        # Get site log name
-        site_log_name = {:sitelog, data.session_id}
+    worktree_result =
+      GitJob.create_lead_worktree(
+        lead_id: lead_id,
+        job_id: data.session_id,
+        working_dir: data.working_dir
+      )
 
-        # RunnerSupervisor name for reference (created by Lead.Supervisor)
-        runner_supervisor_name =
-          {:via, Registry, {Deft.ProcessRegistry, {:runner_supervisor, lead_id}}}
+    handle_lead_worktree_creation(worktree_result, lead_id, deliverable, data)
+  end
 
-        # Start Lead.Supervisor which will manage both the Lead gen_statem
-        # and its RunnerSupervisor as siblings
-        lead_opts = [
-          lead_id: lead_id,
-          session_id: data.session_id,
-          config: data.config,
-          deliverable: deliverable.description,
-          foreman_pid: self(),
-          site_log_name: site_log_name,
-          rate_limiter_pid: data.rate_limiter_pid,
-          worktree_path: worktree_path,
-          working_dir: data.working_dir
-        ]
+  defp handle_lead_worktree_creation({:ok, worktree_path}, lead_id, deliverable, data) do
+    site_log_name = {:sitelog, data.session_id}
 
-        case LeadSupervisor.start_lead(data.session_id, lead_opts) do
-          {:ok, lead_pid} ->
-            # Monitor the Lead process
-            monitor_ref = Process.monitor(lead_pid)
+    runner_supervisor_name =
+      {:via, Registry, {Deft.ProcessRegistry, {:runner_supervisor, lead_id}}}
 
-            lead_info = %{
-              deliverable: deliverable,
-              worktree_path: worktree_path,
-              status: :running,
-              pid: lead_pid,
-              monitor_ref: monitor_ref,
-              runner_supervisor: runner_supervisor_name,
-              agent_state: :implementing
-            }
+    lead_opts = [
+      lead_id: lead_id,
+      session_id: data.session_id,
+      config: data.config,
+      deliverable: deliverable.description,
+      foreman_pid: self(),
+      site_log_name: site_log_name,
+      rate_limiter_pid: data.rate_limiter_pid,
+      worktree_path: worktree_path,
+      working_dir: data.working_dir
+    ]
 
-            leads = Map.put(data.leads, lead_id, lead_info)
-            started_leads = MapSet.put(data.started_leads, deliverable.name)
+    supervisor_result = LeadSupervisor.start_lead(data.session_id, lead_opts)
 
-            Logger.info(
-              "#{log_prefix(data.session_id)} Lead #{lead_id} started for deliverable '#{deliverable.name}' with PID #{inspect(lead_pid)} and worktree at #{worktree_path}"
-            )
+    lead_ctx = %{
+      lead_id: lead_id,
+      deliverable: deliverable,
+      worktree_path: worktree_path,
+      runner_supervisor_name: runner_supervisor_name
+    }
 
-            %{data | leads: leads, started_leads: started_leads}
+    handle_lead_supervisor_start(supervisor_result, lead_ctx, data)
+  end
 
-          {:error, reason} ->
-            Logger.error(
-              "#{log_prefix(data.session_id)} Failed to start Lead #{lead_id}: #{inspect(reason)}"
-            )
+  defp handle_lead_worktree_creation({:error, reason}, lead_id, deliverable, data) do
+    Logger.error(
+      "#{log_prefix(data.session_id)} Failed to create worktree for Lead #{lead_id}: #{inspect(reason)}"
+    )
 
-            # Write failure marker to site log to allow completion check to be satisfied
-            write_failure_marker(
-              lead_id,
-              deliverable.name,
-              "Failed to start Lead: #{inspect(reason)}",
-              data
-            )
+    write_failure_marker(
+      lead_id,
+      deliverable.name,
+      "Failed to create worktree: #{inspect(reason)}",
+      data
+    )
 
-            # Clean up the worktree that was created
-            cleanup_worktree(worktree_path, data.working_dir, data.session_id)
+    started_leads = MapSet.put(data.started_leads, deliverable.name)
+    %{data | started_leads: started_leads}
+  end
 
-            # Add to started_leads so all_leads_complete? can eventually be satisfied
-            started_leads = MapSet.put(data.started_leads, deliverable.name)
-            %{data | started_leads: started_leads}
-        end
+  defp handle_lead_supervisor_start({:ok, lead_pid}, lead_ctx, data) do
+    %{
+      lead_id: lead_id,
+      deliverable: deliverable,
+      worktree_path: worktree_path,
+      runner_supervisor_name: runner_supervisor_name
+    } = lead_ctx
 
-      {:error, reason} ->
-        Logger.error(
-          "#{log_prefix(data.session_id)} Failed to create worktree for Lead #{lead_id}: #{inspect(reason)}"
-        )
+    monitor_ref = Process.monitor(lead_pid)
 
-        # Write failure marker to site log to allow completion check to be satisfied
-        write_failure_marker(
-          lead_id,
-          deliverable.name,
-          "Failed to create worktree: #{inspect(reason)}",
-          data
-        )
+    lead_info = %{
+      deliverable: deliverable,
+      worktree_path: worktree_path,
+      status: :running,
+      pid: lead_pid,
+      monitor_ref: monitor_ref,
+      runner_supervisor: runner_supervisor_name,
+      agent_state: :implementing
+    }
 
-        # Add to started_leads so all_leads_complete? can eventually be satisfied
-        started_leads = MapSet.put(data.started_leads, deliverable.name)
-        %{data | started_leads: started_leads}
-    end
+    leads = Map.put(data.leads, lead_id, lead_info)
+    started_leads = MapSet.put(data.started_leads, deliverable.name)
+
+    Logger.info(
+      "#{log_prefix(data.session_id)} Lead #{lead_id} started for deliverable '#{deliverable.name}' with PID #{inspect(lead_pid)} and worktree at #{worktree_path}"
+    )
+
+    %{data | leads: leads, started_leads: started_leads}
+  end
+
+  defp handle_lead_supervisor_start({:error, reason}, lead_ctx, data) do
+    %{lead_id: lead_id, deliverable: deliverable, worktree_path: worktree_path} = lead_ctx
+
+    Logger.error(
+      "#{log_prefix(data.session_id)} Failed to start Lead #{lead_id}: #{inspect(reason)}"
+    )
+
+    write_failure_marker(
+      lead_id,
+      deliverable.name,
+      "Failed to start Lead: #{inspect(reason)}",
+      data
+    )
+
+    cleanup_worktree(worktree_path, data.working_dir, data.session_id)
+
+    started_leads = MapSet.put(data.started_leads, deliverable.name)
+    %{data | started_leads: started_leads}
   end
 
   # Check if a published contract satisfies a dependency need
