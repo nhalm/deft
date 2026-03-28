@@ -101,34 +101,32 @@ defmodule Deft.Eval.FixtureValidator do
   Validates all fixtures against expected spec versions.
   """
   def validate_all(fixture_paths, spec_versions, fixtures_dir) do
-    results =
-      Enum.map(fixture_paths, fn path ->
-        validate_fixture(path, spec_versions, fixtures_dir)
-      end)
-
-    total = length(results)
-    valid = Enum.count(results, &(&1.status == :valid))
-    stale = Enum.count(results, &(&1.status == :stale))
-    invalid = Enum.count(results, &(&1.status == :invalid))
-
-    stale_fixtures =
-      results
-      |> Enum.filter(&(&1.status == :stale))
-      |> Enum.map(&Map.take(&1, [:path, :current_version, :expected_version, :spec]))
-
-    invalid_fixtures =
-      results
-      |> Enum.filter(&(&1.status == :invalid))
-      |> Enum.map(&Map.take(&1, [:path, :error]))
+    results = Enum.map(fixture_paths, &validate_fixture(&1, spec_versions, fixtures_dir))
 
     %{
-      total: total,
-      valid: valid,
-      stale: stale,
-      invalid: invalid,
-      stale_fixtures: stale_fixtures,
-      invalid_fixtures: invalid_fixtures
+      total: length(results),
+      valid: count_status(results, :valid),
+      stale: count_status(results, :stale),
+      invalid: count_status(results, :invalid),
+      stale_fixtures: collect_stale_fixtures(results),
+      invalid_fixtures: collect_invalid_fixtures(results)
     }
+  end
+
+  defp count_status(results, status) do
+    Enum.count(results, &(&1.status == status))
+  end
+
+  defp collect_stale_fixtures(results) do
+    results
+    |> Enum.filter(&(&1.status == :stale))
+    |> Enum.map(&Map.take(&1, [:path, :current_version, :expected_version, :spec]))
+  end
+
+  defp collect_invalid_fixtures(results) do
+    results
+    |> Enum.filter(&(&1.status == :invalid))
+    |> Enum.map(&Map.take(&1, [:path, :error]))
   end
 
   @doc """
