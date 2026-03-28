@@ -1,4 +1,5 @@
 # History
+- **standards v0.2 (2026-03-28):** Refactor `lib/mix/tasks/eval.compare.ex` (4 violations): Extract helpers from compare and print_soft_floor_violations. Flatten 2 nesting violations
 - **standards v0.2 (2026-03-28):** Refactor `lib/deft/agent/tool_runner.ex` (1 violation): Flatten nesting
 - **standards v0.2 (2026-03-28):** Refactor `lib/deft/agent/context.ex` (1 violation): Split get_om_context into pattern-matched heads
 - **standards v0.2 (2026-03-28):** Refactor `lib/deft/om/reflector.ex` (4 violations): Group compress_with_retry/attempt_compression args into context map. Group collect_stream_text_loop accumulator into state map

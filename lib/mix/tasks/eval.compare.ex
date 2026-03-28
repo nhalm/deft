@@ -35,25 +35,10 @@ defmodule Mix.Tasks.Eval.Compare do
   end
 
   defp compare(run_a_id, run_b_id) do
-    # Load both runs
     with {:ok, baselines} <- Baselines.load(),
          {:ok, run_a} <- load_run(run_a_id),
          {:ok, run_b} <- load_run(run_b_id) do
-      # Group results by category
-      results_a = group_by_category(run_a)
-      results_b = group_by_category(run_b)
-
-      # Print header
-      print_header(run_a_id, run_b_id)
-
-      # Show category changes
-      print_category_changes(results_a, results_b, baselines)
-
-      # Show soft floor violations
-      print_soft_floor_violations(results_b, baselines)
-
-      # Show failure comparisons
-      print_failure_comparisons(results_a, results_b)
+      print_comparison(run_a_id, run_b_id, run_a, run_b, baselines)
     else
       {:error, :not_found, run_id} ->
         Mix.shell().error("Run not found: #{run_id}")
@@ -69,34 +54,49 @@ defmodule Mix.Tasks.Eval.Compare do
     end
   end
 
+  defp print_comparison(run_a_id, run_b_id, run_a, run_b, baselines) do
+    results_a = group_by_category(run_a)
+    results_b = group_by_category(run_b)
+
+    print_header(run_a_id, run_b_id)
+    print_category_changes(results_a, results_b, baselines)
+    print_soft_floor_violations(results_b, baselines)
+    print_failure_comparisons(results_a, results_b)
+  end
+
   defp load_run(run_id) do
     file_path = Path.join("test/eval/results", "#{run_id}.jsonl")
 
     case File.read(file_path) do
       {:ok, content} ->
-        # Parse all JSONL lines (one per category)
-        results =
-          content
-          |> String.split("\n", trim: true)
-          |> Enum.map(fn line ->
-            case Jason.decode(line) do
-              {:ok, result} -> result
-              {:error, _} -> nil
-            end
-          end)
-          |> Enum.reject(&is_nil/1)
-
-        if Enum.empty?(results) do
-          {:error, :corrupt_data, run_id}
-        else
-          {:ok, results}
-        end
+        parse_jsonl_results(content, run_id)
 
       {:error, :enoent} ->
         {:error, :not_found, run_id}
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  defp parse_jsonl_results(content, run_id) do
+    results =
+      content
+      |> String.split("\n", trim: true)
+      |> Enum.map(&decode_json_line/1)
+      |> Enum.reject(&is_nil/1)
+
+    if Enum.empty?(results) do
+      {:error, :corrupt_data, run_id}
+    else
+      {:ok, results}
+    end
+  end
+
+  defp decode_json_line(line) do
+    case Jason.decode(line) do
+      {:ok, result} -> result
+      {:error, _} -> nil
     end
   end
 
@@ -165,34 +165,42 @@ defmodule Mix.Tasks.Eval.Compare do
   end
 
   defp print_soft_floor_violations(results_b, baselines) do
-    violations =
-      results_b
-      |> Enum.filter(fn {category, result} ->
-        rate = result["pass_rate"]
-        Baselines.below_soft_floor?(baselines, category, rate)
-      end)
-      |> Enum.sort_by(fn {category, _} -> category end)
+    violations = find_soft_floor_violations(results_b, baselines)
 
-    if Enum.empty?(violations) do
-      # Don't print section if no violations
-      :ok
-    else
-      IO.puts(IO.ANSI.bright() <> "Soft Floor Violations:" <> IO.ANSI.reset())
-      IO.puts("")
-
-      Enum.each(violations, fn {category, result} ->
-        rate = result["pass_rate"]
-        baseline = Baselines.get_baseline(baselines, category)
-
-        IO.puts(
-          "  #{category}: #{format_rate(rate)} " <>
-            IO.ANSI.red() <>
-            "(below soft floor of #{format_rate(baseline.soft_floor)})" <> IO.ANSI.reset()
-        )
-      end)
-
-      IO.puts("")
+    unless Enum.empty?(violations) do
+      print_violations_section(violations, baselines)
     end
+  end
+
+  defp find_soft_floor_violations(results, baselines) do
+    results
+    |> Enum.filter(fn {category, result} ->
+      rate = result["pass_rate"]
+      Baselines.below_soft_floor?(baselines, category, rate)
+    end)
+    |> Enum.sort_by(fn {category, _} -> category end)
+  end
+
+  defp print_violations_section(violations, baselines) do
+    IO.puts(IO.ANSI.bright() <> "Soft Floor Violations:" <> IO.ANSI.reset())
+    IO.puts("")
+
+    Enum.each(violations, fn {category, result} ->
+      print_violation(category, result, baselines)
+    end)
+
+    IO.puts("")
+  end
+
+  defp print_violation(category, result, baselines) do
+    rate = result["pass_rate"]
+    baseline = Baselines.get_baseline(baselines, category)
+
+    IO.puts(
+      "  #{category}: #{format_rate(rate)} " <>
+        IO.ANSI.red() <>
+        "(below soft floor of #{format_rate(baseline.soft_floor)})" <> IO.ANSI.reset()
+    )
   end
 
   defp print_failure_comparisons(results_a, results_b) do
@@ -229,41 +237,34 @@ defmodule Mix.Tasks.Eval.Compare do
     IO.puts("  #{IO.ANSI.cyan()}#{category}#{IO.ANSI.reset()}")
     IO.puts("")
 
-    # Show side-by-side comparison
     max_count = max(length(failures_a), length(failures_b))
 
     if max_count == 0 do
       IO.puts("    No failures")
     else
-      # Take first 3 failures from each run for comparison
-      failures_a_sample = Enum.take(failures_a, 3)
-      failures_b_sample = Enum.take(failures_b, 3)
-
-      IO.puts("    Run A (#{length(failures_a)} failures):")
-
-      if Enum.empty?(failures_a_sample) do
-        IO.puts("      (none)")
-      else
-        Enum.each(failures_a_sample, fn failure ->
-          IO.puts("      - Fixture: #{failure["fixture"]}")
-          IO.puts("        Reason: #{failure["reason"]}")
-        end)
-      end
-
+      print_run_failures("A", failures_a)
       IO.puts("")
-      IO.puts("    Run B (#{length(failures_b)} failures):")
-
-      if Enum.empty?(failures_b_sample) do
-        IO.puts("      (none)")
-      else
-        Enum.each(failures_b_sample, fn failure ->
-          IO.puts("      - Fixture: #{failure["fixture"]}")
-          IO.puts("        Reason: #{failure["reason"]}")
-        end)
-      end
+      print_run_failures("B", failures_b)
     end
 
     IO.puts("")
+  end
+
+  defp print_run_failures(run_label, failures) do
+    sample = Enum.take(failures, 3)
+
+    IO.puts("    Run #{run_label} (#{length(failures)} failures):")
+
+    if Enum.empty?(sample) do
+      IO.puts("      (none)")
+    else
+      Enum.each(sample, &print_failure/1)
+    end
+  end
+
+  defp print_failure(failure) do
+    IO.puts("      - Fixture: #{failure["fixture"]}")
+    IO.puts("        Reason: #{failure["reason"]}")
   end
 
   defp get_pass_rate(results, category) do
