@@ -1,4 +1,5 @@
 # History
+- **standards v0.2 (2026-03-27):** Refactor `lib/deft/tools/find.ex` (2 violations): Extract helpers from summarize to reduce ABC and cyclomatic complexity
 - **standards v0.2 (2026-03-27):** Refactor `lib/deft/tools/read.ex` (1 violation): Flatten nesting
 - **standards v0.2 (2026-03-27):** Refactor `lib/deft/job/foreman.ex` (32 violations): Extract helpers from init, handle_event handlers, start_lead, handle_lead_crash. Group merge conflict/resolution params into maps (arity 6→map). Split analyze_verification_results into pattern-matched heads. Flatten 12 nesting violations by extracting inner branches to named functions
 - **unit-testing v0.1 (2026-03-27):** Fix Foreman auto-approve test to verify actual state transition to `:executing` (currently only asserts config value)

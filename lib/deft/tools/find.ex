@@ -153,55 +153,12 @@ defmodule Deft.Tools.Find do
 
   @impl Deft.Tool
   def summarize(content_blocks, cache_key) do
-    # Extract text from content blocks
-    text =
-      content_blocks
-      |> Enum.map(fn
-        %{text: t} -> t
-        _ -> ""
-      end)
-      |> Enum.join("\n")
-
-    # Parse the find output to count files and show top-level structure
+    text = extract_text(content_blocks)
     lines = String.split(text, "\n", trim: true)
 
-    # Extract file count from first line if present
-    file_count =
-      case List.first(lines) do
-        line when is_binary(line) ->
-          case Regex.run(~r/Found (\d+)\+? files/, line) do
-            [_, count] -> String.to_integer(count)
-            _ -> length(lines) - 1
-          end
-
-        _ ->
-          length(lines)
-      end
-
-    # Get top-level structure - group by directory
-    file_lines = Enum.drop(lines, 1) |> Enum.reject(&(&1 == "" or String.starts_with?(&1, "(")))
-
-    # Group files by top-level directory
-    grouped =
-      file_lines
-      |> Enum.group_by(fn file ->
-        parts = Path.split(file)
-
-        case parts do
-          [_single] -> "."
-          [first | _] -> first
-          _ -> "."
-        end
-      end)
-
-    # Show directory summary
-    structure =
-      grouped
-      |> Enum.map(fn {dir, files} ->
-        "  #{dir}/    (#{length(files)} files)"
-      end)
-      |> Enum.take(10)
-      |> Enum.join("\n")
+    file_count = parse_file_count(lines)
+    file_lines = extract_file_lines(lines)
+    structure = format_directory_structure(file_lines)
 
     """
     Found #{file_count} files. Top-level structure:
@@ -210,5 +167,58 @@ defmodule Deft.Tools.Find do
 
     Full results: cache://#{cache_key}
     """
+  end
+
+  # Extract text content from content blocks
+  defp extract_text(content_blocks) do
+    content_blocks
+    |> Enum.map(fn
+      %{text: t} -> t
+      _ -> ""
+    end)
+    |> Enum.join("\n")
+  end
+
+  # Parse file count from the first line of find output
+  defp parse_file_count(lines) do
+    case List.first(lines) do
+      line when is_binary(line) ->
+        case Regex.run(~r/Found (\d+)\+? files/, line) do
+          [_, count] -> String.to_integer(count)
+          _ -> length(lines) - 1
+        end
+
+      _ ->
+        length(lines)
+    end
+  end
+
+  # Extract file lines (skip header and footer)
+  defp extract_file_lines(lines) do
+    lines
+    |> Enum.drop(1)
+    |> Enum.reject(&(&1 == "" or String.starts_with?(&1, "(")))
+  end
+
+  # Format directory structure summary
+  defp format_directory_structure(file_lines) do
+    file_lines
+    |> group_by_top_level_directory()
+    |> Enum.map(fn {dir, files} ->
+      "  #{dir}/    (#{length(files)} files)"
+    end)
+    |> Enum.take(10)
+    |> Enum.join("\n")
+  end
+
+  # Group files by their top-level directory
+  defp group_by_top_level_directory(file_lines) do
+    Enum.group_by(file_lines, fn file ->
+      case Path.split(file) do
+        [_single] -> "."
+        [first | _] -> first
+        _ -> "."
+      end
+    end)
   end
 end

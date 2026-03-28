@@ -372,70 +372,6 @@ defmodule Deft.Job.Foreman do
     {:keep_state, data}
   end
 
-  defp get_research_specs(data) do
-    case Map.get(data, :research_task_specs) do
-      nil ->
-        Logger.info(
-          "#{log_prefix(data.session_id)} No research tasks from planning, using defaults"
-        )
-
-        determine_research_tasks(data.prompt)
-
-      specs ->
-        Logger.info(
-          "#{log_prefix(data.session_id)} Using #{length(specs)} research tasks from planning phase"
-        )
-
-        specs
-    end
-  end
-
-  defp spawn_research_tasks(research_specs, data) do
-    Enum.map(research_specs, fn %{instructions: instructions, context: context} ->
-      task =
-        Task.Supervisor.async_nolink(
-          data.runner_supervisor,
-          fn ->
-            runner_config = build_research_runner_config(data)
-
-            Runner.run(
-              :research,
-              instructions,
-              context,
-              data.session_id,
-              runner_config,
-              data.working_dir
-            )
-          end
-        )
-
-      Process.monitor(task.pid)
-      task
-    end)
-  end
-
-  defp build_research_runner_config(data) do
-    research_model =
-      Map.get(
-        data.config,
-        :job_research_runner_model,
-        Map.get(data.config, :job_lead_model)
-      )
-
-    provider_name = Map.get(data.config, :provider, "anthropic")
-
-    runner_config = %{
-      provider: get_provider(data),
-      provider_name: provider_name,
-      model: research_model
-    }
-
-    case Map.get(data.config, :provider_pid) do
-      nil -> runner_config
-      pid -> Map.put(runner_config, :provider_pid, pid)
-    end
-  end
-
   def handle_event(:enter, _old_state, {:decomposing, :idle} = state, data) do
     # When entering decomposing phase, prompt the Foreman to create a work plan
     Logger.info("#{log_prefix(data.session_id)} Foreman starting decomposition phase")
@@ -534,49 +470,6 @@ defmodule Deft.Job.Foreman do
 
       [_] ->
         handle_normal_prompt(text, job_phase, data)
-    end
-  end
-
-  defp handle_job_correction(correction_content, data) do
-    Logger.info("#{log_prefix(data.session_id)} User correction received: #{correction_content}")
-
-    metadata = %{source: "user", timestamp: DateTime.utc_now()}
-    write_to_site_log(:correction, correction_content, metadata, data)
-
-    data = send_user_message("Correction recorded and promoted to site log.", data)
-
-    {:keep_state, data}
-  end
-
-  defp handle_normal_prompt(text, job_phase, data) do
-    user_message = %Message{
-      id: generate_message_id(),
-      role: :user,
-      content: [%Deft.Message.Text{text: text}],
-      timestamp: DateTime.utc_now()
-    }
-
-    messages = data.messages ++ [user_message]
-    data = %{data | messages: messages, turn_count: data.turn_count + 1}
-    data = save_unsaved_messages(data)
-
-    case call_llm(data) do
-      {:ok, stream_ref, monitor_ref, estimated_tokens} ->
-        data = %{
-          data
-          | stream_ref: stream_ref,
-            stream_monitor_ref: monitor_ref,
-            estimated_tokens: estimated_tokens
-        }
-
-        {:next_state, {job_phase, :calling}, data}
-
-      {:error, reason} ->
-        Logger.error(
-          "#{log_prefix(data.session_id)} Foreman LLM call failed in #{job_phase}: #{inspect(reason)}"
-        )
-
-        {:next_state, {:complete, :idle}, data}
     end
   end
 
@@ -925,48 +818,6 @@ defmodule Deft.Job.Foreman do
     dispatch_task_crash(task_type, crash_ctx)
   end
 
-  defp identify_crashed_task(ref, data) do
-    research_tasks = Map.get(data, :research_tasks, [])
-    crashed_research_task = Enum.find(research_tasks, fn task -> task.ref == ref end)
-
-    tool_tasks = Map.get(data, :tool_tasks, [])
-    crashed_tool_task = Enum.find(tool_tasks, fn task -> task.ref == ref end)
-
-    merge_resolution_tasks = Map.get(data, :merge_resolution_tasks, %{})
-    crashed_merge_task = Map.get(merge_resolution_tasks, ref)
-
-    post_merge_test_tasks = Map.get(data, :post_merge_test_tasks, %{})
-    crashed_test_task = Map.get(post_merge_test_tasks, ref)
-
-    cond do
-      crashed_research_task -> {:research, crashed_research_task}
-      crashed_tool_task -> {:tool, crashed_tool_task}
-      crashed_merge_task -> {:merge, crashed_merge_task}
-      crashed_test_task -> {:test, crashed_test_task}
-      true -> :lead
-    end
-  end
-
-  defp dispatch_task_crash({:research, _task}, ctx) do
-    handle_research_task_crash(ctx.ref, ctx.reason, ctx.job_phase, ctx.agent_state, ctx.data)
-  end
-
-  defp dispatch_task_crash({:tool, _task}, ctx) do
-    handle_tool_task_crash(ctx.ref, ctx.reason, ctx.job_phase, ctx.agent_state, ctx.data)
-  end
-
-  defp dispatch_task_crash({:merge, task}, ctx) do
-    handle_merge_task_crash(ctx.ref, ctx.reason, task, ctx.data)
-  end
-
-  defp dispatch_task_crash({:test, task}, ctx) do
-    handle_post_merge_test_crash(ctx.ref, ctx.reason, task, ctx.data)
-  end
-
-  defp dispatch_task_crash(:lead, ctx) do
-    handle_lead_crash(ctx.down_msg, ctx.state, ctx.data)
-  end
-
   # Rate limiter messages
   def handle_event(:info, {:rate_limiter, :cost, amount}, {_job_phase, _agent_state}, data) do
     Logger.info("#{log_prefix(data.session_id)} Foreman cost checkpoint: $#{amount}")
@@ -1302,31 +1153,6 @@ defmodule Deft.Job.Foreman do
     end
   end
 
-  defp handle_post_merge_test_result({:ok, :passed}, task_context, data) do
-    %{lead_id: lead_id, lead_info: lead_info} = task_context
-    new_data = handle_test_success(lead_id, lead_info, data)
-
-    case check_phase_transition(:complete, :executing, new_data) do
-      {:transition, new_phase} ->
-        {:next_state, {new_phase, :idle}, new_data}
-
-      :no_transition ->
-        {:keep_state, new_data}
-    end
-  end
-
-  defp handle_post_merge_test_result({:error, :test_failed, test_output}, task_context, data) do
-    %{lead_id: lead_id, lead_info: lead_info} = task_context
-    new_data = handle_test_failure(lead_id, lead_info, test_output, data)
-    {:keep_state, new_data}
-  end
-
-  defp handle_post_merge_test_result({:error, reason}, task_context, data) do
-    %{lead_id: lead_id, lead_info: lead_info} = task_context
-    new_data = handle_test_error(lead_id, lead_info, reason, data)
-    {:keep_state, new_data}
-  end
-
   # Verification task completion
   def handle_event(
         :info,
@@ -1351,6 +1177,196 @@ defmodule Deft.Job.Foreman do
     else
       handle_verification_failed(results, data)
     end
+  end
+
+  # Ignore job_status broadcasts (these are for TUI subscribers, not the Foreman itself)
+  def handle_event(:info, {:job_status, _agent_statuses}, _state, _data) do
+    :keep_state_and_data
+  end
+
+  # Catch-all for unhandled events
+  def handle_event(event_type, event_content, state, data) do
+    Logger.debug(
+      "#{log_prefix(data.session_id)} Unhandled event: #{event_type} #{inspect(event_content)} in state #{inspect(state)}"
+    )
+
+    :keep_state_and_data
+  end
+
+  # Private helpers
+
+  defp handle_job_correction(correction_content, data) do
+    Logger.info("#{log_prefix(data.session_id)} User correction received: #{correction_content}")
+
+    metadata = %{source: "user", timestamp: DateTime.utc_now()}
+    write_to_site_log(:correction, correction_content, metadata, data)
+
+    data = send_user_message("Correction recorded and promoted to site log.", data)
+
+    {:keep_state, data}
+  end
+
+  defp handle_normal_prompt(text, job_phase, data) do
+    user_message = %Message{
+      id: generate_message_id(),
+      role: :user,
+      content: [%Deft.Message.Text{text: text}],
+      timestamp: DateTime.utc_now()
+    }
+
+    messages = data.messages ++ [user_message]
+    data = %{data | messages: messages, turn_count: data.turn_count + 1}
+    data = save_unsaved_messages(data)
+
+    case call_llm(data) do
+      {:ok, stream_ref, monitor_ref, estimated_tokens} ->
+        data = %{
+          data
+          | stream_ref: stream_ref,
+            stream_monitor_ref: monitor_ref,
+            estimated_tokens: estimated_tokens
+        }
+
+        {:next_state, {job_phase, :calling}, data}
+
+      {:error, reason} ->
+        Logger.error(
+          "#{log_prefix(data.session_id)} Foreman LLM call failed in #{job_phase}: #{inspect(reason)}"
+        )
+
+        {:next_state, {:complete, :idle}, data}
+    end
+  end
+
+  defp get_research_specs(data) do
+    case Map.get(data, :research_task_specs) do
+      nil ->
+        Logger.info(
+          "#{log_prefix(data.session_id)} No research tasks from planning, using defaults"
+        )
+
+        determine_research_tasks(data.prompt)
+
+      specs ->
+        Logger.info(
+          "#{log_prefix(data.session_id)} Using #{length(specs)} research tasks from planning phase"
+        )
+
+        specs
+    end
+  end
+
+  defp spawn_research_tasks(research_specs, data) do
+    Enum.map(research_specs, fn %{instructions: instructions, context: context} ->
+      task =
+        Task.Supervisor.async_nolink(
+          data.runner_supervisor,
+          fn ->
+            runner_config = build_research_runner_config(data)
+
+            Runner.run(
+              :research,
+              instructions,
+              context,
+              data.session_id,
+              runner_config,
+              data.working_dir
+            )
+          end
+        )
+
+      Process.monitor(task.pid)
+      task
+    end)
+  end
+
+  defp build_research_runner_config(data) do
+    research_model =
+      Map.get(
+        data.config,
+        :job_research_runner_model,
+        Map.get(data.config, :job_lead_model)
+      )
+
+    provider_name = Map.get(data.config, :provider, "anthropic")
+
+    runner_config = %{
+      provider: get_provider(data),
+      provider_name: provider_name,
+      model: research_model
+    }
+
+    case Map.get(data.config, :provider_pid) do
+      nil -> runner_config
+      pid -> Map.put(runner_config, :provider_pid, pid)
+    end
+  end
+
+  defp identify_crashed_task(ref, data) do
+    research_tasks = Map.get(data, :research_tasks, [])
+    crashed_research_task = Enum.find(research_tasks, fn task -> task.ref == ref end)
+
+    tool_tasks = Map.get(data, :tool_tasks, [])
+    crashed_tool_task = Enum.find(tool_tasks, fn task -> task.ref == ref end)
+
+    merge_resolution_tasks = Map.get(data, :merge_resolution_tasks, %{})
+    crashed_merge_task = Map.get(merge_resolution_tasks, ref)
+
+    post_merge_test_tasks = Map.get(data, :post_merge_test_tasks, %{})
+    crashed_test_task = Map.get(post_merge_test_tasks, ref)
+
+    cond do
+      crashed_research_task -> {:research, crashed_research_task}
+      crashed_tool_task -> {:tool, crashed_tool_task}
+      crashed_merge_task -> {:merge, crashed_merge_task}
+      crashed_test_task -> {:test, crashed_test_task}
+      true -> :lead
+    end
+  end
+
+  defp dispatch_task_crash({:research, _task}, ctx) do
+    handle_research_task_crash(ctx.ref, ctx.reason, ctx.job_phase, ctx.agent_state, ctx.data)
+  end
+
+  defp dispatch_task_crash({:tool, _task}, ctx) do
+    handle_tool_task_crash(ctx.ref, ctx.reason, ctx.job_phase, ctx.agent_state, ctx.data)
+  end
+
+  defp dispatch_task_crash({:merge, task}, ctx) do
+    handle_merge_task_crash(ctx.ref, ctx.reason, task, ctx.data)
+  end
+
+  defp dispatch_task_crash({:test, task}, ctx) do
+    handle_post_merge_test_crash(ctx.ref, ctx.reason, task, ctx.data)
+  end
+
+  defp dispatch_task_crash(:lead, ctx) do
+    handle_lead_crash(ctx.down_msg, ctx.state, ctx.data)
+  end
+
+  defp handle_post_merge_test_result({:ok, :passed}, task_context, data) do
+    %{lead_id: lead_id, lead_info: lead_info} = task_context
+    new_data = handle_test_success(lead_id, lead_info, data)
+
+    case check_phase_transition(:complete, :executing, new_data) do
+      {:transition, new_phase} ->
+        {:next_state, {new_phase, :idle}, new_data}
+
+      :no_transition ->
+        {:keep_state, new_data}
+    end
+  end
+
+  defp handle_post_merge_test_result({:error, :test_failed, test_output}, task_context, data) do
+    %{lead_id: lead_id, lead_info: lead_info} = task_context
+    new_data = handle_test_failure(lead_id, lead_info, test_output, data)
+    {:keep_state, new_data}
+  end
+
+  defp handle_post_merge_test_result({:error, reason}, task_context, data) do
+    %{lead_id: lead_id, lead_info: lead_info} = task_context
+    new_data = handle_test_error(lead_id, lead_info, reason, data)
+    {:keep_state, new_data}
   end
 
   defp cancel_verification_timeout(data) do
@@ -1487,22 +1503,6 @@ defmodule Deft.Job.Foreman do
       "The job has been stopped and the job branch has been deleted.\nChanges were not merged to your original branch."
     end
   end
-
-  # Ignore job_status broadcasts (these are for TUI subscribers, not the Foreman itself)
-  def handle_event(:info, {:job_status, _agent_statuses}, _state, _data) do
-    :keep_state_and_data
-  end
-
-  # Catch-all for unhandled events
-  def handle_event(event_type, event_content, state, data) do
-    Logger.debug(
-      "#{log_prefix(data.session_id)} Unhandled event: #{event_type} #{inspect(event_content)} in state #{inspect(state)}"
-    )
-
-    :keep_state_and_data
-  end
-
-  # Private helpers
 
   defp handle_research_task_crash(ref, reason, job_phase, agent_state, data) do
     Logger.error(
@@ -2115,59 +2115,6 @@ defmodule Deft.Job.Foreman do
     start_unblocked_leads(unblocked_deliverables, data)
   end
 
-  defp get_publishing_deliverable(lead_id, data) do
-    case Map.get(data.leads, lead_id) do
-      %{deliverable: %{name: name}} -> name
-      _ -> nil
-    end
-  end
-
-  defp find_unblocked_deliverables(publishing_deliverable, content, data) do
-    data.blocked_leads
-    |> Enum.filter(fn {_deliverable_name, contracts_needed} ->
-      Enum.any?(contracts_needed, fn needed_contract ->
-        contract_matches?(needed_contract, publishing_deliverable, content)
-      end)
-    end)
-    |> Enum.map(fn {deliverable_name, _} -> deliverable_name end)
-  end
-
-  defp start_unblocked_leads(unblocked_deliverables, data) do
-    Enum.reduce(unblocked_deliverables, data, fn deliverable_name, acc_data ->
-      deliverable =
-        Enum.find(acc_data.plan.deliverables, fn d ->
-          d.name == deliverable_name
-        end)
-
-      start_unblocked_lead_if_found(deliverable, deliverable_name, acc_data, data)
-    end)
-  end
-
-  defp start_unblocked_lead_if_found(nil, deliverable_name, acc_data, data) do
-    Logger.warning(
-      "#{log_prefix(data.session_id)} Could not find deliverable #{deliverable_name} in plan"
-    )
-
-    acc_data
-  end
-
-  defp start_unblocked_lead_if_found(deliverable, deliverable_name, acc_data, _data) do
-    acc_data = %{
-      acc_data
-      | blocked_leads: Map.delete(acc_data.blocked_leads, deliverable_name)
-    }
-
-    if acc_data.cost_ceiling_reached do
-      Logger.info(
-        "#{log_prefix(acc_data.session_id)} Cost ceiling reached - not starting unblocked Lead #{deliverable_name} until spending approved"
-      )
-
-      acc_data
-    else
-      start_lead(deliverable, acc_data)
-    end
-  end
-
   defp process_lead_message(:critical_finding, content, metadata, data) do
     Logger.info("#{log_prefix(data.session_id)} Lead critical finding: #{content}")
     # Auto-promote to site log
@@ -2318,6 +2265,59 @@ defmodule Deft.Job.Foreman do
   defp process_lead_message(type, content, _metadata, data) do
     Logger.debug("#{log_prefix(data.session_id)} Lead message (#{type}): #{inspect(content)}")
     data
+  end
+
+  defp get_publishing_deliverable(lead_id, data) do
+    case Map.get(data.leads, lead_id) do
+      %{deliverable: %{name: name}} -> name
+      _ -> nil
+    end
+  end
+
+  defp find_unblocked_deliverables(publishing_deliverable, content, data) do
+    data.blocked_leads
+    |> Enum.filter(fn {_deliverable_name, contracts_needed} ->
+      Enum.any?(contracts_needed, fn needed_contract ->
+        contract_matches?(needed_contract, publishing_deliverable, content)
+      end)
+    end)
+    |> Enum.map(fn {deliverable_name, _} -> deliverable_name end)
+  end
+
+  defp start_unblocked_leads(unblocked_deliverables, data) do
+    Enum.reduce(unblocked_deliverables, data, fn deliverable_name, acc_data ->
+      deliverable =
+        Enum.find(acc_data.plan.deliverables, fn d ->
+          d.name == deliverable_name
+        end)
+
+      start_unblocked_lead_if_found(deliverable, deliverable_name, acc_data, data)
+    end)
+  end
+
+  defp start_unblocked_lead_if_found(nil, deliverable_name, acc_data, data) do
+    Logger.warning(
+      "#{log_prefix(data.session_id)} Could not find deliverable #{deliverable_name} in plan"
+    )
+
+    acc_data
+  end
+
+  defp start_unblocked_lead_if_found(deliverable, deliverable_name, acc_data, _data) do
+    acc_data = %{
+      acc_data
+      | blocked_leads: Map.delete(acc_data.blocked_leads, deliverable_name)
+    }
+
+    if acc_data.cost_ceiling_reached do
+      Logger.info(
+        "#{log_prefix(acc_data.session_id)} Cost ceiling reached - not starting unblocked Lead #{deliverable_name} until spending approved"
+      )
+
+      acc_data
+    else
+      start_lead(deliverable, acc_data)
+    end
   end
 
   # Handle merging a completed Lead's branch into the job branch
