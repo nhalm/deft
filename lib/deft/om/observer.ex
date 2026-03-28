@@ -62,6 +62,29 @@ defmodule Deft.OM.Observer do
       "#{log_prefix(session_id)} Starting observation extraction for #{length(messages)} messages"
     )
 
+    # Prepare input for Observer
+    llm_messages = prepare_llm_messages(existing_observations, messages, config)
+
+    # Execute observation extraction
+    case execute_observation(session_id, config, llm_messages) do
+      {:ok, response_text, usage} ->
+        process_observation_result(
+          session_id,
+          response_text,
+          usage,
+          messages,
+          calibration_factor
+        )
+
+      {:error, reason} ->
+        Logger.warning("#{log_prefix(session_id)} Observation failed: #{inspect(reason)}")
+        empty_result(messages, calibration_factor)
+    end
+  end
+
+  ## Private Functions
+
+  defp prepare_llm_messages(existing_observations, messages, config) do
     # Format messages for Observer input (spec section 3.3)
     formatted_messages = Prompt.format_messages(messages)
 
@@ -87,6 +110,10 @@ defmodule Deft.OM.Observer do
       timestamp: DateTime.utc_now()
     }
 
+    [system_message, user_message]
+  end
+
+  defp execute_observation(session_id, config, llm_messages) do
     # Get provider module (use configured om.observer_provider)
     case Provider.Registry.resolve(config.om_observer_provider, config.om_observer_model) do
       {:ok, {provider_module, _model_config}} ->
@@ -97,56 +124,44 @@ defmodule Deft.OM.Observer do
           max_tokens: 16_000
         }
 
-        case call_llm_sync(provider_module, [system_message, user_message], llm_config) do
-          {:ok, response_text, usage} ->
-            # Parse the Observer output
-            case Parse.parse_output(response_text) do
-              {:ok,
-               %{
-                 observations: observations,
-                 current_task: current_task,
-                 continuation_hint: continuation_hint
-               }} ->
-                # Calculate message tokens
-                message_tokens = calculate_message_tokens(messages, calibration_factor)
-                message_ids = Enum.map(messages, & &1.id)
-
-                Logger.debug(
-                  "#{log_prefix(session_id)} Extracted observations (#{Tokens.estimate(observations, calibration_factor)} tokens) from #{message_tokens} tokens of messages"
-                )
-
-                %{
-                  observations: observations,
-                  message_ids: message_ids,
-                  message_tokens: message_tokens,
-                  current_task: current_task,
-                  continuation_hint: continuation_hint,
-                  usage: usage
-                }
-
-              {:error, reason} ->
-                Logger.warning(
-                  "#{log_prefix(session_id)} Failed to parse output: #{inspect(reason)}"
-                )
-
-                # Return empty observations on parse failure
-                empty_result(messages, calibration_factor)
-            end
-
-          {:error, reason} ->
-            Logger.warning("#{log_prefix(session_id)} LLM call failed: #{inspect(reason)}")
-            # Return empty observations on LLM failure
-            empty_result(messages, calibration_factor)
-        end
+        call_llm_sync(provider_module, llm_messages, llm_config)
 
       {:error, reason} ->
         Logger.error("#{log_prefix(session_id)} Failed to resolve provider: #{inspect(reason)}")
-        # Return empty observations on provider resolution failure
+        {:error, reason}
+    end
+  end
+
+  defp process_observation_result(session_id, response_text, usage, messages, calibration_factor) do
+    # Parse the Observer output
+    case Parse.parse_output(response_text) do
+      {:ok, parsed} ->
+        build_success_result(session_id, parsed, usage, messages, calibration_factor)
+
+      {:error, reason} ->
+        Logger.warning("#{log_prefix(session_id)} Failed to parse output: #{inspect(reason)}")
         empty_result(messages, calibration_factor)
     end
   end
 
-  ## Private Functions
+  defp build_success_result(session_id, parsed, usage, messages, calibration_factor) do
+    # Calculate message tokens
+    message_tokens = calculate_message_tokens(messages, calibration_factor)
+    message_ids = Enum.map(messages, & &1.id)
+
+    Logger.debug(
+      "#{log_prefix(session_id)} Extracted observations (#{Tokens.estimate(parsed.observations, calibration_factor)} tokens) from #{message_tokens} tokens of messages"
+    )
+
+    %{
+      observations: parsed.observations,
+      message_ids: message_ids,
+      message_tokens: message_tokens,
+      current_task: parsed.current_task,
+      continuation_hint: parsed.continuation_hint,
+      usage: usage
+    }
+  end
 
   defp build_user_message("", formatted_messages) do
     """
@@ -184,50 +199,79 @@ defmodule Deft.OM.Observer do
   end
 
   defp collect_stream_text(stream_ref, timeout) do
-    collect_stream_text_loop(stream_ref, "", nil, :os.system_time(:millisecond), timeout)
+    state = %{
+      acc: "",
+      usage: nil,
+      start_time: :os.system_time(:millisecond),
+      timeout: timeout
+    }
+
+    collect_stream_text_loop(stream_ref, state)
   end
 
-  defp collect_stream_text_loop(stream_ref, acc, usage, start_time, timeout) do
-    elapsed = :os.system_time(:millisecond) - start_time
-    remaining_timeout = max(0, timeout - elapsed)
+  defp collect_stream_text_loop(stream_ref, state) do
+    remaining_timeout = calculate_remaining_timeout(state)
 
     receive do
-      {:provider_event, %TextDelta{delta: delta}} ->
-        collect_stream_text_loop(stream_ref, acc <> delta, usage, start_time, timeout)
-
-      {:provider_event, %Usage{input: input_tokens, output: output_tokens}} ->
-        usage_data =
-          case usage do
-            nil ->
-              %{input_tokens: input_tokens, output_tokens: output_tokens}
-
-            existing ->
-              %{
-                input_tokens: existing.input_tokens + input_tokens,
-                output_tokens: existing.output_tokens + output_tokens
-              }
-          end
-
-        collect_stream_text_loop(stream_ref, acc, usage_data, start_time, timeout)
-
-      {:provider_event, %Done{}} ->
-        {:ok, acc, usage}
-
-      {:provider_event, %Error{message: msg}} ->
-        {:error, msg}
-
-      {:provider_event, _other} ->
-        # Ignore other events (tool calls, thinking, etc.)
-        collect_stream_text_loop(stream_ref, acc, usage, start_time, timeout)
+      {:provider_event, event} ->
+        handle_provider_event(stream_ref, event, state)
     after
       remaining_timeout ->
-        # Cancel stream on timeout
-        if is_pid(stream_ref) and Process.alive?(stream_ref) do
-          Process.exit(stream_ref, :timeout)
-        end
-
-        {:error, :timeout}
+        handle_stream_timeout(stream_ref)
     end
+  end
+
+  defp calculate_remaining_timeout(state) do
+    elapsed = :os.system_time(:millisecond) - state.start_time
+    max(0, state.timeout - elapsed)
+  end
+
+  defp handle_provider_event(stream_ref, %TextDelta{delta: delta}, state) do
+    new_state = %{state | acc: state.acc <> delta}
+    collect_stream_text_loop(stream_ref, new_state)
+  end
+
+  defp handle_provider_event(
+         stream_ref,
+         %Usage{input: input_tokens, output: output_tokens},
+         state
+       ) do
+    new_usage = merge_usage(state.usage, input_tokens, output_tokens)
+    new_state = %{state | usage: new_usage}
+    collect_stream_text_loop(stream_ref, new_state)
+  end
+
+  defp handle_provider_event(_stream_ref, %Done{}, state) do
+    {:ok, state.acc, state.usage}
+  end
+
+  defp handle_provider_event(_stream_ref, %Error{message: msg}, _state) do
+    {:error, msg}
+  end
+
+  defp handle_provider_event(stream_ref, _other, state) do
+    # Ignore other events (tool calls, thinking, etc.)
+    collect_stream_text_loop(stream_ref, state)
+  end
+
+  defp handle_stream_timeout(stream_ref) do
+    # Cancel stream on timeout
+    if is_pid(stream_ref) and Process.alive?(stream_ref) do
+      Process.exit(stream_ref, :timeout)
+    end
+
+    {:error, :timeout}
+  end
+
+  defp merge_usage(nil, input_tokens, output_tokens) do
+    %{input_tokens: input_tokens, output_tokens: output_tokens}
+  end
+
+  defp merge_usage(existing, input_tokens, output_tokens) do
+    %{
+      input_tokens: existing.input_tokens + input_tokens,
+      output_tokens: existing.output_tokens + output_tokens
+    }
   end
 
   defp calculate_message_tokens(messages, calibration_factor) do
