@@ -67,15 +67,16 @@ defmodule Deft.OM.Reflector do
     correction_markers = extract_correction_markers(active_observations)
 
     # Try compression with escalating levels (max 2 LLM calls)
-    {compressed, level, llm_calls, usage} =
-      compress_with_retry(
-        session_id,
-        config,
-        active_observations,
-        target_size,
-        calibration_factor,
-        correction_markers
-      )
+    context = %{
+      session_id: session_id,
+      config: config,
+      observations: active_observations,
+      target_size: target_size,
+      calibration_factor: calibration_factor,
+      correction_markers: correction_markers
+    }
+
+    {compressed, level, llm_calls, usage} = compress_with_retry(context)
 
     after_tokens = Tokens.estimate(compressed, calibration_factor)
 
@@ -96,77 +97,58 @@ defmodule Deft.OM.Reflector do
   ## Private Functions
 
   # Try compression with escalating levels, max 2 LLM calls
-  defp compress_with_retry(
-         session_id,
-         config,
-         observations,
-         target_size,
-         calibration_factor,
-         correction_markers
-       ) do
-    # First attempt: level 0
-    case attempt_compression(
-           session_id,
-           config,
-           observations,
-           target_size,
-           0,
-           calibration_factor,
-           correction_markers
-         ) do
+  defp compress_with_retry(context) do
+    case attempt_compression(context, 0) do
       {:ok, compressed, level, usage} ->
         {compressed, level, 1, usage}
 
       {:retry, _compressed, level, _usage} ->
-        # Second attempt: try next level (capped at 3)
-        next_level = min(level + 1, 3)
-
-        case attempt_compression(
-               session_id,
-               config,
-               observations,
-               target_size,
-               next_level,
-               calibration_factor,
-               correction_markers
-             ) do
-          {:ok, compressed, final_level, usage2} ->
-            {compressed, final_level, 2, usage2}
-
-          {:retry, compressed, final_level, usage2} ->
-            # Level 3 still exceeds target - accept the output from the second call
-            Logger.warning(
-              "#{log_prefix(session_id)} Level #{final_level} still exceeds target, accepting output"
-            )
-
-            {compressed, final_level, 2, usage2}
-        end
+        retry_with_next_level(context, level)
     end
   end
 
+  defp retry_with_next_level(context, level) do
+    next_level = min(level + 1, 3)
+
+    case attempt_compression(context, next_level) do
+      {:ok, compressed, final_level, usage} ->
+        {compressed, final_level, 2, usage}
+
+      {:retry, compressed, final_level, usage} ->
+        accept_retry_output(context.session_id, compressed, final_level, usage)
+    end
+  end
+
+  defp accept_retry_output(session_id, compressed, level, usage) do
+    Logger.warning(
+      "#{log_prefix(session_id)} Level #{level} still exceeds target, accepting output"
+    )
+
+    {compressed, level, 2, usage}
+  end
+
   # Attempt compression at a specific level
-  defp attempt_compression(
-         session_id,
-         config,
-         observations,
-         target_size,
-         level,
-         calibration_factor,
-         correction_markers
-       ) do
-    case call_llm_for_compression(session_id, config, observations, target_size, level) do
+  defp attempt_compression(context, level) do
+    case call_llm_for_compression(
+           context.session_id,
+           context.config,
+           context.observations,
+           context.target_size,
+           level
+         ) do
       {:ok, compressed, usage} ->
         # Validate CORRECTION markers survived
-        validated = ensure_correction_markers(session_id, compressed, correction_markers)
+        validated =
+          ensure_correction_markers(context.session_id, compressed, context.correction_markers)
 
         # Check if output is within target
-        token_count = Tokens.estimate(validated, calibration_factor)
+        token_count = Tokens.estimate(validated, context.calibration_factor)
 
-        if token_count <= target_size do
+        if token_count <= context.target_size do
           {:ok, validated, level, usage}
         else
           Logger.debug(
-            "#{log_prefix(session_id)} Level #{level} output (#{token_count} tokens) exceeds target (#{target_size} tokens)"
+            "#{log_prefix(context.session_id)} Level #{level} output (#{token_count} tokens) exceeds target (#{context.target_size} tokens)"
           )
 
           {:retry, validated, level, usage}
@@ -174,11 +156,11 @@ defmodule Deft.OM.Reflector do
 
       {:error, reason} ->
         Logger.warning(
-          "#{log_prefix(session_id)} LLM call failed at level #{level}: #{inspect(reason)}"
+          "#{log_prefix(context.session_id)} LLM call failed at level #{level}: #{inspect(reason)}"
         )
 
         # On error, trigger retry with next compression level
-        {:retry, observations, level, nil}
+        {:retry, context.observations, level, nil}
     end
   end
 
@@ -233,50 +215,73 @@ defmodule Deft.OM.Reflector do
   end
 
   defp collect_stream_text(stream_ref, timeout) do
-    collect_stream_text_loop(stream_ref, "", nil, :os.system_time(:millisecond), timeout)
+    state = %{
+      acc: "",
+      usage: nil,
+      start_time: :os.system_time(:millisecond),
+      timeout: timeout
+    }
+
+    collect_stream_text_loop(stream_ref, state)
   end
 
-  defp collect_stream_text_loop(stream_ref, acc, usage, start_time, timeout) do
-    elapsed = :os.system_time(:millisecond) - start_time
-    remaining_timeout = max(0, timeout - elapsed)
+  defp collect_stream_text_loop(stream_ref, state) do
+    remaining_timeout = calculate_remaining_timeout(state)
 
     receive do
       {:provider_event, %TextDelta{delta: delta}} ->
-        collect_stream_text_loop(stream_ref, acc <> delta, usage, start_time, timeout)
+        handle_text_delta(stream_ref, state, delta)
 
       {:provider_event, %Usage{input: input_tokens, output: output_tokens}} ->
-        usage_data =
-          case usage do
-            nil ->
-              %{input_tokens: input_tokens, output_tokens: output_tokens}
-
-            existing ->
-              %{
-                input_tokens: existing.input_tokens + input_tokens,
-                output_tokens: existing.output_tokens + output_tokens
-              }
-          end
-
-        collect_stream_text_loop(stream_ref, acc, usage_data, start_time, timeout)
+        handle_usage_event(stream_ref, state, input_tokens, output_tokens)
 
       {:provider_event, %Done{}} ->
-        {:ok, acc, usage}
+        {:ok, state.acc, state.usage}
 
       {:provider_event, %Error{message: msg}} ->
         {:error, msg}
 
       {:provider_event, _other} ->
-        # Ignore other events
-        collect_stream_text_loop(stream_ref, acc, usage, start_time, timeout)
+        collect_stream_text_loop(stream_ref, state)
     after
       remaining_timeout ->
-        # Cancel stream on timeout
-        if is_pid(stream_ref) and Process.alive?(stream_ref) do
-          Process.exit(stream_ref, :timeout)
-        end
-
-        {:error, :timeout}
+        handle_timeout(stream_ref)
     end
+  end
+
+  defp calculate_remaining_timeout(state) do
+    elapsed = :os.system_time(:millisecond) - state.start_time
+    max(0, state.timeout - elapsed)
+  end
+
+  defp handle_text_delta(stream_ref, state, delta) do
+    new_state = %{state | acc: state.acc <> delta}
+    collect_stream_text_loop(stream_ref, new_state)
+  end
+
+  defp handle_usage_event(stream_ref, state, input_tokens, output_tokens) do
+    usage_data = merge_usage(state.usage, input_tokens, output_tokens)
+    new_state = %{state | usage: usage_data}
+    collect_stream_text_loop(stream_ref, new_state)
+  end
+
+  defp merge_usage(nil, input_tokens, output_tokens) do
+    %{input_tokens: input_tokens, output_tokens: output_tokens}
+  end
+
+  defp merge_usage(existing, input_tokens, output_tokens) do
+    %{
+      input_tokens: existing.input_tokens + input_tokens,
+      output_tokens: existing.output_tokens + output_tokens
+    }
+  end
+
+  defp handle_timeout(stream_ref) do
+    if is_pid(stream_ref) and Process.alive?(stream_ref) do
+      Process.exit(stream_ref, :timeout)
+    end
+
+    {:error, :timeout}
   end
 
   # Extract all CORRECTION markers from observations
