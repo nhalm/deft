@@ -88,55 +88,60 @@ defmodule Deft.Tools.IssueCreate do
 
   @impl Deft.Tool
   def execute(args, %Context{} = context) do
-    # Validate the input
     with :ok <- validate_title(args["title"]),
          :ok <- validate_context(args["context"]),
          :ok <- validate_acceptance_criteria(args["acceptance_criteria"]),
          :ok <- validate_constraints(args["constraints"]),
          :ok <- validate_priority(args["priority"]) do
-      # Ensure Issues GenServer is running
-      ensure_issues_started(context)
-
-      # Build issue attributes with agent source
-      # Note: priority defaults to 3 (low) for agent-created issues when not provided
-      # This is handled by the GenServer based on source
-      attrs = %{
-        title: args["title"],
-        context: args["context"],
-        acceptance_criteria: args["acceptance_criteria"] || [],
-        constraints: args["constraints"] || [],
-        source: :agent
-      }
-
-      # Only include priority if explicitly provided by agent
-      attrs =
-        if args["priority"] do
-          Map.put(attrs, :priority, args["priority"])
-        else
-          attrs
-        end
-
-      # Create the issue
-      case Issues.create(attrs) do
-        {:ok, issue} ->
-          result_text = """
-          Created issue #{issue.id}: #{issue.title}
-          Priority: #{priority_name(issue.priority)}
-          Status: #{issue.status}
-
-          The issue has been added to the work queue.
-          """
-
-          Logger.info("Agent created issue #{issue.id}: #{issue.title}")
-          {:ok, [%Text{text: String.trim(result_text)}]}
-
-        {:error, reason} ->
-          {:error, "Failed to create issue: #{inspect(reason)}"}
-      end
+      create_issue_and_format_result(args, context)
     else
-      {:error, reason} ->
-        {:error, reason}
+      {:error, reason} -> {:error, reason}
     end
+  end
+
+  defp create_issue_and_format_result(args, context) do
+    ensure_issues_started(context)
+    attrs = build_issue_attrs(args)
+
+    case Issues.create(attrs) do
+      {:ok, issue} ->
+        result_text = format_success_result(issue)
+        Logger.info("Agent created issue #{issue.id}: #{issue.title}")
+        {:ok, [%Text{text: String.trim(result_text)}]}
+
+      {:error, reason} ->
+        {:error, "Failed to create issue: #{inspect(reason)}"}
+    end
+  end
+
+  # Build issue attributes with agent source
+  # Note: priority defaults to 3 (low) for agent-created issues when not provided
+  # This is handled by the GenServer based on source
+  defp build_issue_attrs(args) do
+    attrs = %{
+      title: args["title"],
+      context: args["context"],
+      acceptance_criteria: args["acceptance_criteria"] || [],
+      constraints: args["constraints"] || [],
+      source: :agent
+    }
+
+    # Only include priority if explicitly provided by agent
+    if args["priority"] do
+      Map.put(attrs, :priority, args["priority"])
+    else
+      attrs
+    end
+  end
+
+  defp format_success_result(issue) do
+    """
+    Created issue #{issue.id}: #{issue.title}
+    Priority: #{priority_name(issue.priority)}
+    Status: #{issue.status}
+
+    The issue has been added to the work queue.
+    """
   end
 
   defp validate_title(title) when is_binary(title) and byte_size(title) > 0, do: :ok

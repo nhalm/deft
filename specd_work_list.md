@@ -50,7 +50,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Refactor `lib/deft/provider/anthropic.ex` (2 violations): Group stream_loop 10 params into state map. Split parse_event case into pattern-matched heads
 - Refactor `lib/deft/tools/grep.ex` (2 violations): Flatten 2 nesting violations by extracting inner branches
 - Refactor `lib/deft/session/entry.ex` (2 violations): Replace anonymous fn in serialize_content with named pattern-matched function. Reduce Observation.new arity
-- Refactor `lib/deft/tools/issue_create.ex` (1 violation): Extract helpers from execute to reduce ABC size
 - Refactor `lib/deft/tools/ls.ex` (1 violation): Extract helpers from summarize
 - Refactor `lib/deft/session/store.ex` (1 violation): Flatten nesting
 - Refactor `lib/deft/config.ex` (1 violation): Extract helpers from validate_and_build to reduce ABC size
