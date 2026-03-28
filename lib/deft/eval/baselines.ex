@@ -33,32 +33,7 @@ defmodule Deft.Eval.Baselines do
   def load do
     case File.read(@baselines_file) do
       {:ok, content} ->
-        case Jason.decode(content) do
-          {:ok, data} ->
-            # Convert string keys and nested maps to atoms for consistency
-            baselines =
-              Enum.into(data, %{}, fn {category, baseline_data} ->
-                {category,
-                 %{
-                   baseline: baseline_data["baseline"],
-                   soft_floor: baseline_data["soft_floor"],
-                   history:
-                     Enum.map(baseline_data["history"] || [], fn entry ->
-                       %{
-                         run_id: entry["run_id"],
-                         rate: entry["rate"],
-                         n: entry["n"],
-                         commit: entry["commit"]
-                       }
-                     end)
-                 }}
-              end)
-
-            {:ok, baselines}
-
-          {:error, reason} ->
-            {:error, {:json_decode_error, reason}}
-        end
+        decode_baselines(content)
 
       {:error, :enoent} ->
         {:ok, %{}}
@@ -118,10 +93,15 @@ defmodule Deft.Eval.Baselines do
   - Recalculates soft_floor as baseline - 10pp
 
   Returns the updated baselines map.
+
+  ## Parameters
+
+  - `baselines` - The current baselines map
+  - `category` - The category to update
+  - `result` - Map with keys: `:rate`, `:n`, `:run_id`, `:commit`
   """
-  @spec update(baselines(), String.t(), float(), non_neg_integer(), String.t(), String.t()) ::
-          baselines()
-  def update(baselines, category, rate, n, run_id, commit) do
+  @spec update(baselines(), String.t(), map()) :: baselines()
+  def update(baselines, category, %{rate: rate, n: n, run_id: run_id, commit: commit} = _result) do
     current = Map.get(baselines, category, default_baseline())
 
     new_history_entry = %{
@@ -180,7 +160,43 @@ defmodule Deft.Eval.Baselines do
     Map.keys(baselines) |> Enum.sort()
   end
 
-  # Private helper
+  # Private helpers
+
+  defp decode_baselines(content) do
+    case Jason.decode(content) do
+      {:ok, data} ->
+        baselines = parse_baseline_data(data)
+        {:ok, baselines}
+
+      {:error, reason} ->
+        {:error, {:json_decode_error, reason}}
+    end
+  end
+
+  defp parse_baseline_data(data) do
+    Enum.into(data, %{}, fn {category, baseline_data} ->
+      {category, parse_baseline_entry(baseline_data)}
+    end)
+  end
+
+  defp parse_baseline_entry(baseline_data) do
+    %{
+      baseline: baseline_data["baseline"],
+      soft_floor: baseline_data["soft_floor"],
+      history: parse_history(baseline_data["history"] || [])
+    }
+  end
+
+  defp parse_history(history_list) do
+    Enum.map(history_list, fn entry ->
+      %{
+        run_id: entry["run_id"],
+        rate: entry["rate"],
+        n: entry["n"],
+        commit: entry["commit"]
+      }
+    end)
+  end
 
   defp default_baseline do
     %{

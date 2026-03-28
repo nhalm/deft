@@ -107,19 +107,17 @@ defmodule Deft.Eval.BaselinesTest do
     end
   end
 
-  describe "update/6" do
+  describe "update/3" do
     test "creates new baseline for category if it doesn't exist" do
       baselines = %{}
 
       updated =
-        Baselines.update(
-          baselines,
-          "observer.extraction",
-          0.88,
-          20,
-          "2026-03-10-abc123",
-          "abc123"
-        )
+        Baselines.update(baselines, "observer.extraction", %{
+          rate: 0.88,
+          n: 20,
+          run_id: "2026-03-10-abc123",
+          commit: "abc123"
+        })
 
       assert Map.has_key?(updated, "observer.extraction")
       baseline = updated["observer.extraction"]
@@ -147,14 +145,12 @@ defmodule Deft.Eval.BaselinesTest do
       }
 
       updated =
-        Baselines.update(
-          baselines,
-          "observer.extraction",
-          0.90,
-          20,
-          "2026-03-10-new123",
-          "new123"
-        )
+        Baselines.update(baselines, "observer.extraction", %{
+          rate: 0.90,
+          n: 20,
+          run_id: "2026-03-10-new123",
+          commit: "new123"
+        })
 
       baseline = updated["observer.extraction"]
 
@@ -180,14 +176,12 @@ defmodule Deft.Eval.BaselinesTest do
       }
 
       updated =
-        Baselines.update(
-          baselines,
-          "observer.extraction",
-          0.85,
-          20,
-          "2026-03-10-low123",
-          "low123"
-        )
+        Baselines.update(baselines, "observer.extraction", %{
+          rate: 0.85,
+          n: 20,
+          run_id: "2026-03-10-low123",
+          commit: "low123"
+        })
 
       baseline = updated["observer.extraction"]
 
@@ -215,8 +209,18 @@ defmodule Deft.Eval.BaselinesTest do
 
       updated =
         baselines
-        |> Baselines.update("observer.extraction", 0.87, 20, "2026-03-09-bbb", "bbb")
-        |> Baselines.update("observer.extraction", 0.90, 20, "2026-03-10-ccc", "ccc")
+        |> Baselines.update("observer.extraction", %{
+          rate: 0.87,
+          n: 20,
+          run_id: "2026-03-09-bbb",
+          commit: "bbb"
+        })
+        |> Baselines.update("observer.extraction", %{
+          rate: 0.90,
+          n: 20,
+          run_id: "2026-03-10-ccc",
+          commit: "ccc"
+        })
 
       baseline = updated["observer.extraction"]
       assert length(baseline.history) == 3
@@ -316,7 +320,12 @@ defmodule Deft.Eval.BaselinesTest do
 
       # Update with first result
       baselines =
-        Baselines.update(baselines, "observer.extraction", 0.85, 20, "2026-03-10-abc", "abc")
+        Baselines.update(baselines, "observer.extraction", %{
+          rate: 0.85,
+          n: 20,
+          run_id: "2026-03-10-abc",
+          commit: "abc"
+        })
 
       # Save
       :ok = Baselines.save(baselines)
@@ -329,7 +338,12 @@ defmodule Deft.Eval.BaselinesTest do
 
       # Update with higher rate
       updated =
-        Baselines.update(loaded, "observer.extraction", 0.90, 20, "2026-03-11-def", "def")
+        Baselines.update(loaded, "observer.extraction", %{
+          rate: 0.90,
+          n: 20,
+          run_id: "2026-03-11-def",
+          commit: "def"
+        })
 
       :ok = Baselines.save(updated)
 

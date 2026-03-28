@@ -19,10 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## standards v0.2 — Credo violation fixes
 
-### Tier 3: Small files (2-4 violations each)
-
-- Refactor `lib/deft/eval/baselines.ex` (3 violations): Extract decode/parse helpers from load. Change update from arity 6 to accept result map. Flatten nesting
-
 ### Tier 4: Single-violation files (1 each)
 
 - Refactor `lib/deft/provider/anthropic.ex` (2 violations): Group stream_loop 10 params into state map. Split parse_event case into pattern-matched heads
