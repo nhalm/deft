@@ -165,19 +165,7 @@ defmodule Deft.ScriptedProvider do
         {:reply, {:error, :no_more_responses}, %{state | calls: new_calls}}
 
       [response | remaining_responses] ->
-        # Check if this is an error response
-        if Map.has_key?(response, :error) do
-          # Return error without spawning stream
-          {:reply, {:error, response.error},
-           %{state | calls: new_calls, responses: remaining_responses}}
-        else
-          # Spawn stream process and return stream ref
-          # Extract caller PID from the from tuple {pid, ref}
-          {caller_pid, _ref} = from
-          stream_pid = spawn(fn -> emit_response(caller_pid, response) end)
-
-          {:reply, {:ok, stream_pid}, %{state | calls: new_calls, responses: remaining_responses}}
-        end
+        handle_response(response, from, new_calls, remaining_responses, state)
     end
   end
 
@@ -196,6 +184,20 @@ defmodule Deft.ScriptedProvider do
   end
 
   # Private helpers
+
+  defp handle_response(%{error: error}, _from, new_calls, remaining_responses, state) do
+    # Return error without spawning stream
+    {:reply, {:error, error}, %{state | calls: new_calls, responses: remaining_responses}}
+  end
+
+  defp handle_response(response, from, new_calls, remaining_responses, state) do
+    # Spawn stream process and return stream ref
+    # Extract caller PID from the from tuple {pid, ref}
+    {caller_pid, _ref} = from
+    stream_pid = spawn(fn -> emit_response(caller_pid, response) end)
+
+    {:reply, {:ok, stream_pid}, %{state | calls: new_calls, responses: remaining_responses}}
+  end
 
   defp emit_response(caller, response) do
     # Apply delay if specified

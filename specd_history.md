@@ -1,4 +1,5 @@
 # History
+- **standards v0.2 (2026-03-28):** Refactor `test/support/scripted_provider.ex` (1 violation): Flatten nesting
 - **standards v0.2 (2026-03-28):** Refactor `lib/deft/eval/fixture_validator.ex` (1 violation): Flatten nesting
 - **standards v0.2 (2026-03-28):** Refactor `lib/deft/session/entry.ex` (2 violations): Replace anonymous fn in serialize_content with named pattern-matched function. Reduce Observation.new arity
 - **standards v0.2 (2026-03-28):** Refactor `lib/deft/tools/grep.ex` (2 violations): Flatten 2 nesting violations by extracting inner branches
