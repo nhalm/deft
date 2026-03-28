@@ -56,21 +56,20 @@ defmodule Deft.Provider.Anthropic do
 
       # Spawn a process to handle the streaming request
       # Use spawn instead of spawn_link so stream crashes don't kill the agent
-      pid =
-        spawn(fn ->
-          stream_loop(
-            caller,
-            api_key,
-            messages,
-            tools,
-            model,
-            max_tokens,
-            temperature,
-            thinking,
-            thinking_budget,
-            session_id
-          )
-        end)
+      stream_state = %{
+        caller: caller,
+        api_key: api_key,
+        messages: messages,
+        tools: tools,
+        model: model,
+        max_tokens: max_tokens,
+        temperature: temperature,
+        thinking: thinking,
+        thinking_budget: thinking_budget,
+        session_id: session_id
+      }
+
+      pid = spawn(fn -> stream_loop(stream_state) end)
 
       {:ok, pid}
     end
@@ -89,42 +88,28 @@ defmodule Deft.Provider.Anthropic do
   end
 
   # Private streaming loop
-  defp stream_loop(
-         caller,
-         api_key,
-         messages,
-         tools,
-         model,
-         max_tokens,
-         temperature,
-         thinking,
-         thinking_budget,
-         session_id
-       ) do
-    # Format messages and tools for Anthropic API
-    {system_param, wire_messages} = format_messages(messages)
-    wire_tools = format_tools(tools)
+  defp stream_loop(state) do
+    {system_param, wire_messages} = format_messages(state.messages)
+    wire_tools = format_tools(state.tools)
 
-    # Build request body
     body =
       %{
-        model: model,
-        max_tokens: max_tokens,
-        temperature: temperature,
+        model: state.model,
+        max_tokens: state.max_tokens,
+        temperature: state.temperature,
         messages: wire_messages,
         stream: true
       }
       |> maybe_add_system(system_param)
       |> maybe_add_tools(wire_tools)
-      |> maybe_add_thinking(thinking, thinking_budget)
+      |> maybe_add_thinking(state.thinking, state.thinking_budget)
 
     headers = [
-      {"x-api-key", api_key},
+      {"x-api-key", state.api_key},
       {"anthropic-version", @api_version},
       {"content-type", "application/json"}
     ]
 
-    # Start streaming request
     case Req.post(@api_url,
            json: body,
            headers: headers,
@@ -132,21 +117,18 @@ defmodule Deft.Provider.Anthropic do
            receive_timeout: 60_000
          ) do
       {:ok, %Req.Response{status: status} = response} ->
-        # Check for non-2xx response
         if status >= 200 and status < 300 do
-          # Start receiving chunks with SSE parser state
-          receive_chunks(caller, response.body.ref, "", %{}, session_id)
+          receive_chunks(state.caller, response.body.ref, "", %{}, state.session_id)
         else
-          # Non-2xx response - send error event
           send(
-            caller,
+            state.caller,
             {:provider_event, %Error{message: "HTTP request failed with status #{status}"}}
           )
         end
 
       {:error, reason} ->
         send(
-          caller,
+          state.caller,
           {:provider_event, %Error{message: "HTTP request failed: #{inspect(reason)}"}}
         )
     end
@@ -327,22 +309,23 @@ defmodule Deft.Provider.Anthropic do
   end
 
   @impl Deft.Provider
-  def parse_event(sse_event) do
-    event_type = Map.get(sse_event, :event, "message")
-    data = Map.get(sse_event, :data, "")
+  def parse_event(%{event: "message_start", data: data}), do: parse_message_start(data)
 
-    case event_type do
-      "message_start" -> parse_message_start(data)
-      "content_block_start" -> parse_content_block_start(data)
-      "content_block_delta" -> parse_content_block_delta(data)
-      "message_delta" -> parse_message_delta(data)
-      "message_stop" -> %Done{}
-      "error" -> parse_error(data)
-      # content_block_stop is handled separately in the streaming layer
-      # because it requires accumulated state for tool calls
-      _ -> :skip
-    end
-  end
+  def parse_event(%{event: "content_block_start", data: data}),
+    do: parse_content_block_start(data)
+
+  def parse_event(%{event: "content_block_delta", data: data}),
+    do: parse_content_block_delta(data)
+
+  def parse_event(%{event: "message_delta", data: data}), do: parse_message_delta(data)
+
+  def parse_event(%{event: "message_stop"}), do: %Done{}
+
+  def parse_event(%{event: "error", data: data}), do: parse_error(data)
+
+  # content_block_stop is handled separately in the streaming layer
+  # because it requires accumulated state for tool calls
+  def parse_event(_sse_event), do: :skip
 
   # Parse content_block_start events
   defp parse_content_block_start(data) do
