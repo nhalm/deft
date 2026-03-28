@@ -21,7 +21,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ### Tier 2: Medium files (5-8 violations each)
 
-- Refactor `lib/deft/job/lead.ex` (8 violations): Extract helpers from handle_event(:info, runner_result), read_site_log_context, process_runner_result. Split evaluate_runner_output into pattern-matched heads. Flatten 4 nesting violations
 - Refactor `lib/deft/om/state.ex` (7 violations): Group retry function args into context maps — fixes 4 arity violations (run_observer/reflector_with_retry and their loop variants). Extract helpers from handle_info observer completion, activate_buffered_chunks, truncate_session_history_to_target
 - Refactor `lib/deft/job/rate_limiter.ex` (7 violations): Group try_request_or_enqueue params into map. Split track_cost into pipeline of pattern-matched helpers. Extract helpers from promote_starved_requests. Flatten 4 nesting violations
 - Refactor `lib/deft/job/runner.ex` (6 violations): Create loop context struct/map bundling messages, tools, tool_context, job_id, provider, config, max_turns — fixes 4 arity violations (run, loop, do_loop_iteration, handle_assistant_message). Extract helpers from collect_loop (ABC 68) and execute_tools_inline

@@ -1,4 +1,5 @@
 # History
+- **standards v0.2 (2026-03-28):** Refactor `lib/deft/job/lead.ex` (8 violations): Extract helpers from handle_event(:info, runner_result), read_site_log_context, process_runner_result. Split evaluate_runner_output into pattern-matched heads. Flatten 4 nesting violations
 - **standards v0.2 (2026-03-28):** Refactor `lib/deft/agent.ex` (14 violations): Extract shared start_provider_stream helper (deduplicates 3 call sites). Split handle_event(:calling) case into pattern-matched function heads. Extract helpers from handle_tool_execution_complete (ABC 80), handle_idle_transition, save_tool_results, start_compaction_task. Flatten 4 nesting violations
 - **standards v0.2 (2026-03-28):** Refactor `lib/deft/cli.ex` (15 violations): Extract helpers from determine_command (CC 24, split into flag vs positional dispatch). Group start_agent optional params into opts map. Extract display helpers from display_issue_list, display_issue, create/update_interactive_issue, wait_for_job_completion. Flatten 4 nesting violations
 - **standards v0.2 (2026-03-28):** Refactor `lib/deft/tools/issue_create.ex` (1 violation): Extract helpers from execute to reduce ABC size

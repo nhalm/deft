@@ -312,14 +312,7 @@ defmodule Deft.Job.Lead do
       :gen_statem.cast(self(), {:no_tools_return_idle, chunk_phase})
       :keep_state_and_data
     else
-      # Execute tools
-      tasks =
-        Enum.map(tool_calls, fn tool_call ->
-          Task.Supervisor.async_nolink(data.runner_supervisor, fn ->
-            execute_tool(tool_call, data)
-          end)
-        end)
-
+      tasks = spawn_tool_tasks(tool_calls, data)
       {:keep_state, %{data | tool_tasks: tasks}}
     end
   end
@@ -446,48 +439,12 @@ defmodule Deft.Job.Lead do
     # so we must explicitly check runner_tasks to avoid consuming runner completion messages
     cond do
       Enum.any?(tasks, fn task -> task.ref == ref end) ->
-        # A tool task completed
-        tasks = Enum.reject(tasks, fn task -> task.ref == ref end)
-        data = %{data | tool_tasks: tasks}
-
-        # Add tool results to messages
-        data = add_tool_results(results, data)
-
-        # If all tasks done, loop back to call LLM or check for continuation
-        if Enum.empty?(tasks) do
-          maybe_continue_llm(chunk_phase, data)
-        else
-          {:keep_state, data}
-        end
+        handle_tool_task_completion(ref, results, chunk_phase, data)
 
       Map.has_key?(runner_tasks, ref) ->
-        # This is a runner task - handle it using the runner logic
-        runner_info = Map.get(runner_tasks, ref)
-
-        Logger.info(
-          "#{log_prefix(data.lead_id)} runner completed: #{runner_info.task_description}"
-        )
-
-        # Remove completed runner from tracking
-        runner_tasks = Map.delete(runner_tasks, ref)
-        data = %{data | runner_tasks: runner_tasks}
-
-        # Process runner result and decide next action
-        data = process_runner_result(results, runner_info, data)
-
-        # Send status update to Foreman
-        send_lead_message(
-          data.foreman_pid,
-          :status,
-          "Completed: #{runner_info.task_description}",
-          %{}
-        )
-
-        # Continue work since we're in executing_tools state (agent will return to idle later)
-        continue_work(chunk_phase, data)
+        handle_runner_task_completion(ref, results, chunk_phase, data)
 
       true ->
-        # Neither tool nor runner task
         :keep_state_and_data
     end
   end
@@ -680,6 +637,47 @@ defmodule Deft.Job.Lead do
 
   # Private helpers
 
+  defp spawn_tool_tasks(tool_calls, data) do
+    Enum.map(tool_calls, &spawn_tool_task(&1, data))
+  end
+
+  defp spawn_tool_task(tool_call, data) do
+    Task.Supervisor.async_nolink(data.runner_supervisor, fn ->
+      execute_tool(tool_call, data)
+    end)
+  end
+
+  defp handle_tool_task_completion(ref, results, chunk_phase, data) do
+    tasks = Enum.reject(data.tool_tasks, fn task -> task.ref == ref end)
+    data = %{data | tool_tasks: tasks}
+    data = add_tool_results(results, data)
+
+    if Enum.empty?(tasks) do
+      maybe_continue_llm(chunk_phase, data)
+    else
+      {:keep_state, data}
+    end
+  end
+
+  defp handle_runner_task_completion(ref, results, chunk_phase, data) do
+    runner_info = Map.get(data.runner_tasks, ref)
+
+    Logger.info("#{log_prefix(data.lead_id)} runner completed: #{runner_info.task_description}")
+
+    runner_tasks = Map.delete(data.runner_tasks, ref)
+    data = %{data | runner_tasks: runner_tasks}
+    data = process_runner_result(results, runner_info, data)
+
+    send_lead_message(
+      data.foreman_pid,
+      :status,
+      "Completed: #{runner_info.task_description}",
+      %{}
+    )
+
+    continue_work(chunk_phase, data)
+  end
+
   defp build_planning_prompt(data) do
     # Read from site log if available
     site_log_context = read_site_log_context(data.site_log_tid)
@@ -733,61 +731,47 @@ defmodule Deft.Job.Lead do
   defp read_site_log_context(nil), do: ""
 
   defp read_site_log_context(site_log_tid) do
-    # Get all keys from the site log
-    keys = Store.keys(site_log_tid)
+    site_log_tid
+    |> Store.keys()
+    |> read_and_group_site_log_entries(site_log_tid)
+    |> format_site_log_context()
+  end
 
-    if Enum.empty?(keys) do
-      ""
-    else
-      # Read all entries and group by category
-      entries =
-        Enum.map(keys, fn key ->
-          case Store.read(site_log_tid, key) do
-            {:ok, entry} -> {key, entry}
-            :miss -> nil
-            :expired -> nil
-          end
-        end)
-        |> Enum.reject(&is_nil/1)
+  defp read_and_group_site_log_entries([], _site_log_tid), do: %{}
 
-      # Group entries by category
-      grouped =
-        Enum.group_by(entries, fn {_key, entry} ->
-          Map.get(entry.metadata, :category, :other)
-        end)
+  defp read_and_group_site_log_entries(keys, site_log_tid) do
+    keys
+    |> Enum.map(&read_site_log_entry(site_log_tid, &1))
+    |> Enum.reject(&is_nil/1)
+    |> Enum.group_by(fn {_key, entry} ->
+      Map.get(entry.metadata, :category, :other)
+    end)
+  end
 
-      # Format the context
-      sections =
-        [
-          format_site_log_section(
-            "Research Findings",
-            Map.get(grouped, :research, [])
-          ),
-          format_site_log_section(
-            "Interface Contracts",
-            Map.get(grouped, :contract, [])
-          ),
-          format_site_log_section(
-            "Decisions",
-            Map.get(grouped, :decision, [])
-          ),
-          format_site_log_section(
-            "Critical Findings",
-            Map.get(grouped, :critical_finding, [])
-          )
-        ]
-        |> Enum.reject(&is_nil/1)
-        |> Enum.join("\n\n")
+  defp read_site_log_entry(site_log_tid, key) do
+    case Store.read(site_log_tid, key) do
+      {:ok, entry} -> {key, entry}
+      :miss -> nil
+      :expired -> nil
+    end
+  end
 
-      if sections == "" do
-        ""
-      else
-        """
-        ## Site Log Context
+  defp format_site_log_context(grouped) when map_size(grouped) == 0, do: ""
 
-        #{sections}
-        """
-      end
+  defp format_site_log_context(grouped) do
+    sections =
+      [
+        format_site_log_section("Research Findings", Map.get(grouped, :research, [])),
+        format_site_log_section("Interface Contracts", Map.get(grouped, :contract, [])),
+        format_site_log_section("Decisions", Map.get(grouped, :decision, [])),
+        format_site_log_section("Critical Findings", Map.get(grouped, :critical_finding, []))
+      ]
+      |> Enum.reject(&is_nil/1)
+      |> Enum.join("\n\n")
+
+    case sections do
+      "" -> ""
+      content -> "## Site Log Context\n\n#{content}\n"
     end
   end
 
@@ -1201,15 +1185,17 @@ defmodule Deft.Job.Lead do
 
   defp build_tool_result_blocks(accumulated_results, tool_calls) do
     Enum.map(accumulated_results, fn {tool_use_id, tool_result} ->
-      # Find the tool name from the original tool call
-      tool_name =
-        Enum.find_value(tool_calls, fn tool_use ->
-          if tool_use.id == tool_use_id, do: tool_use.name
-        end) || "unknown"
-
-      # Build the ToolResult block based on result type
+      tool_name = find_tool_name(tool_calls, tool_use_id)
       build_tool_result_block(tool_use_id, tool_name, tool_result)
     end)
+  end
+
+  defp find_tool_name(tool_calls, tool_use_id) do
+    Enum.find_value(tool_calls, &match_tool_id(&1, tool_use_id)) || "unknown"
+  end
+
+  defp match_tool_id(tool_use, tool_use_id) do
+    if tool_use.id == tool_use_id, do: tool_use.name
   end
 
   defp build_tool_result_block(tool_use_id, tool_name, {:ok, content}) do
@@ -1291,97 +1277,98 @@ defmodule Deft.Job.Lead do
   end
 
   defp process_runner_result(result, runner_info, data) do
-    # Evaluate runner result and update task list
     Logger.debug(
       "#{log_prefix(data.lead_id)} processing runner result for #{runner_info.task_description}: #{inspect(result)}"
     )
 
     case result do
-      {:ok, output} ->
-        # Update task list - mark current task as done
-        task_list =
-          update_task_status(data.task_list, runner_info.task_description, :done, output)
-
-        # Evaluate if the output meets expectations
-        evaluation = evaluate_runner_output(output, runner_info, data)
-
-        data = %{data | task_list: task_list}
-
-        # Send evaluation to Foreman
-        case evaluation do
-          {:success, summary} ->
-            send_lead_message(
-              data.foreman_pid,
-              :status,
-              "Task completed successfully: #{runner_info.task_description}\n\nSummary: #{summary}",
-              %{task: runner_info.task_description}
-            )
-
-            # Check if this runner's work satisfies a dependency interface
-            if should_publish_contract?(runner_info, output, data) do
-              contract_content = extract_contract(output, runner_info, data)
-
-              send_lead_message(
-                data.foreman_pid,
-                :contract,
-                contract_content,
-                %{lead_id: data.lead_id}
-              )
-
-              Logger.info(
-                "#{log_prefix(data.lead_id)} published contract for task: #{runner_info.task_description}"
-              )
-            end
-
-            data
-
-          {:needs_correction, reason} ->
-            Logger.warning("#{log_prefix(data.lead_id)} detected issue: #{reason}")
-
-            send_lead_message(
-              data.foreman_pid,
-              :finding,
-              "Task needs correction: #{runner_info.task_description}\n\nReason: #{reason}",
-              %{task: runner_info.task_description, shared: false}
-            )
-
-            # Add corrective task to the task list
-            corrective_task = %{
-              description: "Fix: #{runner_info.task_description} - #{reason}",
-              status: :pending,
-              result: nil,
-              correction_for: runner_info.task_description
-            }
-
-            %{data | task_list: data.task_list ++ [corrective_task]}
-
-          {:critical_issue, issue} ->
-            Logger.error("#{log_prefix(data.lead_id)} found critical issue: #{issue}")
-
-            send_lead_message(
-              data.foreman_pid,
-              :critical_finding,
-              "Critical issue in task: #{runner_info.task_description}\n\nIssue: #{issue}",
-              %{task: runner_info.task_description}
-            )
-
-            data
-        end
-
-      {:error, error_msg} ->
-        # Mark task as failed
-        task_list =
-          update_task_status(data.task_list, runner_info.task_description, :failed, error_msg)
-
-        send_lead_message(
-          data.foreman_pid,
-          :error,
-          "Task failed: #{runner_info.task_description}\n\nError: #{error_msg}",
-          %{task: runner_info.task_description}
-        )
-
-        %{data | task_list: task_list}
+      {:ok, output} -> handle_successful_runner_output(output, runner_info, data)
+      {:error, error_msg} -> handle_failed_runner_output(error_msg, runner_info, data)
     end
+  end
+
+  defp handle_successful_runner_output(output, runner_info, data) do
+    task_list = update_task_status(data.task_list, runner_info.task_description, :done, output)
+    evaluation = evaluate_runner_output(output, runner_info, data)
+    data = %{data | task_list: task_list}
+
+    handle_runner_evaluation(evaluation, output, runner_info, data)
+  end
+
+  defp handle_runner_evaluation({:success, summary}, output, runner_info, data) do
+    send_lead_message(
+      data.foreman_pid,
+      :status,
+      "Task completed successfully: #{runner_info.task_description}\n\nSummary: #{summary}",
+      %{task: runner_info.task_description}
+    )
+
+    publish_contract_if_needed(runner_info, output, data)
+    data
+  end
+
+  defp handle_runner_evaluation({:needs_correction, reason}, _output, runner_info, data) do
+    Logger.warning("#{log_prefix(data.lead_id)} detected issue: #{reason}")
+
+    send_lead_message(
+      data.foreman_pid,
+      :finding,
+      "Task needs correction: #{runner_info.task_description}\n\nReason: #{reason}",
+      %{task: runner_info.task_description, shared: false}
+    )
+
+    corrective_task = %{
+      description: "Fix: #{runner_info.task_description} - #{reason}",
+      status: :pending,
+      result: nil,
+      correction_for: runner_info.task_description
+    }
+
+    %{data | task_list: data.task_list ++ [corrective_task]}
+  end
+
+  defp handle_runner_evaluation({:critical_issue, issue}, _output, runner_info, data) do
+    Logger.error("#{log_prefix(data.lead_id)} found critical issue: #{issue}")
+
+    send_lead_message(
+      data.foreman_pid,
+      :critical_finding,
+      "Critical issue in task: #{runner_info.task_description}\n\nIssue: #{issue}",
+      %{task: runner_info.task_description}
+    )
+
+    data
+  end
+
+  defp publish_contract_if_needed(runner_info, output, data) do
+    if should_publish_contract?(runner_info, output, data) do
+      contract_content = extract_contract(output, runner_info, data)
+
+      send_lead_message(
+        data.foreman_pid,
+        :contract,
+        contract_content,
+        %{lead_id: data.lead_id}
+      )
+
+      Logger.info(
+        "#{log_prefix(data.lead_id)} published contract for task: #{runner_info.task_description}"
+      )
+    end
+  end
+
+  defp handle_failed_runner_output(error_msg, runner_info, data) do
+    task_list =
+      update_task_status(data.task_list, runner_info.task_description, :failed, error_msg)
+
+    send_lead_message(
+      data.foreman_pid,
+      :error,
+      "Task failed: #{runner_info.task_description}\n\nError: #{error_msg}",
+      %{task: runner_info.task_description}
+    )
+
+    %{data | task_list: task_list}
   end
 
   defp continue_work(:verifying, data) do
@@ -1592,42 +1579,44 @@ defmodule Deft.Job.Lead do
 
   # Evaluates runner output to determine if task was completed correctly
   defp evaluate_runner_output(output, runner_info, _data) do
-    # Basic evaluation logic:
-    # - Check if output indicates success or problems
-    # - Look for error indicators in output
-    # - Consider task complexity and output length
-
     output_lower = String.downcase(output)
 
     cond do
-      # Check for explicit error indicators
-      String.contains?(output_lower, ["error:", "failed:", "exception:", "panic:"]) ->
+      has_error_indicators?(output_lower) ->
         {:needs_correction, "Output contains error indicators"}
 
-      # Check for very short output (might indicate incomplete work)
       String.length(output) < 20 ->
         {:needs_correction, "Output too brief, task may be incomplete"}
 
-      # Check for test failures if this was a testing runner
-      runner_info.runner_type == :testing and
-          String.contains?(output_lower, ["failed", "failure"]) ->
+      is_testing_failure?(runner_info, output_lower) ->
         {:critical_issue, "Tests failed"}
 
-      # Success case
       true ->
-        # Extract a summary from the output (first sentence or first 100 chars)
-        summary =
-          output
-          |> String.split("\n")
-          |> Enum.reject(&(String.trim(&1) == ""))
-          |> List.first()
-          |> case do
-            nil -> "Task completed"
-            line -> String.slice(line, 0..100)
-          end
-
-        {:success, summary}
+        extract_success_summary(output)
     end
+  end
+
+  defp has_error_indicators?(output_lower) do
+    String.contains?(output_lower, ["error:", "failed:", "exception:", "panic:"])
+  end
+
+  defp is_testing_failure?(runner_info, output_lower) do
+    runner_info.runner_type == :testing and
+      String.contains?(output_lower, ["failed", "failure"])
+  end
+
+  defp extract_success_summary(output) do
+    summary =
+      output
+      |> String.split("\n")
+      |> Enum.reject(&(String.trim(&1) == ""))
+      |> List.first()
+      |> case do
+        nil -> "Task completed"
+        line -> String.slice(line, 0..100)
+      end
+
+    {:success, summary}
   end
 
   # Builds context string for runner based on current state
