@@ -65,30 +65,36 @@ defmodule Deft.Eval.LeadHelpers do
   Handles both raw JSON and JSON in code blocks.
   """
   def extract_json(text) do
-    # Try to find JSON object in the text
-    # Handle both raw JSON and JSON in code blocks
-    json_text =
-      cond do
-        String.contains?(text, "```json") ->
-          # Extract from code block
-          text
-          |> String.split("```json")
-          |> Enum.at(1, "")
-          |> String.split("```")
-          |> Enum.at(0, "")
-          |> String.trim()
+    text
+    |> extract_json_string()
+    |> parse_json()
+  end
 
-        String.contains?(text, "{") ->
-          # Extract JSON object starting from first brace
-          case :binary.match(text, "{") do
-            {start_idx, _} -> String.slice(text, start_idx..-1//1)
-            :nomatch -> text
-          end
+  defp extract_json_string(text) do
+    cond do
+      String.contains?(text, "```json") -> extract_from_code_block(text)
+      String.contains?(text, "{") -> extract_from_first_brace(text)
+      true -> text
+    end
+  end
 
-        true ->
-          text
-      end
+  defp extract_from_code_block(text) do
+    text
+    |> String.split("```json")
+    |> Enum.at(1, "")
+    |> String.split("```")
+    |> Enum.at(0, "")
+    |> String.trim()
+  end
 
+  defp extract_from_first_brace(text) do
+    case :binary.match(text, "{") do
+      {start_idx, _} -> String.slice(text, start_idx..-1//1)
+      :nomatch -> text
+    end
+  end
+
+  defp parse_json(json_text) do
     case Jason.decode(json_text) do
       {:ok, data} -> {:ok, data}
       {:error, error} -> {:error, DecodeError.message(error)}

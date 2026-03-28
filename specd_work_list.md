@@ -19,13 +19,9 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## standards v0.2 — Credo violation fixes
 
-### Tier 4: Single-violation files (1 each)
-
-- Refactor `test/support/eval/lead_helpers.ex` (1 violation): Split extract_json into pattern-matched heads
-
 ### Infrastructure (after all violations fixed)
 
-- Update `Makefile`: add `dialyzer` target to `check` (blocked: all Tier 1-4 items)
+- Update `Makefile`: add `dialyzer` target to `check`
 - Update `lefthook.yml`: add `dialyzer` to pre-commit (blocked: Update Makefile)
 - Run `mix dialyzer`, fix all warnings until clean — add missing `@spec` annotations as needed (blocked: Update lefthook.yml)
 
