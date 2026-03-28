@@ -361,8 +361,15 @@ defmodule Deft.Issues do
     default_priority = if source == :agent, do: 3, else: 2
     dependencies = Map.get(attrs, :dependencies, [])
 
+    opts = %{
+      source: source,
+      default_priority: default_priority,
+      dependencies: dependencies,
+      timestamp: timestamp
+    }
+
     with :ok <- validate_all_blockers_exist(state.issues, dependencies),
-         issue <- build_new_issue(id, attrs, source, default_priority, dependencies, timestamp),
+         issue <- build_new_issue(id, attrs, opts),
          {:ok, _} <- check_cycle(issue, state.issues),
          new_issues = [issue | state.issues],
          new_state = %{state | issues: new_issues},
@@ -374,7 +381,7 @@ defmodule Deft.Issues do
     end
   end
 
-  defp build_new_issue(id, attrs, source, default_priority, dependencies, timestamp) do
+  defp build_new_issue(id, attrs, opts) do
     %Issue{
       id: id,
       title: attrs.title,
@@ -382,12 +389,12 @@ defmodule Deft.Issues do
       acceptance_criteria: Map.get(attrs, :acceptance_criteria, []),
       constraints: Map.get(attrs, :constraints, []),
       status: :open,
-      priority: Map.get(attrs, :priority, default_priority),
-      dependencies: dependencies,
-      created_at: timestamp,
-      updated_at: timestamp,
+      priority: Map.get(attrs, :priority, opts.default_priority),
+      dependencies: opts.dependencies,
+      created_at: opts.timestamp,
+      updated_at: opts.timestamp,
       closed_at: nil,
-      source: source,
+      source: opts.source,
       job_id: nil
     }
   end
