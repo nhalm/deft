@@ -21,7 +21,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ### Tier 2: Medium files (5-8 violations each)
 
-- Refactor `lib/deft/git/job.ex` (5 violations): Group handle_merge_failure params into map. Flatten 4 nesting violations in merge_lead_branch, pop_job_stash, complete_job by extracting inner branches
 - Refactor `lib/deft/skills/registry.ex` (5 violations): Flatten 5 nesting violations by extracting inner case/if branches into named functions with pattern-matched heads
 - Refactor `lib/deft/eval/judge_calibration.ex` (5 violations): Extract helpers from load_latest_result and calculate_metrics. Split calculate_metrics into count_classifications + compute_rates. Flatten 2 nesting violations
 

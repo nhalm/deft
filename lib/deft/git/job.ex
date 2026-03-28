@@ -325,23 +325,26 @@ defmodule Deft.Git.Job do
       with {:ok, _} <- create_merge_worktree(git, job_branch, temp_dir, job_id),
            merge_result <-
              attempt_merge_in_worktree(git, temp_dir, lead_branch, job_branch, job_id) do
-        case merge_result do
-          {:ok, :conflict, conflicted_files} ->
-            # Preserve the temp worktree for the merge-resolution Runner
-            # Return the worktree path so it can be cleaned up later
-            {:ok, :conflict, conflicted_files, temp_dir}
-
-          _ ->
-            # Clean up immediately for success or errors
-            cleanup_merge_worktree(git, working_dir, temp_dir)
-            merge_result
-        end
+        handle_merge_result(merge_result, git, working_dir, temp_dir)
       else
         error ->
           cleanup_merge_worktree(git, working_dir, temp_dir)
           error
       end
     end)
+  end
+
+  # Handle merge result - preserve conflict worktrees, clean up others
+  defp handle_merge_result({:ok, :conflict, conflicted_files}, _git, _working_dir, temp_dir) do
+    # Preserve the temp worktree for the merge-resolution Runner
+    # Return the worktree path so it can be cleaned up later
+    {:ok, :conflict, conflicted_files, temp_dir}
+  end
+
+  defp handle_merge_result(merge_result, git, working_dir, temp_dir) do
+    # Clean up immediately for success or errors
+    cleanup_merge_worktree(git, working_dir, temp_dir)
+    merge_result
   end
 
   # Create a temporary worktree for the job branch to perform the merge
@@ -356,7 +359,7 @@ defmodule Deft.Git.Job do
   end
 
   # Attempt to merge the Lead branch into the job branch within the temporary worktree
-  defp attempt_merge_in_worktree(git, temp_dir, lead_branch, job_branch, job_id) do
+  defp attempt_merge_in_worktree(git, temp_dir, lead_branch, _job_branch, _job_id) do
     # Ensure directory exists (git worktree add creates it, but mocks may not)
     File.mkdir_p!(temp_dir)
 
@@ -366,7 +369,7 @@ defmodule Deft.Git.Job do
           {:ok, :merged}
 
         {output, exit_code} ->
-          handle_merge_failure(git, output, exit_code, lead_branch, job_branch, job_id)
+          handle_merge_failure(git, output, exit_code)
       end
     end)
   end
@@ -387,7 +390,7 @@ defmodule Deft.Git.Job do
   end
 
   # Handle merge failure - either conflict or error
-  defp handle_merge_failure(git, output, exit_code, _lead_branch, _job_branch, _job_id) do
+  defp handle_merge_failure(git, output, exit_code) do
     if exit_code == 1 and String.contains?(output, "CONFLICT") do
       # Extract conflicted files
       conflicted_files = extract_conflicted_files(git)
@@ -780,26 +783,30 @@ defmodule Deft.Git.Job do
           |> Enum.find_index(&String.contains?(&1, stash_message))
 
         if stash_index do
-          # Pop the stash
-          case git.cmd(["stash", "pop", "stash@{#{stash_index}}"]) do
-            {_output, 0} ->
-              IO.puts("Your previously stashed changes have been restored.\n")
-              :ok
-
-            {_error_output, _exit_code} ->
-              IO.puts("""
-              Warning: Failed to automatically restore your stashed changes.
-              Please manually restore them with: git stash pop stash@{#{stash_index}}
-              """)
-
-              :ok
-          end
+          pop_stash_by_index(git, stash_index)
         else
           # No stash found - this is normal if working tree was clean
           :ok
         end
 
       {_error_output, _exit_code} ->
+        :ok
+    end
+  end
+
+  # Pop a stash by index
+  defp pop_stash_by_index(git, stash_index) do
+    case git.cmd(["stash", "pop", "stash@{#{stash_index}}"]) do
+      {_output, 0} ->
+        IO.puts("Your previously stashed changes have been restored.\n")
+        :ok
+
+      {_error_output, _exit_code} ->
+        IO.puts("""
+        Warning: Failed to automatically restore your stashed changes.
+        Please manually restore them with: git stash pop stash@{#{stash_index}}
+        """)
+
         :ok
     end
   end
@@ -861,21 +868,19 @@ defmodule Deft.Git.Job do
       # Always restore user's stashed changes, even if worktree verification fails
       pop_job_stash(git, job_id)
 
-      case result do
-        :ok ->
-          case verify_no_worktrees(git) do
-            :ok ->
-              {:ok, :completed}
-
-            error ->
-              error
-          end
-
-        error ->
-          error
-      end
+      finalize_job_completion(result, git)
     end)
   end
+
+  # Finalize job completion with worktree verification
+  defp finalize_job_completion(:ok, git) do
+    case verify_no_worktrees(git) do
+      :ok -> {:ok, :completed}
+      error -> error
+    end
+  end
+
+  defp finalize_job_completion(error, _git), do: error
 
   # Merge the job branch into the current branch
   defp merge_job_branch(git, job_branch, squash, job_id) do
@@ -1040,6 +1045,14 @@ defmodule Deft.Git.Job do
     end
   end
 
+  # Remove a single worktree
+  defp remove_worktree(git, path) do
+    case git.cmd(["worktree", "remove", path, "--force"]) do
+      {_output, 0} -> :ok
+      {_error_output, _exit_code} -> :ok
+    end
+  end
+
   # Remove all Lead worktrees associated with a job
   defp remove_lead_worktrees(git, working_dir, job_id) do
     case git.cmd(["worktree", "list", "--porcelain"]) do
@@ -1047,33 +1060,24 @@ defmodule Deft.Git.Job do
         worktrees = parse_worktree_list(output, working_dir)
 
         # Find all Lead worktrees for this job
-        job_worktrees =
-          Enum.filter(worktrees, fn worktree ->
-            case worktree.branch do
-              # Lead branches: deft/lead-<job_id>-<deliverable>
-              "deft/lead-" <> lead_id ->
-                String.starts_with?(lead_id, job_id <> "-")
-
-              _ ->
-                false
-            end
-          end)
+        job_worktrees = Enum.filter(worktrees, &is_job_lead_worktree?(&1, job_id))
 
         # Remove each Lead worktree
         Enum.each(job_worktrees, fn worktree ->
-          case git.cmd(["worktree", "remove", worktree.path, "--force"]) do
-            {_output, 0} ->
-              :ok
-
-            {_error_output, _exit_code} ->
-              :ok
-          end
+          remove_worktree(git, worktree.path)
         end)
 
       {_error_output, _exit_code} ->
         :ok
     end
   end
+
+  # Check if a worktree belongs to a job's Lead branch
+  defp is_job_lead_worktree?(%{branch: "deft/lead-" <> lead_id}, job_id) do
+    String.starts_with?(lead_id, job_id <> "-")
+  end
+
+  defp is_job_lead_worktree?(_, _job_id), do: false
 
   # Delete the job branch forcefully (used during abort)
   defp delete_job_branch_force(git, job_branch, _job_id) do
