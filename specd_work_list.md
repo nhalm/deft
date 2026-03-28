@@ -21,8 +21,7 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ### Infrastructure (after all violations fixed)
 
-- Update `Makefile`: add `dialyzer` target to `check`
-- Update `lefthook.yml`: add `dialyzer` to pre-commit (blocked: Update Makefile)
+- Update `lefthook.yml`: add `dialyzer` to pre-commit
 - Run `mix dialyzer`, fix all warnings until clean — add missing `@spec` annotations as needed (blocked: Update lefthook.yml)
 
 ## unit-testing v0.1

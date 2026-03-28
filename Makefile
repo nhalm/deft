@@ -55,7 +55,7 @@ test.integration:
 test.all:
 	mix test --include eval --include integration
 
-check: compile format.check lint test.eval.check-structure test
+check: compile format.check lint dialyzer test.eval.check-structure test
 
 ci: test.eval.check-structure compile format.check lint dialyzer test.all
 
