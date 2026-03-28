@@ -1,4 +1,5 @@
 # History
+- **standards v0.2 (2026-03-28):** Refactor `lib/deft/agent/tool_runner.ex` (1 violation): Flatten nesting
 - **standards v0.2 (2026-03-28):** Refactor `lib/deft/agent/context.ex` (1 violation): Split get_om_context into pattern-matched heads
 - **standards v0.2 (2026-03-28):** Refactor `lib/deft/om/reflector.ex` (4 violations): Group compress_with_retry/attempt_compression args into context map. Group collect_stream_text_loop accumulator into state map
 - **standards v0.2 (2026-03-28):** Refactor `lib/deft/config.ex` (1 violation): Extract helpers from validate_and_build to reduce ABC size

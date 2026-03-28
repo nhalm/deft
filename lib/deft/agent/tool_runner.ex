@@ -111,39 +111,37 @@ defmodule Deft.Agent.ToolRunner do
   end
 
   # Check if result should be spilled to cache based on size threshold
-  defp maybe_spill_to_cache({:ok, content_blocks} = result, tool_name, tool_module, context) do
-    # Never spill use_skill results — the agent needs the full skill definition
-    # in the system injection at agent.ex:1405-1413 (skills spec section 2.5)
-    if tool_name == "use_skill" do
-      result
-      # Only spill if cache is available and configured
+  # Never spill use_skill results — the agent needs the full skill definition
+  # in the system injection at agent.ex:1405-1413 (skills spec section 2.5)
+  defp maybe_spill_to_cache({:ok, _content_blocks} = result, "use_skill", _tool_module, _context) do
+    result
+  end
+
+  # Only spill if cache is available and configured
+  defp maybe_spill_to_cache({:ok, content_blocks} = result, tool_name, tool_module, context)
+       when not is_nil(context.cache_tid) and not is_nil(context.cache_config) do
+    estimated_tokens = estimate_content_tokens(content_blocks)
+    threshold = Map.get(context.cache_config, tool_name, context.cache_config["default"])
+
+    if estimated_tokens > threshold do
+      spill_to_cache(result, content_blocks, tool_name, tool_module, context)
     else
-      if context.cache_tid && context.cache_config do
-        # Calculate total byte size of all content blocks
-        total_bytes =
-          Enum.reduce(content_blocks, 0, fn block, acc ->
-            acc + content_block_byte_size(block)
-          end)
-
-        # Estimate tokens as byte_size / 4
-        estimated_tokens = div(total_bytes, 4)
-
-        # Get threshold for this tool (or default)
-        threshold = Map.get(context.cache_config, tool_name, context.cache_config["default"])
-
-        # Spill if exceeds threshold
-        if estimated_tokens > threshold do
-          spill_to_cache(result, content_blocks, tool_name, tool_module, context)
-        else
-          result
-        end
-      else
-        result
-      end
+      result
     end
   end
 
   defp maybe_spill_to_cache(result, _tool_name, _tool_module, _context), do: result
+
+  # Calculate estimated token count from content blocks
+  defp estimate_content_tokens(content_blocks) do
+    total_bytes =
+      Enum.reduce(content_blocks, 0, fn block, acc ->
+        acc + content_block_byte_size(block)
+      end)
+
+    # Estimate tokens as byte_size / 4
+    div(total_bytes, 4)
+  end
 
   # Calculate byte size of a content block
   defp content_block_byte_size(%{text: text}) when is_binary(text), do: byte_size(text)
