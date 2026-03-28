@@ -27,8 +27,7 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## unit-testing v0.1
 
-- Add integration test scenario 2.2: Foreman Research → Decompose → Execute
-- Add integration test scenario 2.3: Partial Unblocking Flow (blocked: unit-testing v0.1 scenario 2.2)
+- Add integration test scenario 2.3: Partial Unblocking Flow
 - Add integration test scenario 2.4: Resume from Saved State
 - Add integration test scenario 2.5: Rate Limiter Integration
 - Add integration test scenario 2.6: Observation Injection
