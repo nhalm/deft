@@ -21,7 +21,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ### Tier 4: Single-violation files (1 each)
 
-- Refactor `test/deft/git/job_test.exs` (1 violation): Split mock cmd into pattern-matched heads
 - Refactor `test/support/eval/lead_helpers.ex` (1 violation): Split extract_json into pattern-matched heads
 
 ### Infrastructure (after all violations fixed)

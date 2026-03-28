@@ -605,30 +605,34 @@ defmodule Deft.Git.JobTest do
 
       def cmd(args) do
         send(self(), {:git_cmd, args})
-
-        case args do
-          ["checkout", _branch] ->
-            Process.get(:mock_checkout_response, {"", 0})
-
-          ["merge", "--squash", _job_branch] ->
-            Process.get(:mock_merge_response, {"", 0})
-
-          ["merge", "--no-ff", _job_branch] ->
-            Process.get(:mock_merge_response, {"", 0})
-
-          ["commit", "-m", _message] ->
-            Process.get(:mock_commit_response, {"", 0})
-
-          ["branch", "-d", _branch] ->
-            Process.get(:mock_branch_delete_response, {"", 0})
-
-          ["worktree", "list", "--porcelain"] ->
-            Process.get(:mock_worktree_list_response, {"worktree /path/to/repo\n", 0})
-
-          _ ->
-            {"", 0}
-        end
+        do_cmd(args)
       end
+
+      defp do_cmd(["checkout", _branch]) do
+        Process.get(:mock_checkout_response, {"", 0})
+      end
+
+      defp do_cmd(["merge", "--squash", _job_branch]) do
+        Process.get(:mock_merge_response, {"", 0})
+      end
+
+      defp do_cmd(["merge", "--no-ff", _job_branch]) do
+        Process.get(:mock_merge_response, {"", 0})
+      end
+
+      defp do_cmd(["commit", "-m", _message]) do
+        Process.get(:mock_commit_response, {"", 0})
+      end
+
+      defp do_cmd(["branch", "-d", _branch]) do
+        Process.get(:mock_branch_delete_response, {"", 0})
+      end
+
+      defp do_cmd(["worktree", "list", "--porcelain"]) do
+        Process.get(:mock_worktree_list_response, {"worktree /path/to/repo\n", 0})
+      end
+
+      defp do_cmd(_), do: {"", 0}
     end
 
     setup do
