@@ -74,10 +74,6 @@ defmodule Deft.Tools.Bash do
     {:error, "Command timed out after #{timeout}ms"}
   end
 
-  defp handle_command_result({:error, reason}, _command, _temp_path, _timeout) do
-    {:error, "Failed to execute command: #{reason}"}
-  end
-
   defp cleanup_temp_file(temp_path) do
     if File.exists?(temp_path) do
       case File.stat(temp_path) do

@@ -99,14 +99,9 @@ defmodule Deft.Agent.Context do
   # Fetches OM state and applies sync fallback if needed
   defp fetch_om_state_with_sync(session_id, config) do
     try do
-      case OMState.get_context(session_id) do
-        {_obs, _ids, _hint, _cal, pending_tokens, obs_tokens} ->
-          check_sync_fallback(session_id, config, pending_tokens, obs_tokens)
-          extract_context_after_sync(session_id)
-
-        _ ->
-          {"", [], nil, 4.0}
-      end
+      {_obs, _ids, _hint, _cal, pending_tokens, obs_tokens} = OMState.get_context(session_id)
+      check_sync_fallback(session_id, config, pending_tokens, obs_tokens)
+      extract_context_after_sync(session_id)
     catch
       :exit, _ -> {"", [], nil, 4.0}
     end
@@ -114,13 +109,10 @@ defmodule Deft.Agent.Context do
 
   # Extracts context tuple after sync fallback
   defp extract_context_after_sync(session_id) do
-    case OMState.get_context(session_id) do
-      {observations, observed_ids, continuation_hint, calibration_factor, _, _} ->
-        {observations, observed_ids, continuation_hint, calibration_factor}
+    {observations, observed_ids, continuation_hint, calibration_factor, _, _} =
+      OMState.get_context(session_id)
 
-      _ ->
-        {"", [], nil, 4.0}
-    end
+    {observations, observed_ids, continuation_hint, calibration_factor}
   end
 
   # Checks if sync fallback is needed and calls force_observe/force_reflect

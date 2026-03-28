@@ -1058,12 +1058,18 @@ defmodule Deft.CLI do
 
   # Detect if stdin is piped (not a TTY)
   defp stdin_piped? do
-    !IO.ANSI.enabled?() or :io.columns() == {:error, :enoent}
+    case :io.columns() do
+      {:ok, _} -> !IO.ANSI.enabled?()
+      {:error, _} -> true
+    end
   end
 
   # Read prompt from stdin
   defp read_stdin do
-    IO.read(:stdio, :all)
+    :stdio
+    |> IO.stream(:line)
+    |> Enum.to_list()
+    |> Enum.join()
     |> String.trim()
   end
 

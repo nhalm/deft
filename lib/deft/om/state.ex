@@ -179,7 +179,7 @@ defmodule Deft.OM.State do
 
   Per spec section 9.3, this is called during session resume to restore OM state.
   """
-  @spec load_latest_snapshot(String.t(), String.t()) ::
+  @spec load_latest_snapshot(String.t(), String.t() | nil) ::
           {:ok, ObservationEntry.t() | nil} | {:error, term()}
   def load_latest_snapshot(session_id, working_dir \\ nil) do
     working_dir = working_dir || File.cwd!()

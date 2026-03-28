@@ -71,16 +71,12 @@ defmodule Deft.Job.Lead.Supervisor do
 
     if supervisor_pid do
       # Find the Lead child (id: :lead) in the supervisor's children
-      case Supervisor.which_children(supervisor_pid) do
-        children when is_list(children) ->
-          Enum.find_value(children, fn
-            {:lead, pid, :worker, _} when is_pid(pid) -> pid
-            _ -> nil
-          end)
+      children = Supervisor.which_children(supervisor_pid)
 
-        _ ->
-          nil
-      end
+      Enum.find_value(children, fn
+        {:lead, pid, :worker, _} when is_pid(pid) -> pid
+        _ -> nil
+      end)
     else
       nil
     end

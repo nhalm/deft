@@ -13,7 +13,11 @@ defmodule DeftWeb.SessionsLive do
   @impl true
   def mount(_params, _session, socket) do
     # Load sessions from store
-    {:ok, sessions} = Store.list()
+    sessions =
+      case Store.list() do
+        {:ok, sessions} -> sessions
+        {:error, _} -> []
+      end
 
     socket =
       socket

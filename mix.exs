@@ -13,7 +13,8 @@ defmodule Deft.MixProject do
       test_pattern: "*_test.exs",
       test_coverage: [ignore_modules: [~r/^Inspect\./]],
       aliases: aliases(),
-      releases: releases()
+      releases: releases(),
+      dialyzer: dialyzer()
     ]
   end
 
@@ -28,6 +29,15 @@ defmodule Deft.MixProject do
   # Specifies which paths to compile per environment.
   defp elixirc_paths(:test), do: ["lib", "test/support", "test/eval/support"]
   defp elixirc_paths(_), do: ["lib"]
+
+  # Dialyzer configuration
+  defp dialyzer do
+    [
+      plt_add_apps: [:mix, :ex_unit],
+      plt_file: {:no_warn, "priv/plts/dialyzer.plt"},
+      ignore_warnings: ".dialyzer_ignore.exs"
+    ]
+  end
 
   # Run "mix help deps" to learn about dependencies.
   defp deps do

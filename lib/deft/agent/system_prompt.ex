@@ -232,7 +232,6 @@ defmodule Deft.Agent.SystemPrompt do
       {:unix, :linux} -> "Linux"
       {:unix, subtype} -> "Unix (#{subtype})"
       {:win32, _} -> "Windows"
-      other -> inspect(other)
     end
   end
 
