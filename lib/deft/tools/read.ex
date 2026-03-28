@@ -111,43 +111,46 @@ defmodule Deft.Tools.Read do
   end
 
   defp read_text_file(path, offset, limit) do
-    case File.read(path) do
-      {:ok, content} ->
-        lines = String.split(content, "\n")
-        total_lines = length(lines)
-
-        # Apply offset (1-indexed)
-        start_idx = if offset && offset > 0, do: offset - 1, else: 0
-        lines_from_offset = Enum.drop(lines, start_idx)
-
-        # Apply limit
-        selected_lines =
-          if limit && limit > 0 do
-            Enum.take(lines_from_offset, limit)
-          else
-            lines_from_offset
-          end
-
-        # Add line numbers (continuing from actual line numbers in file)
-        numbered_lines =
-          selected_lines
-          |> Enum.with_index(start_idx + 1)
-          |> Enum.map(fn {line, num} -> "#{num}\t#{line}" end)
-          |> Enum.join("\n")
-
-        result_text =
-          if numbered_lines == "" do
-            "(empty file or no lines in requested range)"
-          else
-            "#{numbered_lines}\n\n(#{length(selected_lines)} of #{total_lines} lines)"
-          end
-
-        {:ok, [%Text{text: result_text}]}
-
-      {:error, reason} ->
-        {:error, "Failed to read file: #{:file.format_error(reason)}"}
+    with {:ok, content} <- File.read(path) do
+      lines = String.split(content, "\n")
+      selected_lines = select_lines(lines, offset, limit)
+      result_text = format_output(selected_lines, offset, length(lines))
+      {:ok, [%Text{text: result_text}]}
+    else
+      {:error, reason} -> {:error, "Failed to read file: #{:file.format_error(reason)}"}
     end
   end
+
+  defp select_lines(lines, offset, limit) do
+    start_idx = calculate_start_index(offset)
+    lines |> Enum.drop(start_idx) |> apply_limit(limit)
+  end
+
+  defp calculate_start_index(nil), do: 0
+  defp calculate_start_index(offset) when offset > 0, do: offset - 1
+  defp calculate_start_index(_), do: 0
+
+  defp apply_limit(lines, limit) when is_integer(limit) and limit > 0,
+    do: Enum.take(lines, limit)
+
+  defp apply_limit(lines, _), do: lines
+
+  defp format_output(selected_lines, offset, total_lines) do
+    start_idx = calculate_start_index(offset)
+
+    numbered_lines =
+      selected_lines
+      |> Enum.with_index(start_idx + 1)
+      |> Enum.map(fn {line, num} -> "#{num}\t#{line}" end)
+      |> Enum.join("\n")
+
+    format_result_text(numbered_lines, length(selected_lines), total_lines)
+  end
+
+  defp format_result_text("", _, _), do: "(empty file or no lines in requested range)"
+
+  defp format_result_text(numbered_lines, selected_count, total_lines),
+    do: "#{numbered_lines}\n\n(#{selected_count} of #{total_lines} lines)"
 
   @impl Deft.Tool
   def summarize(content_blocks, cache_key) do
