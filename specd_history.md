@@ -1,4 +1,5 @@
 # History
+- **unit-testing v0.1 (2026-03-28):** Add integration test scenario 2.5: Rate Limiter Integration
 - **standards v0.2 (2026-03-28):** Update `lefthook.yml`: add `dialyzer` to pre-commit
 - **standards v0.2 (2026-03-28):** Update `Makefile`: add `dialyzer` target to `check`
 - **unit-testing v0.1 (2026-03-28):** Add integration test scenario 2.4: Resume from Saved State

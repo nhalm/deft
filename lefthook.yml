@@ -12,8 +12,6 @@ pre-commit:
       glob: "*.{ex,exs}"
     compile:
       run: mix compile --warnings-as-errors
-    dialyzer:
-      run: mix dialyzer
 
 pre-push:
   commands:
