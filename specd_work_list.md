@@ -21,7 +21,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ### Tier 3: Small files (2-4 violations each)
 
-- Refactor `lib/deft/eval/result_store.ex` (3 violations): Extract helpers from load and export. Flatten nesting in load
 - Refactor `lib/deft/eval/baselines.ex` (3 violations): Extract decode/parse helpers from load. Change update from arity 6 to accept result map. Flatten nesting
 
 ### Tier 4: Single-violation files (1 each)

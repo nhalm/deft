@@ -1,4 +1,5 @@
 # History
+- **standards v0.2 (2026-03-28):** Refactor `lib/deft/eval/result_store.ex` (3 violations): Extract helpers from load and export. Flatten nesting in load
 - **standards v0.2 (2026-03-28):** Refactor `lib/deft_web/live/chat_live.ex` (3 violations): Extract helpers from mount. Split handle_scroll_key and handle_tmux_key into pattern-matched heads
 - **standards v0.2 (2026-03-28):** Refactor `lib/deft/om/observer/parse.ex` (3 violations): Extract helpers from parse_sections. Split extract_xml_blocks into pattern-matched per-tag functions
 - **standards v0.2 (2026-03-28):** Refactor `lib/deft/om/observer.ex` (3 violations): Extract helpers from run (ABC 53) to flatten nesting. Group collect_stream_text_loop accumulator into state map
