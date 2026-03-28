@@ -1,4 +1,5 @@
 # History
+- **unit-testing v0.1 (2026-03-28):** Add integration test scenario 2.6: Observation Injection
 - **standards v0.2 (2026-03-28):** Run `mix dialyzer`, fix all warnings until clean — add missing `@spec` annotations as needed
 - **unit-testing v0.1 (2026-03-28):** Add integration test scenario 2.5: Rate Limiter Integration
 - **standards v0.2 (2026-03-28):** Update `lefthook.yml`: add `dialyzer` to pre-commit
