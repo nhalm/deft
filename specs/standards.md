@@ -2,11 +2,17 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.3 |
-| Status | Implemented |
+| Version | 0.4 |
+| Status | Ready |
 | Last Updated | 2026-03-29 |
 
 ## Changelog
+
+### v0.4 (2026-03-29)
+- Added test hygiene rules: `warnings_as_errors: true` project-wide, `capture_log: true` globally, clean test output
+- Added explicit "never test" rules: no testing trivial code, OS behavior, or standard library
+- Added `IO.warn`/`IO.puts` prohibition in application code — use Logger
+- Added doctest rules: no side effects, no process spawning, no filesystem/shell access
 
 ### v0.3 (2026-03-29)
 - Fixed `test.all` Makefile target: `mix test` → `mix test --include eval --include integration` (bare `mix test` skips eval/integration due to ExUnit.configure exclusions in test_helper.exs)
@@ -314,6 +320,12 @@ Lefthook is installed via `make setup` (which runs `lefthook install`).
 | **Tools** | Edit tool string matching, bash timeout enforcement, output truncation | File.read/write wrappers |
 | **Orchestration** | Dependency DAG resolution, partial unblocking logic, merge ordering | Process lifecycle (trust OTP) |
 
+**Never test:**
+
+- **Trivial code.** String formatting, path joining, map access, struct field reads, simple delegation. If the function is one line with no branching, it doesn't need a test.
+- **Standard library or OS behavior.** Don't test that `File.mkdir_p/1` creates directories, that `String.replace/3` replaces strings, or that `cd` works. Trust the platform.
+- **Pure functions via side effects.** If testing a pure function requires shelling out, spawning processes, or hitting the filesystem, the test is wrong — either test the function directly or don't test it.
+
 #### 9.2 Mocking Strategy
 
 Use `Mox` exclusively. Mock at system boundaries only:
@@ -390,6 +402,23 @@ end
 - Require `ANTHROPIC_API_KEY` in environment
 - Are non-deterministic — a single failure is not a bug, but consistent failures indicate a prompt problem
 - Use Tribunal's evaluation mode for statistical confidence where needed (e.g., "passes 80% of the time")
+
+#### 9.6 Test Hygiene
+
+Test output must be clean. Zero warnings, zero log noise, zero stderr leakage.
+
+**Compilation:**
+- `warnings_as_errors: true` is set project-wide in `mix.exs` via `elixirc_options`. This applies to both `lib/` and `test/` compilation. No unused variables, no unused defaults, no deprecation warnings.
+
+**Log output:**
+- `ExUnit.start(capture_log: true)` is set globally in `test_helper.exs`. All Logger output is captured during tests and only displayed on failure. Tests using explicit `capture_log/1` still work.
+- Application code must use `Logger` for all output — never `IO.puts`, `IO.warn`, or `IO.inspect` (except temporarily during debugging). `IO.warn` bypasses Logger and cannot be captured. `IO.puts` writes to stdout unconditionally.
+
+**Doctests:**
+- Doctests are for demonstrating usage of pure functions. They must not spawn processes, hit the filesystem, shell out, or produce side effects. If a function's behavior can't be shown without side effects, use a unit test instead of a doctest.
+
+**Test isolation:**
+- Tests must not leak state. Temp directories must outlive all operations that reference them. `on_exit` cleanup must not race with async work.
 
 ### 10. CI Pipeline
 
