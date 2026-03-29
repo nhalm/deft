@@ -21,7 +21,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ### Phase 2: Define domain types in owning modules
 
-- Define `@type id :: String.t()` in `Deft.Message`. Update `Message.t` struct field, `Session.Entry.Message.message_id`, `OM.State.observed_message_ids`, and `Session.Entry.Observation.observed_message_ids` to use `Message.id()`
 - Define `@type job_id :: String.t()` and `@type lead_id :: String.t()` in `Deft.Job`. Update `Job.Runner.LoopContext.job_id`, `Issue.job_id`, `Tool.Context.lead_id`, and `Store.name` tuple types to use them
 - Define `@type id :: String.t()` in `Deft.Issue`. Update `Issue.t` fields `id` and `dependencies` to use `Issue.id()` and `[Issue.id()]` respectively. Update `Issue.Id.generate/1` spec
 - Define `@type run_id :: String.t()` and `@type category :: String.t()` in `Deft.Eval`. Update specs in `Eval.ResultStore`, `Eval.Baselines`, `Eval.JudgeCalibration`, and `Eval.RegressionDetection` to use them (blocked: Define tool_name, tool_call_id, message id, job_id, lead_id, issue id types)

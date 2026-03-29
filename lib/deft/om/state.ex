@@ -31,7 +31,7 @@ defmodule Deft.OM.State do
           buffered_reflection: String.t() | nil,
           buffered_reflection_epoch: integer() | nil,
           last_observed_at: DateTime.t() | nil,
-          observed_message_ids: [String.t()],
+          observed_message_ids: [Message.id()],
           pending_message_tokens: integer(),
           generation_count: integer(),
           is_observing: boolean(),

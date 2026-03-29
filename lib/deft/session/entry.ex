@@ -73,7 +73,7 @@ defmodule Deft.Session.Entry.Message do
   @derive Jason.Encoder
   @type t :: %__MODULE__{
           type: :message,
-          message_id: String.t(),
+          message_id: Deft.Message.id(),
           role: :user | :assistant | :system,
           content: [map()],
           timestamp: DateTime.t()
@@ -222,7 +222,7 @@ defmodule Deft.Session.Entry.Observation do
           type: :observation,
           active_observations: String.t(),
           observation_tokens: non_neg_integer(),
-          observed_message_ids: [String.t()],
+          observed_message_ids: [Deft.Message.id()],
           pending_message_tokens: non_neg_integer(),
           generation_count: non_neg_integer(),
           last_observed_at: DateTime.t() | nil,

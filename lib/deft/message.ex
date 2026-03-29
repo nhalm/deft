@@ -14,6 +14,9 @@ defmodule Deft.Message do
 
   alias Deft.Message.{Text, ToolUse, ToolResult, Thinking, Image}
 
+  @typedoc "Unique identifier for a message"
+  @type id :: String.t()
+
   @typedoc "Role of the message sender"
   @type role :: :system | :user | :assistant
 
@@ -21,7 +24,7 @@ defmodule Deft.Message do
   @type content_block :: Text.t() | ToolUse.t() | ToolResult.t() | Thinking.t() | Image.t()
 
   @type t :: %__MODULE__{
-          id: String.t(),
+          id: id(),
           role: role(),
           content: [content_block()],
           timestamp: DateTime.t()
