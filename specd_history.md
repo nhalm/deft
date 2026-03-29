@@ -1,4 +1,5 @@
 # History
+- **standards v0.2 (2026-03-29):** Define `@type model_name :: String.t()` and `@type provider_name :: String.t()` in `Deft.Provider`. Update `@callback model_config/1` and all provider specs to use `Provider.model_name()` instead of `String.t()`
 - **standards v0.2 (2026-03-29):** Define `@type session_id :: String.t()` in `Deft.Session` (create module at `lib/deft/session.ex` if it doesn't exist as a namespace module). Export it for use across `Session.Store`, `Session.Worker`, `OM.State`, `OM.Observer`, `OM.Reflector`, `Tool.Context`
 - **standards v0.2 (2026-03-29):** Add `dialyzer` to the `check` target in `Makefile` so `make check` runs Dialyzer
 - **standards v0.2 (2026-03-29):** Add `mix dialyzer` command to pre-commit in `lefthook.yml` (parallel with format, lint, compile)

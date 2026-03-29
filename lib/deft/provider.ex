@@ -49,6 +49,8 @@ defmodule Deft.Provider do
   @type provider_messages :: term()
   @type provider_tools :: term()
   @type raw_event :: term()
+  @type model_name :: String.t()
+  @type provider_name :: String.t()
   @type model_config :: %{
           context_window: non_neg_integer(),
           max_output: non_neg_integer(),
@@ -157,7 +159,7 @@ defmodule Deft.Provider do
   - Map with model configuration
   - `{:error, :unknown_model}` if model not supported
   """
-  @callback model_config(String.t()) :: model_config() | {:error, :unknown_model}
+  @callback model_config(model_name()) :: model_config() | {:error, :unknown_model}
 end
 
 defmodule Deft.Provider.Event.TextDelta do
