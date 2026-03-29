@@ -11,26 +11,22 @@ defmodule DeftWeb.Endpoint do
   alias Deft.Project
 
   @doc """
-  Endpoint initialization callback.
+  Returns endpoint config with a dynamically selected port.
 
-  Implements dynamic port selection: tries the configured port (from PORT env or 4000),
-  and if that fails with :eaddrinuse, tries ports 4001-4099.
+  Tries the configured port (from PORT env or 4000), and if that's in use,
+  tries ports 4001-4099. Writes the actual port to the project pidfile.
 
-  Writes the actual port to ~/.deft/projects/<path-encoded-repo>/server.pid.
+  Called from Application.start/2 and passed to the endpoint child spec.
   """
-  def init(_key, config) do
-    # Get the initial port from config
-    initial_port = get_in(config, [:http, :port]) || 4000
+  @spec port_config() :: keyword()
+  def port_config do
+    http_config = Application.get_env(:deft, __MODULE__, []) |> Keyword.get(:http, [])
+    initial_port = Keyword.get(http_config, :port, 4000)
 
-    # Try to find an available port
     case find_available_port(initial_port) do
       {:ok, port} ->
-        # Write pidfile with the actual port
         write_pidfile(port)
-
-        # Update config with the selected port
-        updated_config = put_in(config, [:http, :port], port)
-        {:ok, updated_config}
+        [http: [ip: {127, 0, 0, 1}, port: port]]
 
       {:error, :no_ports_available} ->
         raise """

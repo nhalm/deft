@@ -9,6 +9,7 @@ defmodule Deft.Application do
 
   alias Deft.Config
   alias Deft.Git
+  alias DeftWeb.Endpoint
 
   @impl true
   def start(_type, _args) do
@@ -38,8 +39,8 @@ defmodule Deft.Application do
       Deft.Session.Supervisor,
       # Phoenix PubSub for web UI
       {Phoenix.PubSub, name: Deft.PubSub},
-      # Phoenix Endpoint for web UI
-      DeftWeb.Endpoint
+      # Phoenix Endpoint for web UI — pass dynamic port at startup
+      {Endpoint, Endpoint.port_config()}
     ]
 
     # Conditionally add Issues if issues.jsonl exists
