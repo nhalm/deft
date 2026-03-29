@@ -2,11 +2,17 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.2 |
+| Version | 0.3 |
 | Status | Ready |
 | Last Updated | 2026-03-29 |
 
 ## Changelog
+
+### v0.3 (2026-03-29)
+- Fixed `test.all` Makefile target: `mix test` → `mix test --include eval --include integration` (bare `mix test` skips eval/integration due to ExUnit.configure exclusions in test_helper.exs)
+- Fixed `ci` Makefile target: added `test.eval.check-structure` prerequisite
+- Updated dependency list: replaced `breeze` TUI framework with Phoenix web stack (`phoenix`, `phoenix_live_view`, `phoenix_html`, `bandit`, `earmark_parser`, `earmark`) after TUI deprecation in favor of [web-ui](web-ui.md)
+- Updated project skeleton: replaced `tui/` with note that web UI lives in `lib/deft_web/` (see [web-ui](web-ui.md))
 
 ### v0.2 (2026-03-29)
 - Added strong type requirements: `@type t()` on all structs, domain types on all shared values, no raw primitives across boundaries
@@ -60,7 +66,7 @@ deft/
 │       ├── provider/        # LLM provider behaviour and implementations
 │       ├── tools/           # Built-in tools (read, write, edit, bash, grep, find, ls)
 │       ├── session/         # Session persistence, JSONL store
-│       ├── tui/             # Breeze views, rendering, components
+│       ├── ...              # Other contexts (see individual specs)
 │       ├── job/             # Orchestration (Foreman, Lead, Runner, SiteLog, RateLimiter)
 │       ├── message.ex       # Canonical message format and content blocks
 │       ├── config.ex        # Configuration loading and validation
@@ -145,15 +151,25 @@ defp deps do
     {:jason, "~> 1.4"},                  # JSON
     {:yaml_elixir, "~> 2.11"},           # Config parsing
     {:server_sent_events, "~> 0.2"},     # SSE parsing
-    {:breeze, "~> 0.2"},                 # TUI framework (pulls in back_breeze, termite)
+    {:phoenix, "~> 1.7"},                # Web framework
+    {:phoenix_live_view, "~> 0.20"},     # LiveView
+    {:phoenix_html, "~> 4.0"},           # HTML helpers
+    {:bandit, "~> 1.0"},                 # HTTP server
+    {:earmark_parser, "~> 1.4"},         # Markdown parsing
+    {:earmark, "~> 1.4"},               # Markdown rendering
     {:burrito, "~> 1.0"},               # Single-binary distribution
+    {:dotenvy, "~> 1.1"},               # .env file loading
 
     # Dev/Test only
+    {:phoenix_live_reload, "~> 1.5", only: [:dev]},
+    {:esbuild, "~> 0.8", runtime: Mix.env() == :dev},
+    {:floki, ">= 0.30.0", only: :test},
     {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
     {:dialyxir, "~> 1.4", only: [:dev], runtime: false},
     {:stream_data, "~> 1.0", only: [:test]},
     {:mox, "~> 1.1", only: [:test]},
     {:tribunal, "~> 1.3", only: [:test]},
+    {:req_llm, "~> 1.2", only: [:test]},
     {:ex_doc, "~> 0.34", only: [:dev], runtime: false},
   ]
 end
@@ -239,11 +255,11 @@ test.integration:
 	mix test --only integration
 
 test.all:
-	mix test
+	mix test --include eval --include integration
 
 check: compile format.check lint dialyzer test
 
-ci: compile format.check lint dialyzer test.all
+ci: test.eval.check-structure compile format.check lint dialyzer test.all
 
 clean:
 	mix clean
