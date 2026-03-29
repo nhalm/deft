@@ -194,8 +194,7 @@ defmodule Deft.Eval.ResultStore do
 
   If individual runs fail to load, a warning is logged and the run is skipped.
   """
-  @dialyzer {:nowarn_function, export: 1}
-  @spec export(Path.t()) :: :ok | {:error, term()}
+  @spec export(Path.t()) :: :ok | {:error, File.posix()}
   def export(output_path) do
     runs = list_runs()
     {results, failed_runs} = load_all_runs(runs)

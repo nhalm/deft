@@ -19,5 +19,4 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## standards v0.2
 
-- Remove `@dialyzer {:nowarn_function, export: 1}` from `lib/deft/eval/result_store.ex:197` and fix the underlying Dialyzer violation
 - Type `Tool.Context.cache_config` field as a proper typed map or struct instead of raw `map()` in `lib/deft/tool.ex`
