@@ -21,6 +21,8 @@ Thumbs.db
 *.swp
 *.swo
 *~
+*.bak
+*.bak2
 .vscode/
 .idea/
 
