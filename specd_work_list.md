@@ -16,9 +16,3 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
-
-## standards v0.2
-
-### Phase 4: Validate
-
-- Run `mix dialyzer` with strict flags and fix any new violations introduced by the type changes. Ensure zero warnings, zero suppressed warnings.
