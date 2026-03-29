@@ -13,6 +13,12 @@ defmodule Deft.Eval.RegressionDetection do
           reason: String.t()
         }
 
+  @type analysis_result :: %{
+          is_regression: boolean(),
+          failure_type: :infrastructure | :model_quality | :insufficient_data,
+          infrastructure_reason: String.t() | nil
+        }
+
   @doc """
   Detects if current pass rate represents a significant regression vs historical distribution.
 
@@ -175,8 +181,7 @@ defmodule Deft.Eval.RegressionDetection do
         infrastructure_reason: "crash"
       }
   """
-  @dialyzer {:nowarn_function, analyze: 4}
-  @spec analyze(float(), non_neg_integer(), [float()], [failure()]) :: map()
+  @spec analyze(float(), non_neg_integer(), [float()], [failure()]) :: analysis_result()
   def analyze(current_rate, current_n, historical_rates, failures) do
     is_regression = significant_regression?(current_rate, current_n, historical_rates)
 
