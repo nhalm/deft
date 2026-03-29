@@ -8,6 +8,8 @@ defmodule Deft.Eval.ResultStore do
   Automatically manages cleanup to keep only the last 30 runs on disk.
   """
 
+  alias Deft.Eval
+
   @results_dir "test/eval/results"
   @max_runs_to_keep 30
 
@@ -18,11 +20,11 @@ defmodule Deft.Eval.ResultStore do
         }
 
   @type result :: %{
-          run_id: String.t(),
+          run_id: Eval.run_id(),
           commit: String.t(),
           timestamp: String.t(),
           model: String.t(),
-          category: String.t(),
+          category: Eval.category(),
           pass_rate: float(),
           iterations: non_neg_integer(),
           cost_usd: float(),
@@ -34,7 +36,7 @@ defmodule Deft.Eval.ResultStore do
 
   Format: YYYY-MM-DD-<6-hex-chars>
   """
-  @spec generate_run_id() :: String.t()
+  @spec generate_run_id() :: Eval.run_id()
   def generate_run_id do
     date = Date.utc_today() |> Date.to_iso8601()
     random = :crypto.strong_rand_bytes(3) |> Base.encode16(case: :lower)
@@ -89,7 +91,7 @@ defmodule Deft.Eval.ResultStore do
   If individual JSONL lines are corrupt, they are skipped with a warning logged.
   Valid results from the same run are preserved.
   """
-  @spec load(String.t()) :: {:ok, [result()]} | {:error, :not_found | term()}
+  @spec load(Eval.run_id()) :: {:ok, [result()]} | {:error, :not_found | term()}
   def load(run_id) do
     file_path = Path.join(@results_dir, "#{run_id}.jsonl")
 
@@ -144,7 +146,7 @@ defmodule Deft.Eval.ResultStore do
 
   Returns a list of run IDs.
   """
-  @spec list_runs() :: [String.t()]
+  @spec list_runs() :: [Eval.run_id()]
   def list_runs do
     case File.ls(@results_dir) do
       {:ok, files} ->

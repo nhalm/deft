@@ -19,10 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## standards v0.2
 
-### Phase 2: Define domain types in owning modules
-
-- Define `@type run_id :: String.t()` and `@type category :: String.t()` in `Deft.Eval`. Update specs in `Eval.ResultStore`, `Eval.Baselines`, `Eval.JudgeCalibration`, and `Eval.RegressionDetection` to use them
-
 ### Phase 3: Replace primitives in specs and structs
 
 - Replace all `String.t()` session ID parameters in `Session.Store` specs (`append/3`, `load/2`, `resume/2`, `append_to_path/2`) with `Session.session_id()`

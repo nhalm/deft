@@ -6,11 +6,13 @@ defmodule Deft.Eval.Baselines do
   array per category. Baselines only go up — regressions are tracked but don't lower the baseline.
   """
 
+  alias Deft.Eval
+
   @baselines_file "test/eval/baselines.json"
   @soft_floor_offset 0.10
 
   @type history_entry :: %{
-          run_id: String.t(),
+          run_id: Eval.run_id(),
           rate: float(),
           n: non_neg_integer(),
           commit: String.t()
@@ -22,7 +24,7 @@ defmodule Deft.Eval.Baselines do
           history: [history_entry()]
         }
 
-  @type baselines :: %{String.t() => baseline()}
+  @type baselines :: %{Eval.category() => baseline()}
 
   @doc """
   Loads baselines from test/eval/baselines.json.
@@ -100,7 +102,7 @@ defmodule Deft.Eval.Baselines do
   - `category` - The category to update
   - `result` - Map with keys: `:rate`, `:n`, `:run_id`, `:commit`
   """
-  @spec update(baselines(), String.t(), map()) :: baselines()
+  @spec update(baselines(), Eval.category(), map()) :: baselines()
   def update(baselines, category, %{rate: rate, n: n, run_id: run_id, commit: commit} = _result) do
     current = Map.get(baselines, category, default_baseline())
 
@@ -134,7 +136,7 @@ defmodule Deft.Eval.Baselines do
 
   Returns nil if the category doesn't exist.
   """
-  @spec get_baseline(baselines(), String.t()) :: baseline() | nil
+  @spec get_baseline(baselines(), Eval.category()) :: baseline() | nil
   def get_baseline(baselines, category) do
     Map.get(baselines, category)
   end
@@ -144,7 +146,7 @@ defmodule Deft.Eval.Baselines do
 
   Returns false if the category doesn't exist (no baseline to compare against).
   """
-  @spec below_soft_floor?(baselines(), String.t(), float()) :: boolean()
+  @spec below_soft_floor?(baselines(), Eval.category(), float()) :: boolean()
   def below_soft_floor?(baselines, category, rate) do
     case get_baseline(baselines, category) do
       nil -> false
@@ -155,7 +157,7 @@ defmodule Deft.Eval.Baselines do
   @doc """
   Gets all categories with baselines.
   """
-  @spec categories(baselines()) :: [String.t()]
+  @spec categories(baselines()) :: [Eval.category()]
   def categories(baselines) do
     Map.keys(baselines) |> Enum.sort()
   end
