@@ -38,7 +38,7 @@ defmodule DeftWeb.SessionsLiveTest do
   end
 
   # Helper to create test session files
-  defp create_test_session(session_id, opts \\ []) do
+  defp create_test_session(session_id, opts) do
     working_dir = Keyword.get(opts, :working_dir, File.cwd!())
     message_count = Keyword.get(opts, :message_count, 0)
     last_prompt = Keyword.get(opts, :last_prompt, "")

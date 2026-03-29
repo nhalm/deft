@@ -14,7 +14,8 @@ defmodule Deft.MixProject do
       test_coverage: [ignore_modules: [~r/^Inspect\./]],
       aliases: aliases(),
       releases: releases(),
-      dialyzer: dialyzer()
+      dialyzer: dialyzer(),
+      elixirc_options: [warnings_as_errors: true]
     ]
   end
 

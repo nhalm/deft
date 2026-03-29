@@ -1294,7 +1294,7 @@ defmodule Deft.Job.ForemanTest do
 
       # The determine_next_phase function should detect this and set the flag
       # We'll test this by creating a minimal data struct and calling the logic
-      data = %{
+      _data = %{
         messages: messages,
         session_id: "test-job"
       }
