@@ -237,7 +237,7 @@ defmodule Deft.Eval.ResultStore do
 
     case File.write(output_path, jsonl_content <> "\n") do
       :ok ->
-        IO.puts("Exported #{length(results)} eval results to #{output_path}")
+        Logger.info("Exported #{length(results)} eval results to #{output_path}")
         :ok
 
       {:error, reason} = error ->

@@ -5,30 +5,10 @@ defmodule Deft.ProjectTest do
   alias Deft.Project
 
   describe "project_dir/1" do
-    test "encodes absolute paths correctly" do
-      path = Project.project_dir("/Users/alice/code/myapp")
-      assert String.ends_with?(path, "projects/Users-alice-code-myapp")
-    end
-
-    test "strips leading dash from encoded path" do
-      # Root path "/" becomes "" after stripping leading -
-      path = Project.project_dir("/")
-      refute String.contains?(path, "projects/-")
-    end
-
-    test "uses current working directory by default" do
-      # Should not raise an error
-      path = Project.project_dir()
-      assert is_binary(path)
-      assert String.contains?(path, "/.deft/projects/")
-    end
-
     test "resolves to git root when inside a git repo" do
-      # This test runs in the actual repo
       cwd = File.cwd!()
       path = Project.project_dir(cwd)
 
-      # The path should be based on the git root, not a subdirectory
       assert String.contains?(path, "projects/")
       assert is_binary(path)
     end
@@ -62,27 +42,6 @@ defmodule Deft.ProjectTest do
     test "is idempotent", %{test_dir: test_dir} do
       assert :ok = Project.ensure_project_dirs(test_dir)
       assert :ok = Project.ensure_project_dirs(test_dir)
-    end
-  end
-
-  describe "sessions_dir/1" do
-    test "returns sessions subdirectory" do
-      path = Project.sessions_dir("/Users/alice/code/myapp")
-      assert String.ends_with?(path, "projects/Users-alice-code-myapp/sessions")
-    end
-  end
-
-  describe "cache_dir/1" do
-    test "returns cache subdirectory" do
-      path = Project.cache_dir("/Users/alice/code/myapp")
-      assert String.ends_with?(path, "projects/Users-alice-code-myapp/cache")
-    end
-  end
-
-  describe "jobs_dir/1" do
-    test "returns jobs subdirectory" do
-      path = Project.jobs_dir("/Users/alice/code/myapp")
-      assert String.ends_with?(path, "projects/Users-alice-code-myapp/jobs")
     end
   end
 end

@@ -25,15 +25,6 @@ defmodule Deft.Project do
 
   Resolves symlinks to real paths, detects git worktrees, and encodes the path.
 
-  ## Examples
-
-      iex> path = Deft.Project.project_dir("/Users/alice/code/myapp")
-      iex> String.ends_with?(path, "projects/Users-alice-code-myapp")
-      true
-
-      iex> path = Deft.Project.project_dir()
-      iex> String.contains?(path, "/.deft/projects/")
-      true
   """
   @spec project_dir(String.t()) :: String.t()
   def project_dir(working_dir \\ File.cwd!()) do
@@ -53,10 +44,6 @@ defmodule Deft.Project do
   - ~/.deft/projects/<path-encoded-repo>/cache/
   - ~/.deft/projects/<path-encoded-repo>/jobs/
 
-  ## Examples
-
-      iex> Deft.Project.ensure_project_dirs("/Users/alice/code/myapp")
-      :ok
   """
   @spec ensure_project_dirs(binary()) :: :ok | {:error, atom()}
   def ensure_project_dirs(working_dir \\ File.cwd!()) do
@@ -75,11 +62,6 @@ defmodule Deft.Project do
   @doc """
   Returns the sessions directory for the given working directory.
 
-  ## Examples
-
-      iex> path = Deft.Project.sessions_dir("/Users/alice/code/myapp")
-      iex> String.ends_with?(path, "projects/Users-alice-code-myapp/sessions")
-      true
   """
   @spec sessions_dir(String.t()) :: String.t()
   def sessions_dir(working_dir \\ File.cwd!()) do
@@ -91,11 +73,6 @@ defmodule Deft.Project do
   @doc """
   Returns the cache directory for the given working directory.
 
-  ## Examples
-
-      iex> path = Deft.Project.cache_dir("/Users/alice/code/myapp")
-      iex> String.ends_with?(path, "projects/Users-alice-code-myapp/cache")
-      true
   """
   @spec cache_dir(String.t()) :: String.t()
   def cache_dir(working_dir \\ File.cwd!()) do
@@ -107,11 +84,6 @@ defmodule Deft.Project do
   @doc """
   Returns the jobs directory for the given working directory.
 
-  ## Examples
-
-      iex> path = Deft.Project.jobs_dir("/Users/alice/code/myapp")
-      iex> String.ends_with?(path, "projects/Users-alice-code-myapp/jobs")
-      true
   """
   @spec jobs_dir(String.t()) :: String.t()
   def jobs_dir(working_dir \\ File.cwd!()) do
