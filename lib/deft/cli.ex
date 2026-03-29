@@ -1727,43 +1727,8 @@ defmodule Deft.CLI do
     # Build elicitation prompt for editing with existing draft fields
     elicitation_prompt = ElicitationPrompt.build_for_draft_edit(draft, title, open_issues)
 
-    # Create system message with elicitation instructions
-    system_message = %Deft.Message{
-      id: "elicit_sys_edit",
-      role: :system,
-      content: [%Deft.Message.Text{text: elicitation_prompt}],
-      timestamp: DateTime.utc_now()
-    }
-
-    # Create a temporary session for elicitation
-    session_id = generate_session_id()
-
-    # Build config for elicitation agent (lightweight, tools for issue_draft only)
-    agent_config = %{
-      model: flags[:model] || "claude-sonnet-4-20250514",
-      provider: Deft.Provider.Anthropic,
-      working_dir: working_dir,
-      turn_limit: 10,
-      tool_timeout: 30_000,
-      bash_timeout: 30_000,
-      max_turns: 10,
-      tools: [Deft.Tools.UseSkill, Deft.Tools.IssueDraft]
-    }
-
-    # Start the elicitation agent with the elicitation prompt as first message
-    {:ok, _worker_pid} =
-      Deft.Session.Supervisor.start_session(
-        session_id: session_id,
-        config: agent_config,
-        messages: [system_message],
-        project_dir: working_dir
-      )
-
-    # Look up the Agent PID from the registry
-    [{agent_pid, _}] = Registry.lookup(Deft.ProcessRegistry, {:agent, session_id})
-
-    # Subscribe to agent events
-    _ = Registry.register(Deft.Registry, {:session, session_id}, [])
+    # Set up the elicitation agent
+    agent_pid = setup_elicitation_agent(elicitation_prompt, working_dir, flags)
 
     IO.puts("\nLet's refine the issue draft...")
     IO.puts("")
@@ -1778,6 +1743,47 @@ defmodule Deft.CLI do
         IO.puts(:stderr, "Error during issue elicitation: #{reason}")
         exit({:shutdown, 1})
     end
+  end
+
+  # Set up and start the elicitation agent, returning the agent PID
+  defp setup_elicitation_agent(elicitation_prompt, working_dir, flags) do
+    system_message = %Deft.Message{
+      id: "elicit_sys_edit",
+      role: :system,
+      content: [%Deft.Message.Text{text: elicitation_prompt}],
+      timestamp: DateTime.utc_now()
+    }
+
+    session_id = generate_session_id()
+
+    agent_config = build_elicitation_agent_config(working_dir, flags)
+
+    {:ok, _worker_pid} =
+      Deft.Session.Supervisor.start_session(
+        session_id: session_id,
+        config: agent_config,
+        messages: [system_message],
+        project_dir: working_dir
+      )
+
+    [{agent_pid, _}] = Registry.lookup(Deft.ProcessRegistry, {:agent, session_id})
+    _ = Registry.register(Deft.Registry, {:session, session_id}, [])
+
+    agent_pid
+  end
+
+  # Build config for elicitation agent
+  defp build_elicitation_agent_config(working_dir, flags) do
+    %{
+      model: flags[:model] || "claude-sonnet-4-20250514",
+      provider: Deft.Provider.Anthropic,
+      working_dir: working_dir,
+      turn_limit: 10,
+      tool_timeout: 30_000,
+      bash_timeout: 30_000,
+      max_turns: 10,
+      tools: [Deft.Tools.UseSkill, Deft.Tools.IssueDraft]
+    }
   end
 
   # Save the issue from the draft

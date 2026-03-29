@@ -66,33 +66,42 @@ defmodule Deft.Agent.ToolRunner do
       end)
 
     # Collect results with timeout
-    session_prefix = "[Tools:#{String.slice(context.session_id, 0, 8)}]"
+    collect_task_results(tasks, timeout, context.session_id)
+  end
 
-    results =
-      tasks
-      |> Enum.map(fn {_id, _name, task} -> task end)
-      |> Task.yield_many(timeout)
-      |> Enum.zip(tasks)
-      |> Enum.map(fn {{_task_ref, result}, {tool_use_id, tool_name, task}} ->
-        case result do
-          {:ok, tool_result} ->
-            {tool_use_id, tool_result}
+  # Collect and process task results
+  defp collect_task_results(tasks, timeout, session_id) do
+    session_prefix = "[Tools:#{String.slice(session_id, 0, 8)}]"
+    ctx = {timeout, session_prefix}
 
-          {:exit, reason} ->
-            Logger.error(
-              "#{session_prefix} Tool crashed: #{tool_name}, reason: #{inspect(reason)}"
-            )
+    tasks
+    |> Enum.map(fn {_id, _name, task} -> task end)
+    |> Task.yield_many(timeout)
+    |> Enum.zip(tasks)
+    |> Enum.map(fn {{_task_ref, result}, task_info} ->
+      handle_task_result(result, task_info, ctx)
+    end)
+  end
 
-            {tool_use_id, {:error, "Tool crashed: #{inspect(reason)}"}}
+  # Handle successful task result
+  defp handle_task_result({:ok, tool_result}, {tool_use_id, _tool_name, _task}, _ctx) do
+    {tool_use_id, tool_result}
+  end
 
-          nil ->
-            # Task timed out - kill it to prevent process leak
-            _ = Task.shutdown(task, :brutal_kill)
-            {tool_use_id, {:error, "Tool execution timed out after #{timeout}ms"}}
-        end
-      end)
+  # Handle task exit/crash
+  defp handle_task_result({:exit, reason}, {tool_use_id, tool_name, _task}, {_timeout, prefix}) do
+    log_tool_crash(prefix, tool_name, reason)
+    {tool_use_id, {:error, "Tool crashed: #{inspect(reason)}"}}
+  end
 
-    results
+  # Handle task timeout
+  defp handle_task_result(nil, {tool_use_id, _tool_name, task}, {timeout, _prefix}) do
+    _ = Task.shutdown(task, :brutal_kill)
+    {tool_use_id, {:error, "Tool execution timed out after #{timeout}ms"}}
+  end
+
+  defp log_tool_crash(prefix, tool_name, reason) do
+    Logger.error("#{prefix} Tool crashed: #{tool_name}, reason: #{inspect(reason)}")
   end
 
   # Execute a single tool call

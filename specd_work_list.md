@@ -19,11 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## standards v0.2
 
-### Phase 1: Dialyzer strictness
-
-- Add `mix dialyzer` command to pre-commit in `lefthook.yml` (parallel with format, lint, compile)
-- Add `dialyzer` to the `check` target in `Makefile` so `make check` runs Dialyzer
-
 ### Phase 2: Define domain types in owning modules
 
 - Define `@type session_id :: String.t()` in `Deft.Session` (create module at `lib/deft/session.ex` if it doesn't exist as a namespace module). Export it for use across `Session.Store`, `Session.Worker`, `OM.State`, `OM.Observer`, `OM.Reflector`, `Tool.Context`
