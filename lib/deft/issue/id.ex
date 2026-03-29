@@ -30,7 +30,7 @@ defmodule Deft.Issue.Id do
 
   A string in the format `deft-<hex>` where `<hex>` is 4+ hex characters.
   """
-  @spec generate([String.t()]) :: String.t()
+  @spec generate([Deft.Issue.id()]) :: Deft.Issue.id()
   def generate(existing_ids) when is_list(existing_ids) do
     # Generate random bytes and convert to hex
     hex_source =

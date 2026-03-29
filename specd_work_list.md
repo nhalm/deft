@@ -21,8 +21,7 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ### Phase 2: Define domain types in owning modules
 
-- Define `@type id :: String.t()` in `Deft.Issue`. Update `Issue.t` fields `id` and `dependencies` to use `Issue.id()` and `[Issue.id()]` respectively. Update `Issue.Id.generate/1` spec
-- Define `@type run_id :: String.t()` and `@type category :: String.t()` in `Deft.Eval`. Update specs in `Eval.ResultStore`, `Eval.Baselines`, `Eval.JudgeCalibration`, and `Eval.RegressionDetection` to use them (blocked: Define tool_name, tool_call_id, message id, job_id, lead_id, issue id types)
+- Define `@type run_id :: String.t()` and `@type category :: String.t()` in `Deft.Eval`. Update specs in `Eval.ResultStore`, `Eval.Baselines`, `Eval.JudgeCalibration`, and `Eval.RegressionDetection` to use them
 
 ### Phase 3: Replace primitives in specs and structs
 

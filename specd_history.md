@@ -1,4 +1,5 @@
 # History
+- **standards v0.2 (2026-03-29):** Define `@type id :: String.t()` in `Deft.Issue`. Update `Issue.t` fields `id` and `dependencies` to use `Issue.id()` and `[Issue.id()]` respectively. Update `Issue.Id.generate/1` spec
 - **standards v0.2 (2026-03-29):** Define `@type job_id :: String.t()` and `@type lead_id :: String.t()` in `Deft.Job`. Update `Job.Runner.LoopContext.job_id`, `Issue.job_id`, `Tool.Context.lead_id`, and `Store.name` tuple types to use them
 - **standards v0.2 (2026-03-29):** Define `@type id :: String.t()` in `Deft.Message`. Update `Message.t` struct field, `Session.Entry.Message.message_id`, `OM.State.observed_message_ids`, and `Session.Entry.Observation.observed_message_ids` to use `Message.id()`
 - **standards v0.2 (2026-03-29):** Define `@type tool_name :: String.t()` and `@type tool_call_id :: String.t()` in `Deft.Tool`. Update `@callback name/0` return type and all struct fields in `Message.ToolUse`, `Message.ToolResult`, `Provider.Event.ToolCallStart`, `Provider.Event.ToolCallDelta`, `Provider.Event.ToolCallDone`, `Session.Entry.ToolResult` to use them

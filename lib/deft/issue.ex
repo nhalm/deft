@@ -12,19 +12,20 @@ defmodule Deft.Issue do
   require Logger
 
   @derive Jason.Encoder
+  @type id :: String.t()
   @type status :: :open | :in_progress | :closed
   @type priority :: 0..4
   @type source :: :user | :agent
 
   @type t :: %__MODULE__{
-          id: String.t(),
+          id: id(),
           title: String.t(),
           context: String.t(),
           acceptance_criteria: [String.t()],
           constraints: [String.t()],
           status: status(),
           priority: priority(),
-          dependencies: [String.t()],
+          dependencies: [id()],
           created_at: String.t(),
           updated_at: String.t(),
           closed_at: String.t() | nil,
