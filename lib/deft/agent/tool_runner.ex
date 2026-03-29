@@ -87,7 +87,7 @@ defmodule Deft.Agent.ToolRunner do
 
           nil ->
             # Task timed out - kill it to prevent process leak
-            Task.shutdown(task, :brutal_kill)
+            _ = Task.shutdown(task, :brutal_kill)
             {tool_use_id, {:error, "Tool execution timed out after #{timeout}ms"}}
         end
       end)

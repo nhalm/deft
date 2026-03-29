@@ -175,6 +175,7 @@ defmodule Deft.Eval.RegressionDetection do
         infrastructure_reason: "crash"
       }
   """
+  @dialyzer {:nowarn_function, analyze: 4}
   @spec analyze(float(), non_neg_integer(), [float()], [failure()]) :: map()
   def analyze(current_rate, current_n, historical_rates, failures) do
     is_regression = significant_regression?(current_rate, current_n, historical_rates)

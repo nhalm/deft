@@ -169,7 +169,7 @@ defmodule Deft.Job.Foreman do
   - `:runner_supervisor` — Required. PID of the RunnerSupervisor.
   - `:working_dir` — Optional. Working directory for the project (defaults to File.cwd!()).
   """
-  @spec resume(Keyword.t()) :: {:ok, pid()} | {:error, term()} | :ignore
+  @spec resume(Keyword.t()) :: {:ok, pid()} | {:error, term()}
   def resume(opts) do
     session_id = Keyword.fetch!(opts, :session_id)
     working_dir = Keyword.get(opts, :working_dir, File.cwd!())
@@ -654,8 +654,8 @@ defmodule Deft.Job.Foreman do
         error ->
           Logger.error(
             "#{log_prefix(data.session_id)} Job abort cleanup failed during file archival: #{Exception.message(error)}"
-          )
-      end
+        )
+    end
 
     # Cancel job timeout timer and clear state
     data = cancel_job_timeout(data)
@@ -1319,10 +1319,9 @@ defmodule Deft.Job.Foreman do
   end
 
   defp cancel_verification_timeout(data) do
-    _ =
-      if data.verification_timeout_ref do
-        _ = Process.cancel_timer(data.verification_timeout_ref)
-      end
+    if data.verification_timeout_ref do
+      _ = Process.cancel_timer(data.verification_timeout_ref)
+    end
 
     %{data | verification_timeout_ref: nil}
   end
@@ -1467,10 +1466,9 @@ defmodule Deft.Job.Foreman do
     # If all research tasks done (including crashed ones), transition to decomposing
     if Enum.empty?(remaining_tasks) do
       # Cancel timeout timer
-      _ =
-        if data.research_timeout_ref do
-          _ = Process.cancel_timer(data.research_timeout_ref)
-        end
+      if data.research_timeout_ref do
+        _ = Process.cancel_timer(data.research_timeout_ref)
+      end
 
       Logger.info(
         "#{log_prefix(data.session_id)} Research phase complete (with crashes), collected #{length(data.research_findings)} findings"
@@ -1564,10 +1562,9 @@ defmodule Deft.Job.Foreman do
     )
 
     # Cancel timeout timer
-    _ =
-      if data.verification_timeout_ref do
-        _ = Process.cancel_timer(data.verification_timeout_ref)
-      end
+    if data.verification_timeout_ref do
+      _ = Process.cancel_timer(data.verification_timeout_ref)
+    end
 
     data = %{data | verification_timeout_ref: nil}
 
@@ -1751,10 +1748,9 @@ defmodule Deft.Job.Foreman do
   end
 
   defp cancel_job_timeout(data) do
-    _ =
-      if data.job_timeout_ref do
-        _ = Process.cancel_timer(data.job_timeout_ref)
-      end
+    if data.job_timeout_ref do
+      _ = Process.cancel_timer(data.job_timeout_ref)
+    end
 
     %{data | job_timeout_ref: nil}
   end
@@ -2081,11 +2077,10 @@ defmodule Deft.Job.Foreman do
     Logger.debug("#{log_prefix(data.session_id)} Lead finding: #{inspect(content)}")
 
     # Promote if tagged as 'shared'
-    _ =
-      if Map.get(metadata, :shared, false) do
-        Logger.info("#{log_prefix(data.session_id)} Lead shared finding - promoting to site log")
-        _ = write_to_site_log(:research, content, metadata, data)
-      end
+    if Map.get(metadata, :shared, false) do
+      Logger.info("#{log_prefix(data.session_id)} Lead shared finding - promoting to site log")
+      write_to_site_log(:research, content, metadata, data)
+    end
 
     data
   end
@@ -2393,13 +2388,12 @@ defmodule Deft.Job.Foreman do
     deliverable_name = String.replace_prefix(lead_id, "#{data.session_id}-", "")
 
     # Write failure marker to site log to allow completion check to be satisfied
-    _ =
-      write_failure_marker(
-        lead_id,
-        deliverable_name,
-        "Post-merge tests failed",
-        data
-      )
+    _ = write_failure_marker(
+      lead_id,
+      deliverable_name,
+      "Post-merge tests failed",
+      data
+    )
 
     # Clean up the Lead's worktree
     cleanup_worktree(lead_info.worktree_path, data.working_dir, data.session_id)
@@ -2432,13 +2426,12 @@ defmodule Deft.Job.Foreman do
     deliverable_name = String.replace_prefix(lead_id, "#{data.session_id}-", "")
 
     # Write failure marker to site log to allow completion check to be satisfied
-    _ =
-      write_failure_marker(
-        lead_id,
-        deliverable_name,
-        "Test execution error: #{inspect(reason)}",
-        data
-      )
+    _ = write_failure_marker(
+      lead_id,
+      deliverable_name,
+      "Test execution error: #{inspect(reason)}",
+      data
+    )
 
     # Clean up the Lead's worktree
     cleanup_worktree(lead_info.worktree_path, data.working_dir, data.session_id)
@@ -2591,13 +2584,12 @@ defmodule Deft.Job.Foreman do
     deliverable_name = String.replace_prefix(lead_id, "#{data.session_id}-", "")
 
     # Write failure marker to site log to allow completion check to be satisfied
-    _ =
-      write_failure_marker(
-        lead_id,
-        deliverable_name,
-        "Merge conflict unresolved after #{max_retries} attempts",
-        data
-      )
+    _ = write_failure_marker(
+      lead_id,
+      deliverable_name,
+      "Merge conflict unresolved after #{max_retries} attempts",
+      data
+    )
 
     # Clean up the Lead's worktree
     cleanup_worktree(lead_info.worktree_path, data.working_dir, data.session_id)
@@ -3679,13 +3671,12 @@ defmodule Deft.Job.Foreman do
       "#{log_prefix(data.session_id)} Failed to create worktree for Lead #{lead_id}: #{inspect(reason)}"
     )
 
-    _ =
-      write_failure_marker(
-        lead_id,
-        deliverable.name,
-        "Failed to create worktree: #{inspect(reason)}",
-        data
-      )
+    _ = write_failure_marker(
+      lead_id,
+      deliverable.name,
+      "Failed to create worktree: #{inspect(reason)}",
+      data
+    )
 
     started_leads = MapSet.put(data.started_leads, deliverable.name)
     %{data | started_leads: started_leads}
@@ -3728,13 +3719,12 @@ defmodule Deft.Job.Foreman do
       "#{log_prefix(data.session_id)} Failed to start Lead #{lead_id}: #{inspect(reason)}"
     )
 
-    _ =
-      write_failure_marker(
-        lead_id,
-        deliverable.name,
-        "Failed to start Lead: #{inspect(reason)}",
-        data
-      )
+    _ = write_failure_marker(
+      lead_id,
+      deliverable.name,
+      "Failed to start Lead: #{inspect(reason)}",
+      data
+    )
 
     cleanup_worktree(worktree_path, data.working_dir, data.session_id)
 
@@ -4189,13 +4179,12 @@ defmodule Deft.Job.Foreman do
     # This allows all_leads_complete? to be satisfied even when Leads crash or fail
     metadata = %{lead_id: lead_id, deliverable: deliverable_name, failure_reason: reason}
 
-    _ =
-      write_to_site_log(
-        :failed,
-        "Deliverable #{deliverable_name} failed: #{reason}",
-        metadata,
-        data
-      )
+    _ = write_to_site_log(
+      :failed,
+      "Deliverable #{deliverable_name} failed: #{reason}",
+      metadata,
+      data
+    )
   end
 
   # Job status broadcasting for TUI agent roster

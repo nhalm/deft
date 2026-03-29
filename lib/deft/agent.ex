@@ -288,7 +288,7 @@ defmodule Deft.Agent do
     Logger.info("#{log_prefix(data.session_id)} Abort requested (current state: #{state})")
 
     # Cancel any in-flight operations based on current state
-    cancel_operations_for_abort(state, data)
+    _ = cancel_operations_for_abort(state, data)
 
     # Broadcast abort event
     broadcast_event(data.session_id, {:abort, state})
@@ -923,7 +923,7 @@ defmodule Deft.Agent do
     # Persist cost entry to session JSONL
     cost_entry = Cost.new(new_session_cost)
     working_dir = Map.get(data.config, :working_dir, File.cwd!())
-    Store.append(data.session_id, cost_entry, working_dir)
+    _ = Store.append(data.session_id, cost_entry, working_dir)
 
     broadcast_event(
       data.session_id,
@@ -1768,7 +1768,7 @@ defmodule Deft.Agent do
       # Persist compaction entry to session JSONL
       working_dir = Map.get(data.config, :working_dir, File.cwd!())
       compaction_entry = Compaction.new(summary_text, pending.messages_to_remove_count)
-      Store.append(data.session_id, compaction_entry, working_dir)
+      _ = Store.append(data.session_id, compaction_entry, working_dir)
 
       new_data = %{
         data

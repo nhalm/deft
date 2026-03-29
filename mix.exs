@@ -33,9 +33,15 @@ defmodule Deft.MixProject do
   # Dialyzer configuration
   defp dialyzer do
     [
-      plt_add_apps: [:mix, :ex_unit],
+      plt_add_apps: [:mix, :ex_unit, :credo],
       plt_file: {:no_warn, "priv/plts/dialyzer.plt"},
-      ignore_warnings: ".dialyzer_ignore.exs"
+      flags: [
+        :unmatched_returns,
+        :error_handling,
+        :underspecs,
+        :extra_return,
+        :missing_return
+      ]
     ]
   end
 

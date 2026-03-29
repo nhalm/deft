@@ -21,7 +21,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ### Phase 1: Dialyzer strictness
 
-- Add strict Dialyzer flags (`:unmatched_returns`, `:error_handling`, `:underspecs`, `:extra_return`, `:missing_return`) to `dialyzer/0` in `mix.exs`. Remove the `ignore_warnings` key. Delete `.dialyzer_ignore.exs`. Run `mix dialyzer` and fix every violation until clean.
 - Add `mix dialyzer` command to pre-commit in `lefthook.yml` (parallel with format, lint, compile)
 - Add `dialyzer` to the `check` target in `Makefile` so `make check` runs Dialyzer
 

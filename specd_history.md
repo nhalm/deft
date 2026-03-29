@@ -1,4 +1,5 @@
 # History
+- **standards v0.2 (2026-03-29):** Add strict Dialyzer flags (`:unmatched_returns`, `:error_handling`, `:underspecs`, `:extra_return`, `:missing_return`) to `dialyzer/0` in `mix.exs`. Remove the `ignore_warnings` key. Delete `.dialyzer_ignore.exs`. Run `mix dialyzer` and fix every violation until clean.
 - **unit-testing v0.1 (2026-03-28):** Add integration test scenario 2.6: Observation Injection
 - **standards v0.2 (2026-03-28):** Run `mix dialyzer`, fix all warnings until clean — add missing `@spec` annotations as needed
 - **unit-testing v0.1 (2026-03-28):** Add integration test scenario 2.5: Rate Limiter Integration

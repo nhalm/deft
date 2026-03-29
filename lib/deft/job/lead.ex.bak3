@@ -469,10 +469,9 @@ defmodule Deft.Job.Lead do
         )
 
         # Cancel the timeout timer since the runner completed
-        _ =
-          if runner_info.timeout_ref do
-            _ = Process.cancel_timer(runner_info.timeout_ref)
-          end
+        if runner_info.timeout_ref do
+          _ = Process.cancel_timer(runner_info.timeout_ref)
+        end
 
         # Remove completed runner from tracking
         runner_tasks = Map.delete(runner_tasks, ref)
@@ -523,10 +522,9 @@ defmodule Deft.Job.Lead do
         )
 
         # Cancel the timeout timer since the runner crashed
-        _ =
-          if runner_info.timeout_ref do
-            _ = Process.cancel_timer(runner_info.timeout_ref)
-          end
+        if runner_info.timeout_ref do
+          _ = Process.cancel_timer(runner_info.timeout_ref)
+        end
 
         # Remove crashed runner
         runner_tasks = Map.delete(runner_tasks, task_ref)
@@ -571,7 +569,7 @@ defmodule Deft.Job.Lead do
         Process.demonitor(runner_info.monitor_ref, [:flush])
 
         # Kill the runner task
-        _ = Task.Supervisor.terminate_child(data.runner_supervisor, runner_info.pid)
+        Task.Supervisor.terminate_child(data.runner_supervisor, runner_info.pid)
 
         # Remove timed-out runner from tracking
         runner_tasks = Map.delete(runner_tasks, task_ref)
@@ -1624,7 +1622,6 @@ defmodule Deft.Job.Lead do
   end
 
   # Builds context string for runner based on current state
-  @dialyzer {:nowarn_function, build_runner_context: 2}
   defp build_runner_context(task, data) do
     # Read relevant information from site log
     site_log_context = read_site_log_context(data.site_log_tid)
@@ -1687,7 +1684,6 @@ defmodule Deft.Job.Lead do
   end
 
   # Determines runner type based on task description keywords
-  @dialyzer {:nowarn_function, determine_runner_type: 1}
   defp determine_runner_type(task) do
     desc_lower = String.downcase(task.description)
 

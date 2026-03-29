@@ -297,10 +297,9 @@ defmodule Deft.Store do
   @impl true
   def terminate(_reason, state) do
     # Check closed flag to prevent double-flush/close
-    _ =
-      if not state.closed do
-        _ = do_shutdown(state)
-      end
+    if not state.closed do
+      _ = do_shutdown(state)
+    end
 
     :ok
   end
@@ -401,11 +400,10 @@ defmodule Deft.Store do
     end)
 
     # Sync DETS if requested (sitelog only)
-    _ =
-      if Keyword.get(opts, :sync, false) do
-        Logger.debug("[Store] Syncing DETS file")
-        _ = :dets.sync(state.dets_file)
-      end
+    if Keyword.get(opts, :sync, false) do
+      Logger.debug("[Store] Syncing DETS file")
+      _ = :dets.sync(state.dets_file)
+    end
 
     %{state | write_buffer: []}
   end
@@ -426,16 +424,14 @@ defmodule Deft.Store do
     state = %{state | closed: true}
 
     # Kill load task if still running
-    _ =
-      if state.load_task do
-        Task.shutdown(state.load_task, :brutal_kill)
-      end
+    if state.load_task do
+      Task.shutdown(state.load_task, :brutal_kill)
+    end
 
     # Cancel flush timer if active
-    _ =
-      if state.flush_timer do
-        _ = Process.cancel_timer(state.flush_timer)
-      end
+    if state.flush_timer do
+      _ = Process.cancel_timer(state.flush_timer)
+    end
 
     # Flush buffered writes
     state = flush_buffer(state)
@@ -454,10 +450,9 @@ defmodule Deft.Store do
     state = do_shutdown(state)
 
     # Delete DETS file
-    _ =
-      if File.exists?(state.dets_path) do
-        _ = File.rm(state.dets_path)
-      end
+    if File.exists?(state.dets_path) do
+      _ = File.rm(state.dets_path)
+    end
 
     state
   end

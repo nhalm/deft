@@ -201,7 +201,7 @@ defmodule Deft.Git.Job do
     case File.mkdir_p(worktrees_dir) do
       :ok ->
         # Add .deft-worktrees/ to .gitignore if not already present
-        _ = ensure_gitignore_entry(working_dir, ".deft-worktrees/")
+        ensure_gitignore_entry(working_dir, ".deft-worktrees/")
         create_worktree(git, worktree_path, lead_branch, job_branch, job_id)
 
       {:error, reason} ->
@@ -383,7 +383,7 @@ defmodule Deft.Git.Job do
 
         {_error_output, _exit_code} ->
           # Try to clean up manually if git worktree remove fails
-          _ = File.rm_rf(temp_dir)
+          File.rm_rf(temp_dir)
           :ok
       end
     end)
@@ -525,7 +525,7 @@ defmodule Deft.Git.Job do
 
       nil ->
         # Task timed out - kill it to prevent process leak
-        _ = Task.shutdown(task, :brutal_kill)
+        Task.shutdown(task, :brutal_kill)
 
         {:error, :timeout}
     end
@@ -574,8 +574,7 @@ defmodule Deft.Git.Job do
       Deft.Git.Job.cleanup_orphans(auto_approve: true)
       # => :ok
   """
-  @spec cleanup_orphans(keyword()) ::
-          :ok | {:error, {:branch_list_failed, term()} | {:worktree_list_failed, term()}}
+  @spec cleanup_orphans(keyword()) :: :ok | {:error, term()}
   def cleanup_orphans(opts \\ []) do
     git = Keyword.get(opts, :git, Deft.Git)
     working_dir = Keyword.get(opts, :working_dir, File.cwd!())

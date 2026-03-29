@@ -58,7 +58,7 @@ defmodule Deft.Project do
       iex> Deft.Project.ensure_project_dirs("/Users/alice/code/myapp")
       :ok
   """
-  @spec ensure_project_dirs(String.t()) :: :ok | {:error, term()}
+  @spec ensure_project_dirs(binary()) :: :ok | {:error, atom()}
   def ensure_project_dirs(working_dir \\ File.cwd!()) do
     project_path = project_dir(working_dir)
 

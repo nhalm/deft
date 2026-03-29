@@ -582,7 +582,7 @@ defmodule Deft.Issues do
     rescue
       e ->
         # Clean up temp file on error
-        _ = File.rm(temp_path)
+        File.rm(temp_path)
         {:error, e}
     end
   end
@@ -799,7 +799,7 @@ defmodule Deft.Issues do
           try do
             fun.()
           after
-            _ = File.close(lock_file)
+            File.close(lock_file)
             File.rm(lock_opts.lock_path)
           end
 
@@ -847,7 +847,7 @@ defmodule Deft.Issues do
     now_ms = :calendar.datetime_to_gregorian_seconds(:calendar.universal_time()) * 1000
 
     if now_ms - mtime_ms > stale_threshold do
-      _ = File.rm(lock_path)
+      File.rm(lock_path)
       acquire_lock(lock_path, stale_threshold)
     else
       {:error, :locked}
@@ -924,7 +924,7 @@ defmodule Deft.Issues do
     rescue
       e ->
         # Clean up temp file on error
-        _ = File.rm(temp_path)
+        File.rm(temp_path)
         {:error, e}
     end
   end

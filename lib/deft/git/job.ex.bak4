@@ -574,8 +574,7 @@ defmodule Deft.Git.Job do
       Deft.Git.Job.cleanup_orphans(auto_approve: true)
       # => :ok
   """
-  @spec cleanup_orphans(keyword()) ::
-          :ok | {:error, {:branch_list_failed, term()} | {:worktree_list_failed, term()}}
+  @spec cleanup_orphans(keyword()) :: :ok | {:error, term()}
   def cleanup_orphans(opts \\ []) do
     git = Keyword.get(opts, :git, Deft.Git)
     working_dir = Keyword.get(opts, :working_dir, File.cwd!())

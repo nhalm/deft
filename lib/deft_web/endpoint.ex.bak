@@ -87,7 +87,7 @@ defmodule DeftWeb.Endpoint do
     pidfile_path = Project.project_dir() |> Path.join("server.pid")
 
     # Ensure project directory exists
-    _ = Project.ensure_project_dirs()
+    Project.ensure_project_dirs()
 
     # Write port to pidfile
     File.write!(pidfile_path, "#{port}\n")

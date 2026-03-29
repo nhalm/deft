@@ -169,7 +169,7 @@ defmodule Deft.Tools.Bash do
     case :file.open(path, [:read, :binary]) do
       {:ok, io_device} ->
         try do
-          _ = :file.position(io_device, offset)
+          :file.position(io_device, offset)
           {:ok, data} = :file.read(io_device, @max_output_bytes)
           data
         after

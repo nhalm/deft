@@ -84,18 +84,17 @@ defmodule Deft.Session.Worker do
 
   def terminate(_reason, _state) do
     # Clean up session cache directory on termination
-    _ =
-      case Process.get(:session_cleanup_data) do
-        %{session_id: session_id, cache_dir: cache_dir} ->
-          session_cache_dir = Path.join(cache_dir, session_id)
+    case Process.get(:session_cleanup_data) do
+      %{session_id: session_id, cache_dir: cache_dir} ->
+        session_cache_dir = Path.join(cache_dir, session_id)
 
-          if File.exists?(session_cache_dir) do
-            File.rm_rf(session_cache_dir)
-          end
+        if File.exists?(session_cache_dir) do
+          File.rm_rf(session_cache_dir)
+        end
 
-        _ ->
-          :ok
-      end
+      _ ->
+        :ok
+    end
 
     :ok
   end

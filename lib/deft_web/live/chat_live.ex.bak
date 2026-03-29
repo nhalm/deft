@@ -273,8 +273,8 @@ defmodule DeftWeb.ChatLive do
 
   defp subscribe_to_session(session_id) do
     # Subscribe to agent events for this session
-    _ = Registry.register(Deft.Registry, {:session, session_id}, [])
-    _ = Registry.register(Deft.Registry, {:job_status, session_id}, [])
+    Registry.register(Deft.Registry, {:session, session_id}, [])
+    Registry.register(Deft.Registry, {:job_status, session_id}, [])
 
     # Log session connection
     id_prefix = String.slice(session_id, 0, 8)

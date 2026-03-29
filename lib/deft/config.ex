@@ -169,6 +169,7 @@ defmodule Deft.Config do
   @doc """
   Returns the default configuration.
   """
+  @dialyzer {:nowarn_function, defaults: 0}
   @spec defaults() :: map()
   def defaults do
     %{

@@ -43,7 +43,8 @@ defmodule Deft.CLI do
 
   Parses arguments, loads configuration, and starts the appropriate mode.
   """
-  @spec main([String.t()]) :: :ok
+  @spec main([String.t()]) ::
+          :ok | {:ok, float()} | {:error, term()} | {:error, :aborted, float()}
   def main(args) do
     # Ensure the OTP application is started
     {:ok, _} = Application.ensure_all_started(:deft)
@@ -514,7 +515,7 @@ defmodule Deft.CLI do
   defp execute_command({:resume_session, session_id}, flags) do
     # Clean up orphaned git artifacts from crashed jobs
     working_dir = flags[:working_dir] || File.cwd!()
-    cleanup_git_orphans(working_dir, flags[:auto_approve_all])
+    _ = cleanup_git_orphans(working_dir, flags[:auto_approve_all])
 
     # Load the session state
     with {:ok, state} <- Store.resume(session_id, working_dir) do
@@ -537,16 +538,16 @@ defmodule Deft.CLI do
     config = Config.load(cli_flags, working_dir)
 
     # Clean up orphaned git artifacts from crashed jobs
-    cleanup_git_orphans(working_dir, flags[:auto_approve_all])
+    _ = cleanup_git_orphans(working_dir, flags[:auto_approve_all])
 
     verify_api_key()
     :ok = Deft.Provider.Registry.register("anthropic", Deft.Provider.Anthropic)
 
     session_id = generate_session_id()
-    create_session(session_id, working_dir, config)
+    _ = create_session(session_id, working_dir, config)
     _agent_pid = start_agent(session_id, working_dir, config)
 
-    Registry.register(Deft.Registry, {:session, session_id}, [])
+    _ = Registry.register(Deft.Registry, {:session, session_id}, [])
 
     IO.puts("Deft session #{session_id} started.")
 
@@ -566,11 +567,11 @@ defmodule Deft.CLI do
 
     # Create session and start agent
     session_id = generate_session_id()
-    create_session(session_id, working_dir, config)
+    _ = create_session(session_id, working_dir, config)
     agent_pid = start_agent(session_id, working_dir, config)
 
     # Subscribe to agent events
-    Registry.register(Deft.Registry, {:session, session_id}, [])
+    _ = Registry.register(Deft.Registry, {:session, session_id}, [])
 
     # Open output handle and run
     output_handle = open_output_handle(flags[:output])
@@ -578,7 +579,7 @@ defmodule Deft.CLI do
     result = non_interactive_loop(output_handle)
 
     # Clean up
-    close_output_handle(output_handle)
+    _ = close_output_handle(output_handle)
     result
   end
 
@@ -625,7 +626,7 @@ defmodule Deft.CLI do
         om_snapshot: state.om_snapshot
       })
 
-    Registry.register(Deft.Registry, {:session, session_id}, [])
+    _ = Registry.register(Deft.Registry, {:session, session_id}, [])
     IO.puts("Deft session #{session_id} resumed.")
     start_web_ui(session_id)
   end
@@ -692,7 +693,7 @@ defmodule Deft.CLI do
       })
 
     # Subscribe to agent events
-    Registry.register(Deft.Registry, {:session, session_id}, [])
+    _ = Registry.register(Deft.Registry, {:session, session_id}, [])
 
     # Open output handle and run
     output_handle = open_output_handle(flags[:output])
@@ -700,7 +701,7 @@ defmodule Deft.CLI do
     result = non_interactive_loop(output_handle)
 
     # Clean up
-    close_output_handle(output_handle)
+    _ = close_output_handle(output_handle)
     result
   end
 
@@ -1165,6 +1166,7 @@ defmodule Deft.CLI do
   end
 
   # Helper to exit with an error message
+  @spec exit_with_error(String.t()) :: no_return()
   defp exit_with_error(message) do
     IO.puts(:stderr, message)
     exit({:shutdown, 1})
@@ -1452,11 +1454,12 @@ defmodule Deft.CLI do
       )
 
     [{agent_pid, _}] = Registry.lookup(Deft.ProcessRegistry, {:agent, session_id})
-    Registry.register(Deft.Registry, {:session, session_id}, [])
+    _ = Registry.register(Deft.Registry, {:session, session_id}, [])
     agent_pid
   end
 
   # Handle elicitation error
+  @spec handle_elicitation_error(term()) :: no_return()
   defp handle_elicitation_error(reason) do
     IO.puts(:stderr, "Error during issue elicitation: #{reason}")
     exit({:shutdown, 1})
@@ -1760,7 +1763,7 @@ defmodule Deft.CLI do
     [{agent_pid, _}] = Registry.lookup(Deft.ProcessRegistry, {:agent, session_id})
 
     # Subscribe to agent events
-    Registry.register(Deft.Registry, {:session, session_id}, [])
+    _ = Registry.register(Deft.Registry, {:session, session_id}, [])
 
     IO.puts("\nLet's refine the issue draft...")
     IO.puts("")
@@ -1897,25 +1900,26 @@ defmodule Deft.CLI do
     IO.puts("Press Ctrl+C to stop.\n")
 
     # Open browser based on OS
-    try do
-      case :os.type() do
-        {:unix, :darwin} ->
-          # macOS
-          System.cmd("open", [url])
+    _ =
+      try do
+        case :os.type() do
+          {:unix, :darwin} ->
+            # macOS
+            System.cmd("open", [url])
 
-        {:unix, _} ->
-          # Linux and other Unix
-          System.cmd("xdg-open", [url])
+          {:unix, _} ->
+            # Linux and other Unix
+            System.cmd("xdg-open", [url])
 
-        _ ->
-          # Windows or other - skip auto-open
-          {:ok, ""}
+          _ ->
+            # Windows or other - skip auto-open
+            {:ok, ""}
+        end
+      rescue
+        e ->
+          # Failed to open browser - warn but don't crash
+          IO.puts(:stderr, "Warning: Could not auto-open browser: #{Exception.message(e)}")
       end
-    rescue
-      e ->
-        # Failed to open browser - warn but don't crash
-        IO.puts(:stderr, "Warning: Could not auto-open browser: #{Exception.message(e)}")
-    end
 
     # Block until Ctrl+C (BEAM handles shutdown)
     Process.sleep(:infinity)
@@ -2013,6 +2017,7 @@ defmodule Deft.CLI do
   end
 
   # Handle job failure
+  @spec handle_job_failure(term(), float()) :: no_return()
   defp handle_job_failure(reason, cumulative_cost) do
     IO.puts(:stderr, "Job failed: #{inspect(reason)}")
     IO.puts("Total cost: $#{Float.round(cumulative_cost, 2)}")

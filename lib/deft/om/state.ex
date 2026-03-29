@@ -465,7 +465,7 @@ defmodule Deft.OM.State do
     }
 
     # Trigger snapshot write
-    write_snapshot(updated_state)
+    _ = write_snapshot(updated_state)
 
     {:reply, :ok, updated_state}
   end
