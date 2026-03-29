@@ -1,4 +1,5 @@
 # History
+- **standards v0.2 (2026-03-29):** Remove `@dialyzer {:nowarn_function, defaults: 0}` from `lib/deft/config.ex:172` and fix the underlying Dialyzer violation
 - **standards v0.2 (2026-03-29):** Remove `|| true` and `--no-start 2>/dev/null` from pre-push integration command in `lefthook.yml` — failures must not be masked
 - **standards v0.2 (2026-03-29):** Remove `skip: true` from pre-push integration hook in `lefthook.yml` — integration tests exist (`test/integration/`), hook should run as spec requires
 - **standards v0.2 (2026-03-29):** Run `mix dialyzer` with strict flags and fix any new violations introduced by the type changes. Ensure zero warnings, zero suppressed warnings.

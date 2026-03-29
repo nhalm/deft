@@ -50,6 +50,61 @@ defmodule Deft.Config do
           job_max_duration: pos_integer()
         }
 
+  @typedoc """
+  Intermediate config map structure used during config loading and merging.
+  Gets converted to a `t()` struct by `validate_and_build/1`.
+  """
+  @type config_map :: %{
+          optional(:model) => String.t(),
+          optional(:provider) => String.t(),
+          optional(:turn_limit) => pos_integer(),
+          optional(:tool_timeout) => pos_integer(),
+          optional(:bash_timeout) => pos_integer(),
+          optional(:om) => %{
+            optional(:enabled) => boolean(),
+            optional(:observer_model) => String.t(),
+            optional(:reflector_model) => String.t(),
+            optional(:observer_provider) => String.t(),
+            optional(:reflector_provider) => String.t(),
+            optional(:observer_temperature) => float(),
+            optional(:reflector_temperature) => float(),
+            optional(:message_token_threshold) => pos_integer(),
+            optional(:observation_token_threshold) => pos_integer(),
+            optional(:buffer_interval) => float(),
+            optional(:buffer_tail_retention) => float(),
+            optional(:hard_threshold_multiplier) => float(),
+            optional(:previous_observer_tokens) => pos_integer()
+          },
+          optional(:cache) => %{
+            optional(:token_threshold) => pos_integer(),
+            optional(:token_threshold_read) => pos_integer(),
+            optional(:token_threshold_grep) => pos_integer(),
+            optional(:token_threshold_ls) => pos_integer(),
+            optional(:token_threshold_find) => pos_integer()
+          },
+          optional(:issues) => %{
+            optional(:compaction_days) => pos_integer()
+          },
+          optional(:work) => %{
+            optional(:cost_ceiling) => float()
+          },
+          optional(:job) => %{
+            optional(:test_command) => String.t(),
+            optional(:keep_failed_branches) => boolean(),
+            optional(:squash_on_complete) => boolean(),
+            optional(:initial_concurrency) => pos_integer(),
+            optional(:max_leads) => pos_integer(),
+            optional(:max_runners_per_lead) => pos_integer(),
+            optional(:research_timeout) => pos_integer(),
+            optional(:runner_timeout) => pos_integer(),
+            optional(:foreman_model) => String.t(),
+            optional(:lead_model) => String.t(),
+            optional(:runner_model) => String.t(),
+            optional(:research_runner_model) => String.t(),
+            optional(:max_duration) => pos_integer()
+          }
+        }
+
   @enforce_keys [
     :model,
     :provider,
@@ -169,8 +224,7 @@ defmodule Deft.Config do
   @doc """
   Returns the default configuration.
   """
-  @dialyzer {:nowarn_function, defaults: 0}
-  @spec defaults() :: map()
+  @spec defaults() :: config_map()
   def defaults do
     %{
       model: "claude-sonnet-4-20250514",
@@ -225,6 +279,7 @@ defmodule Deft.Config do
   end
 
   # Merge user config from ~/.deft/config.yaml
+  @spec merge_user_config(config_map(), String.t()) :: config_map()
   defp merge_user_config(config, user_home) do
     user_config_path = Path.join([user_home, ".deft", "config.yaml"])
 
@@ -235,6 +290,7 @@ defmodule Deft.Config do
   end
 
   # Merge project config from .deft/config.yaml in working_dir
+  @spec merge_project_config(config_map(), String.t()) :: config_map()
   defp merge_project_config(config, working_dir) do
     project_config_path = Path.join([working_dir, ".deft", "config.yaml"])
 
@@ -245,6 +301,7 @@ defmodule Deft.Config do
   end
 
   # Merge CLI flags (highest priority)
+  @spec merge_cli_flags(config_map(), map()) :: config_map()
   defp merge_cli_flags(config, cli_flags) do
     # CLI flags use flat structure, need to handle om.* specially
     cli_config = normalize_cli_flags(cli_flags)
@@ -362,6 +419,7 @@ defmodule Deft.Config do
   defp deep_merge(_left, right), do: right
 
   # Validate and build the Config struct
+  @spec validate_and_build(config_map()) :: t()
   defp validate_and_build(config) do
     base_config = %{
       model: Map.fetch!(config, :model),
