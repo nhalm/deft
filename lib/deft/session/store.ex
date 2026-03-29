@@ -31,7 +31,7 @@ defmodule Deft.Session.Store do
       iex> Store.append("abc123", entry, "/tmp")
       :ok
   """
-  @spec append(String.t(), Entry.t(), String.t() | nil) :: :ok | {:error, term()}
+  @spec append(Deft.Session.session_id(), Entry.t(), String.t() | nil) :: :ok | {:error, term()}
   def append(session_id, entry, working_dir \\ nil) do
     working_dir = working_dir || File.cwd!()
     path = session_path(session_id, working_dir)
@@ -92,7 +92,7 @@ defmodule Deft.Session.Store do
       iex> Store.load("nonexistent", "/tmp")
       {:error, :enoent}
   """
-  @spec load(String.t(), String.t() | nil) :: {:ok, [Entry.t()]} | {:error, term()}
+  @spec load(Deft.Session.session_id(), String.t() | nil) :: {:ok, [Entry.t()]} | {:error, term()}
   def load(session_id, working_dir \\ nil) do
     working_dir = working_dir || File.cwd!()
     path = session_path(session_id, working_dir)
@@ -145,7 +145,7 @@ defmodule Deft.Session.Store do
       iex> Store.resume("nonexistent", "/tmp")
       {:error, :enoent}
   """
-  @spec resume(String.t(), String.t() | nil) :: {:ok, map()} | {:error, term()}
+  @spec resume(Deft.Session.session_id(), String.t() | nil) :: {:ok, map()} | {:error, term()}
   def resume(session_id, working_dir \\ nil) do
     working_dir = working_dir || File.cwd!()
 

@@ -1,4 +1,5 @@
 # History
+- **standards v0.2 (2026-03-29):** Replace all `String.t()` session ID parameters in `Session.Store` specs (`append/3`, `load/2`, `resume/2`, `append_to_path/2`) with `Session.session_id()`
 - **standards v0.2 (2026-03-29):** Define `@type run_id :: String.t()` and `@type category :: String.t()` in `Deft.Eval`. Update specs in `Eval.ResultStore`, `Eval.Baselines`, `Eval.JudgeCalibration`, and `Eval.RegressionDetection` to use them
 - **standards v0.2 (2026-03-29):** Define `@type id :: String.t()` in `Deft.Issue`. Update `Issue.t` fields `id` and `dependencies` to use `Issue.id()` and `[Issue.id()]` respectively. Update `Issue.Id.generate/1` spec
 - **standards v0.2 (2026-03-29):** Define `@type job_id :: String.t()` and `@type lead_id :: String.t()` in `Deft.Job`. Update `Job.Runner.LoopContext.job_id`, `Issue.job_id`, `Tool.Context.lead_id`, and `Store.name` tuple types to use them
