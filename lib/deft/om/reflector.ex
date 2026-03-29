@@ -13,7 +13,7 @@ defmodule Deft.OM.Reflector do
 
   require Logger
 
-  alias Deft.{Config, Message, Provider}
+  alias Deft.{Config, Message, Provider, Session}
   alias Deft.Message.Text
   alias Deft.OM.{Reflector.Prompt, Tokens}
   alias Deft.Provider.Event.{TextDelta, Done, Error, Usage}
@@ -47,7 +47,7 @@ defmodule Deft.OM.Reflector do
       iex> result.llm_calls <= 2
       true
   """
-  @spec run(String.t(), Config.t(), String.t(), integer(), float()) ::
+  @spec run(Session.session_id(), Config.t(), String.t(), integer(), float()) ::
           %{
             compressed_observations: String.t(),
             before_tokens: integer(),

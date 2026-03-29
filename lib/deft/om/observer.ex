@@ -13,7 +13,7 @@ defmodule Deft.OM.Observer do
 
   require Logger
 
-  alias Deft.{Config, Message, Provider}
+  alias Deft.{Config, Message, Provider, Session}
   alias Deft.Message.{Text, ToolUse, ToolResult, Thinking, Image}
   alias Deft.OM.Tokens
   alias Deft.OM.Observer.{Parse, Prompt}
@@ -48,7 +48,7 @@ defmodule Deft.OM.Observer do
       iex> is_list(result.message_ids)
       true
   """
-  @spec run(String.t(), Config.t(), [Message.t()], String.t(), float()) ::
+  @spec run(Session.session_id(), Config.t(), [Message.t()], String.t(), float()) ::
           %{
             observations: String.t(),
             message_ids: [String.t()],
