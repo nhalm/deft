@@ -16,7 +16,7 @@ defmodule Deft.OM.State do
   use GenServer
   require Logger
 
-  alias Deft.{Config, Message, Project}
+  alias Deft.{Config, Message, Project, Session}
   alias Deft.OM.{BufferedChunk, Observer, Reflector, Supervisor, Tokens}
   alias Deft.OM.Observer.Parse
   alias Deft.Session.Entry.Observation, as: ObservationEntry
@@ -126,7 +126,7 @@ defmodule Deft.OM.State do
 
   Returns `{observations_text, observed_message_ids, continuation_hint, calibration_factor, pending_message_tokens, observation_tokens}`.
   """
-  @spec get_context(String.t()) ::
+  @spec get_context(Session.session_id()) ::
           {String.t(), [String.t()], String.t() | nil, float(), integer(), integer()}
   def get_context(session_id) do
     GenServer.call(via_tuple(session_id), :get_context)
@@ -138,7 +138,7 @@ defmodule Deft.OM.State do
   Accepts a list of Deft.Message structs.
   Updates pending_message_tokens and spawns Observer Tasks when buffer intervals are crossed.
   """
-  @spec messages_added(String.t(), [Message.t()]) :: :ok
+  @spec messages_added(Session.session_id(), [Message.t()]) :: :ok
   def messages_added(session_id, messages) do
     GenServer.cast(via_tuple(session_id), {:messages_added, messages})
   end
@@ -152,7 +152,7 @@ defmodule Deft.OM.State do
   Returns `{:ok, :no_messages}` if no unobserved messages exist,
   `{:ok, result}` on success, or `{:error, reason}` on failure/timeout.
   """
-  @spec force_observe(String.t(), timeout()) :: {:ok, term()} | {:error, term()}
+  @spec force_observe(Session.session_id(), timeout()) :: {:ok, term()} | {:error, term()}
   def force_observe(session_id, timeout \\ 60_000) do
     GenServer.call(via_tuple(session_id), :force_observe, timeout)
   end
@@ -166,7 +166,7 @@ defmodule Deft.OM.State do
   Returns `{:ok, :below_threshold}` if observations are below threshold,
   `{:ok, result}` on success, or `{:error, reason}` on failure/timeout.
   """
-  @spec force_reflect(String.t(), timeout()) :: {:ok, term()} | {:error, term()}
+  @spec force_reflect(Session.session_id(), timeout()) :: {:ok, term()} | {:error, term()}
   def force_reflect(session_id, timeout \\ 60_000) do
     GenServer.call(via_tuple(session_id), :force_reflect, timeout)
   end
@@ -179,7 +179,7 @@ defmodule Deft.OM.State do
 
   Per spec section 9.3, this is called during session resume to restore OM state.
   """
-  @spec load_latest_snapshot(String.t(), String.t() | nil) ::
+  @spec load_latest_snapshot(Session.session_id(), String.t() | nil) ::
           {:ok, ObservationEntry.t() | nil} | {:error, term()}
   def load_latest_snapshot(session_id, working_dir \\ nil) do
     working_dir = working_dir || File.cwd!()
@@ -216,7 +216,7 @@ defmodule Deft.OM.State do
 
   The marker is appended to the User Preferences section (which uses append merge strategy).
   """
-  @spec append_correction(String.t(), String.t()) :: :ok
+  @spec append_correction(Session.session_id(), String.t()) :: :ok
   def append_correction(session_id, correction_text) do
     GenServer.call(via_tuple(session_id), {:append_correction, correction_text})
   end

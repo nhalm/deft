@@ -1,4 +1,5 @@
 # History
+- **standards v0.2 (2026-03-29):** Replace all `String.t()` session ID parameters in `OM.State` specs (`get_context/1`, `messages_added/2`, `force_observe/2`, `force_reflect/2`, `load_latest_snapshot/2`, `append_correction/2`) with `Session.session_id()`
 - **standards v0.2 (2026-03-29):** Replace all `String.t()` session ID parameters in `Session.Store` specs (`append/3`, `load/2`, `resume/2`, `append_to_path/2`) with `Session.session_id()`
 - **standards v0.2 (2026-03-29):** Define `@type run_id :: String.t()` and `@type category :: String.t()` in `Deft.Eval`. Update specs in `Eval.ResultStore`, `Eval.Baselines`, `Eval.JudgeCalibration`, and `Eval.RegressionDetection` to use them
 - **standards v0.2 (2026-03-29):** Define `@type id :: String.t()` in `Deft.Issue`. Update `Issue.t` fields `id` and `dependencies` to use `Issue.id()` and `[Issue.id()]` respectively. Update `Issue.Id.generate/1` spec
