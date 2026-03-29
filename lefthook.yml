@@ -20,4 +20,3 @@ pre-push:
       run: mix test --exclude eval
     integration:
       run: mix test --only integration --no-start 2>/dev/null || true
-      skip: true  # Enable when integration tests exist

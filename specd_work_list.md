@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## standards v0.2
 
-- Remove `skip: true` from pre-push integration hook in `lefthook.yml` — integration tests exist (`test/integration/`), hook should run as spec requires
 - Remove `|| true` and `--no-start 2>/dev/null` from pre-push integration command in `lefthook.yml` — failures must not be masked
 - Remove `@dialyzer {:nowarn_function, defaults: 0}` from `lib/deft/config.ex:172` and fix the underlying Dialyzer violation
 - Remove `@dialyzer {:nowarn_function, build_runner_context: 2}` and `{:nowarn_function, determine_runner_type: 1}` from `lib/deft/job/lead.ex` and fix the underlying Dialyzer violations
