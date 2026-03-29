@@ -4,7 +4,7 @@
 # Register providers for tests
 :ok = Deft.Provider.Registry.register("anthropic", Deft.Provider.Anthropic)
 
-ExUnit.start()
+ExUnit.start(capture_log: true)
 
 # Exclude eval and integration tests by default
 ExUnit.configure(exclude: [:eval, :integration])
