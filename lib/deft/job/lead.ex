@@ -279,6 +279,12 @@ defmodule Deft.Job.Lead do
     end
   end
 
+  def handle_event(:enter, _old_state, {:executing, :idle}, data) do
+    # When entering executing phase, start processing the task list
+    Logger.info("#{log_prefix(data.lead_id)} starting execution phase")
+    continue_work(:executing, data)
+  end
+
   def handle_event(:enter, _old_state, {:verifying, :idle}, data) do
     # When entering verification phase, spawn a testing runner to run compile checks and tests
     Logger.info("#{log_prefix(data.lead_id)} starting verification")
@@ -1624,7 +1630,6 @@ defmodule Deft.Job.Lead do
   end
 
   # Builds context string for runner based on current state
-  @dialyzer {:nowarn_function, build_runner_context: 2}
   defp build_runner_context(task, data) do
     # Read relevant information from site log
     site_log_context = read_site_log_context(data.site_log_tid)
@@ -1687,7 +1692,6 @@ defmodule Deft.Job.Lead do
   end
 
   # Determines runner type based on task description keywords
-  @dialyzer {:nowarn_function, determine_runner_type: 1}
   defp determine_runner_type(task) do
     desc_lower = String.downcase(task.description)
 
