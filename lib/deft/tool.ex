@@ -100,7 +100,7 @@ defmodule Deft.Tool.Context do
 
   @type t :: %__MODULE__{
           working_dir: String.t(),
-          session_id: String.t(),
+          session_id: Deft.Session.session_id(),
           lead_id: Deft.Job.lead_id(),
           emit: (String.t() -> :ok),
           file_scope: [String.t()] | nil,

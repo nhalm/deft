@@ -22,7 +22,7 @@ defmodule Deft.OM.State do
   alias Deft.Session.Entry.Observation, as: ObservationEntry
 
   @type t :: %__MODULE__{
-          session_id: String.t(),
+          session_id: Session.session_id(),
           config: Config.t(),
           messages: [Message.t()],
           active_observations: String.t(),

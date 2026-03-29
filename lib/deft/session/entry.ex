@@ -37,7 +37,7 @@ defmodule Deft.Session.Entry.SessionStart do
   @derive Jason.Encoder
   @type t :: %__MODULE__{
           type: :session_start,
-          session_id: String.t(),
+          session_id: Deft.Session.session_id(),
           created_at: DateTime.t(),
           working_dir: String.t(),
           model: String.t(),

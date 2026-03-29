@@ -1,4 +1,5 @@
 # History
+- **standards v0.2 (2026-03-29):** Update `session_id` struct fields in `OM.State.t`, `Tool.Context.t`, `Session.Entry.SessionStart.t` to use `Session.session_id()`
 - **standards v0.2 (2026-03-29):** Replace all `String.t()` session ID parameters in `OM.Observer.run/4` and `OM.Reflector.run/4` with `Session.session_id()`
 - **standards v0.2 (2026-03-29):** Replace all `String.t()` session ID parameters in `OM.State` specs (`get_context/1`, `messages_added/2`, `force_observe/2`, `force_reflect/2`, `load_latest_snapshot/2`, `append_correction/2`) with `Session.session_id()`
 - **standards v0.2 (2026-03-29):** Replace all `String.t()` session ID parameters in `Session.Store` specs (`append/3`, `load/2`, `resume/2`, `append_to_path/2`) with `Session.session_id()`
