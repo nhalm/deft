@@ -2,11 +2,17 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.1 |
-| Status | Implemented |
-| Last Updated | 2026-03-16 |
+| Version | 0.2 |
+| Status | Ready |
+| Last Updated | 2026-03-29 |
 
 ## Changelog
+
+### v0.2 (2026-03-29)
+- Added strong type requirements: `@type t()` on all structs, domain types on all shared values, no raw primitives across boundaries
+- Dialyzer moved to pre-commit and added to `make check`
+- Added strict Dialyzer flags: `unmatched_returns`, `error_handling`, `underspecs`, `extra_return`, `missing_return`
+- Phased removal of `.dialyzer_ignore.exs` — fix all violations first, then delete the file
 
 ### v0.1 (2026-03-16)
 - Initial spec — Elixir coding standards, Makefile, git hooks, testing strategy, AI evals
@@ -108,6 +114,26 @@ deft/
 - `@doc` on every public function. First paragraph is one concise line (used as summary by ExDoc).
 - `@spec` on all public functions. Serves as documentation, Dialyzer input, and contract definition.
 
+#### 2.4 Type Discipline
+
+Deft uses strong, domain-specific types. Raw primitives (`String.t()`, `integer()`, `map()`) do not cross module boundaries.
+
+**Required types:**
+
+- **`@type t()` on every struct module.** Every `defstruct` module defines `@type t :: %__MODULE__{}` with all fields typed. No exceptions.
+- **Domain types for shared values.** If a value is used as a parameter or return type in more than one module, it gets a named `@type` in the module that owns the concept. Other modules reference it by name. Examples:
+  - `Session.id()` not `String.t()` for session identifiers
+  - `Message.role()` not `:user | :assistant | :system` repeated everywhere
+  - `Tool.result()` not `{:ok, String.t()} | {:error, String.t()}`
+  - `Provider.model()` not `String.t()` for model names
+- **Callback types on behaviours.** Every `@callback` uses domain types, not primitives. The behaviour module defines the types its callbacks use.
+
+**Forbidden patterns:**
+
+- `@spec foo(String.t()) :: map()` on a public function that takes a session ID and returns a config — use `@spec foo(Session.id()) :: Config.t()`.
+- `@type t :: %__MODULE__{data: map()}` with an untyped map field — type the map contents or use a nested struct.
+- Duplicating type definitions across modules. One module owns each type. Others reference it.
+
 ### 3. Dependencies
 
 ```elixir
@@ -156,7 +182,26 @@ Default line length (98). No custom rules. `mix format` is non-negotiable — it
 
 ### 6. Static Analysis
 
-Dialyzer via `dialyxir`. PLT cached in CI. `mix dialyzer` runs in CI but NOT in pre-commit hooks (too slow for local dev).
+Dialyzer via `dialyxir` with strict flags. Runs in pre-commit and CI — no exceptions.
+
+```elixir
+# mix.exs
+defp dialyzer do
+  [
+    plt_add_apps: [:mix, :ex_unit],
+    plt_file: {:no_warn, "priv/plts/dialyzer.plt"},
+    flags: [
+      :unmatched_returns,
+      :error_handling,
+      :underspecs,
+      :extra_return,
+      :missing_return
+    ]
+  ]
+end
+```
+
+**No warning suppression.** There is no `.dialyzer_ignore.exs`. If Dialyzer flags something, fix it — don't suppress it.
 
 ### 7. Makefile
 
@@ -196,7 +241,7 @@ test.integration:
 test.all:
 	mix test
 
-check: compile format.check lint test
+check: compile format.check lint dialyzer test
 
 ci: compile format.check lint dialyzer test.all
 
@@ -205,8 +250,8 @@ clean:
 	rm -rf _build deps
 ```
 
-`make check` is the fast local quality gate (no Dialyzer, no integration/eval tests).
-`make ci` is the full pipeline including Dialyzer and all tests.
+`make check` is the local quality gate (includes Dialyzer, excludes integration/eval tests).
+`make ci` is the full pipeline including all tests.
 
 ### 8. Git Hooks
 
@@ -222,6 +267,8 @@ pre-commit:
       run: mix credo --strict
     compile:
       run: mix compile --warnings-as-errors
+    dialyzer:
+      run: mix dialyzer
 
 pre-push:
   commands:
@@ -232,7 +279,7 @@ pre-push:
       tags: integration
 ```
 
-- **Pre-commit:** formatting, linting, compilation warnings. Parallel, fast (<10s).
+- **Pre-commit:** formatting, linting, compilation warnings, Dialyzer. Parallel.
 - **Pre-push:** unit tests + integration tests. Runs before code reaches remote.
 - **AI eval tests** are NOT in hooks — they require API calls, are slow, and are non-deterministic. They run in CI and manually via `make test.eval`.
 
@@ -350,9 +397,9 @@ AI eval tests report a pass rate rather than pass/fail. A drop in pass rate trig
 
 - **Lefthook over elixir_git_hooks.** Lefthook runs hooks in parallel, is language-agnostic (useful if we add Rust NIFs later), and has better ecosystem support. The Elixir-native option is convenient but limited.
 - **Credo strict mode from day 1.** Retroactively enabling strict Credo on a large codebase is painful. Starting strict is easy and prevents bad patterns from establishing.
-- **Dialyzer in CI only, not in hooks.** The first PLT build is slow (minutes). Subsequent runs are fast but still slower than format/lint. Developers run it manually (`make dialyzer`); CI enforces it.
+- **Dialyzer in pre-commit.** Static analysis catches type errors before they land. No exceptions.
 - **Tribunal for AI evals.** It's the only Elixir-native LLM evaluation framework. It provides both deterministic assertions (`assert_contains`, `assert_json`) and LLM-as-judge assertions (`refute_hallucination`, `assert_faithful`).
-- **`make check` vs `make ci`.** `check` is the fast local loop (<30s). `ci` is the full pipeline (with Dialyzer and all test suites). Developers run `check` constantly; CI runs `ci` once.
+- **`make check` vs `make ci`.** `check` includes Dialyzer and unit tests. `ci` adds integration and eval tests.
 
 ### Open questions (resolve before Ready)
 
