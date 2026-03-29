@@ -58,7 +58,7 @@ defmodule Deft.Job.Runner do
             messages: [Message.t()],
             tools: [module()],
             tool_context: Deft.Tool.Context.t(),
-            job_id: String.t(),
+            job_id: Deft.Job.job_id(),
             provider: module(),
             config: map(),
             max_turns: pos_integer()

@@ -67,7 +67,8 @@ defmodule Deft.Store do
   require Logger
 
   @type instance_type :: :cache | :sitelog
-  @type name :: {:cache, String.t(), String.t()} | {:sitelog, String.t()}
+  @type name ::
+          {:cache, String.t(), Deft.Job.lead_id()} | {:sitelog, Deft.Job.job_id()}
   @type entry :: %{value: term(), metadata: map()}
 
   # Client API

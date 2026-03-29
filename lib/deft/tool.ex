@@ -101,7 +101,7 @@ defmodule Deft.Tool.Context do
   @type t :: %__MODULE__{
           working_dir: String.t(),
           session_id: String.t(),
-          lead_id: String.t(),
+          lead_id: Deft.Job.lead_id(),
           emit: (String.t() -> :ok),
           file_scope: [String.t()] | nil,
           bash_timeout: pos_integer(),

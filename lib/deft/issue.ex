@@ -29,7 +29,7 @@ defmodule Deft.Issue do
           updated_at: String.t(),
           closed_at: String.t() | nil,
           source: source(),
-          job_id: String.t() | nil
+          job_id: Deft.Job.job_id() | nil
         }
 
   @enforce_keys [
