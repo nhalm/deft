@@ -9,12 +9,18 @@ defmodule Deft.Tool do
 
   alias Deft.Message
 
+  @typedoc "Tool name identifier"
+  @type tool_name :: String.t()
+
+  @typedoc "Tool call identifier"
+  @type tool_call_id :: String.t()
+
   @doc """
   Returns the tool's name as a string.
 
   This name is sent to the LLM and used in tool calls.
   """
-  @callback name() :: String.t()
+  @callback name() :: tool_name()
 
   @doc """
   Returns a description of what the tool does.

@@ -200,8 +200,8 @@ defmodule Deft.Provider.Event.ToolCallStart do
   """
 
   @type t :: %__MODULE__{
-          id: String.t(),
-          name: String.t()
+          id: Deft.Tool.tool_call_id(),
+          name: Deft.Tool.tool_name()
         }
 
   @enforce_keys [:id, :name]
@@ -217,7 +217,7 @@ defmodule Deft.Provider.Event.ToolCallDelta do
   """
 
   @type t :: %__MODULE__{
-          id: String.t(),
+          id: Deft.Tool.tool_call_id(),
           delta: String.t()
         }
 
@@ -234,7 +234,7 @@ defmodule Deft.Provider.Event.ToolCallDone do
   """
 
   @type t :: %__MODULE__{
-          id: String.t(),
+          id: Deft.Tool.tool_call_id(),
           args: map()
         }
 

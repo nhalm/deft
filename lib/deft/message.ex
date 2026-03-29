@@ -54,8 +54,8 @@ defmodule Deft.Message.ToolUse do
   """
 
   @type t :: %__MODULE__{
-          id: String.t(),
-          name: String.t(),
+          id: Deft.Tool.tool_call_id(),
+          name: Deft.Tool.tool_name(),
           args: map()
         }
 
@@ -71,8 +71,8 @@ defmodule Deft.Message.ToolResult do
   """
 
   @type t :: %__MODULE__{
-          tool_use_id: String.t(),
-          name: String.t(),
+          tool_use_id: Deft.Tool.tool_call_id(),
+          name: Deft.Tool.tool_name(),
           content: String.t(),
           is_error: boolean()
         }

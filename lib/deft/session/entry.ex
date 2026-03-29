@@ -151,8 +151,8 @@ defmodule Deft.Session.Entry.ToolResult do
   @derive Jason.Encoder
   @type t :: %__MODULE__{
           type: :tool_result,
-          tool_call_id: String.t(),
-          name: String.t(),
+          tool_call_id: Deft.Tool.tool_call_id(),
+          name: Deft.Tool.tool_name(),
           result: String.t(),
           duration_ms: non_neg_integer(),
           is_error: boolean(),
