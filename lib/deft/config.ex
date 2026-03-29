@@ -10,16 +10,16 @@ defmodule Deft.Config do
   """
 
   @type t :: %__MODULE__{
-          model: String.t(),
-          provider: String.t(),
+          model: Deft.Provider.model_name(),
+          provider: Deft.Provider.provider_name(),
           turn_limit: pos_integer(),
           tool_timeout: pos_integer(),
           bash_timeout: pos_integer(),
           om_enabled: boolean(),
-          om_observer_model: String.t(),
-          om_reflector_model: String.t(),
-          om_observer_provider: String.t(),
-          om_reflector_provider: String.t(),
+          om_observer_model: Deft.Provider.model_name(),
+          om_reflector_model: Deft.Provider.model_name(),
+          om_observer_provider: Deft.Provider.provider_name(),
+          om_reflector_provider: Deft.Provider.provider_name(),
           om_observer_temperature: float(),
           om_reflector_temperature: float(),
           om_message_token_threshold: pos_integer(),
@@ -43,10 +43,10 @@ defmodule Deft.Config do
           job_max_runners_per_lead: pos_integer(),
           job_research_timeout: pos_integer(),
           job_runner_timeout: pos_integer(),
-          job_foreman_model: String.t(),
-          job_lead_model: String.t(),
-          job_runner_model: String.t(),
-          job_research_runner_model: String.t(),
+          job_foreman_model: Deft.Provider.model_name(),
+          job_lead_model: Deft.Provider.model_name(),
+          job_runner_model: Deft.Provider.model_name(),
+          job_research_runner_model: Deft.Provider.model_name(),
           job_max_duration: pos_integer()
         }
 
