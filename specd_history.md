@@ -1,4 +1,5 @@
 # History
+- **standards v0.2 (2026-03-29):** Define `@type session_id :: String.t()` in `Deft.Session` (create module at `lib/deft/session.ex` if it doesn't exist as a namespace module). Export it for use across `Session.Store`, `Session.Worker`, `OM.State`, `OM.Observer`, `OM.Reflector`, `Tool.Context`
 - **standards v0.2 (2026-03-29):** Add `dialyzer` to the `check` target in `Makefile` so `make check` runs Dialyzer
 - **standards v0.2 (2026-03-29):** Add `mix dialyzer` command to pre-commit in `lefthook.yml` (parallel with format, lint, compile)
 - **standards v0.2 (2026-03-29):** Add strict Dialyzer flags (`:unmatched_returns`, `:error_handling`, `:underspecs`, `:extra_return`, `:missing_return`) to `dialyzer/0` in `mix.exs`. Remove the `ignore_warnings` key. Delete `.dialyzer_ignore.exs`. Run `mix dialyzer` and fix every violation until clean.
