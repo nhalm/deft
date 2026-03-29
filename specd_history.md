@@ -1,4 +1,5 @@
 # History
+- **standards v0.2 (2026-03-29):** Replace `config :: map()` in `Deft.Provider` callback with a typed `@type call_config` that has `model`, `temperature`, `max_tokens`, and optional `thinking`/`thinking_budget` fields. Update `Deft.Provider.Anthropic` to match
 - **standards v0.2 (2026-03-29):** Replace all model/provider `String.t()` fields in `Config.t` (`model`, `provider`, `om_observer_model`, `om_observer_provider`, `om_reflector_model`, `om_reflector_provider`, `job_foreman_model`, `job_lead_model`, `job_runner_model`, `job_research_runner_model`) with `Provider.model_name()` and `Provider.provider_name()`
 - **standards v0.2 (2026-03-29):** Update `session_id` struct fields in `OM.State.t`, `Tool.Context.t`, `Session.Entry.SessionStart.t` to use `Session.session_id()`
 - **standards v0.2 (2026-03-29):** Replace all `String.t()` session ID parameters in `OM.Observer.run/4` and `OM.Reflector.run/4` with `Session.session_id()`

@@ -45,7 +45,13 @@ defmodule Deft.Provider do
           | Error.t()
   @type messages :: [Deft.Message.t()]
   @type tools :: [module()]
-  @type config :: map()
+  @type call_config :: %{
+          required(:model) => model_name(),
+          required(:temperature) => float(),
+          required(:max_tokens) => non_neg_integer(),
+          optional(:thinking) => boolean(),
+          optional(:thinking_budget) => non_neg_integer()
+        }
   @type provider_messages :: term()
   @type provider_tools :: term()
   @type raw_event :: term()
@@ -76,7 +82,7 @@ defmodule Deft.Provider do
   - `{:ok, stream_ref}` - Stream started successfully
   - `{:error, reason}` - Failed to start stream
   """
-  @callback stream(messages(), tools(), config()) ::
+  @callback stream(messages(), tools(), call_config()) ::
               {:ok, stream_ref()} | {:error, term()}
 
   @doc """

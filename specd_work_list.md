@@ -21,7 +21,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ### Phase 3: Replace primitives in specs and structs
 
-- Replace `config :: map()` in `Deft.Provider` callback with a typed `@type call_config` that has `model`, `temperature`, `max_tokens`, and optional `thinking`/`thinking_budget` fields. Update `Deft.Provider.Anthropic` to match
 - Update `Deft.Store.name` type from `{:cache, String.t(), String.t()}` to `{:cache, Session.session_id(), Job.lead_id()}` and `{:sitelog, String.t()}` to `{:sitelog, Job.job_id()}`
 
 ### Phase 4: Validate
