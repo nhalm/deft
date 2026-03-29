@@ -17,6 +17,3 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## standards v0.2
-
-- Type `Tool.Context.cache_config` field as a proper typed map or struct instead of raw `map()` in `lib/deft/tool.ex`

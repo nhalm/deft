@@ -106,6 +106,6 @@ defmodule Deft.Tool.Context do
           file_scope: [String.t()] | nil,
           bash_timeout: pos_integer(),
           cache_tid: reference() | nil,
-          cache_config: map() | nil
+          cache_config: %{optional(String.t()) => pos_integer()} | nil
         }
 end
