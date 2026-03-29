@@ -8,6 +8,8 @@ defmodule Deft.Eval.ResultStore do
   Automatically manages cleanup to keep only the last 30 runs on disk.
   """
 
+  require Logger
+
   alias Deft.Eval
 
   @results_dir "test/eval/results"
@@ -78,7 +80,7 @@ defmodule Deft.Eval.ResultStore do
         :ok
 
       {:error, reason} = error ->
-        IO.warn("Failed to write eval result to #{file_path}: #{inspect(reason)}")
+        Logger.warning("Failed to write eval result to #{file_path}: #{inspect(reason)}")
         error
     end
   end
@@ -127,14 +129,16 @@ defmodule Deft.Eval.ResultStore do
         {[result | results], corrupt}
 
       {:error, reason} ->
-        IO.warn("Skipping corrupt JSONL line #{line_num} in #{file_path}: #{inspect(reason)}")
+        Logger.warning(
+          "Skipping corrupt JSONL line #{line_num} in #{file_path}: #{inspect(reason)}"
+        )
 
         {results, corrupt + 1}
     end
   end
 
   defp log_corrupt_lines_if_any(valid_results, run_id, corrupt_count) when corrupt_count > 0 do
-    IO.warn(
+    Logger.warning(
       "Loaded #{length(valid_results)} valid results from #{run_id}, skipped #{corrupt_count} corrupt line(s)"
     )
   end
@@ -210,14 +214,17 @@ defmodule Deft.Eval.ResultStore do
           {results_acc ++ run_results, failed_acc}
 
         {:error, reason} ->
-          IO.warn("Skipping run #{run_id} during export: failed to load (#{inspect(reason)})")
+          Logger.warning(
+            "Skipping run #{run_id} during export: failed to load (#{inspect(reason)})"
+          )
+
           {results_acc, [run_id | failed_acc]}
       end
     end)
   end
 
   defp log_failed_runs_if_any(failed_runs) when length(failed_runs) > 0 do
-    IO.warn("Export skipped #{length(failed_runs)} run(s) that failed to load")
+    Logger.warning("Export skipped #{length(failed_runs)} run(s) that failed to load")
   end
 
   defp log_failed_runs_if_any(_failed_runs), do: :ok
@@ -234,7 +241,7 @@ defmodule Deft.Eval.ResultStore do
         :ok
 
       {:error, reason} = error ->
-        IO.warn("Failed to export eval results to #{output_path}: #{inspect(reason)}")
+        Logger.warning("Failed to export eval results to #{output_path}: #{inspect(reason)}")
         error
     end
   end
