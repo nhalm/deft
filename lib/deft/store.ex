@@ -68,7 +68,8 @@ defmodule Deft.Store do
 
   @type instance_type :: :cache | :sitelog
   @type name ::
-          {:cache, String.t(), Deft.Job.lead_id()} | {:sitelog, Deft.Job.job_id()}
+          {:cache, Deft.Session.session_id(), Deft.Job.lead_id()}
+          | {:sitelog, Deft.Job.job_id()}
   @type entry :: %{value: term(), metadata: map()}
 
   # Client API

@@ -19,10 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## standards v0.2
 
-### Phase 3: Replace primitives in specs and structs
-
-- Update `Deft.Store.name` type from `{:cache, String.t(), String.t()}` to `{:cache, Session.session_id(), Job.lead_id()}` and `{:sitelog, String.t()}` to `{:sitelog, Job.job_id()}`
-
 ### Phase 4: Validate
 
 - Run `mix dialyzer` with strict flags and fix any new violations introduced by the type changes. Ensure zero warnings, zero suppressed warnings.
