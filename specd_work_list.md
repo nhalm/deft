@@ -16,7 +16,3 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
-
-## orchestration v0.7
-
-- Handle `{:lead_message, :complete, ...}` by removing Lead from `started_leads` and checking `all_leads_complete?` for transition to `:verifying` — currently the normal completion path never transitions to `:verifying` (only the crash path does)

@@ -587,7 +587,23 @@ defmodule Deft.Job.Foreman do
       )
     end
 
-    :keep_state_and_data
+    # Handle Lead completion - remove from tracking and check for transition to verifying
+    if type == :complete do
+      lead_id = Map.get(metadata, :lead_id)
+      Logger.info("Lead #{lead_id} completed, removing from started_leads")
+
+      updated_data = Map.update!(data, :started_leads, &MapSet.delete(&1, lead_id))
+
+      # Check if all Leads are complete and transition to :verifying
+      if state == :executing and all_leads_complete?(updated_data) do
+        Logger.info("All Leads complete, transitioning to :verifying")
+        {:next_state, :verifying, updated_data}
+      else
+        {:keep_state, updated_data}
+      end
+    else
+      :keep_state_and_data
+    end
   end
 
   # Handle Lead process DOWN messages
