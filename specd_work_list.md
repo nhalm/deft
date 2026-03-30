@@ -17,3 +17,7 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
+## orchestration v0.7
+
+- Fix `parent_pid` passed to ForemanAgent and LeadAgent — `Job.Supervisor` (line 123) passes `parent_pid: foreman_name` where `foreman_name` is a `{:via, Registry, ...}` tuple, but all ForemanAgent tools (`submit_plan`, `ready_to_plan`, `request_research`, `spawn_lead`, `abort_lead`, `steer_lead`, `unblock_lead`) guard `when is_pid(parent_pid)` causing `FunctionClauseError` on every tool call. Same issue in `Lead.Supervisor` (line 81) for LeadAgent tools (`spawn_runner`, `publish_contract`, `report_status`, `request_help`). Fix: resolve the via-tuple to a PID before passing as `parent_pid`, or use `GenServer.whereis/1` in the supervisor after the Foreman/Lead process starts.
+
