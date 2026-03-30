@@ -1,4 +1,5 @@
 # History
+- **logging v0.5 (2026-03-30):** Remove `Logger.info("[Session] Session saved: #{session_id}")` from `Store.append/3` in `lib/deft/session/store.ex` — `append/3` is a low-level function called on every cost entry, tool result, and session start; logging here violates the "only callers log" principle (same violation as `load/2` which was already fixed in v0.5)
 - **logging v0.5 (2026-03-30):** Add `[Lead:<id>]` bracketed log prefix to all Logger calls in `lib/deft/job/lead.ex` — currently uses `"Lead #{data.lead_id}"` inline without the spec-required bracket format
 - **logging v0.5 (2026-03-30):** Add `[Foreman:<id>]` bracketed log prefix to all Logger calls in `lib/deft/job/foreman.ex` — currently uses bare strings like `"Foreman started for job ..."` without the spec-required `[Foreman:<id>]` format
 - **logging v0.5 (2026-03-30):** Move "Session loaded" log out of `Store.load/2` in `lib/deft/session/store.ex`: remove the `Logger.info` from `load/2`, add `Logger.info("[Session] Session resumed: #{session_id}, #{length(entries)} entries")` in `resume/2` after a successful load. This stops `list_sessions` from spamming on startup.

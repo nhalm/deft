@@ -59,8 +59,6 @@ defmodule Deft.Session.Store do
          {:ok, json} <- Jason.encode(entry),
          line <- json <> "\n",
          :ok <- File.write(path, line, [:append]) do
-      require Logger
-      Logger.info("[Session] Session saved: #{session_id}")
       :ok
     else
       {:error, reason} = error ->
