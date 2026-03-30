@@ -979,7 +979,7 @@ defmodule Deft.Job.Foreman do
   end
 
   defp start_lead_process(lead_id, deliverable, worktree_path, data) do
-    site_log_name = {:sitelog, data.session_id}
+    site_log_name = {:via, Registry, {Deft.ProcessRegistry, {:sitelog, data.session_id}}}
 
     runner_supervisor_name =
       {:via, Registry, {Deft.ProcessRegistry, {:runner_supervisor, lead_id}}}
