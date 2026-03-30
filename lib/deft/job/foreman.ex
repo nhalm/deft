@@ -212,9 +212,11 @@ defmodule Deft.Job.Foreman do
 
     if length(research_tasks) > 0 do
       # Spawn a task to collect all results and send to ForemanAgent
-      spawn_link(fn ->
-        collect_research_results(research_tasks, research_timeout, data)
-      end)
+      # Use async_nolink to avoid crashing the Foreman if collection fails
+      _task =
+        Task.Supervisor.async_nolink(data.runner_supervisor, fn ->
+          collect_research_results(research_tasks, research_timeout, data)
+        end)
 
       :keep_state_and_data
     else

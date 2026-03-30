@@ -26,5 +26,4 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Implement single-agent fallback: when Foreman detects simple task, configure ForemanAgent with full tool set (read, write, edit, bash, grep, find, ls) and skip orchestration (blocked: Implement Foreman→ForemanAgent prompt flow)
 - Remove old tuple-state Foreman implementation (the fused orchestrator+agent gen_statem) and replace with new split architecture (blocked: all above items)
 - Remove old tuple-state Lead implementation and replace with new split architecture (blocked: all above items)
-- Fix `spawn_link` in `foreman.ex:215`: research collection is spawned with `spawn_link`, so a crash in `collect_research_results` (e.g., ForemanAgent died) kills the Foreman via linked exit. Use `Task.Supervisor.async_nolink` on the Foreman's runner_supervisor or bare `spawn` instead.
 
