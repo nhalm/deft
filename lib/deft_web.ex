@@ -52,7 +52,7 @@ defmodule DeftWeb do
     quote do
       use Phoenix.LiveView,
         layout: {DeftWeb.Layouts, :app},
-        log: :debug
+        log: false
 
       unquote(html_helpers())
     end
