@@ -2,11 +2,14 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.3 |
-| Status | Implemented |
-| Last Updated | 2026-03-29 |
+| Version | 0.4 |
+| Status | Ready |
+| Last Updated | 2026-03-30 |
 
 ## Changelog
+
+### v0.4 (2026-03-30)
+- Added optional `rate_limiter` config field to `Deft.Agent`. When provided, the Agent calls `RateLimiter.request/2` before sending to the provider and `RateLimiter.reconcile/4` after receiving the response, ensuring all LLM calls in orchestrated jobs flow through the centralized RateLimiter.
 
 ### v0.3 (2026-03-29)
 - Added sub-agent mode: `Deft.Agent` can be started as a child of an orchestrator process, not just as a top-level session agent. The agent is the same — the supervision context differs.
@@ -69,6 +72,7 @@ Deft.Application (Application)
 **Sub-agent mode:** `Deft.Agent` can also be started as a child of an orchestrator process (Foreman, Lead) within a job supervision tree. In this mode:
 
 - The Agent is started with a `parent_pid` option, which is passed through to `ToolContext` for orchestration tools
+- The Agent may also be started with an optional `rate_limiter` option (pid of a `Deft.Job.RateLimiter` GenServer). When provided, the Agent calls `RateLimiter.request/2` before provider calls and `RateLimiter.reconcile/4` after receiving the response.
 - The orchestrator process is responsible for sending prompts to the Agent via `Deft.Agent.prompt/2`
 - The Agent broadcasts events via Registry as usual — the orchestrator and web UI both subscribe
 - Multiple Agents can coexist in the same job (one ForemanAgent + N LeadAgents), each with their own ToolRunner and OM
