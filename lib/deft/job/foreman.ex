@@ -80,6 +80,7 @@ defmodule Deft.Job.Foreman do
       plan: nil,
       blocked_leads: %{},
       started_leads: MapSet.new(),
+      completed_leads: MapSet.new(),
       job_start_time: System.monotonic_time(:millisecond)
     }
 
@@ -582,39 +583,10 @@ defmodule Deft.Job.Foreman do
     end
 
     # Auto-promote certain message types to site log
-    if type in [:contract, :decision, :correction, :critical_finding] and data.site_log_pid do
-      # Generate unique key with type prefix
-      unique_id = :erlang.unique_integer([:positive])
-      key = "#{type}-#{unique_id}"
-
-      Store.write(
-        data.site_log_pid,
-        key,
-        content,
-        Map.merge(metadata, %{
-          category: type,
-          timestamp: System.system_time(:millisecond)
-        })
-      )
-    end
+    promote_lead_message_to_site_log(type, content, metadata, data)
 
     # Handle Lead completion - remove from tracking and check for transition to verifying
-    if type == :complete do
-      lead_id = Map.get(metadata, :lead_id)
-      Logger.info("Lead #{lead_id} completed, removing from started_leads")
-
-      updated_data = Map.update!(data, :started_leads, &MapSet.delete(&1, lead_id))
-
-      # Check if all Leads are complete and transition to :verifying
-      if state == :executing and all_leads_complete?(updated_data) do
-        Logger.info("All Leads complete, transitioning to :verifying")
-        {:next_state, :verifying, updated_data}
-      else
-        {:keep_state, updated_data}
-      end
-    else
-      :keep_state_and_data
-    end
+    handle_lead_completion(type, metadata, state, data)
   end
 
   # Handle Lead process DOWN messages
@@ -992,9 +964,58 @@ defmodule Deft.Job.Foreman do
   end
 
   defp all_leads_complete?(data) do
-    # All Leads are complete when no Leads are currently running
-    # (started_leads tracks currently active Leads)
-    MapSet.size(data.started_leads) == 0
+    # All Leads are complete when the number of completed Leads equals
+    # the number of deliverables in the plan.
+    # This ensures we don't transition to :verifying if a Lead crashed
+    # (crashed Leads are removed from started_leads but NOT added to completed_leads)
+    if data.plan && data.plan.deliverables do
+      expected_count = length(data.plan.deliverables)
+      actual_count = MapSet.size(data.completed_leads)
+      actual_count == expected_count
+    else
+      # Fallback: if no plan exists yet, check if started_leads is empty
+      MapSet.size(data.started_leads) == 0
+    end
+  end
+
+  defp promote_lead_message_to_site_log(type, content, metadata, data) do
+    if type in [:contract, :decision, :correction, :critical_finding] and data.site_log_pid do
+      # Generate unique key with type prefix
+      unique_id = :erlang.unique_integer([:positive])
+      key = "#{type}-#{unique_id}"
+
+      Store.write(
+        data.site_log_pid,
+        key,
+        content,
+        Map.merge(metadata, %{
+          category: type,
+          timestamp: System.system_time(:millisecond)
+        })
+      )
+    end
+  end
+
+  defp handle_lead_completion(type, metadata, state, data) do
+    if type == :complete do
+      lead_id = Map.get(metadata, :lead_id)
+      Logger.info("Lead #{lead_id} completed, removing from started_leads")
+
+      updated_data =
+        data
+        |> Map.update!(:started_leads, &MapSet.delete(&1, lead_id))
+        |> Map.update!(:completed_leads, &MapSet.put(&1, lead_id))
+
+      # Check if all Leads are complete and transition to :verifying
+      if state == :executing and all_leads_complete?(updated_data) do
+        Logger.info("All Leads complete, transitioning to :verifying")
+        {:next_state, :verifying, updated_data}
+      else
+        {:keep_state, updated_data}
+      end
+    else
+      :keep_state_and_data
+    end
   end
 
   defp do_handle_lead_crash(lead_id, _state, data) do

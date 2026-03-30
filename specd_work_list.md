@@ -17,6 +17,3 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## orchestration v0.7
-
-- Fix Lead crash handler treating crashed Leads as successfully completed (foreman.ex:1017-1020): when a crashed Lead is the last in `started_leads`, Foreman transitions to `:verifying` with missing deliverables — should not count a crash as completion
