@@ -2,11 +2,14 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.6 |
-| Status | Implemented |
-| Last Updated | 2026-03-24 |
+| Version | 0.7 |
+| Status | Ready |
+| Last Updated | 2026-03-29 |
 
 ## Changelog
+
+### v0.7 (2026-03-29)
+- Clarified distinction between user sessions and agent sessions. User sessions are conversations; agent sessions are internal LLM state for orchestrated sub-agents (ForemanAgent, LeadAgents). Same JSONL format, different storage paths.
 
 ### v0.6 (2026-03-24)
 - Replaced escript with unified CLI dispatcher — same `./deft` binary handles all subcommands
@@ -62,7 +65,16 @@ Sessions handle persistence, configuration, and the CLI entry point for Deft. A 
 
 Sessions are stored as JSONL files. Each line is a JSON object representing one event in the session timeline.
 
-Storage location: `~/.deft/projects/<path-encoded-repo>/sessions/<session_id>.jsonl`
+There are two kinds of sessions, both using the same JSONL format:
+
+**User sessions** — conversations between the user and Deft. These are the primary sessions.
+- Storage: `~/.deft/projects/<path-encoded-repo>/sessions/<session_id>.jsonl`
+- Listed in the web UI session picker. Resumable by the user.
+
+**Agent sessions** — internal LLM conversation history for orchestrated sub-agents (ForemanAgent, LeadAgents). These are not user-facing.
+- Storage: `~/.deft/projects/<path-encoded-repo>/jobs/<job_id>/foreman_session.jsonl` and `lead_<id>_session.jsonl`
+- Not listed in the session picker. Not directly resumable — the orchestrator starts fresh agents on job resume (see [orchestration.md](orchestration.md)).
+- Same entry types, same format. The only difference is storage path and lifecycle.
 
 Sessions are scoped per-project. The project is identified by the git repository root (resolved to a real path, no symlinks). The path is encoded by replacing `/` with `-` (e.g., `/Users/nick/myapp` → `-Users-nick-myapp`). See [filesystem.md](filesystem.md) for the full `~/.deft/projects/` layout.
 

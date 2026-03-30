@@ -2,11 +2,14 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.2 |
-| Status | Implemented |
-| Last Updated | 2026-03-17 |
+| Version | 0.3 |
+| Status | Ready |
+| Last Updated | 2026-03-29 |
 
 ## Changelog
+
+### v0.3 (2026-03-29)
+- Clarified priority naming: callers are ForemanAgent/LeadAgent/Runner (orchestrators don't make LLM calls). No logic change.
 
 ### v0.2 (2026-03-20)
 - Added `job.max_leads` to configuration table — was referenced in section 5 but missing from section 7
@@ -54,9 +57,9 @@ A call proceeds only when both buckets have sufficient capacity. If either is ex
 
 ### 2. Priority Queue
 
-**Priority order:** Foreman > Runner > Lead.
+**Priority order:** ForemanAgent > Runner > LeadAgent.
 
-**Rationale for Runner > Lead:** Runners are spawned by Leads. A Lead waiting for its Runner's LLM response is blocked. Starving Runners starves Leads — this is priority inversion. Giving Runners higher priority than Leads ensures Leads' active work completes before Leads get to plan more work.
+**Rationale:** With the orchestrator+agent split (see [orchestration.md](orchestration.md)), only agents and Runners make LLM calls — the orchestrator processes (Foreman, Lead) do not. ForemanAgent makes coordination decisions (unblocking, steering) that unblock LeadAgents, so it gets highest priority. Runners are spawned by Leads and block their owning LeadAgent when the Lead waits for results — starving Runners starves Leads (priority inversion). LeadAgents get lowest priority so their own Runners finish first.
 
 The Foreman has highest priority because its coordination decisions (unblocking, steering, conflict resolution) affect all Leads.
 

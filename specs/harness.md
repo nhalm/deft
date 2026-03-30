@@ -2,11 +2,16 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.2 |
-| Status | Implemented |
-| Last Updated | 2026-03-19 |
+| Version | 0.3 |
+| Status | Ready |
+| Last Updated | 2026-03-29 |
 
 ## Changelog
+
+### v0.3 (2026-03-29)
+- Added sub-agent mode: `Deft.Agent` can be started as a child of an orchestrator process, not just as a top-level session agent. The agent is the same — the supervision context differs.
+- Updated supervision tree to show both standalone (session) and orchestrated (job) modes
+- Removed tuple-state reference from design decisions — orchestration no longer extends the agent via tuple states
 
 ### v0.2 (2026-03-19)
 - Clarified: abort in `:executing_tools` must terminate all per-tool inner tasks, not just the outer wrapper task
@@ -59,11 +64,24 @@ Deft.Application (Application)
             └── Deft.OM.Supervisor (Supervisor — observational memory processes)
 ```
 
+**Standalone mode** (above) is for direct user sessions — one Agent per session. This is the default.
+
+**Sub-agent mode:** `Deft.Agent` can also be started as a child of an orchestrator process (Foreman, Lead) within a job supervision tree. In this mode:
+
+- The Agent is started with a `parent_pid` option, which is passed through to `ToolContext` for orchestration tools
+- The orchestrator process is responsible for sending prompts to the Agent via `Deft.Agent.prompt/2`
+- The Agent broadcasts events via Registry as usual — the orchestrator and web UI both subscribe
+- Multiple Agents can coexist in the same job (one ForemanAgent + N LeadAgents), each with their own ToolRunner and OM
+- The `rest_for_one` strategy applies within each Agent's sub-tree (Agent + ToolRunner + OM), not at the job level. If a sub-agent crashes, its orchestrator detects the crash via `Process.monitor` and handles recovery.
+
+See [orchestration.md](orchestration.md) for the job-level supervision tree.
+
 Key invariants:
 - Each session is an isolated process subtree. A crash in one session does not affect others.
-- `rest_for_one` strategy on the session worker: if the Agent crashes, ToolRunner and OM processes restart too.
+- `rest_for_one` strategy on the session worker (standalone) or agent sub-tree (sub-agent): if the Agent crashes, ToolRunner and OM processes restart too.
 - The Agent process owns the conversation state. All access is via message passing.
 - Tool execution happens in supervised tasks (`Task.Supervisor.async_nolink`). A tool crash returns an error result; it does not crash the agent.
+- The Agent is the same `gen_statem` in both modes. It does not know whether it's standalone or orchestrated — it just processes prompts and executes tools.
 
 ### 2. Agent Loop
 
@@ -136,7 +154,7 @@ Updated after each LLM response from `:usage` events.
 
 ### Design decisions
 
-- **gen_statem with `handle_event` mode.** Allows fallback handlers in any state (critical for abort, which must work in all states). Also supports tuple states `{phase, agent_state}` for orchestration extension.
+- **gen_statem with `handle_event` mode.** Allows fallback handlers in any state (critical for abort, which must work in all states).
 - **JSONL over SQLite for sessions.** Append-only, human-readable, linearly reconstructed.
 - **Provider events via process messages.** Simple `receive` in gen_statem, no callback complexity.
 - **Compaction at 70%.** Leaves room for model response. 80% was too aggressive per reviewer feedback.

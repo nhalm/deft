@@ -2,11 +2,15 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.2 |
-| Status | Implemented |
-| Last Updated | 2026-03-19 |
+| Version | 0.3 |
+| Status | Ready |
+| Last Updated | 2026-03-29 |
 
 ## Changelog
+
+### v0.3 (2026-03-29)
+- Added orchestration tools — tools whose `execute/2` sends a message to a parent process and returns a confirmation. Enabled by optional `parent_pid` field in `ToolContext`.
+- Added `cache_config` field to `ToolContext` (was implicit, now documented)
 
 ### v0.2 (2026-03-19)
 - Clarified edit tool: unified diff must use a real diff algorithm (LCS or Myers), not positional line comparison
@@ -52,8 +56,23 @@ callback execute(args :: map(), context :: ToolContext.t()) :: {:ok, [ContentBlo
 - `session_id` — current session identifier
 - `emit` — function for streaming incremental output back to the TUI during long-running tools (e.g., bash output)
 - `file_scope :: [String.t()] | nil` — optional restriction on write/edit paths (used by orchestration; `nil` means unrestricted)
+- `parent_pid :: pid() | nil` — optional PID of the orchestrator process that owns this agent. Used by orchestration tools to send messages back to their orchestrator. `nil` for standalone sessions.
+- `cache_config :: %{optional(String.t()) => pos_integer()} | nil` — per-tool spilling thresholds (see [filesystem.md](filesystem.md))
 
 Tools return a list of content blocks (typically a single `Text` block, but structured content for future MCP compatibility). The agent loop wraps these into `ToolResult` messages for the LLM.
+
+### 1.1 Orchestration Tools
+
+Orchestration tools are tools whose primary effect is sending a message to the agent's parent orchestrator process. They follow the same `Deft.Tool` behaviour but use `context.parent_pid` to communicate with the orchestrator.
+
+Pattern:
+1. Tool validates args
+2. Tool calls `send(context.parent_pid, {:agent_action, action, payload})`
+3. Tool returns `{:ok, [Text.new("action requested")]}`
+
+The agent sees a normal tool result. The orchestrator receives the message in `handle_info`. This keeps agents standard — they don't know they're being orchestrated, they just have extra tools available.
+
+Orchestration tools are defined by the orchestration layer (see [orchestration.md](orchestration.md)), not in this spec. This spec only defines the mechanism (`parent_pid` in ToolContext).
 
 ### 2. Built-in Tools
 

@@ -63,10 +63,10 @@ Decision reasoning is logged in [specd_decisions.jsonl](../specd_decisions.jsonl
 | [testing](testing/README.md) | v0.1 | Implemented | Testing strategy — three layers (unit, integration, eval), ScriptedProvider, coverage expectations |
 | [unit-testing](testing/unit-testing.md) | v0.1 | Implemented | Unit testing philosophy, critical path coverage, ScriptedProvider integration scenarios |
 | [evals](testing/evals/README.md) | v0.4 | Implemented | AI eval infrastructure, methodology, and component eval definitions |
-| [harness](harness.md) | v0.2 | Implemented | Agent loop (gen_statem), message format, process architecture, context assembly |
-| [tools](tools.md) | v0.2 | Implemented | Tool behaviour, 7 built-in tools, tool execution model |
+| [harness](harness.md) | v0.3 | Ready | Agent loop (gen_statem), message format, process architecture, standalone + sub-agent modes |
+| [tools](tools.md) | v0.3 | Ready | Tool behaviour, 7 built-in tools, orchestration tools, tool execution model |
 | [providers](providers.md) | v0.3 | Implemented | LLM provider behaviour, SSE streaming, Anthropic implementation |
-| [sessions](sessions.md) | v0.6 | Implemented | Session persistence (JSONL), resume, configuration, CLI dispatcher, Mix release distribution |
+| [sessions](sessions.md) | v0.7 | Ready | Session persistence (JSONL), user + agent sessions, resume, configuration, CLI dispatcher, Mix release distribution |
 | [tui](tui.md) | v0.5 | Deprecated | Terminal UI — superseded by web-ui |
 | [web-ui](web-ui.md) | v0.5 | Implemented | Phoenix LiveView web interface, vim/tmux keybindings, responsive, real-time streaming |
 
@@ -75,8 +75,8 @@ Decision reasoning is logged in [specd_decisions.jsonl](../specd_decisions.jsonl
 | Spec | Version | Status | Description |
 |------|---------|--------|-------------|
 | [observational-memory](observational-memory.md) | v0.3 | Implemented | Observer/Reflector with sectioned observations, two-level compression |
-| [orchestration](orchestration.md) | v0.6 | Implemented | Foreman/Lead/Runner hierarchy, OTP coordination protocol, Deft.Store site log |
-| [rate-limiter](rate-limiter.md) | v0.2 | Implemented | Dual token-bucket rate limiting, priority queue, adaptive concurrency, cost tracking |
+| [orchestration](orchestration.md) | v0.7 | Ready | Foreman/Lead/Runner hierarchy — orchestrator+agent split, OTP coordination, Deft.Store site log |
+| [rate-limiter](rate-limiter.md) | v0.3 | Ready | Dual token-bucket rate limiting, priority queue, adaptive concurrency, cost tracking |
 | [git-strategy](git-strategy.md) | v0.2 | Implemented | Git worktree strategy, merge protocol, conflict resolution, orphan cleanup |
 
 ## Infrastructure
