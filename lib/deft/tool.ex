@@ -81,6 +81,7 @@ defmodule Deft.Tool.Context do
   - `lead_id` - Lead identifier for cache isolation (defaults to "main" for single-agent sessions)
   - `emit` - Function for streaming incremental output (e.g., bash stdout)
   - `file_scope` - Optional list of allowed paths for write/edit operations
+  - `parent_pid` - Optional PID of the orchestrator process that owns this agent. Used by orchestration tools to send messages back to their orchestrator. `nil` for standalone sessions.
   - `bash_timeout` - Timeout in milliseconds for bash tool execution
   - `cache_tid` - Optional ETS table ID for cache access (present when cache is active)
   - `cache_config` - Optional map of cache configuration (token thresholds per tool)
@@ -92,6 +93,7 @@ defmodule Deft.Tool.Context do
     :session_id,
     :emit,
     :file_scope,
+    :parent_pid,
     :bash_timeout,
     :cache_tid,
     :cache_config,
@@ -104,6 +106,7 @@ defmodule Deft.Tool.Context do
           lead_id: Deft.Job.lead_id(),
           emit: (String.t() -> :ok),
           file_scope: [String.t()] | nil,
+          parent_pid: pid() | nil,
           bash_timeout: pos_integer(),
           cache_tid: reference() | nil,
           cache_config: %{optional(String.t()) => pos_integer()} | nil
