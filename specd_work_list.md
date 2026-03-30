@@ -16,3 +16,8 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
+
+## logging v0.6
+
+- Add "Job complete" info-level log to `lib/deft/job/foreman.ex` `:complete` state entry handler: calculate duration since job start and total cost, log as `"#{log_prefix(data)} Job complete (#{duration_sec}s, $#{cost})"` — per §5 Info level "Job complete (duration, total cost)"
+- Add periodic cost checkpoint info-level logging in `lib/deft/job/foreman.ex`: log accumulated cost at regular intervals during job execution as `"#{log_prefix(data)} Cost checkpoint: $#{cost}"` — per §5 Info level "Cost checkpoints (accumulated cost)"
