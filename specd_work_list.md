@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## harness v0.4
 
-- Fix RateLimiter reply pattern match in `call_provider_stream/5` (agent.ex:833): RateLimiter replies `{:ok, estimated_tokens}` but agent matches on bare `:ok` — all rate-limited LLM calls silently fail, falling through to the `{:error, reason}` arm
 - Fix `_estimated_tokens` not persisted to agent state for reconciliation (agent.ex:835,991): `config_with_estimate` is a local variable passed to `provider.stream` but never stored in `data.config` — `handle_usage` always reads `_estimated_tokens` as `0`, making reconciliation a no-op
 
 ## orchestration v0.7

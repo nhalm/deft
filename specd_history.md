@@ -1,4 +1,5 @@
 # History
+- **harness v0.4 (2026-03-30):** Fix RateLimiter reply pattern match in `call_provider_stream/5` (agent.ex:833): RateLimiter replies `{:ok, estimated_tokens}` but agent matches on bare `:ok` — all rate-limited LLM calls silently fail, falling through to the `{:error, reason}` arm
 - **orchestration v0.7 (2026-03-30):** Pass RateLimiter PID to each LeadAgent through config when starting it
 - **orchestration v0.7 (2026-03-30):** Pass RateLimiter PID to ForemanAgent through config when starting it in `Deft.Job.Supervisor`
 - **orchestration v0.7 (2026-03-30):** Fix deliverable string/atom key mismatch: normalize deliverable and dependency keys from strings to atoms when storing plan in Foreman, fixing `deliverable_already_started?`, `build_system_prompt`, and `build_planning_context` access

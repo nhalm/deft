@@ -830,7 +830,7 @@ defmodule Deft.Agent do
              {:request, provider, estimated_tokens, priority},
              :infinity
            ) do
-        :ok ->
+        {:ok, estimated_tokens} ->
           # Store estimated tokens in config for reconciliation
           config_with_estimate = Map.put(config, :_estimated_tokens, estimated_tokens)
           provider.stream(messages, tools, config_with_estimate)
