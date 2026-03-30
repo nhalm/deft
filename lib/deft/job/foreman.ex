@@ -321,6 +321,14 @@ defmodule Deft.Job.Foreman do
 
   def handle_event(:enter, _old_state, :complete, data) do
     Logger.info("#{log_prefix(data)} Foreman entering :complete phase")
+
+    # Calculate job duration and get total cost
+    duration_ms = System.monotonic_time(:millisecond) - data.job_start_time
+    duration_sec = Float.round(duration_ms / 1000, 1)
+    cost = RateLimiter.get_cumulative_cost(data.session_id)
+
+    Logger.info("#{log_prefix(data)} Job complete (#{duration_sec}s, $#{Float.round(cost, 2)})")
+
     # Squash-merge all work, report summary, cleanup
     :keep_state_and_data
   end
