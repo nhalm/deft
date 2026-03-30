@@ -587,7 +587,7 @@ defmodule Deft.Job.ForemanTest do
       # The mock provider fails immediately, so the planning phase's call_llm
       # fails gracefully and transitions to complete.
       {state, _data} = :sys.get_state(foreman_pid)
-      assert match?({:complete, :idle}, state)
+      assert match?(:complete, state)
 
       # Cleanup
       :gen_statem.stop(foreman_pid)
@@ -617,7 +617,7 @@ defmodule Deft.Job.ForemanTest do
       Process.sleep(100)
 
       # Transition to researching and trigger entry
-      :sys.replace_state(foreman_pid, fn {_s, d} -> {{:researching, :idle}, d} end)
+      :sys.replace_state(foreman_pid, fn {_s, d} -> {:researching, d} end)
 
       # Manually trigger research phase entry
       # We'll directly call the determine_research_tasks to verify it works
@@ -660,7 +660,7 @@ defmodule Deft.Job.ForemanTest do
         mock_task = %{ref: task_ref, pid: self()}
 
         {
-          {:researching, :idle},
+          :researching,
           %{
             d
             | research_tasks: [mock_task],
@@ -679,7 +679,7 @@ defmodule Deft.Job.ForemanTest do
       # Research findings are collected and tasks cleared.
       # The mock provider fails immediately, so decomposition transitions to complete.
       {state, data} = :sys.get_state(foreman_pid)
-      assert match?({:complete, :idle}, state)
+      assert match?(:complete, state)
       assert data.research_findings == ["Research finding 1"]
       assert data.research_tasks == []
 
@@ -718,7 +718,7 @@ defmodule Deft.Job.ForemanTest do
         mock_task = %{ref: task_ref, pid: mock_pid}
 
         {
-          {:researching, :idle},
+          :researching,
           %{
             d
             | research_tasks: [mock_task],
@@ -737,7 +737,7 @@ defmodule Deft.Job.ForemanTest do
       # Research findings are preserved despite timeout.
       # The mock provider fails immediately, so decomposition transitions to complete.
       {state, data} = :sys.get_state(foreman_pid)
-      assert match?({:complete, :idle}, state)
+      assert match?(:complete, state)
       assert data.research_findings == ["Finding 1"]
       assert data.research_tasks == []
 
@@ -772,14 +772,14 @@ defmodule Deft.Job.ForemanTest do
       # Verify decomposition phase entry casts :start_decomposition
       # We'll manually transition to verify the entry handler works
       :sys.replace_state(foreman_pid, fn {_s, d} ->
-        {{:decomposing, :idle}, d}
+        {:decomposing, d}
       end)
 
       # The entry handler should have cast :start_decomposition
       # We can't easily verify the cast was sent without mocking,
       # but we can verify the state is correct
       {state, _data} = :sys.get_state(foreman_pid)
-      assert match?({:decomposing, :idle}, state)
+      assert match?(:decomposing, state)
 
       # Cleanup
       {_state, data} = :sys.get_state(foreman_pid)
@@ -897,7 +897,7 @@ defmodule Deft.Job.ForemanTest do
       # This simulates the state right after all tools complete
       :sys.replace_state(foreman_pid, fn {_s, d} ->
         {
-          {:decomposing, :executing_tools},
+          :decomposing,
           %{
             d
             | messages: [assistant_message],
@@ -926,7 +926,7 @@ defmodule Deft.Job.ForemanTest do
       # In auto-approve mode, should transition to executing (or complete if git fails)
       # The key is that it should NOT still be in decomposing
       refute match?({:decomposing, _}, state)
-      assert match?({:executing, :idle}, state) or match?({:complete, :idle}, state)
+      assert match?(:executing, state) or match?(:complete, state)
 
       # Cleanup
       {_state, data} = :sys.get_state(foreman_pid)
@@ -956,7 +956,7 @@ defmodule Deft.Job.ForemanTest do
 
       # Set Foreman to decomposing:idle state
       :sys.replace_state(foreman_pid, fn {_s, d} ->
-        {{:decomposing, :idle}, d}
+        {:decomposing, d}
       end)
 
       # Send approve_plan
@@ -968,7 +968,7 @@ defmodule Deft.Job.ForemanTest do
       # approve_plan transitions to executing, but without a real git repo
       # the job branch creation fails → complete. Verify no crash.
       {state, _data} = :sys.get_state(foreman_pid)
-      assert match?({:complete, :idle}, state)
+      assert match?(:complete, state)
 
       # Cleanup
       {_state, data} = :sys.get_state(foreman_pid)
@@ -1005,7 +1005,7 @@ defmodule Deft.Job.ForemanTest do
       }
 
       :sys.replace_state(foreman_pid, fn {_s, d} ->
-        {{:decomposing, :idle}, %{d | messages: [initial_message]}}
+        {:decomposing, %{d | messages: [initial_message]}}
       end)
 
       # Get initial message count
@@ -1022,7 +1022,7 @@ defmodule Deft.Job.ForemanTest do
       # The mock provider fails immediately → complete.
       # Verify the revision message was still added.
       {state, data_after} = :sys.get_state(foreman_pid)
-      assert match?({:complete, :idle}, state)
+      assert match?(:complete, state)
       # New message should be added (revision prompt)
       assert length(data_after.messages) > initial_count
 
