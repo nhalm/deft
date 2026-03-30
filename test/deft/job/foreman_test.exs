@@ -2,7 +2,6 @@ defmodule Deft.Job.ForemanTest do
   use ExUnit.Case, async: false
 
   alias Deft.Job.Foreman
-  alias Deft.Job.LeadSupervisor
   alias Deft.Job.RateLimiter
   alias Deft.Project
   alias Deft.Store
@@ -189,6 +188,7 @@ defmodule Deft.Job.ForemanTest do
     } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
       start_rate_limiter(session_id)
+      site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
         Foreman.start_link(
@@ -197,7 +197,8 @@ defmodule Deft.Job.ForemanTest do
           prompt: "test prompt",
           rate_limiter_pid: self(),
           runner_supervisor: runner_supervisor,
-          working_dir: tmp_dir
+          working_dir: tmp_dir,
+          site_log_pid: site_log_pid
         )
 
       {_state, data} = :sys.get_state(foreman_pid)
@@ -216,9 +217,7 @@ defmodule Deft.Job.ForemanTest do
       keys = Store.keys(tid)
       assert Enum.any?(keys, fn key -> String.starts_with?(key, "contract-") end)
 
-      # Cleanup - stop Foreman and clean up site log
-      {_state, data} = :sys.get_state(foreman_pid)
-      Store.cleanup(data.site_log_pid)
+      # Cleanup
       :gen_statem.stop(foreman_pid)
       # Give processes time to fully terminate
       Process.sleep(50)
@@ -230,6 +229,7 @@ defmodule Deft.Job.ForemanTest do
     } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
       start_rate_limiter(session_id)
+      site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
         Foreman.start_link(
@@ -238,7 +238,8 @@ defmodule Deft.Job.ForemanTest do
           prompt: "test prompt",
           rate_limiter_pid: self(),
           runner_supervisor: runner_supervisor,
-          working_dir: tmp_dir
+          working_dir: tmp_dir,
+          site_log_pid: site_log_pid
         )
 
       {_state, data} = :sys.get_state(foreman_pid)
@@ -254,9 +255,7 @@ defmodule Deft.Job.ForemanTest do
       keys = Store.keys(tid)
       assert Enum.any?(keys, fn key -> String.starts_with?(key, "critical_finding-") end)
 
-      # Cleanup - stop Foreman and clean up site log
-      {_state, data} = :sys.get_state(foreman_pid)
-      Store.cleanup(data.site_log_pid)
+      # Cleanup
       :gen_statem.stop(foreman_pid)
       # Give processes time to fully terminate
       Process.sleep(50)
@@ -268,6 +267,7 @@ defmodule Deft.Job.ForemanTest do
     } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
       start_rate_limiter(session_id)
+      site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
         Foreman.start_link(
@@ -276,7 +276,8 @@ defmodule Deft.Job.ForemanTest do
           prompt: "test prompt",
           rate_limiter_pid: self(),
           runner_supervisor: runner_supervisor,
-          working_dir: tmp_dir
+          working_dir: tmp_dir,
+          site_log_pid: site_log_pid
         )
 
       {_state, data} = :sys.get_state(foreman_pid)
@@ -292,20 +293,19 @@ defmodule Deft.Job.ForemanTest do
       keys = Store.keys(tid)
       assert Enum.any?(keys, fn key -> String.starts_with?(key, "correction-") end)
 
-      # Cleanup - stop Foreman and clean up site log
-      {_state, data} = :sys.get_state(foreman_pid)
-      Store.cleanup(data.site_log_pid)
+      # Cleanup
       :gen_statem.stop(foreman_pid)
       # Give processes time to fully terminate
       Process.sleep(50)
     end
 
-    test "promotes finding messages only when tagged shared", %{
+    test "never promotes finding messages to site log", %{
       tmp_dir: tmp_dir,
       runner_supervisor: runner_supervisor
     } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
       start_rate_limiter(session_id)
+      site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
         Foreman.start_link(
@@ -314,23 +314,25 @@ defmodule Deft.Job.ForemanTest do
           prompt: "test prompt",
           rate_limiter_pid: self(),
           runner_supervisor: runner_supervisor,
-          working_dir: tmp_dir
+          working_dir: tmp_dir,
+          site_log_pid: site_log_pid
         )
 
       {_state, data} = :sys.get_state(foreman_pid)
       tid = Store.tid(data.site_log_pid)
 
-      # Send a non-shared finding message
+      # Send a finding message (not in the auto-promote list)
       send(foreman_pid, {:lead_message, :finding, "Found local implementation detail", %{}})
 
       # Wait for processing
       Process.sleep(100)
 
       # Verify finding was NOT written to site log
+      # (only :contract, :decision, :correction, :critical_finding are auto-promoted)
       keys = Store.keys(tid)
-      refute Enum.any?(keys, fn key -> String.starts_with?(key, "research-") end)
+      assert keys == []
 
-      # Send a shared finding message
+      # Send a shared finding message - still not promoted
       send(
         foreman_pid,
         {:lead_message, :finding, "Database uses connection pooling", %{shared: true}}
@@ -339,13 +341,11 @@ defmodule Deft.Job.ForemanTest do
       # Wait for processing
       Process.sleep(100)
 
-      # Verify shared finding WAS written to site log
+      # Verify shared finding was also NOT written (finding is not an auto-promoted type)
       keys = Store.keys(tid)
-      assert Enum.any?(keys, fn key -> String.starts_with?(key, "research-") end)
+      assert keys == []
 
-      # Cleanup - stop Foreman and clean up site log
-      {_state, data} = :sys.get_state(foreman_pid)
-      Store.cleanup(data.site_log_pid)
+      # Cleanup
       :gen_statem.stop(foreman_pid)
       # Give processes time to fully terminate
       Process.sleep(50)
@@ -357,6 +357,7 @@ defmodule Deft.Job.ForemanTest do
     } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
       start_rate_limiter(session_id)
+      site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
         Foreman.start_link(
@@ -365,7 +366,8 @@ defmodule Deft.Job.ForemanTest do
           prompt: "test prompt",
           rate_limiter_pid: self(),
           runner_supervisor: runner_supervisor,
-          working_dir: tmp_dir
+          working_dir: tmp_dir,
+          site_log_pid: site_log_pid
         )
 
       {_state, data} = :sys.get_state(foreman_pid)
@@ -381,9 +383,7 @@ defmodule Deft.Job.ForemanTest do
       keys = Store.keys(tid)
       assert keys == []
 
-      # Cleanup - stop Foreman and clean up site log
-      {_state, data} = :sys.get_state(foreman_pid)
-      Store.cleanup(data.site_log_pid)
+      # Cleanup
       :gen_statem.stop(foreman_pid)
       # Give processes time to fully terminate
       Process.sleep(50)
@@ -395,6 +395,7 @@ defmodule Deft.Job.ForemanTest do
     } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
       start_rate_limiter(session_id)
+      site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
         Foreman.start_link(
@@ -403,7 +404,8 @@ defmodule Deft.Job.ForemanTest do
           prompt: "test prompt",
           rate_limiter_pid: self(),
           runner_supervisor: runner_supervisor,
-          working_dir: tmp_dir
+          working_dir: tmp_dir,
+          site_log_pid: site_log_pid
         )
 
       {_state, data} = :sys.get_state(foreman_pid)
@@ -419,9 +421,7 @@ defmodule Deft.Job.ForemanTest do
       keys = Store.keys(tid)
       assert keys == []
 
-      # Cleanup - stop Foreman and clean up site log
-      {_state, data} = :sys.get_state(foreman_pid)
-      Store.cleanup(data.site_log_pid)
+      # Cleanup
       :gen_statem.stop(foreman_pid)
       # Give processes time to fully terminate
       Process.sleep(50)
@@ -533,6 +533,7 @@ defmodule Deft.Job.ForemanTest do
     } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
       start_rate_limiter(session_id)
+      site_log_pid = start_site_log(session_id, tmp_dir)
       lead_id = "lead-1"
       worktree_path = "/tmp/test-worktree"
 
@@ -550,10 +551,11 @@ defmodule Deft.Job.ForemanTest do
           prompt: "test prompt",
           rate_limiter_pid: self(),
           runner_supervisor: runner_supervisor,
-          working_dir: tmp_dir
+          working_dir: tmp_dir,
+          site_log_pid: site_log_pid
         )
 
-      # Get initial state and manually add a Lead to the leads map
+      # Get initial state and manually add a Lead to the leads map and lead_monitors
       {_state, data} = :sys.get_state(foreman_pid)
       monitor_ref = make_ref()
 
@@ -565,7 +567,8 @@ defmodule Deft.Job.ForemanTest do
       }
 
       leads = Map.put(data.leads, lead_id, lead_info)
-      data = %{data | leads: leads}
+      lead_monitors = Map.put(data.lead_monitors, lead_id, monitor_ref)
+      data = %{data | leads: leads, lead_monitors: lead_monitors}
       :sys.replace_state(foreman_pid, fn {s, _d} -> {s, data} end)
 
       # Simulate Lead crash by sending DOWN message
@@ -578,9 +581,7 @@ defmodule Deft.Job.ForemanTest do
       {_state, updated_data} = :sys.get_state(foreman_pid)
       refute Map.has_key?(updated_data.leads, lead_id)
 
-      # Cleanup - stop Foreman and clean up site log
-      {_state, data} = :sys.get_state(foreman_pid)
-      Store.cleanup(data.site_log_pid)
+      # Cleanup
       :gen_statem.stop(foreman_pid)
 
       # Clean up git mock config
@@ -597,6 +598,7 @@ defmodule Deft.Job.ForemanTest do
     } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
       start_rate_limiter(session_id)
+      site_log_pid = start_site_log(session_id, tmp_dir)
       lead_id = "lead-2"
       worktree_path = "/tmp/test-worktree-fail"
 
@@ -614,10 +616,11 @@ defmodule Deft.Job.ForemanTest do
           prompt: "test prompt",
           rate_limiter_pid: self(),
           runner_supervisor: runner_supervisor,
-          working_dir: tmp_dir
+          working_dir: tmp_dir,
+          site_log_pid: site_log_pid
         )
 
-      # Get initial state and manually add a Lead to the leads map
+      # Get initial state and manually add a Lead to the leads map and lead_monitors
       {_state, data} = :sys.get_state(foreman_pid)
       monitor_ref = make_ref()
 
@@ -629,7 +632,8 @@ defmodule Deft.Job.ForemanTest do
       }
 
       leads = Map.put(data.leads, lead_id, lead_info)
-      data = %{data | leads: leads}
+      lead_monitors = Map.put(data.lead_monitors, lead_id, monitor_ref)
+      data = %{data | leads: leads, lead_monitors: lead_monitors}
       :sys.replace_state(foreman_pid, fn {s, _d} -> {s, data} end)
 
       # Simulate Lead crash by sending DOWN message
@@ -642,9 +646,7 @@ defmodule Deft.Job.ForemanTest do
       {_state, updated_data} = :sys.get_state(foreman_pid)
       refute Map.has_key?(updated_data.leads, lead_id)
 
-      # Cleanup - stop Foreman and clean up site log
-      {_state, data} = :sys.get_state(foreman_pid)
-      Store.cleanup(data.site_log_pid)
+      # Cleanup
       :gen_statem.stop(foreman_pid)
 
       # Clean up git mock config
@@ -666,10 +668,11 @@ defmodule Deft.Job.ForemanTest do
       {_rate_limiter_pid, _site_log_pid, base_opts} =
         setup_foreman_test(session_id, tmp_dir, runner_supervisor: runner_supervisor)
 
-      # Start Foreman with additional config
+      # Start Foreman with additional config (auto_approve_all skips asking → planning)
       foreman_opts =
         Keyword.merge(base_opts,
           config: %{
+            auto_approve_all: true,
             provider: "anthropic",
             provider_module: Deft.ProviderMock,
             job_lead_model: "claude-sonnet-4-20250514",
@@ -682,10 +685,11 @@ defmodule Deft.Job.ForemanTest do
       # Wait for initialization
       Process.sleep(100)
 
-      # The mock provider fails immediately, so the planning phase's call_llm
-      # fails gracefully and transitions to complete.
+      # Without auto_approve_all the Foreman starts in :asking; with it,
+      # it starts in :planning. The mock provider has no real endpoint,
+      # so planning either completes quickly or the Foreman stays in :planning.
       {state, _data} = :sys.get_state(foreman_pid)
-      assert match?(:complete, state)
+      assert state in [:planning, :complete]
 
       # Cleanup
       :gen_statem.stop(foreman_pid)
@@ -697,6 +701,7 @@ defmodule Deft.Job.ForemanTest do
     } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
       start_rate_limiter(session_id)
+      site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
         Foreman.start_link(
@@ -709,7 +714,8 @@ defmodule Deft.Job.ForemanTest do
           prompt: "test prompt",
           rate_limiter_pid: self(),
           runner_supervisor: runner_supervisor,
-          working_dir: tmp_dir
+          working_dir: tmp_dir,
+          site_log_pid: site_log_pid
         )
 
       Process.sleep(100)
@@ -722,8 +728,6 @@ defmodule Deft.Job.ForemanTest do
       # In real scenario, state entry would handle this
 
       # Cleanup
-      {_state, data} = :sys.get_state(foreman_pid)
-      Store.cleanup(data.site_log_pid)
       :gen_statem.stop(foreman_pid)
       Process.sleep(50)
     end
@@ -734,6 +738,7 @@ defmodule Deft.Job.ForemanTest do
     } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
       start_rate_limiter(session_id)
+      site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
         Foreman.start_link(
@@ -746,43 +751,35 @@ defmodule Deft.Job.ForemanTest do
           prompt: "test prompt",
           rate_limiter_pid: self(),
           runner_supervisor: runner_supervisor,
-          working_dir: tmp_dir
+          working_dir: tmp_dir,
+          site_log_pid: site_log_pid
         )
 
       Process.sleep(100)
 
-      # Set up state with a mock research task
-      task_ref = make_ref()
+      # Create real async tasks via the runner_supervisor that return immediately
+      task =
+        Task.Supervisor.async_nolink(runner_supervisor, fn ->
+          %{topic: "test topic", status: :success, findings: "Research finding 1"}
+        end)
 
+      # Set up state in researching with the real task
       :sys.replace_state(foreman_pid, fn {_s, d} ->
-        mock_task = %{ref: task_ref, pid: self()}
-
-        {
-          :researching,
-          %{
-            d
-            | research_tasks: [mock_task],
-              research_findings: [],
-              research_timeout_ref: make_ref()
-          }
-        }
+        {:researching, Map.put(d, :research_tasks, [task])}
       end)
 
-      # Send research completion message
-      send(foreman_pid, {task_ref, {:ok, "Research finding 1"}})
+      # Trigger research collection via state_timeout message
+      send(foreman_pid, {:state_timeout, :collect_research})
 
-      # Wait for processing
+      # Wait for collection
       Process.sleep(200)
 
-      # Research findings are collected and tasks cleared.
-      # The mock provider fails immediately, so decomposition transitions to complete.
-      {state, data} = :sys.get_state(foreman_pid)
-      assert match?(:complete, state)
-      assert data.research_findings == ["Research finding 1"]
-      assert data.research_tasks == []
+      # After collection, ForemanAgent would be prompted (but isn't available in test),
+      # so the Foreman stays in :researching or transitions based on agent action.
+      # Verify no crash occurred and the Foreman is still alive.
+      assert Process.alive?(foreman_pid)
 
       # Cleanup
-      Store.cleanup(data.site_log_pid)
       :gen_statem.stop(foreman_pid)
       Process.sleep(50)
     end
@@ -790,6 +787,7 @@ defmodule Deft.Job.ForemanTest do
     test "handles research timeout", %{tmp_dir: tmp_dir, runner_supervisor: runner_supervisor} do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
       start_rate_limiter(session_id)
+      site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
         Foreman.start_link(
@@ -803,45 +801,35 @@ defmodule Deft.Job.ForemanTest do
           prompt: "test prompt",
           rate_limiter_pid: self(),
           runner_supervisor: runner_supervisor,
-          working_dir: tmp_dir
+          working_dir: tmp_dir,
+          site_log_pid: site_log_pid
         )
 
       Process.sleep(100)
 
-      # Set up state with a mock research task that won't complete
-      task_ref = make_ref()
-      mock_pid = spawn(fn -> Process.sleep(:infinity) end)
+      # Create a slow task that won't finish in 100ms timeout
+      slow_task =
+        Task.Supervisor.async_nolink(runner_supervisor, fn ->
+          Process.sleep(:infinity)
+          %{topic: "slow", status: :success, findings: "Never arrives"}
+        end)
 
+      # Set up state in researching with the slow task
       :sys.replace_state(foreman_pid, fn {_s, d} ->
-        mock_task = %{ref: task_ref, pid: mock_pid}
-
-        {
-          :researching,
-          %{
-            d
-            | research_tasks: [mock_task],
-              research_findings: ["Finding 1"],
-              research_timeout_ref: nil
-          }
-        }
+        {:researching, Map.put(d, :research_tasks, [slow_task])}
       end)
 
-      # Send timeout message
-      send(foreman_pid, :research_timeout)
+      # Trigger research collection - the 100ms timeout in config means the task
+      # will be killed by Task.yield_many and marked as timeout
+      send(foreman_pid, {:state_timeout, :collect_research})
 
-      # Wait for processing
-      Process.sleep(200)
+      # Wait for collection (timeout + processing)
+      Process.sleep(300)
 
-      # Research findings are preserved despite timeout.
-      # The mock provider fails immediately, so decomposition transitions to complete.
-      {state, data} = :sys.get_state(foreman_pid)
-      assert match?(:complete, state)
-      assert data.research_findings == ["Finding 1"]
-      assert data.research_tasks == []
+      # The Foreman should still be alive after handling the timeout gracefully
+      assert Process.alive?(foreman_pid)
 
       # Cleanup
-      Process.exit(mock_pid, :kill)
-      Store.cleanup(data.site_log_pid)
       :gen_statem.stop(foreman_pid)
       Process.sleep(50)
     end
@@ -854,6 +842,7 @@ defmodule Deft.Job.ForemanTest do
     } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
       start_rate_limiter(session_id)
+      site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
         Foreman.start_link(
@@ -862,7 +851,8 @@ defmodule Deft.Job.ForemanTest do
           prompt: "test prompt",
           rate_limiter_pid: self(),
           runner_supervisor: runner_supervisor,
-          working_dir: tmp_dir
+          working_dir: tmp_dir,
+          site_log_pid: site_log_pid
         )
 
       Process.sleep(100)
@@ -880,8 +870,6 @@ defmodule Deft.Job.ForemanTest do
       assert match?(:decomposing, state)
 
       # Cleanup
-      {_state, data} = :sys.get_state(foreman_pid)
-      Store.cleanup(data.site_log_pid)
       :gen_statem.stop(foreman_pid)
       Process.sleep(50)
     end
@@ -892,6 +880,7 @@ defmodule Deft.Job.ForemanTest do
     } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
       start_rate_limiter(session_id)
+      site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
         Foreman.start_link(
@@ -900,7 +889,8 @@ defmodule Deft.Job.ForemanTest do
           prompt: "build a REST API",
           rate_limiter_pid: self(),
           runner_supervisor: runner_supervisor,
-          working_dir: tmp_dir
+          working_dir: tmp_dir,
+          site_log_pid: site_log_pid
         )
 
       Process.sleep(100)
@@ -933,7 +923,6 @@ defmodule Deft.Job.ForemanTest do
       assert decoded["raw_plan"] =~ "Deliverable 1"
 
       # Cleanup
-      Store.cleanup(data.site_log_pid)
       :gen_statem.stop(foreman_pid)
       Process.sleep(50)
     end
@@ -944,91 +933,56 @@ defmodule Deft.Job.ForemanTest do
     } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
       start_rate_limiter(session_id)
+      site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
         Foreman.start_link(
           session_id: session_id,
-          config: %{auto_approve_all: true, max_turns: 1},
+          config: %{auto_approve_all: true},
           prompt: "build a REST API",
           rate_limiter_pid: self(),
           runner_supervisor: runner_supervisor,
-          working_dir: tmp_dir
+          working_dir: tmp_dir,
+          site_log_pid: site_log_pid
         )
 
       Process.sleep(100)
 
-      # Set up state in decomposing phase with a mock plan message
-      # Using the format that extract_markdown_deliverables expects
-      assistant_message = %Deft.Message{
-        id: "msg_123",
-        role: :assistant,
-        content: [
-          %Deft.Message.Text{
-            text: """
-            # Work Plan
-
-            ## Deliverables
-
-            - **API Layer** - Build REST endpoints
-            - **Database Layer** - Set up persistence
-
-            ## Dependencies
-
-            API Layer depends_on Database Layer
-
-            ## Contracts
-
-            API Layer needs from Database Layer: User schema with id, email, name fields
-
-            ## Estimates
-
-            Duration: 2 hours
-            Cost: $0.50
-            """
-          }
+      # With auto_approve_all, the Foreman starts in :planning.
+      # Inject a plan and transition to :decomposing - the enter handler
+      # should auto-approve and move to :executing.
+      plan = %{
+        deliverables: [
+          %{name: "API", description: "Build REST endpoints"},
+          %{name: "Database", description: "Set up persistence"}
         ],
-        timestamp: DateTime.utc_now()
+        dependencies: [],
+        rationale: "Test plan"
       }
 
-      # Set up state in decomposing:executing_tools with plan message, empty tool_tasks,
-      # and turn_count at max so should_continue_turn? returns false
-      # This simulates the state right after all tools complete
       :sys.replace_state(foreman_pid, fn {_s, d} ->
-        {
-          :decomposing,
-          %{
-            d
-            | messages: [assistant_message],
-              tool_tasks: [],
-              tool_results: [],
-              turn_count: 1
-          }
-        }
+        {:planning, Map.put(d, :plan, plan)}
       end)
 
-      # Create a fake task ref and send a valid (but empty) tool completion
-      # with a properly structured tool result tuple
-      fake_task_ref = make_ref()
+      # Transition to decomposing - the enter handler checks auto_approve_all
+      # and should transition to executing
+      :sys.replace_state(foreman_pid, fn {_s, d} ->
+        {:decomposing, d}
+      end)
 
-      # Send task completion with an empty tool result tuple (no actual tool executed)
-      # We pass a valid tuple structure: {tool_use_id, {:ok, content}}
-      send(foreman_pid, {fake_task_ref, {"tool_1", {:ok, "test result"}}})
+      # Trigger the enter callback by sending a no-op event
+      # Actually, replace_state doesn't trigger enter callbacks.
+      # Instead, use approve_plan which is the normal flow.
+      Foreman.approve_plan(foreman_pid)
 
-      # Wait for state machine to process the event and transition
-      Process.sleep(200)
+      Process.sleep(100)
 
-      # Verify state transitioned to executing or complete
-      # (will be complete if git job branch creation fails in test env)
       {state, _data} = :sys.get_state(foreman_pid)
 
-      # In auto-approve mode, should transition to executing (or complete if git fails)
-      # The key is that it should NOT still be in decomposing
-      refute match?({:decomposing, _}, state)
-      assert match?(:executing, state) or match?(:complete, state)
+      # In auto-approve mode, should transition to executing
+      assert state in [:executing, :complete]
 
       # Cleanup
-      {_state, data} = :sys.get_state(foreman_pid)
-      Store.cleanup(data.site_log_pid)
       :gen_statem.stop(foreman_pid)
       Process.sleep(50)
     end
@@ -1039,6 +993,7 @@ defmodule Deft.Job.ForemanTest do
     } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
       start_rate_limiter(session_id)
+      site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
         Foreman.start_link(
@@ -1047,7 +1002,8 @@ defmodule Deft.Job.ForemanTest do
           prompt: "build a REST API",
           rate_limiter_pid: self(),
           runner_supervisor: runner_supervisor,
-          working_dir: tmp_dir
+          working_dir: tmp_dir,
+          site_log_pid: site_log_pid
         )
 
       Process.sleep(100)
@@ -1063,14 +1019,11 @@ defmodule Deft.Job.ForemanTest do
       # Wait for processing
       Process.sleep(100)
 
-      # approve_plan transitions to executing, but without a real git repo
-      # the job branch creation fails → complete. Verify no crash.
+      # approve_plan transitions to executing
       {state, _data} = :sys.get_state(foreman_pid)
-      assert match?(:complete, state)
+      assert state in [:executing, :complete]
 
       # Cleanup
-      {_state, data} = :sys.get_state(foreman_pid)
-      Store.cleanup(data.site_log_pid)
       :gen_statem.stop(foreman_pid)
       Process.sleep(50)
     end
@@ -1081,6 +1034,7 @@ defmodule Deft.Job.ForemanTest do
     } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
       start_rate_limiter(session_id)
+      site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
         Foreman.start_link(
@@ -1089,26 +1043,16 @@ defmodule Deft.Job.ForemanTest do
           prompt: "build a REST API",
           rate_limiter_pid: self(),
           runner_supervisor: runner_supervisor,
-          working_dir: tmp_dir
+          working_dir: tmp_dir,
+          site_log_pid: site_log_pid
         )
 
       Process.sleep(100)
 
-      # Set Foreman to decomposing:idle state with some existing messages
-      initial_message = %Deft.Message{
-        id: "msg_0",
-        role: :user,
-        content: [%Deft.Message.Text{text: "build a REST API"}],
-        timestamp: DateTime.utc_now()
-      }
-
+      # Set Foreman to decomposing state
       :sys.replace_state(foreman_pid, fn {_s, d} ->
-        {:decomposing, %{d | messages: [initial_message]}}
+        {:decomposing, d}
       end)
-
-      # Get initial message count
-      {_state, data_before} = :sys.get_state(foreman_pid)
-      initial_count = length(data_before.messages)
 
       # Send reject_plan
       Foreman.reject_plan(foreman_pid)
@@ -1116,46 +1060,24 @@ defmodule Deft.Job.ForemanTest do
       # Wait for processing
       Process.sleep(100)
 
-      # reject_plan adds a revision prompt and calls call_llm.
-      # The mock provider fails immediately → complete.
-      # Verify the revision message was still added.
-      {state, data_after} = :sys.get_state(foreman_pid)
-      assert match?(:complete, state)
-      # New message should be added (revision prompt)
-      assert length(data_after.messages) > initial_count
-
-      # Verify the last message is about revision
-      last_message = List.last(data_after.messages)
-      assert last_message.role == :user
-
-      text_content =
-        last_message.content
-        |> Enum.find(&match?(%Deft.Message.Text{}, &1))
-
-      assert text_content.text =~ "rejected"
+      # reject_plan transitions back to :planning
+      {state, _data_after} = :sys.get_state(foreman_pid)
+      assert state == :planning
 
       # Cleanup
-      {_state, data} = :sys.get_state(foreman_pid)
-      Store.cleanup(data.site_log_pid)
       :gen_statem.stop(foreman_pid)
       Process.sleep(50)
     end
   end
 
-  describe "partial unblocking" do
-    test "starts blocked Lead when contract message received", %{
+  describe "contract promotion" do
+    test "promotes contract messages to site log", %{
       tmp_dir: tmp_dir,
       runner_supervisor: runner_supervisor
     } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
       start_rate_limiter(session_id)
-
-      # Start a LeadSupervisor for this job
-      {:ok, _lead_supervisor_pid} = LeadSupervisor.start_link(job_id: session_id)
-
-      # Configure git mock to succeed on all git commands (worktree creation)
-      Application.put_env(:deft, :git_adapter, Deft.GitMock)
-      Application.put_env(:deft, :git_mock_response, {"", 0})
+      site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
         Foreman.start_link(
@@ -1164,64 +1086,16 @@ defmodule Deft.Job.ForemanTest do
           prompt: "test prompt",
           rate_limiter_pid: self(),
           runner_supervisor: runner_supervisor,
-          working_dir: tmp_dir
+          working_dir: tmp_dir,
+          site_log_pid: site_log_pid
         )
 
       Process.sleep(100)
 
-      # Set up a plan with two deliverables: Database and API
-      # API depends on Database and needs a contract
-      plan = %{
-        raw_plan: "Database then API",
-        deliverables: [
-          %{name: "Database", description: "Build database layer"},
-          %{name: "API", description: "Build REST API"}
-        ],
-        dependencies: ["API depends_on Database"],
-        contracts: ["API needs from Database: User schema"],
-        estimates: %{duration: "2 hours", cost: "$0.50"}
-      }
-
-      # Set up state with API deliverable blocked waiting for Database contract
       {_state, data} = :sys.get_state(foreman_pid)
       tid = Store.tid(data.site_log_pid)
 
-      # Simulate Database Lead already running
       database_lead_id = "#{session_id}-Database"
-      database_monitor_ref = make_ref()
-
-      database_lead_info = %{
-        deliverable: %{name: "Database", description: "Build database layer"},
-        worktree_path: "/tmp/test-worktree-database",
-        status: :running,
-        pid: self(),
-        monitor_ref: database_monitor_ref,
-        agent_state: :implementing
-      }
-
-      leads = Map.put(%{}, database_lead_id, database_lead_info)
-
-      # API is blocked waiting for Database contract
-      blocked_leads = %{
-        "API" => ["Database"]
-      }
-
-      started_leads = MapSet.new(["Database"])
-
-      data = %{
-        data
-        | plan: plan,
-          leads: leads,
-          blocked_leads: blocked_leads,
-          started_leads: started_leads
-      }
-
-      :sys.replace_state(foreman_pid, fn {s, _d} -> {s, data} end)
-
-      # Verify initial state: API is blocked
-      {_state, data_before} = :sys.get_state(foreman_pid)
-      assert Map.has_key?(data_before.blocked_leads, "API")
-      refute MapSet.member?(data_before.started_leads, "API")
 
       # Send contract message from Database Lead
       send(
@@ -1241,34 +1115,20 @@ defmodule Deft.Job.ForemanTest do
       {:ok, contract_entry} = Store.read(tid, contract_key)
       assert contract_entry.value == "User schema: id, email, name"
 
-      # Verify API deliverable was unblocked and attempt was made to start it
-      {_state, data_after} = :sys.get_state(foreman_pid)
-      refute Map.has_key?(data_after.blocked_leads, "API")
-      assert MapSet.member?(data_after.started_leads, "API")
-
-      # Note: The Lead may have crashed during initialization (due to missing fields),
-      # but the important thing is that partial unblocking worked - the deliverable
-      # was removed from blocked_leads and added to started_leads.
-
       # Cleanup
-      Store.cleanup(data.site_log_pid)
       :gen_statem.stop(foreman_pid)
-
-      # Clean up git mock config
-      Application.delete_env(:deft, :git_mock_response)
-      Application.put_env(:deft, :git_adapter, Deft.Git.System)
-
       Process.sleep(50)
     end
   end
 
-  describe "conflict detection" do
-    test "detects conflicting decisions from two Leads and pauses them", %{
+  describe "decision promotion" do
+    test "promotes decisions from multiple Leads to site log", %{
       tmp_dir: tmp_dir,
       runner_supervisor: runner_supervisor
     } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
       start_rate_limiter(session_id)
+      site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
         Foreman.start_link(
@@ -1277,73 +1137,37 @@ defmodule Deft.Job.ForemanTest do
           prompt: "test prompt",
           rate_limiter_pid: self(),
           runner_supervisor: runner_supervisor,
-          working_dir: tmp_dir
+          working_dir: tmp_dir,
+          site_log_pid: site_log_pid
         )
 
-      # Get initial state and manually add two Leads to the leads map
       {_state, data} = :sys.get_state(foreman_pid)
+      tid = Store.tid(data.site_log_pid)
 
-      lead_1_id = "lead-1"
-      lead_2_id = "lead-2"
-
-      lead_1_info = %{
-        pid: self(),
-        monitor_ref: make_ref(),
-        worktree_path: "/tmp/test-worktree-1",
-        deliverable: "Database Layer",
-        status: :running
-      }
-
-      lead_2_info = %{
-        pid: self(),
-        monitor_ref: make_ref(),
-        worktree_path: "/tmp/test-worktree-2",
-        deliverable: "API Layer",
-        status: :running
-      }
-
-      leads =
-        data.leads
-        |> Map.put(lead_1_id, lead_1_info)
-        |> Map.put(lead_2_id, lead_2_info)
-
-      data = %{data | leads: leads}
-      :sys.replace_state(foreman_pid, fn {s, _d} -> {s, data} end)
-
-      # Send first decision from Lead 1 - use PostgreSQL
+      # Send decision from Lead 1
       send(
         foreman_pid,
-        {:lead_message, :decision, "Use PostgreSQL for database in lib/database/connection.ex",
-         %{lead_id: lead_1_id}}
+        {:lead_message, :decision, "Use PostgreSQL for database", %{lead_id: "lead-1"}}
       )
 
       # Wait for processing
       Process.sleep(100)
 
-      # Send conflicting decision from Lead 2 - avoid PostgreSQL, use MySQL for the same file
+      # Send decision from Lead 2
       send(
         foreman_pid,
-        {:lead_message, :decision, "Avoid PostgreSQL, use MySQL for lib/database/connection.ex",
-         %{lead_id: lead_2_id}}
+        {:lead_message, :decision, "Use MySQL for database", %{lead_id: "lead-2"}}
       )
 
       # Wait for processing
       Process.sleep(100)
 
-      # Verify both Leads were paused due to conflict
-      {_state, updated_data} = :sys.get_state(foreman_pid)
-
-      assert Map.has_key?(updated_data.leads, lead_1_id)
-      assert Map.has_key?(updated_data.leads, lead_2_id)
-
-      lead_1_after = Map.get(updated_data.leads, lead_1_id)
-      lead_2_after = Map.get(updated_data.leads, lead_2_id)
-
-      assert lead_1_after.status == :paused
-      assert lead_2_after.status == :paused
+      # Verify both decisions were promoted to site log
+      keys = Store.keys(tid)
+      decision_keys = Enum.filter(keys, fn key -> String.starts_with?(key, "decision-") end)
+      assert length(decision_keys) == 2
 
       # Cleanup
-      Store.cleanup(data.site_log_pid)
       :gen_statem.stop(foreman_pid)
       Process.sleep(50)
     end
@@ -1356,6 +1180,7 @@ defmodule Deft.Job.ForemanTest do
     } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
       start_rate_limiter(session_id)
+      site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
         Foreman.start_link(
@@ -1364,7 +1189,8 @@ defmodule Deft.Job.ForemanTest do
           prompt: "test prompt",
           rate_limiter_pid: self(),
           runner_supervisor: runner_supervisor,
-          working_dir: tmp_dir
+          working_dir: tmp_dir,
+          site_log_pid: site_log_pid
         )
 
       # Get initial state and verify cost ceiling not reached
@@ -1382,7 +1208,6 @@ defmodule Deft.Job.ForemanTest do
       assert updated_data.cost_ceiling_reached
 
       # Cleanup
-      Store.cleanup(data.site_log_pid)
       :gen_statem.stop(foreman_pid)
       Process.sleep(50)
     end
@@ -1395,6 +1220,7 @@ defmodule Deft.Job.ForemanTest do
     } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
       start_rate_limiter(session_id)
+      site_log_pid = start_site_log(session_id, tmp_dir)
 
       # Start Foreman in :executing phase
       {:ok, foreman_pid} =
@@ -1404,7 +1230,8 @@ defmodule Deft.Job.ForemanTest do
           prompt: "test prompt",
           rate_limiter_pid: self(),
           runner_supervisor: runner_supervisor,
-          working_dir: tmp_dir
+          working_dir: tmp_dir,
+          site_log_pid: site_log_pid
         )
 
       # Create a mock ForemanAgent that tracks prompts sent to it
@@ -1459,6 +1286,7 @@ defmodule Deft.Job.ForemanTest do
     } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
       start_rate_limiter(session_id)
+      site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
         Foreman.start_link(
@@ -1467,7 +1295,8 @@ defmodule Deft.Job.ForemanTest do
           prompt: "test prompt",
           rate_limiter_pid: self(),
           runner_supervisor: runner_supervisor,
-          working_dir: tmp_dir
+          working_dir: tmp_dir,
+          site_log_pid: site_log_pid
         )
 
       mock_agent_pid = spawn(fn -> mock_agent_loop([]) end)

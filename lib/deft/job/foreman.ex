@@ -866,18 +866,18 @@ defmodule Deft.Job.Foreman do
     format_contract_list(tid, contract_keys)
   end
 
+  defp extract_entry_content(%{value: %{content: c}}), do: c
+  defp extract_entry_content(%{value: s}) when is_binary(s), do: s
+  defp extract_entry_content(%{value: other}), do: inspect(other)
+
   defp format_contract_list(_tid, []), do: ""
 
   defp format_contract_list(tid, contract_keys) do
     formatted_contracts =
       Enum.map(contract_keys, fn key ->
         case Store.read(tid, key) do
-          {:ok, entry} ->
-            content = get_in(entry, [:value, :content]) || "No content"
-            "- #{inspect(content)}"
-
-          _other ->
-            "- [Could not read contract #{key}]"
+          {:ok, entry} -> "- #{extract_entry_content(entry)}"
+          _other -> "- [Could not read contract #{key}]"
         end
       end)
       |> Enum.join("\n")
