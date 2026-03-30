@@ -331,13 +331,25 @@ defmodule Deft.Job.Foreman do
     {:next_state, :researching, data}
   end
 
-  def handle_event(:info, {:agent_action, :plan, deliverables}, :researching, data) do
+  def handle_event(:info, {:agent_action, :plan, plan_data}, :researching, data) do
+    deliverables = Map.get(plan_data, :deliverables, [])
+    dependencies = Map.get(plan_data, :dependencies, [])
+    rationale = Map.get(plan_data, :rationale, "")
+
     Logger.info("ForemanAgent submitted plan with #{length(deliverables)} deliverables")
-    data = Map.put(data, :plan, deliverables)
+
+    # Store the full plan data
+    full_plan = %{
+      deliverables: deliverables,
+      dependencies: dependencies,
+      rationale: rationale
+    }
+
+    data = Map.put(data, :plan, full_plan)
 
     # Write plan to site log
     if data.site_log_pid do
-      Store.write(data.site_log_pid, "plan", deliverables)
+      Store.write(data.site_log_pid, "plan", full_plan)
     end
 
     # Present plan to user for approval
@@ -735,6 +747,11 @@ defmodule Deft.Job.Foreman do
   end
 
   defp format_plan_summary(nil), do: "No plan has been created yet."
+
+  defp format_plan_summary(plan) when is_map(plan) do
+    deliverables = Map.get(plan, :deliverables, [])
+    format_plan_summary(deliverables)
+  end
 
   defp format_plan_summary(plan) when not is_list(plan),
     do: "Plan available but format unexpected."
