@@ -226,11 +226,28 @@ defmodule Deft.Job.Foreman do
     end
   end
 
-  def handle_event(:enter, _old_state, :decomposing, _data) do
+  def handle_event(:enter, _old_state, :decomposing, data) do
     Logger.info("Foreman entering :decomposing phase - waiting for plan approval")
     # Present plan to user, wait for approval
     # For now, stub implementation
-    :keep_state_and_data
+
+    # Check if auto-approve is enabled - skip plan approval in non-interactive/auto-approve mode
+    auto_approve = Map.get(data.config, :auto_approve_all, false)
+
+    if auto_approve do
+      Logger.info("Auto-approving plan (--auto-approve-all is set)")
+
+      # Save plan to persistence
+      if data.plan do
+        jobs_dir = Project.jobs_dir(data.working_dir)
+        plan_path = Path.join([jobs_dir, data.session_id, "plan.json"])
+        File.write!(plan_path, Jason.encode!(data.plan))
+      end
+
+      {:next_state, :executing, data}
+    else
+      :keep_state_and_data
+    end
   end
 
   def handle_event(:enter, _old_state, :executing, _data) do

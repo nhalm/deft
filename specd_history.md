@@ -1,4 +1,5 @@
 # History
+- **orchestration v0.7 (2026-03-30):** Fix `--auto-approve-all` not skipping plan approval in `:decomposing` state: `foreman.ex:159-160` uses `auto_approve_all` only to skip `:asking` → `:planning`, but the `:decomposing` → `:executing` transition at line 479 waits for explicit `approve_plan` cast with no check for `auto_approve_all`. In `--auto-approve-all` or non-interactive mode, the job hangs in `:decomposing` forever.
 - **orchestration v0.7 (2026-03-30):** Remove old tuple-state Lead implementation and replace with new split architecture
 - **orchestration v0.7 (2026-03-30):** Remove old tuple-state Foreman implementation (the fused orchestrator+agent gen_statem) and replace with new split architecture
 - **orchestration v0.7 (2026-03-30):** Implement single-agent fallback: when Foreman detects simple task, configure ForemanAgent with full tool set (read, write, edit, bash, grep, find, ls) and skip orchestration
