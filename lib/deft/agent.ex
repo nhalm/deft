@@ -21,6 +21,7 @@ defmodule Deft.Agent do
   - `config` — Configuration map for the agent
   - `session_id` — Unique identifier for the session
   - `parent_pid` — PID of orchestrator process that owns this agent (optional, nil for standalone sessions)
+  - `rate_limiter` — PID of RateLimiter GenServer for orchestrated jobs (optional, nil for standalone sessions)
   - `current_message` — Message being accumulated during streaming (optional)
   - `stream_ref` — Reference to the current stream (optional)
   - `stream_monitor_ref` — Monitor reference for the stream process (optional)
@@ -78,6 +79,7 @@ defmodule Deft.Agent do
   - `:messages` — Optional. Initial conversation messages (default: []).
   - `:session_cost` — Optional. Initial session cost from resumed session (default: 0.0).
   - `:parent_pid` — Optional. PID of orchestrator process that owns this agent (default: nil).
+  - `:rate_limiter` — Optional. PID of RateLimiter GenServer for orchestrated jobs (default: nil).
   - `:name` — Optional. Name for the gen_statem process.
   """
   def child_spec(opts) do
@@ -96,6 +98,7 @@ defmodule Deft.Agent do
     initial_messages = Keyword.get(opts, :messages, [])
     initial_session_cost = Keyword.get(opts, :session_cost, 0.0)
     parent_pid = Keyword.get(opts, :parent_pid)
+    rate_limiter = Keyword.get(opts, :rate_limiter)
     name = Keyword.get(opts, :name)
 
     # Get context window from provider model config
@@ -126,7 +129,8 @@ defmodule Deft.Agent do
       compaction_task_ref: nil,
       compaction_task_pid: nil,
       pending_compaction_data: nil,
-      parent_pid: parent_pid
+      parent_pid: parent_pid,
+      rate_limiter: rate_limiter
     }
 
     if name do
@@ -380,7 +384,13 @@ defmodule Deft.Agent do
     # Add session_id to config for provider logging
     config_with_session = Map.put(compacted_data.config, :session_id, compacted_data.session_id)
 
-    case call_provider_stream(provider, context_messages, tools, config_with_session) do
+    case call_provider_stream(
+           provider,
+           context_messages,
+           tools,
+           config_with_session,
+           compacted_data.rate_limiter
+         ) do
       {:ok, stream_ref} ->
         # Monitor the stream process to detect crashes (only if stream_ref is a PID)
         monitor_ref = if is_pid(stream_ref), do: Process.monitor(stream_ref), else: nil
@@ -586,7 +596,13 @@ defmodule Deft.Agent do
     tools = Map.get(data.config, :tools, [])
     config_with_session = Map.put(data.config, :session_id, data.session_id)
 
-    case call_provider_stream(provider, context_messages, tools, config_with_session) do
+    case call_provider_stream(
+           provider,
+           context_messages,
+           tools,
+           config_with_session,
+           data.rate_limiter
+         ) do
       {:ok, stream_ref} ->
         log_provider_stream_started(data.session_id, provider, config_with_session)
         new_data = build_calling_state_data(data, stream_ref, opts)
@@ -765,15 +781,68 @@ defmodule Deft.Agent do
     "[Agent:#{prefix}]"
   end
 
-  defp call_provider_stream(nil, _messages, _tools, _config) do
+  # Token estimation for rate limiting
+  # Uses simple heuristic of 4 characters per token
+  @chars_per_token 4
+
+  defp estimate_message_tokens(messages) when is_list(messages) do
+    messages
+    |> Enum.map(&estimate_single_message_tokens/1)
+    |> Enum.sum()
+  end
+
+  defp estimate_single_message_tokens(%{content: content}) when is_binary(content) do
+    div(String.length(content), @chars_per_token)
+  end
+
+  defp estimate_single_message_tokens(%{content: content}) when is_list(content) do
+    content
+    |> Enum.map(&estimate_content_block_tokens/1)
+    |> Enum.sum()
+  end
+
+  defp estimate_single_message_tokens(_), do: 0
+
+  defp estimate_content_block_tokens(%Text{text: text}) when is_binary(text) do
+    div(String.length(text), @chars_per_token)
+  end
+
+  defp estimate_content_block_tokens(%{text: text}) when is_binary(text) do
+    div(String.length(text), @chars_per_token)
+  end
+
+  defp estimate_content_block_tokens(_), do: 0
+
+  defp call_provider_stream(nil, _messages, _tools, _config, _rate_limiter) do
     # No provider configured
     {:error, :no_provider}
   end
 
-  defp call_provider_stream(provider, messages, tools, config) do
-    # Call provider.stream/3
-    # Ensure session_id is in config for provider logging
-    provider.stream(messages, tools, config)
+  defp call_provider_stream(provider, messages, tools, config, rate_limiter) do
+    # If rate_limiter is configured, request capacity before calling provider
+    if rate_limiter do
+      estimated_tokens = estimate_message_tokens(messages)
+      # Default priority for agent calls
+      priority = 1
+
+      case GenServer.call(
+             rate_limiter,
+             {:request, provider, estimated_tokens, priority},
+             :infinity
+           ) do
+        :ok ->
+          # Store estimated tokens in config for reconciliation
+          config_with_estimate = Map.put(config, :_estimated_tokens, estimated_tokens)
+          provider.stream(messages, tools, config_with_estimate)
+
+        {:error, reason} = error ->
+          Logger.warning("Rate limiter denied request: #{inspect(reason)}")
+          error
+      end
+    else
+      # No rate limiter - proceed directly
+      provider.stream(messages, tools, config)
+    end
   end
 
   # Notify OM.State about new messages added
@@ -915,6 +984,14 @@ defmodule Deft.Agent do
     # Calculate cost from usage tokens
     turn_cost = calculate_cost(data.config, input_tokens, output_tokens)
     new_session_cost = data.session_cost + turn_cost
+
+    # Reconcile rate limiter if configured
+    if data.rate_limiter do
+      provider = Map.get(data.config, :provider)
+      estimated_tokens = Map.get(data.config, :_estimated_tokens, 0)
+      actual_usage = %{input: input_tokens, output: output_tokens}
+      GenServer.cast(data.rate_limiter, {:reconcile, provider, estimated_tokens, actual_usage})
+    end
 
     new_data = %{
       data

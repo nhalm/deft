@@ -1,4 +1,5 @@
 # History
+- **harness v0.4 (2026-03-30):** Implement optional `rate_limiter` config in `Deft.Agent` — call `RateLimiter.request/2` before sending to provider and `RateLimiter.reconcile/4` after receiving response, ensuring all LLM calls flow through the centralized rate limiter
 - **orchestration v0.7 (2026-03-30):** Handle `{:lead_message, :complete, ...}` by removing Lead from `started_leads` and checking `all_leads_complete?` for transition to `:verifying` — currently the normal completion path never transitions to `:verifying` (only the crash path does)
 - **orchestration v0.7 (2026-03-30):** Handle `{:agent_action, :plan, plan_data}` in `:planning` state (not just `:researching`) — after plan rejection the Foreman returns to `:planning`, and if the ForemanAgent resubmits a plan without calling `request_research` first, the message is silently dropped and the job hangs
 - **orchestration v0.7 (2026-03-30):** Fix `Deft.Job.Lead.Supervisor` to start LeadAgent via `Deft.Job.LeadAgent.start_link/1` instead of `Deft.Agent.start_link/1` — same issue, LeadAgent has no Lead-specific tools or OM
