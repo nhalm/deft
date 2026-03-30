@@ -739,6 +739,12 @@ defmodule Deft.Job.Foreman do
     end
   end
 
+  # Handle periodic cost checkpoint from RateLimiter
+  def handle_event(:info, {:rate_limiter, :cost, cost}, _state, data) do
+    Logger.info("#{log_prefix(data)} Cost checkpoint: $#{Float.round(cost, 2)}")
+    :keep_state_and_data
+  end
+
   # Handle cost warning from RateLimiter
   def handle_event(:info, {:rate_limiter, :cost_warning, cost}, _state, data) do
     Logger.info(
