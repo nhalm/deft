@@ -20,7 +20,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 ## orchestration v0.7
 
 - Fix `submit_plan` handler type mismatch: `submit_plan.ex` sends `{:agent_action, :plan, %{deliverables: list, dependencies: list, rationale: string}}` but `foreman.ex:322` binds the map to `deliverables` and calls `length(deliverables)` which crashes on a map. Either destructure the map in the handler or send just the deliverables list. (blocked: Update Deft.Job.Supervisor to start ForemanAgent)
-- Fix `:correction` missing from site-log auto-promotion: `foreman.ex:514` checks `type in [:contract, :decision, :critical_finding]` but spec section 7.3 requires `:correction` in the auto-promoted set
 - Implement Lead→LeadAgent prompt flow: Lead calls `Deft.Agent.prompt/2` with deliverable assignment, Runner results, and Foreman steering (blocked: Create Deft.Job.Lead, Create Deft.Job.LeadAgent)
 - Update `Deft.Job.Supervisor` to start ForemanAgent + its ToolRunner as separate children alongside the Foreman (blocked: Create Deft.Job.ForemanAgent)
 - Update `Deft.Job.Lead.Supervisor` to start LeadAgent + its ToolRunner as separate children alongside the Lead (blocked: Create Deft.Job.LeadAgent)

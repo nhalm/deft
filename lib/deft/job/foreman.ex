@@ -511,7 +511,7 @@ defmodule Deft.Job.Foreman do
     end
 
     # Auto-promote certain message types to site log
-    if type in [:contract, :decision, :critical_finding] and data.site_log_pid do
+    if type in [:contract, :decision, :correction, :critical_finding] and data.site_log_pid do
       # Generate unique key with type prefix
       unique_id = :erlang.unique_integer([:positive])
       key = "#{type}-#{unique_id}"
