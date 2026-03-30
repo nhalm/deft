@@ -26,6 +26,8 @@ defmodule Deft.Job.Foreman do
 
   @behaviour :gen_statem
 
+  alias Deft.Git.Job, as: GitJob
+  alias Deft.Job.LeadSupervisor
   alias Deft.Job.Runner
   alias Deft.Project
   alias Deft.Store
@@ -353,22 +355,10 @@ defmodule Deft.Job.Foreman do
       Logger.warning("Lead #{lead_id} already started, ignoring spawn request")
       :keep_state_and_data
     else
-      # Spawn Lead process
-      # TODO: This requires Deft.Job.Lead to be implemented
-      # For now, log and track that we would spawn the Lead
-      Logger.info("Would spawn Lead #{lead_id} for deliverable: #{inspect(deliverable[:name])}")
-
-      # Track Lead (will be updated when Lead module exists)
-      data =
-        data
-        |> Map.update!(:started_leads, &MapSet.put(&1, lead_id))
-        |> put_in([:leads, lead_id], %{
-          deliverable: deliverable,
-          status: :starting,
-          pid: nil
-        })
-
-      {:keep_state, data}
+      case do_spawn_lead(lead_id, deliverable, data) do
+        {:ok, updated_data} -> {:keep_state, updated_data}
+        :error -> :keep_state_and_data
+      end
     end
   end
 
@@ -765,6 +755,63 @@ defmodule Deft.Job.Foreman do
       {lead_id, _ref} -> {:ok, lead_id}
       nil -> :not_found
     end
+  end
+
+  defp do_spawn_lead(lead_id, deliverable, data) do
+    with {:ok, worktree_path} <- create_lead_worktree(lead_id, data),
+         {:ok, lead_pid} <- start_lead_process(lead_id, deliverable, worktree_path, data) do
+      # Monitor the Lead process
+      monitor_ref = Process.monitor(lead_pid)
+
+      # Track Lead with monitoring
+      updated_data =
+        data
+        |> Map.update!(:started_leads, &MapSet.put(&1, lead_id))
+        |> put_in([:leads, lead_id], %{
+          deliverable: deliverable,
+          status: :running,
+          pid: lead_pid,
+          worktree_path: worktree_path
+        })
+        |> put_in([:lead_monitors, lead_id], monitor_ref)
+
+      Logger.info("Lead #{lead_id} started with PID #{inspect(lead_pid)} at #{worktree_path}")
+      {:ok, updated_data}
+    else
+      {:error, reason} ->
+        Logger.error("Failed to spawn Lead #{lead_id}: #{inspect(reason)}")
+        :error
+    end
+  end
+
+  defp create_lead_worktree(lead_id, data) do
+    GitJob.create_lead_worktree(
+      lead_id: lead_id,
+      job_id: data.session_id,
+      working_dir: data.working_dir
+    )
+  end
+
+  defp start_lead_process(lead_id, deliverable, worktree_path, data) do
+    site_log_name = {:sitelog, data.session_id}
+
+    runner_supervisor_name =
+      {:via, Registry, {Deft.ProcessRegistry, {:runner_supervisor, lead_id}}}
+
+    lead_opts = [
+      lead_id: lead_id,
+      session_id: data.session_id,
+      config: data.config,
+      deliverable: deliverable,
+      foreman_pid: self(),
+      site_log_name: site_log_name,
+      rate_limiter_pid: data.rate_limiter_pid,
+      worktree_path: worktree_path,
+      working_dir: data.working_dir,
+      runner_supervisor: runner_supervisor_name
+    ]
+
+    LeadSupervisor.start_lead(data.session_id, lead_opts)
   end
 
   defp do_abort_lead(lead_id, lead_pid, data) do
