@@ -1,4 +1,5 @@
 # History
+- **orchestration v0.7 (2026-03-30):** Fix deliverable string/atom key mismatch: normalize deliverable and dependency keys from strings to atoms when storing plan in Foreman, fixing `deliverable_already_started?`, `build_system_prompt`, and `build_planning_context` access
 - **orchestration v0.7 (2026-03-30):** Add read-only tools (Read, Grep, Find, Ls) to `LeadAgent.add_lead_tools/1` — currently only orchestration tools are added, so the LeadAgent's system prompt promises read/grep/find/ls but they error at runtime with "Tool not found"
 - **harness v0.4 (2026-03-30):** Implement optional `rate_limiter` config in `Deft.Agent` — call `RateLimiter.request/2` before sending to provider and `RateLimiter.reconcile/4` after receiving response, ensuring all LLM calls flow through the centralized rate limiter
 - **orchestration v0.7 (2026-03-30):** Handle `{:lead_message, :complete, ...}` by removing Lead from `started_leads` and checking `all_leads_complete?` for transition to `:verifying` — currently the normal completion path never transitions to `:verifying` (only the crash path does)

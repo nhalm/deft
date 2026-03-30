@@ -19,6 +19,5 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.7
 
-- Fix deliverable string/atom key mismatch: `submit_plan` stores JSON-decoded deliverables with string keys (`"id"`, `"description"`), but `LeadAgent.build_system_prompt` and `Lead.build_planning_context` access them with atom keys (`:name`, `:description`) → always nil. Normalize keys to atoms when storing the plan, or use string-key access downstream. Also fix `deliverable_already_started?` which uses `Map.get(lead.deliverable, :id)` on a string-keyed map.
 - Pass RateLimiter PID to ForemanAgent through config when starting it in `Deft.Job.Supervisor`
 - Pass RateLimiter PID to each LeadAgent through config when starting it

@@ -357,10 +357,14 @@ defmodule Deft.Job.Foreman do
       "ForemanAgent submitted plan with #{length(deliverables)} deliverables (from :planning state)"
     )
 
+    # Normalize deliverables and dependencies to use atom keys
+    normalized_deliverables = Enum.map(deliverables, &normalize_deliverable_keys/1)
+    normalized_dependencies = Enum.map(dependencies, &normalize_dependency_keys/1)
+
     # Store the full plan data
     full_plan = %{
-      deliverables: deliverables,
-      dependencies: dependencies,
+      deliverables: normalized_deliverables,
+      dependencies: normalized_dependencies,
       rationale: rationale
     }
 
@@ -372,7 +376,7 @@ defmodule Deft.Job.Foreman do
     end
 
     # Present plan to user for approval
-    present_plan_to_user(data, deliverables)
+    present_plan_to_user(data, normalized_deliverables)
 
     {:next_state, :decomposing, data}
   end
@@ -384,10 +388,14 @@ defmodule Deft.Job.Foreman do
 
     Logger.info("ForemanAgent submitted plan with #{length(deliverables)} deliverables")
 
+    # Normalize deliverables and dependencies to use atom keys
+    normalized_deliverables = Enum.map(deliverables, &normalize_deliverable_keys/1)
+    normalized_dependencies = Enum.map(dependencies, &normalize_dependency_keys/1)
+
     # Store the full plan data
     full_plan = %{
-      deliverables: deliverables,
-      dependencies: dependencies,
+      deliverables: normalized_deliverables,
+      dependencies: normalized_dependencies,
       rationale: rationale
     }
 
@@ -399,7 +407,7 @@ defmodule Deft.Job.Foreman do
     end
 
     # Present plan to user for approval
-    present_plan_to_user(data, deliverables)
+    present_plan_to_user(data, normalized_deliverables)
 
     {:next_state, :decomposing, data}
   end
@@ -1150,6 +1158,28 @@ defmodule Deft.Job.Foreman do
 
     Dependencies: #{inspect(deliverable[:dependencies] || [])}
     """
+  end
+
+  # Normalize deliverable keys from strings to atoms
+  defp normalize_deliverable_keys(deliverable) when is_map(deliverable) do
+    id = Map.get(deliverable, "id")
+
+    %{
+      id: id,
+      name: id,
+      description: Map.get(deliverable, "description"),
+      files: Map.get(deliverable, "files", []),
+      estimated_complexity: Map.get(deliverable, "estimated_complexity")
+    }
+  end
+
+  # Normalize dependency keys from strings to atoms
+  defp normalize_dependency_keys(dependency) when is_map(dependency) do
+    %{
+      from: Map.get(dependency, "from"),
+      to: Map.get(dependency, "to"),
+      contract: Map.get(dependency, "contract")
+    }
   end
 
   defp cleanup(data) do
