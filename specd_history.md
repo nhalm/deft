@@ -1,4 +1,5 @@
 # History
+- **orchestration v0.7 (2026-03-29):** Wire Lead `handle_info` to process `{:agent_action, ...}` messages from LeadAgent — dispatch to Runner spawning, contract publishing, Foreman reporting, blocker escalation
 - **orchestration v0.7 (2026-03-30):** Implement 4 LeadAgent tools (`spawn_runner`, `publish_contract`, `report_status`, `request_help`) as thin wrappers that `send(lead_pid, {:agent_action, action, payload})`
 - **orchestration v0.7 (2026-03-30):** Create `Deft.Job.LeadAgent` module that starts a standard `Deft.Agent` with Lead-specific system prompt, read-only tools + Lead tools, OM enabled
 - **orchestration v0.7 (2026-03-30):** Create `Deft.Job.Lead` gen_statem with 4 orchestration states (`:planning`, `:executing`, `:verifying`, `:complete`) — no agent loop
