@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## orchestration v0.7
-
-- Fix `do_abort_lead`: add aborted Lead to `completed_leads` (or new tracking set) and update `all_leads_complete?` to account for aborted Leads — currently using `abort_lead` tool causes the job to hang in `:executing` forever because aborted Leads are removed from `started_leads` but never counted toward completion (foreman.ex:1003-1019, 1029-1042)
-
 ## orchestration v0.9
 
 - Add `failed_leads` set to Foreman state (alongside `started_leads` and `completed_leads`) to track Leads removed due to crash or explicit failure
