@@ -503,6 +503,9 @@ defmodule Deft.Job.Foreman do
   def handle_event(:cast, {:prompt, text}, :asking, data) do
     Logger.debug("User answer received in asking phase: #{text}")
 
+    # Check for /correct command and promote to site log if present
+    handle_correct_command(text, data)
+
     # Record user answer in Q&A history
     qa_history = Map.get(data, :qa_history, [])
 
@@ -523,6 +526,9 @@ defmodule Deft.Job.Foreman do
       when state in [:executing, :planning, :researching, :decomposing] do
     Logger.debug("User prompt received in #{state}: #{text}")
 
+    # Check for /correct command and promote to site log if present
+    handle_correct_command(text, data)
+
     # Build structured context including current job state
     context = build_user_prompt_context(text, state, data)
 
@@ -536,6 +542,9 @@ defmodule Deft.Job.Foreman do
 
   def handle_event(:cast, {:prompt, text}, state, data) do
     Logger.debug("User prompt received in #{state}: #{text}")
+
+    # Check for /correct command and promote to site log if present
+    handle_correct_command(text, data)
 
     # For other states, just forward as-is
     if data.foreman_agent_pid do
@@ -975,6 +984,19 @@ defmodule Deft.Job.Foreman do
     else
       # Fallback: if no plan exists yet, check if started_leads is empty
       MapSet.size(data.started_leads) == 0
+    end
+  end
+
+  defp handle_correct_command(text, data) do
+    # Parse /correct command and promote to site log if detected
+    case String.trim(text) do
+      "/correct " <> message when byte_size(message) > 0 ->
+        Logger.info("User correction detected: #{message}")
+        metadata = %{source: :user}
+        promote_lead_message_to_site_log(:correction, message, metadata, data)
+
+      _ ->
+        :ok
     end
   end
 

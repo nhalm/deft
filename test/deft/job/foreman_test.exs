@@ -428,6 +428,104 @@ defmodule Deft.Job.ForemanTest do
     end
   end
 
+  describe "user /correct command" do
+    test "parses /correct command and promotes to site log", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
+      session_id = "test-job-#{:erlang.unique_integer([:positive])}"
+
+      {_rate_limiter_pid, _site_log_pid, foreman_opts} =
+        setup_foreman_test(session_id, tmp_dir, runner_supervisor: runner_supervisor)
+
+      {:ok, foreman_pid} = Foreman.start_link(foreman_opts)
+
+      {_state, data} = :sys.get_state(foreman_pid)
+      tid = Store.tid(data.site_log_pid)
+
+      # Send /correct command as user prompt
+      :gen_statem.cast(foreman_pid, {:prompt, "/correct Use MySQL instead of PostgreSQL"})
+
+      # Wait for processing
+      Process.sleep(100)
+
+      # Verify correction was written to site log
+      keys = Store.keys(tid)
+      assert Enum.any?(keys, fn key -> String.starts_with?(key, "correction-") end)
+
+      # Cleanup
+      :gen_statem.stop(foreman_pid)
+      Process.sleep(50)
+    end
+
+    test "forwards /correct command to ForemanAgent", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
+      session_id = "test-job-#{:erlang.unique_integer([:positive])}"
+
+      {_rate_limiter_pid, _site_log_pid, foreman_opts} =
+        setup_foreman_test(session_id, tmp_dir, runner_supervisor: runner_supervisor)
+
+      # Start mock agent that tracks prompts
+      mock_agent_pid = spawn(fn -> mock_agent_loop([]) end)
+
+      foreman_opts = Keyword.put(foreman_opts, :foreman_agent_pid, mock_agent_pid)
+      {:ok, foreman_pid} = Foreman.start_link(foreman_opts)
+
+      # Send /correct command
+      :gen_statem.cast(foreman_pid, {:prompt, "/correct Use a different approach"})
+
+      # Wait for processing
+      Process.sleep(100)
+
+      # Verify the prompt was forwarded to ForemanAgent
+      send(mock_agent_pid, {:get_prompts, self()})
+
+      receive do
+        {:prompts, prompts} ->
+          # The ForemanAgent receives the initial prompt plus the /correct command
+          assert "/correct Use a different approach" in prompts
+      after
+        500 -> flunk("Did not receive prompts from mock agent")
+      end
+
+      # Cleanup
+      Process.exit(mock_agent_pid, :kill)
+      :gen_statem.stop(foreman_pid)
+      Process.sleep(50)
+    end
+
+    test "does not promote non-/correct user prompts", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
+      session_id = "test-job-#{:erlang.unique_integer([:positive])}"
+
+      {_rate_limiter_pid, _site_log_pid, foreman_opts} =
+        setup_foreman_test(session_id, tmp_dir, runner_supervisor: runner_supervisor)
+
+      {:ok, foreman_pid} = Foreman.start_link(foreman_opts)
+
+      {_state, data} = :sys.get_state(foreman_pid)
+      tid = Store.tid(data.site_log_pid)
+
+      # Send regular user prompt (not /correct)
+      :gen_statem.cast(foreman_pid, {:prompt, "What's the status?"})
+
+      # Wait for processing
+      Process.sleep(100)
+
+      # Verify no correction was written to site log
+      keys = Store.keys(tid)
+      refute Enum.any?(keys, fn key -> String.starts_with?(key, "correction-") end)
+
+      # Cleanup
+      :gen_statem.stop(foreman_pid)
+      Process.sleep(50)
+    end
+  end
+
   describe "Lead crash cleanup" do
     test "cleans up worktree when Lead crashes", %{
       tmp_dir: tmp_dir,
