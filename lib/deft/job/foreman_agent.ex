@@ -33,6 +33,7 @@ defmodule Deft.Job.ForemanAgent do
   - `:session_id` — Required. Job identifier.
   - `:config` — Required. Configuration map.
   - `:parent_pid` — Required. PID of the Foreman orchestrator.
+  - `:rate_limiter` — Optional. PID of RateLimiter GenServer for orchestrated jobs.
   - `:working_dir` — Required. Working directory for the project.
   - `:messages` — Optional. Initial conversation messages (default: []).
   - `:name` — Optional. Name for the agent process.
@@ -41,6 +42,7 @@ defmodule Deft.Job.ForemanAgent do
     session_id = Keyword.fetch!(opts, :session_id)
     config = Keyword.fetch!(opts, :config)
     parent_pid = Keyword.fetch!(opts, :parent_pid)
+    rate_limiter = Keyword.get(opts, :rate_limiter)
     working_dir = Keyword.fetch!(opts, :working_dir)
     messages = Keyword.get(opts, :messages, [])
     name = Keyword.get(opts, :name)
@@ -72,6 +74,9 @@ defmodule Deft.Job.ForemanAgent do
     ]
 
     agent_opts = if name, do: Keyword.put(agent_opts, :name, name), else: agent_opts
+
+    agent_opts =
+      if rate_limiter, do: Keyword.put(agent_opts, :rate_limiter, rate_limiter), else: agent_opts
 
     Agent.start_link(agent_opts)
   end

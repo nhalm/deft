@@ -19,5 +19,4 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.7
 
-- Pass RateLimiter PID to ForemanAgent through config when starting it in `Deft.Job.Supervisor`
 - Pass RateLimiter PID to each LeadAgent through config when starting it

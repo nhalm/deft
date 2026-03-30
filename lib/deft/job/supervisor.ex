@@ -121,6 +121,7 @@ defmodule Deft.Job.Supervisor do
                session_id: foreman_agent_session_id,
                config: config,
                parent_pid: foreman_name,
+               rate_limiter: rate_limiter_name,
                working_dir: working_dir,
                messages: [],
                name: foreman_agent_name
