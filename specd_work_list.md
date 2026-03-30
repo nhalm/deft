@@ -16,3 +16,8 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
+
+## orchestration v0.7
+
+- Add read-only tools (Read, Grep, Find, Ls) to `LeadAgent.add_lead_tools/1` — currently only orchestration tools are added, so the LeadAgent's system prompt promises read/grep/find/ls but they error at runtime with "Tool not found"
+- Fix deliverable string/atom key mismatch: `submit_plan` stores JSON-decoded deliverables with string keys (`"id"`, `"description"`), but `LeadAgent.build_system_prompt` and `Lead.build_planning_context` access them with atom keys (`:name`, `:description`) → always nil. Normalize keys to atoms when storing the plan, or use string-key access downstream. Also fix `deliverable_already_started?` which uses `Map.get(lead.deliverable, :id)` on a string-keyed map.
