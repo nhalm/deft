@@ -1,4 +1,6 @@
 # History
+- **orchestration v0.7 (2026-03-30):** Implement 4 LeadAgent tools (`spawn_runner`, `publish_contract`, `report_status`, `request_help`) as thin wrappers that `send(lead_pid, {:agent_action, action, payload})`
+- **orchestration v0.7 (2026-03-30):** Create `Deft.Job.LeadAgent` module that starts a standard `Deft.Agent` with Lead-specific system prompt, read-only tools + Lead tools, OM enabled
 - **orchestration v0.7 (2026-03-30):** Create `Deft.Job.Lead` gen_statem with 4 orchestration states (`:planning`, `:executing`, `:verifying`, `:complete`) — no agent loop
 - **orchestration v0.7 (2026-03-29):** Implement Foreman forwarding of Lead progress to ForemanAgent: on receiving `{:lead_message, ...}`, format as structured prompt and call `Deft.Agent.prompt/2`
 - **orchestration v0.7 (2026-03-29):** Implement Foreman→ForemanAgent prompt flow: Foreman calls `Deft.Agent.prompt/2` with structured context (research results, Lead progress, contracts, user messages)

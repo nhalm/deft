@@ -19,9 +19,7 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.7
 
-- Create `Deft.Job.LeadAgent` module that starts a standard `Deft.Agent` with Lead-specific system prompt, read-only tools + Lead tools, OM enabled
-- Implement 4 LeadAgent tools (`spawn_runner`, `publish_contract`, `report_status`, `request_help`) as thin wrappers that `send(lead_pid, {:agent_action, action, payload})` (blocked: Create Deft.Job.Lead, Create Deft.Job.LeadAgent)
-- Wire Lead `handle_info` to process `{:agent_action, ...}` messages from LeadAgent — dispatch to Runner spawning, contract publishing, Foreman reporting, blocker escalation (blocked: Implement 4 LeadAgent tools)
+- Wire Lead `handle_info` to process `{:agent_action, ...}` messages from LeadAgent — dispatch to Runner spawning, contract publishing, Foreman reporting, blocker escalation
 - Implement Lead→LeadAgent prompt flow: Lead calls `Deft.Agent.prompt/2` with deliverable assignment, Runner results, and Foreman steering (blocked: Create Deft.Job.Lead, Create Deft.Job.LeadAgent)
 - Update `Deft.Job.Supervisor` to start ForemanAgent + its ToolRunner as separate children alongside the Foreman (blocked: Create Deft.Job.ForemanAgent)
 - Update `Deft.Job.Lead.Supervisor` to start LeadAgent + its ToolRunner as separate children alongside the Lead (blocked: Create Deft.Job.LeadAgent)
