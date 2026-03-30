@@ -524,11 +524,15 @@ defmodule Deft.Job.Foreman do
       unique_id = :erlang.unique_integer([:positive])
       key = "#{type}-#{unique_id}"
 
-      Store.write(data.site_log_pid, key, %{
-        content: content,
-        metadata: metadata,
-        timestamp: System.system_time(:millisecond)
-      })
+      Store.write(
+        data.site_log_pid,
+        key,
+        content,
+        Map.merge(metadata, %{
+          category: type,
+          timestamp: System.system_time(:millisecond)
+        })
+      )
     end
 
     :keep_state_and_data
