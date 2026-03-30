@@ -1065,7 +1065,7 @@ defmodule Deft.Job.Foreman do
         key,
         content,
         Map.merge(metadata, %{
-          category: type,
+          type: type,
           timestamp: System.system_time(:millisecond)
         })
       )

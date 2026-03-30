@@ -145,7 +145,7 @@ defmodule Deft.Job.ForemanTest do
       decision_key = Enum.find(keys, fn key -> String.starts_with?(key, "decision-") end)
       {:ok, entry} = Store.read(tid, decision_key)
       assert entry.value == "Test decision"
-      assert entry.metadata.category == :decision
+      assert entry.metadata.type == :decision
 
       # Cleanup
       :gen_statem.stop(foreman_pid)

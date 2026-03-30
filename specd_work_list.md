@@ -17,7 +17,3 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## orchestration v0.7
-
-- Fix site log metadata key mismatch: Foreman writes `category: type` (foreman.ex:1068) but Lead reads `entry[:metadata][:type]` (lead.ex:605) — always nil, so all site log entries are silently dropped even after the name fix above
-
