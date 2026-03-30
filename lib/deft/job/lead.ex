@@ -29,6 +29,7 @@ defmodule Deft.Job.Lead do
   @behaviour :gen_statem
 
   alias Deft.Job.Runner
+  alias Deft.Store
 
   require Logger
 
@@ -181,9 +182,11 @@ defmodule Deft.Job.Lead do
   def handle_event(:enter, _old_state, :planning, data) do
     Logger.info("Lead #{data.lead_id} entering :planning phase")
 
-    # Send deliverable assignment to LeadAgent
+    # Send deliverable assignment + site log context to LeadAgent
     if data.lead_agent_pid do
-      context = build_planning_context(data)
+      # Read research findings and contracts from site log
+      site_log_context = read_site_log_context(data)
+      context = build_planning_context(data, site_log_context)
       Deft.Agent.prompt(data.lead_agent_pid, context)
     end
 
@@ -339,9 +342,21 @@ defmodule Deft.Job.Lead do
         # Notify LeadAgent so it can adjust approach
         if data.lead_agent_pid do
           timeout_prompt = """
-          Runner #{runner_info.runner_type} timed out while executing: #{runner_info.task_description}
+          **RUNNER TIMEOUT**
 
-          The task exceeded the configured timeout. Please adjust your approach or break the task into smaller steps.
+          Runner type: #{runner_info.runner_type}
+          Task: #{runner_info.task_description}
+          Status: Timed out
+
+          The Runner exceeded the configured timeout and was terminated. This usually means the task was too complex or got stuck.
+
+          **Recovery Actions:**
+          1. Break the task into smaller, more focused steps
+          2. Simplify the instructions to reduce complexity
+          3. Consider if the approach needs to change
+          4. If repeatedly timing out, use `request_help` to escalate to the Foreman
+
+          Please spawn a new Runner with an adjusted approach.
           """
 
           Deft.Agent.prompt(data.lead_agent_pid, timeout_prompt)
@@ -379,7 +394,7 @@ defmodule Deft.Job.Lead do
 
         # Send results to LeadAgent
         if data.lead_agent_pid do
-          context = build_runner_result_context(runner_info.runner_type, result)
+          context = build_runner_result_context(data, runner_info.runner_type, result)
           Deft.Agent.prompt(data.lead_agent_pid, context)
         end
 
@@ -424,10 +439,29 @@ defmodule Deft.Job.Lead do
 
         # Send failure to LeadAgent for recovery
         if data.lead_agent_pid do
-          context =
-            "Runner #{runner_info.runner_type} failed: #{inspect(reason)}. Please adjust approach."
+          failure_prompt = """
+          **RUNNER FAILURE**
 
-          Deft.Agent.prompt(data.lead_agent_pid, context)
+          Runner type: #{runner_info.runner_type}
+          Task: #{runner_info.task_description || "No description"}
+          Status: Failed
+          Reason: #{inspect(reason)}
+
+          The Runner process crashed or exited unexpectedly. This may indicate:
+          - An error in the Runner's execution
+          - An unexpected condition that wasn't handled
+          - A system-level issue
+
+          **Recovery Actions:**
+          1. Review the failure reason above
+          2. Adjust your instructions to handle edge cases
+          3. Consider if a different approach is needed
+          4. If unclear how to proceed, use `request_help` to escalate to the Foreman
+
+          Please analyze the failure and spawn a new Runner with corrective instructions.
+          """
+
+          Deft.Agent.prompt(data.lead_agent_pid, failure_prompt)
         end
 
         {:keep_state, data}
@@ -439,13 +473,27 @@ defmodule Deft.Job.Lead do
       when state in [:planning, :executing] do
     Logger.info("Lead #{data.lead_id} - Received steering from Foreman")
 
-    # Inject steering into LeadAgent as a prompt
+    # Inject steering into LeadAgent as a prompt with current context
     if data.lead_agent_pid do
+      # Build current progress context
+      completed_count = length(data.runner_results)
+      running_count = map_size(data.runner_tasks)
+
       steering_prompt = """
-      FOREMAN STEERING:
+      **FOREMAN STEERING**
+
+      The Foreman has sent you guidance:
+
       #{content}
 
-      Please adjust your approach accordingly.
+      **Current Progress:**
+      - Deliverable: #{data.deliverable[:name]}
+      - Phase: #{state}
+      - Runners completed: #{completed_count}
+      - Runners running: #{running_count}
+
+      **Action Required:**
+      Review the Foreman's guidance and adjust your approach accordingly. Update your task plan if needed and continue with implementation.
       """
 
       Deft.Agent.prompt(data.lead_agent_pid, steering_prompt)
@@ -459,14 +507,19 @@ defmodule Deft.Job.Lead do
       when state in [:planning, :executing] do
     Logger.info("Lead #{data.lead_id} - Received dependency contract from Foreman")
 
-    # Forward contract to LeadAgent as a prompt
+    # Forward contract to LeadAgent as a prompt with context
     if data.lead_agent_pid do
       contract_prompt = """
-      DEPENDENCY CONTRACT AVAILABLE:
+      **DEPENDENCY CONTRACT AVAILABLE**
+
+      A dependency you were waiting for has been satisfied. The interface contract is now available:
+
       #{inspect(contract, pretty: true)}
 
-      A dependency you were waiting for has provided this interface contract.
-      You can now proceed with work that depends on this interface.
+      **Action Required:**
+      Review this contract and proceed with work that depends on this interface. You can now unblock any tasks that were waiting for this dependency.
+
+      If you have questions about the contract or need clarification, use the `request_help` tool to ask the Foreman.
       """
 
       Deft.Agent.prompt(data.lead_agent_pid, contract_prompt)
@@ -486,42 +539,199 @@ defmodule Deft.Job.Lead do
 
   # Private helpers
 
-  defp build_planning_context(data) do
+  defp build_planning_context(data, site_log_context) do
     """
     You are the LeadAgent managing the following deliverable:
 
     **Deliverable:** #{data.deliverable[:name]}
     **Description:** #{data.deliverable[:description] || "No description provided"}
 
+    #{format_site_log_context(site_log_context)}
+
     **Your responsibilities:**
-    1. Read the deliverable assignment and research findings from the site log
+    1. Analyze the deliverable assignment, research findings, and available contracts
     2. Decompose the deliverable into concrete implementation tasks
     3. Use your available tools to spawn Runners, publish contracts, and report progress
     4. Evaluate Runner output and request corrective Runners if needed
-    5. Request testing Runners to verify compile checks and tests
+    5. Request testing Runners to verify compile checks and tests after implementation
 
     **Available tools:**
-    - `spawn_runner` — Start a Runner to execute a task
+    - `spawn_runner` — Start a Runner to execute a task (types: :implementation, :testing, :review)
     - `publish_contract` — Publish an interface contract for dependent Leads
     - `report_status` — Send progress updates to the Foreman
     - `request_help` — Escalate blockers to the Foreman
 
     **Worktree path:** #{data.worktree_path}
 
-    Begin by analyzing the deliverable and planning your approach. When ready, spawn your first Runner.
+    Begin by analyzing the deliverable, reviewing available research findings and contracts, then planning your approach. When ready, spawn your first Runner.
     """
   end
 
-  defp build_runner_result_context(runner_type, result) do
-    """
-    Runner #{runner_type} completed with the following result:
+  defp read_site_log_context(data) do
+    case get_site_log_tid(data) do
+      nil ->
+        %{research: [], contracts: [], decisions: [], critical: []}
 
+      tid ->
+        tid
+        |> Store.keys()
+        |> categorize_site_log_entries(tid)
+    end
+  end
+
+  defp get_site_log_tid(data) do
+    try do
+      Store.tid(data.site_log_name)
+    rescue
+      _ ->
+        Logger.warning("Lead #{data.lead_id} - Could not access site log")
+        nil
+    end
+  end
+
+  defp categorize_site_log_entries(keys, tid) do
+    Enum.reduce(keys, %{research: [], contracts: [], decisions: [], critical: []}, fn key, acc ->
+      categorize_entry(tid, key, acc)
+    end)
+  end
+
+  defp categorize_entry(tid, key, acc) do
+    case Store.read(tid, key) do
+      {:ok, entry} ->
+        add_entry_to_category(entry, key, acc)
+
+      _ ->
+        acc
+    end
+  end
+
+  defp add_entry_to_category(entry, key, acc) do
+    case entry[:metadata][:type] do
+      :finding -> Map.update!(acc, :research, &[{key, entry} | &1])
+      :contract -> Map.update!(acc, :contracts, &[{key, entry} | &1])
+      :decision -> Map.update!(acc, :decisions, &[{key, entry} | &1])
+      :critical_finding -> Map.update!(acc, :critical, &[{key, entry} | &1])
+      _ -> acc
+    end
+  end
+
+  defp format_site_log_context(context) do
+    sections =
+      []
+      |> maybe_add_research_findings(context[:research])
+      |> maybe_add_contracts(context[:contracts])
+      |> maybe_add_critical_findings(context[:critical])
+      |> maybe_add_decisions(context[:decisions])
+
+    if sections == [] do
+      ""
+    else
+      "\n" <> Enum.join(Enum.reverse(sections), "\n")
+    end
+  end
+
+  defp maybe_add_research_findings(sections, findings) when findings != [] do
+    findings_text =
+      findings
+      |> Enum.map(fn {key, entry} ->
+        "- #{key}: #{inspect(entry[:value])}"
+      end)
+      |> Enum.join("\n")
+
+    [
+      """
+      **Research Findings:**
+      #{findings_text}
+      """
+      | sections
+    ]
+  end
+
+  defp maybe_add_research_findings(sections, _), do: sections
+
+  defp maybe_add_contracts(sections, contracts) when contracts != [] do
+    contracts_text =
+      contracts
+      |> Enum.map(fn {key, entry} ->
+        "- #{key}: #{inspect(entry[:value])}"
+      end)
+      |> Enum.join("\n")
+
+    [
+      """
+      **Available Contracts:**
+      #{contracts_text}
+      """
+      | sections
+    ]
+  end
+
+  defp maybe_add_contracts(sections, _), do: sections
+
+  defp maybe_add_critical_findings(sections, findings) when findings != [] do
+    critical_text =
+      findings
+      |> Enum.map(fn {key, entry} ->
+        "- #{key}: #{inspect(entry[:value])}"
+      end)
+      |> Enum.join("\n")
+
+    [
+      """
+      **Critical Findings:**
+      #{critical_text}
+      """
+      | sections
+    ]
+  end
+
+  defp maybe_add_critical_findings(sections, _), do: sections
+
+  defp maybe_add_decisions(sections, decisions) when decisions != [] do
+    decisions_text =
+      decisions
+      |> Enum.map(fn {key, entry} ->
+        "- #{key}: #{inspect(entry[:value])}"
+      end)
+      |> Enum.join("\n")
+
+    [
+      """
+      **Foreman Decisions:**
+      #{decisions_text}
+      """
+      | sections
+    ]
+  end
+
+  defp maybe_add_decisions(sections, _), do: sections
+
+  defp build_runner_result_context(data, runner_type, result) do
+    # Count completed and running runners
+    completed_count = length(data.runner_results)
+    running_count = map_size(data.runner_tasks)
+
+    """
+    **Runner Completion Report**
+
+    Runner type: #{runner_type}
+    Status: Completed
+
+    **Result:**
     #{inspect(result, pretty: true)}
 
-    Please evaluate this output and decide on the next step:
-    - If successful, proceed to the next task or verify the deliverable
-    - If there are issues, spawn a corrective Runner
-    - If the deliverable is complete, transition to verification
+    **Progress Summary:**
+    - Runners completed: #{completed_count}
+    - Runners currently running: #{running_count}
+    - Deliverable: #{data.deliverable[:name]}
+
+    **Next Steps:**
+    Evaluate this output and decide on the next action:
+    - If successful and this was an implementation Runner, spawn a testing Runner to verify compile checks and tests
+    - If there are issues, spawn a corrective Runner with specific guidance
+    - If the deliverable is complete and verified, you can wait for the Lead to transition to verification phase
+    - If you need to publish an interface contract, use the `publish_contract` tool
+    - Report progress to the Foreman using `report_status` with important decisions or artifacts
     """
   end
 

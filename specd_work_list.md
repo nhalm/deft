@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.7
 
-- Implement Lead→LeadAgent prompt flow: Lead calls `Deft.Agent.prompt/2` with deliverable assignment, Runner results, and Foreman steering
 - Update `Deft.Job.Supervisor` to start ForemanAgent + its ToolRunner as separate children alongside the Foreman
 - Update `Deft.Job.Lead.Supervisor` to start LeadAgent + its ToolRunner as separate children alongside the Lead
 - Implement Lead crash recovery in Foreman `:DOWN` handler (foreman.ex:534-540): the handler is a TODO stub that returns `:keep_state_and_data`. Must clean up the crashed Lead's worktree, remove Lead from tracking state (`data.leads`, `lead_monitors`, `started_leads`), and check `all_leads_complete?` for phase transition — otherwise job hangs in `:executing` if last Lead crashes. `do_abort_lead` has partial cleanup logic to reuse.
