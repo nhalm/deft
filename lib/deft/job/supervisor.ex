@@ -115,13 +115,14 @@ defmodule Deft.Job.Supervisor do
       %{
         id: Deft.Job.ForemanAgent,
         start:
-          {Deft.Agent, :start_link,
+          {Deft.Job.ForemanAgent, :start_link,
            [
              [
                session_id: foreman_agent_session_id,
                config: config,
-               messages: [],
                parent_pid: foreman_name,
+               working_dir: working_dir,
+               messages: [],
                name: foreman_agent_name
              ]
            ]},
