@@ -1200,7 +1200,8 @@ defmodule Deft.Job.Foreman do
   defp handle_lead_completion(type, metadata, state, data) do
     if type == :complete do
       lead_id = Map.get(metadata, :lead_id)
-      Logger.info("#{log_prefix(data)} Lead #{lead_id} completed, removing from started_leads")
+      deliverable_name = get_in(data, [:leads, lead_id, :deliverable, :name])
+      Logger.info("#{log_prefix(data)} Lead completed: #{lead_id}, task: #{deliverable_name}")
 
       updated_data =
         data
