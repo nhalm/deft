@@ -38,7 +38,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## harness v0.3
 
-- Add `parent_pid` option to `Deft.Agent.start_link/1` — stored in agent data, passed through to ToolContext on tool execution
 - Add `Deft.Agent.prompt/2` public API for sending prompts to an agent from an external process (orchestrator) — returns `:ok`, agent processes asynchronously
 - Ensure `Deft.Agent` broadcasts events via Registry in both standalone and sub-agent modes so orchestrators and web UI can subscribe
 
