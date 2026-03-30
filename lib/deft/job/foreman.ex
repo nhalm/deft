@@ -136,11 +136,25 @@ defmodule Deft.Job.Foreman do
 
   @impl :gen_statem
   def init(data) do
-    # Get or look up the site log instance started by Job.Supervisor
+    data =
+      data
+      |> resolve_site_log_pid()
+      |> setup_foreman_agent_monitoring()
+
+    Logger.info("Foreman started for job #{data.session_id}")
+
+    # Start in :asking phase if auto-approve is not set, otherwise skip to :planning
+    auto_approve = Map.get(data.config, :auto_approve_all, false)
+    initial_state = if auto_approve, do: :planning, else: :asking
+
+    {:ok, initial_state, data}
+  end
+
+  # Private helper to resolve site log PID from registry if not provided
+  defp resolve_site_log_pid(data) do
     site_log_pid =
       case data.site_log_pid do
         nil ->
-          # Look up the site log by name
           site_log_name = {:via, Registry, {Deft.ProcessRegistry, {:sitelog, data.session_id}}}
 
           case GenServer.whereis(site_log_name) do
@@ -156,16 +170,36 @@ defmodule Deft.Job.Foreman do
           pid
       end
 
-    data = Map.put(data, :site_log_pid, site_log_pid)
-
-    Logger.info("Foreman started for job #{data.session_id}")
-
-    # Start in :asking phase if auto-approve is not set, otherwise skip to :planning
-    auto_approve = Map.get(data.config, :auto_approve_all, false)
-    initial_state = if auto_approve, do: :planning, else: :asking
-
-    {:ok, initial_state, data}
+    Map.put(data, :site_log_pid, site_log_pid)
   end
+
+  # Private helper to set up ForemanAgent monitoring
+  defp setup_foreman_agent_monitoring(data) do
+    case data.foreman_agent_pid do
+      nil ->
+        Logger.warning("ForemanAgent PID not provided during init")
+        data
+
+      name_or_pid ->
+        pid = resolve_agent_pid(name_or_pid)
+
+        if pid do
+          monitor_ref = Process.monitor(pid)
+          Logger.debug("Monitoring ForemanAgent with ref: #{inspect(monitor_ref)}")
+
+          data
+          |> Map.put(:foreman_agent_pid, pid)
+          |> Map.put(:foreman_agent_monitor_ref, monitor_ref)
+        else
+          Logger.warning("Could not resolve ForemanAgent name to PID: #{inspect(name_or_pid)}")
+          data
+        end
+    end
+  end
+
+  # Resolve a registered name or PID to an actual PID
+  defp resolve_agent_pid(pid) when is_pid(pid), do: pid
+  defp resolve_agent_pid(name), do: GenServer.whereis(name)
 
   @impl :gen_statem
   def handle_event(:enter, _old_state, :asking, data) do

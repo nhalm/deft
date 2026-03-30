@@ -16,7 +16,3 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
-
-## orchestration v0.9
-
-- Wire up ForemanAgent monitoring in production: `Foreman.init/1` receives `foreman_agent_pid` (a registered name) from the Supervisor but never calls `Process.monitor` on it — `foreman_agent_monitor_ref` stays `nil`, the `:DOWN` handler (foreman.ex:635) never matches, ForemanAgent crashes go undetected and the job hangs silently. Either resolve the name to a PID in `init` and monitor it, or have `Job.Supervisor` call `Foreman.set_foreman_agent/2` after both processes are started.
