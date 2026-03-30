@@ -38,7 +38,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## harness v0.3
 
-- Add `Deft.Agent.prompt/2` public API for sending prompts to an agent from an external process (orchestrator) — returns `:ok`, agent processes asynchronously
 - Ensure `Deft.Agent` broadcasts events via Registry in both standalone and sub-agent modes so orchestrators and web UI can subscribe
 
 ## sessions v0.7
