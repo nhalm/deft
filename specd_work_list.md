@@ -19,11 +19,10 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.7
 
-- Create `Deft.Job.ForemanAgent` module that starts a standard `Deft.Agent` with Foreman-specific system prompt and OM enabled
-- Implement 7 ForemanAgent orchestration tools (`ready_to_plan`, `request_research`, `submit_plan`, `spawn_lead`, `unblock_lead`, `steer_lead`, `abort_lead`) as thin wrappers that `send(foreman_pid, {:agent_action, action, payload})` and return `:ok` (blocked: Create Deft.Job.Foreman, Create Deft.Job.ForemanAgent)
-- Implement `:asking` phase in Foreman: relay ForemanAgent text responses to user as questions, relay user answers back to ForemanAgent as prompts, transition to `:planning` on `{:agent_action, :ready_to_plan}` (blocked: Create Deft.Job.Foreman, Create Deft.Job.ForemanAgent)
-- Wire Foreman `handle_info` to process `{:agent_action, ...}` messages from ForemanAgent — dispatch to research spawning, plan presentation, Lead lifecycle, and steering (blocked: Implement 6 ForemanAgent orchestration tools)
-- Implement Foreman→ForemanAgent prompt flow: Foreman calls `Deft.Agent.prompt/2` with structured context (research results, Lead progress, contracts, user messages) (blocked: Create Deft.Job.Foreman, Create Deft.Job.ForemanAgent)
+- Implement 7 ForemanAgent orchestration tools (`ready_to_plan`, `request_research`, `submit_plan`, `spawn_lead`, `unblock_lead`, `steer_lead`, `abort_lead`) as thin wrappers that `send(foreman_pid, {:agent_action, action, payload})` and return `:ok`
+- Implement `:asking` phase in Foreman: relay ForemanAgent text responses to user as questions, relay user answers back to ForemanAgent as prompts, transition to `:planning` on `{:agent_action, :ready_to_plan}`
+- Wire Foreman `handle_info` to process `{:agent_action, ...}` messages from ForemanAgent — dispatch to research spawning, plan presentation, Lead lifecycle, and steering (blocked: Implement 7 ForemanAgent orchestration tools)
+- Implement Foreman→ForemanAgent prompt flow: Foreman calls `Deft.Agent.prompt/2` with structured context (research results, Lead progress, contracts, user messages)
 - Create `Deft.Job.Lead` gen_statem with 4 orchestration states (`:planning`, `:executing`, `:verifying`, `:complete`) — no agent loop
 - Create `Deft.Job.LeadAgent` module that starts a standard `Deft.Agent` with Lead-specific system prompt, read-only tools + Lead tools, OM enabled
 - Implement 4 LeadAgent tools (`spawn_runner`, `publish_contract`, `report_status`, `request_help`) as thin wrappers that `send(lead_pid, {:agent_action, action, payload})` (blocked: Create Deft.Job.Lead, Create Deft.Job.LeadAgent)
