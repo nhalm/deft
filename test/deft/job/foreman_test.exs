@@ -36,6 +36,18 @@ defmodule Deft.Job.ForemanTest do
     pid
   end
 
+  # Mock agent that tracks prompts sent via :gen_statem.cast({:prompt, text})
+  defp mock_agent_loop(prompts) do
+    receive do
+      {:"$gen_cast", {:prompt, text}} ->
+        mock_agent_loop([text | prompts])
+
+      {:get_prompts, caller} ->
+        send(caller, {:prompts, Enum.reverse(prompts)})
+        mock_agent_loop(prompts)
+    end
+  end
+
   describe "site log instance creation" do
     test "creates site log on init", %{tmp_dir: tmp_dir, runner_supervisor: runner_supervisor} do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
@@ -1268,6 +1280,131 @@ defmodule Deft.Job.ForemanTest do
 
       # Cleanup
       Store.cleanup(data.site_log_pid)
+      :gen_statem.stop(foreman_pid)
+      Process.sleep(50)
+    end
+  end
+
+  describe "Lead message forwarding to ForemanAgent" do
+    test "forwards lead_message to ForemanAgent via Deft.Agent.prompt/2", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
+      session_id = "test-job-#{:erlang.unique_integer([:positive])}"
+      start_rate_limiter(session_id)
+
+      # Start Foreman in :executing phase
+      {:ok, foreman_pid} =
+        Foreman.start_link(
+          session_id: session_id,
+          config: %{auto_approve_all: true},
+          prompt: "test prompt",
+          rate_limiter_pid: self(),
+          runner_supervisor: runner_supervisor,
+          working_dir: tmp_dir
+        )
+
+      # Create a mock ForemanAgent that tracks prompts sent to it
+      mock_agent_pid = spawn(fn -> mock_agent_loop([]) end)
+
+      # Set the mock agent as the ForemanAgent
+      Foreman.set_foreman_agent(foreman_pid, mock_agent_pid)
+
+      # Transition to :executing state
+      :sys.replace_state(foreman_pid, fn {_state, data} ->
+        {:executing, data}
+      end)
+
+      # Send a lead_message to the Foreman
+      lead_metadata = %{
+        lead_id: "lead-123",
+        lead_name: "Test Lead"
+      }
+
+      send(foreman_pid, {:lead_message, :status, "Working on database layer", lead_metadata})
+
+      # Wait for message to be processed
+      Process.sleep(100)
+
+      # Verify the mock agent received a prompt
+      send(mock_agent_pid, {:get_prompts, self()})
+
+      receive do
+        {:prompts, prompts} ->
+          assert length(prompts) == 1
+          [prompt_text] = prompts
+
+          # Verify the prompt contains expected structure from build_lead_message_context
+          assert String.contains?(prompt_text, "## Lead Update")
+          assert String.contains?(prompt_text, "**Type:** status")
+          assert String.contains?(prompt_text, "**From:** Test Lead (lead-123)")
+          assert String.contains?(prompt_text, "Working on database layer")
+          assert String.contains?(prompt_text, "**Job Phase:** executing")
+      after
+        500 -> flunk("Did not receive prompts from mock agent")
+      end
+
+      # Cleanup
+      Process.exit(mock_agent_pid, :kill)
+      :gen_statem.stop(foreman_pid)
+      Process.sleep(50)
+    end
+
+    test "forwards different lead_message types with proper formatting", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
+      session_id = "test-job-#{:erlang.unique_integer([:positive])}"
+      start_rate_limiter(session_id)
+
+      {:ok, foreman_pid} =
+        Foreman.start_link(
+          session_id: session_id,
+          config: %{auto_approve_all: true},
+          prompt: "test prompt",
+          rate_limiter_pid: self(),
+          runner_supervisor: runner_supervisor,
+          working_dir: tmp_dir
+        )
+
+      mock_agent_pid = spawn(fn -> mock_agent_loop([]) end)
+      Foreman.set_foreman_agent(foreman_pid, mock_agent_pid)
+
+      :sys.replace_state(foreman_pid, fn {_state, data} ->
+        {:executing, data}
+      end)
+
+      # Test different message types
+      message_types = [
+        {:decision, "Use PostgreSQL for database", %{lead_id: "lead-1"}},
+        {:contract, "API endpoint: POST /api/users", %{lead_id: "lead-2"}},
+        {:blocker, "Need API key configuration", %{lead_id: "lead-3"}},
+        {:critical_finding, "Security vulnerability found", %{lead_id: "lead-4"}}
+      ]
+
+      for {type, content, metadata} <- message_types do
+        send(foreman_pid, {:lead_message, type, content, metadata})
+      end
+
+      Process.sleep(200)
+
+      send(mock_agent_pid, {:get_prompts, self()})
+
+      receive do
+        {:prompts, prompts} ->
+          assert length(prompts) == 4
+
+          # Verify each prompt contains the correct message type
+          for {idx, {type, _, _}} <- Enum.with_index(message_types) do
+            prompt = Enum.at(prompts, idx)
+            assert String.contains?(prompt, "**Type:** #{type}")
+          end
+      after
+        500 -> flunk("Did not receive prompts from mock agent")
+      end
+
+      # Cleanup
+      Process.exit(mock_agent_pid, :kill)
       :gen_statem.stop(foreman_pid)
       Process.sleep(50)
     end

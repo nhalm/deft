@@ -27,7 +27,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Update `Deft.Job.Supervisor` to start ForemanAgent + its ToolRunner as separate children alongside the Foreman (blocked: Create Deft.Job.ForemanAgent)
 - Update `Deft.Job.Lead.Supervisor` to start LeadAgent + its ToolRunner as separate children alongside the Lead (blocked: Create Deft.Job.LeadAgent)
 - Implement single-agent fallback: when Foreman detects simple task, configure ForemanAgent with full tool set (read, write, edit, bash, grep, find, ls) and skip orchestration (blocked: Implement Foreman→ForemanAgent prompt flow)
-- Implement Foreman forwarding of Lead progress to ForemanAgent: on receiving `{:lead_message, ...}`, format as structured prompt and call `Deft.Agent.prompt/2`
 - Implement Lead injection of Foreman steering: on receiving `{:foreman_steering, content}`, format as prompt and call `Deft.Agent.prompt/2` on LeadAgent (blocked: Wire Lead handle_info)
 - Remove old tuple-state Foreman implementation (the fused orchestrator+agent gen_statem) and replace with new split architecture (blocked: all above items)
 - Remove old tuple-state Lead implementation and replace with new split architecture (blocked: all above items)
