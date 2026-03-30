@@ -2,11 +2,14 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.5 |
+| Version | 0.6 |
 | Status | Ready |
 | Last Updated | 2026-03-30 |
 
 ## Changelog
+
+### v0.6 (2026-03-30)
+- Remove "Session saved" from Infrastructure logging requirements — Session persistence happens continuously via append with no discrete "save" event worth logging at info level; "Session resumed" already covers the meaningful lifecycle event
 
 ### v0.5 (2026-03-30)
 - Silence keystroke noise: remove app-level keydown logging, disable Phoenix built-in callback logging, keep only meaningful UI events at debug level
@@ -172,7 +175,6 @@ Covers Store, Skills, Issues, Session modules.
 
 **Info level:**
 - Session resumed (session ID, entry count) — logged by `resume`, not by `load`
-- Session saved
 - Issue created/updated
 - Skill registered
 
