@@ -2,11 +2,15 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.4 |
-| Status | Implemented |
-| Last Updated | 2026-03-27 |
+| Version | 0.5 |
+| Status | Ready |
+| Last Updated | 2026-03-30 |
 
 ## Changelog
+
+### v0.5 (2026-03-30)
+- Silence keystroke noise: remove app-level keydown logging, disable Phoenix built-in callback logging, keep only meaningful UI events at debug level
+- Fix "only callers log" violation in Session Store: move "Session loaded" log out of `Store.load/2` and into callers that warrant it (e.g., `resume`), so `list_sessions` doesn't spam on startup
 
 ### v0.4 (2026-03-27)
 - Remove status code from "Provider stream complete" requirement — successful stream completion inherently means 200; non-200 responses are logged as provider failures
@@ -46,7 +50,7 @@ Deft uses Elixir's built-in Logger for operational visibility across all layers.
 - **Only callers log.** Low-level functions return deterministic results (`{:ok, _}` / `{:error, _}`). They do not log. The caller has the context to decide whether a failure is expected, recoverable, or fatal — and logs accordingly. This applies to git operations, HTTP calls, file I/O, parsing, and any utility function.
 - `:info` tells you what happened (prompt received, LLM called, tools ran, turn complete)
 - `:debug` tells you the details (individual events, broadcasts, state transitions)
-- High-frequency UI events (keypresses) stay at `:debug` to avoid noise
+- High-frequency UI events (keypresses) are not logged at any level — they generate too much noise even at `:debug` and have no diagnostic value
 - Never log message content or tool output — may contain secrets. Log lengths, counts, types, and durations.
 
 ## Specification
@@ -80,7 +84,7 @@ Example: `[info] [Agent:a1b2c3d4] Prompt received, 342 chars`
 
 ### 3. Phoenix Layer
 
-LiveView callbacks (mount, handle_event, handle_info) log at `:debug` level. This keeps keypress and high-frequency UI events out of normal output while making them available when needed.
+Phoenix's built-in LiveView callback logging is disabled (`log: false` in the `live_view` macro). App-level logging in LiveView modules provides better context (prefixed, selective), making Phoenix's generic `HANDLE EVENT` lines redundant.
 
 ### 4. Agent Layer
 
@@ -157,15 +161,22 @@ The agent logs its message lifecycle:
 
 **Debug level:**
 - Agent events received for rendering (event type)
+- Discrete UI events: toggle_thinking, toggle_tool (event name only)
+
+**Not logged (any level):**
+- Keydown events — high-frequency, no diagnostic value
 
 ### 9. Infrastructure Layer
 
 Covers Store, Skills, Issues, Session modules.
 
 **Info level:**
-- Session loaded/saved
+- Session resumed (session ID, entry count) — logged by `resume`, not by `load`
+- Session saved
 - Issue created/updated
 - Skill registered
+
+`Store.load/2` is a low-level function called by multiple callers (resume, list_sessions, extract_metadata). Per the "only callers log" principle, `load` does not log. Callers that represent meaningful user-facing actions (like `resume`) log at their own level.
 
 **Debug level:**
 - Cache hits/misses

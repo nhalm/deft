@@ -16,3 +16,9 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
+
+## logging v0.5
+
+- Disable Phoenix built-in LiveView callback logging: change `log: :debug` to `log: false` in the `live_view` macro in `lib/deft_web.ex`
+- Remove `Logger.debug("[Chat:...] Event: keydown")` from the `handle_event("keydown", ...)` clause in `lib/deft_web/live/chat_live.ex` — delete the log line only, keep the handler logic
+- Move "Session loaded" log out of `Store.load/2` in `lib/deft/session/store.ex`: remove the `Logger.info` from `load/2`, add `Logger.info("[Session] Session resumed: #{session_id}, #{length(entries)} entries")` in `resume/2` after a successful load. This stops `list_sessions` from spamming on startup.
