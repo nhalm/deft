@@ -1110,6 +1110,8 @@ defmodule Deft.Job.Foreman do
   end
 
   defp create_lead_worktree(lead_id, data) do
+    Logger.debug("#{log_prefix(data)} Creating worktree for Lead #{lead_id}")
+
     GitJob.create_lead_worktree(
       lead_id: lead_id,
       job_id: data.session_id,
@@ -1248,6 +1250,8 @@ defmodule Deft.Job.Foreman do
 
     # Clean up all Lead worktrees
     Enum.each(data.leads, fn {lead_id, _lead} ->
+      Logger.debug("#{log_prefix(data)} Cleaning up worktree for Lead #{lead_id}")
+
       GitJob.cleanup_lead_worktree(
         lead_id: lead_id,
         working_dir: data.working_dir
@@ -1263,6 +1267,8 @@ defmodule Deft.Job.Foreman do
 
   defp do_handle_lead_crash(lead_id, _state, data) do
     # Clean up the crashed Lead's worktree
+    Logger.debug("#{log_prefix(data)} Cleaning up worktree for crashed Lead #{lead_id}")
+
     GitJob.cleanup_lead_worktree(
       lead_id: lead_id,
       working_dir: data.working_dir

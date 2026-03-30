@@ -19,6 +19,5 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## logging v0.6
 
-- Add debug-level logging for branch operations in `lib/deft/job/foreman.ex`: log before `create_lead_worktree` and `cleanup_lead_worktree` calls (spec §5 requires "Branch operations (create, merge, cleanup)" at debug level)
 - Fix `Agent.run/2` to log at warning level when `Store.append` fails (currently discards the return value with `_ = Store.append(...)`), respecting the "only callers log" principle
 - Remove error-level logging from `Store.append/3` and `Store.append_to_path/2` in `lib/deft/session/store.ex:66` and `:94` (blocked: Agent must log append failures first)

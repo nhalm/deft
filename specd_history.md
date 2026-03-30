@@ -1,4 +1,5 @@
 # History
+- **logging v0.6 (2026-03-30):** Add debug-level logging for branch operations in `lib/deft/job/foreman.ex`: log before `create_lead_worktree` and `cleanup_lead_worktree` calls (spec §5 requires "Branch operations (create, merge, cleanup)" at debug level)
 - **logging v0.6 (2026-03-30):** Add warning-level logging for individual calling errors during retry in `lib/deft/agent.ex` `handle_calling_error/2`: currently retries 1-2 emit zero log output — log the error reason and retry count at warning level before scheduling retry
 - **logging v0.6 (2026-03-30):** Validate `LOG_LEVEL` env var in `config/runtime.exs`: reject values outside `debug | info | warning | error` with a clear error message instead of passing arbitrary atoms to Logger (which crashes on invalid levels)
 - **logging v0.6 (2026-03-30):** Add periodic cost checkpoint info-level logging in `lib/deft/job/foreman.ex`: log accumulated cost at regular intervals during job execution as `"#{log_prefix(data)} Cost checkpoint: $#{cost}"` — per §5 Info level "Cost checkpoints (accumulated cost)"
