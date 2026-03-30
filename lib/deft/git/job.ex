@@ -209,6 +209,51 @@ defmodule Deft.Git.Job do
     end
   end
 
+  @doc """
+  Cleans up a Lead's worktree and branch after crash or abort.
+
+  ## Options
+
+  - `:lead_id` - Required. Lead identifier.
+  - `:working_dir` - Optional. Working directory (defaults to File.cwd!()).
+  - `:git` - Optional. Git adapter module (defaults to Deft.Git).
+
+  ## Returns
+
+  - `:ok` - Cleanup succeeded (or worktree didn't exist)
+
+  ## Examples
+
+      Deft.Git.Job.cleanup_lead_worktree(lead_id: "abc123-auth")
+      # => :ok
+  """
+  @spec cleanup_lead_worktree(keyword()) :: :ok
+  def cleanup_lead_worktree(opts) do
+    lead_id = Keyword.fetch!(opts, :lead_id)
+    git = Keyword.get(opts, :git, Deft.Git)
+    working_dir = Keyword.get(opts, :working_dir, File.cwd!())
+
+    worktree_path = Path.join([working_dir, ".deft-worktrees", "lead-#{lead_id}"])
+    lead_branch = "deft/lead-#{lead_id}"
+
+    # Remove worktree if it exists
+    remove_worktree(git, worktree_path)
+
+    # Delete the branch (force delete to handle unmerged branches)
+    case git.cmd(["branch", "-D", lead_branch]) do
+      {_output, 0} -> :ok
+      {_error_output, _exit_code} -> :ok
+    end
+
+    # Prune stale worktree metadata
+    case git.cmd(["worktree", "prune"]) do
+      {_output, 0} -> :ok
+      {_error_output, _exit_code} -> :ok
+    end
+
+    :ok
+  end
+
   # Create a git worktree branched from the job branch
   defp create_worktree(git, worktree_path, lead_branch, job_branch, _job_id) do
     # git worktree add <path> -b <lead_branch> <job_branch>

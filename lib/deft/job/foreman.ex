@@ -545,13 +545,11 @@ defmodule Deft.Job.Foreman do
   end
 
   # Handle Lead process DOWN messages
-  def handle_event(:info, {:DOWN, ref, :process, pid, reason}, _state, data) do
+  def handle_event(:info, {:DOWN, ref, :process, pid, reason}, state, data) do
     case find_lead_by_monitor(data.lead_monitors, ref) do
       {:ok, lead_id} ->
         Logger.warning("Lead #{lead_id} (#{inspect(pid)}) crashed: #{inspect(reason)}")
-        # Handle Lead crash, cleanup worktree
-        # TODO: Implement Lead crash recovery
-        :keep_state_and_data
+        do_handle_lead_crash(lead_id, state, data)
 
       :not_found ->
         # Monitor might be for another process (e.g., Runner)
@@ -917,6 +915,41 @@ defmodule Deft.Job.Foreman do
     case Map.get(monitors, lead_id) do
       nil -> :ok
       monitor_ref -> Process.demonitor(monitor_ref, [:flush])
+    end
+  end
+
+  defp all_leads_complete?(data) do
+    # All Leads are complete when no Leads are currently running
+    # (started_leads tracks currently active Leads)
+    MapSet.size(data.started_leads) == 0
+  end
+
+  defp do_handle_lead_crash(lead_id, state, data) do
+    # Clean up the crashed Lead's worktree
+    GitJob.cleanup_lead_worktree(
+      lead_id: lead_id,
+      working_dir: data.working_dir
+    )
+
+    Logger.info("Cleaned up worktree for crashed Lead #{lead_id}")
+
+    # Clean up monitor
+    cleanup_lead_monitor(data.lead_monitors, lead_id)
+
+    # Remove from tracking
+    updated_data =
+      data
+      |> Map.update!(:leads, &Map.delete(&1, lead_id))
+      |> Map.update!(:started_leads, &MapSet.delete(&1, lead_id))
+      |> Map.update!(:blocked_leads, &Map.delete(&1, lead_id))
+      |> Map.update!(:lead_monitors, &Map.delete(&1, lead_id))
+
+    # Check if all Leads are complete
+    if state == :executing and all_leads_complete?(updated_data) do
+      Logger.info("All Leads complete after crash, transitioning to :verifying")
+      {:next_state, :verifying, updated_data}
+    else
+      {:keep_state, updated_data}
     end
   end
 
