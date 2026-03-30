@@ -1,4 +1,5 @@
 # History
+- **orchestration v0.7 (2026-03-30):** Create `Deft.Job.Lead` gen_statem with 4 orchestration states (`:planning`, `:executing`, `:verifying`, `:complete`) — no agent loop
 - **orchestration v0.7 (2026-03-29):** Implement Foreman forwarding of Lead progress to ForemanAgent: on receiving `{:lead_message, ...}`, format as structured prompt and call `Deft.Agent.prompt/2`
 - **orchestration v0.7 (2026-03-29):** Implement Foreman→ForemanAgent prompt flow: Foreman calls `Deft.Agent.prompt/2` with structured context (research results, Lead progress, contracts, user messages)
 - **rate-limiter v0.3 (2026-03-29):** Update `RateLimiter.request/4` priority parameter to accept `:foreman_agent`, `:lead_agent`, `:runner` atoms instead of `:foreman`, `:lead`, `:runner`
