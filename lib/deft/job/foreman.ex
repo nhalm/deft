@@ -212,9 +212,9 @@ defmodule Deft.Job.Foreman do
     research_tasks = Map.get(data, :research_tasks, [])
 
     if length(research_tasks) > 0 do
-      # Trigger collection via internal event so Foreman process collects results
+      # Trigger collection via state_timeout so Foreman process collects results
       # (Task.yield must be called from the process that owns the tasks)
-      {:keep_state_and_data, {:next_event, :internal, :collect_research}}
+      {:keep_state_and_data, {:state_timeout, 0, :collect_research}}
     else
       # No research tasks, skip to decomposing
       Logger.warning("No research tasks to execute")
@@ -222,7 +222,7 @@ defmodule Deft.Job.Foreman do
     end
   end
 
-  def handle_event(:internal, :collect_research, :researching, data) do
+  def handle_event(:state_timeout, :collect_research, :researching, data) do
     research_timeout = Map.get(data.config, :job_research_timeout, 120_000)
     research_tasks = Map.get(data, :research_tasks, [])
 
