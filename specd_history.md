@@ -1,4 +1,5 @@
 # History
+- **orchestration v0.7 (2026-03-29):** Implement 7 ForemanAgent orchestration tools (`ready_to_plan`, `request_research`, `submit_plan`, `spawn_lead`, `unblock_lead`, `steer_lead`, `abort_lead`) as thin wrappers that `send(foreman_pid, {:agent_action, action, payload})` and return `:ok`
 - **harness v0.3 (2026-03-29):** Add `Deft.Agent.prompt/2` public API for sending prompts to an agent from an external process (orchestrator) — returns `:ok`, agent processes asynchronously
 - **harness v0.3 (2026-03-29):** Add `parent_pid` option to `Deft.Agent.start_link/1` — stored in agent data, passed through to ToolContext on tool execution
 - **orchestration v0.7 (2026-03-29):** Create `Deft.Job.ForemanAgent` module that starts a standard `Deft.Agent` with Foreman-specific system prompt and OM enabled
