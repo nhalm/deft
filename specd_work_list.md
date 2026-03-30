@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.7
 
-- Wire Foreman `handle_info` to process `{:agent_action, ...}` messages from ForemanAgent — dispatch to research spawning, plan presentation, Lead lifecycle, and steering
 - Implement Foreman→ForemanAgent prompt flow: Foreman calls `Deft.Agent.prompt/2` with structured context (research results, Lead progress, contracts, user messages)
 - Create `Deft.Job.Lead` gen_statem with 4 orchestration states (`:planning`, `:executing`, `:verifying`, `:complete`) — no agent loop
 - Create `Deft.Job.LeadAgent` module that starts a standard `Deft.Agent` with Lead-specific system prompt, read-only tools + Lead tools, OM enabled
@@ -29,7 +28,7 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Update `Deft.Job.Supervisor` to start ForemanAgent + its ToolRunner as separate children alongside the Foreman (blocked: Create Deft.Job.ForemanAgent)
 - Update `Deft.Job.Lead.Supervisor` to start LeadAgent + its ToolRunner as separate children alongside the Lead (blocked: Create Deft.Job.LeadAgent)
 - Implement single-agent fallback: when Foreman detects simple task, configure ForemanAgent with full tool set (read, write, edit, bash, grep, find, ls) and skip orchestration (blocked: Implement Foreman→ForemanAgent prompt flow)
-- Implement Foreman forwarding of Lead progress to ForemanAgent: on receiving `{:lead_message, ...}`, format as structured prompt and call `Deft.Agent.prompt/2` (blocked: Wire Foreman handle_info)
+- Implement Foreman forwarding of Lead progress to ForemanAgent: on receiving `{:lead_message, ...}`, format as structured prompt and call `Deft.Agent.prompt/2`
 - Implement Lead injection of Foreman steering: on receiving `{:foreman_steering, content}`, format as prompt and call `Deft.Agent.prompt/2` on LeadAgent (blocked: Wire Lead handle_info)
 - Remove old tuple-state Foreman implementation (the fused orchestrator+agent gen_statem) and replace with new split architecture (blocked: all above items)
 - Remove old tuple-state Lead implementation and replace with new split architecture (blocked: all above items)

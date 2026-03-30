@@ -26,6 +26,7 @@ defmodule Deft.Job.Foreman do
 
   @behaviour :gen_statem
 
+  alias Deft.Job.Runner
   alias Deft.Project
   alias Deft.Store
 
@@ -189,10 +190,25 @@ defmodule Deft.Job.Foreman do
     :keep_state_and_data
   end
 
-  def handle_event(:enter, _old_state, :researching, _data) do
+  def handle_event(:enter, _old_state, :researching, data) do
     Logger.info("Foreman entering :researching phase")
-    # Research Runners will be spawned when ForemanAgent calls request_research tool
-    :keep_state_and_data
+
+    # Collect research results from all tasks
+    research_timeout = Map.get(data.config, :research_timeout, 120_000)
+    research_tasks = Map.get(data, :research_tasks, [])
+
+    if length(research_tasks) > 0 do
+      # Spawn a task to collect all results and send to ForemanAgent
+      spawn_link(fn ->
+        collect_research_results(research_tasks, research_timeout, data)
+      end)
+
+      :keep_state_and_data
+    else
+      # No research tasks, skip to decomposing
+      Logger.warning("No research tasks to execute")
+      {:next_state, :decomposing, data}
+    end
   end
 
   def handle_event(:enter, _old_state, :decomposing, _data) do
@@ -274,8 +290,17 @@ defmodule Deft.Job.Foreman do
 
   def handle_event(:info, {:agent_action, :research, topics}, :planning, data) do
     Logger.info("ForemanAgent requested research on topics: #{inspect(topics)}")
-    # Spawn research Runners (stub for now)
-    # When complete, transition to :decomposing
+
+    # Spawn research Runners in parallel
+    research_tasks =
+      Enum.map(topics, fn topic ->
+        Task.Supervisor.async_nolink(data.runner_supervisor, fn ->
+          run_research_runner(topic, data)
+        end)
+      end)
+
+    # Store tasks and transition to researching phase
+    data = Map.put(data, :research_tasks, research_tasks)
     {:next_state, :researching, data}
   end
 
@@ -288,31 +313,103 @@ defmodule Deft.Job.Foreman do
       Store.write(data.site_log_pid, "plan", deliverables)
     end
 
+    # Present plan to user for approval
+    present_plan_to_user(data, deliverables)
+
     {:next_state, :decomposing, data}
   end
 
-  def handle_event(:info, {:agent_action, :spawn_lead, _deliverable}, :executing, _data) do
-    Logger.info("ForemanAgent requested spawning Lead")
-    # Spawn Lead (stub for now)
-    :keep_state_and_data
+  def handle_event(:info, {:agent_action, :spawn_lead, deliverable}, :executing, data) do
+    Logger.info("ForemanAgent requested spawning Lead for: #{inspect(deliverable[:name])}")
+
+    # Generate unique Lead ID
+    lead_id = "lead-#{:erlang.unique_integer([:positive])}"
+
+    # Check if Lead already started
+    if MapSet.member?(data.started_leads, lead_id) do
+      Logger.warning("Lead #{lead_id} already started, ignoring spawn request")
+      :keep_state_and_data
+    else
+      # Spawn Lead process
+      # TODO: This requires Deft.Job.Lead to be implemented
+      # For now, log and track that we would spawn the Lead
+      Logger.info("Would spawn Lead #{lead_id} for deliverable: #{inspect(deliverable[:name])}")
+
+      # Track Lead (will be updated when Lead module exists)
+      data =
+        data
+        |> Map.update!(:started_leads, &MapSet.put(&1, lead_id))
+        |> put_in([:leads, lead_id], %{
+          deliverable: deliverable,
+          status: :starting,
+          pid: nil
+        })
+
+      {:keep_state, data}
+    end
   end
 
-  def handle_event(:info, {:agent_action, :unblock_lead, lead_id, _contract}, :executing, _data) do
+  def handle_event(:info, {:agent_action, :unblock_lead, lead_id, contract}, :executing, data) do
     Logger.info("ForemanAgent unblocking Lead #{lead_id}")
-    # Unblock Lead with contract (stub for now)
-    :keep_state_and_data
+
+    case Map.get(data.leads, lead_id) do
+      nil ->
+        Logger.warning("Cannot unblock Lead #{lead_id}: Lead not found")
+        :keep_state_and_data
+
+      lead ->
+        if lead.pid do
+          # Send contract to Lead
+          send(lead.pid, {:foreman_contract, contract})
+          Logger.info("Sent contract to Lead #{lead_id}")
+
+          # Remove from blocked_leads if present
+          data = Map.update!(data, :blocked_leads, &Map.delete(&1, lead_id))
+          {:keep_state, data}
+        else
+          Logger.warning("Cannot unblock Lead #{lead_id}: Lead PID not available")
+          :keep_state_and_data
+        end
+    end
   end
 
-  def handle_event(:info, {:agent_action, :steer_lead, lead_id, _content}, :executing, _data) do
+  def handle_event(:info, {:agent_action, :steer_lead, lead_id, content}, :executing, data) do
     Logger.info("ForemanAgent steering Lead #{lead_id}")
-    # Send steering to Lead (stub for now)
-    :keep_state_and_data
+
+    case Map.get(data.leads, lead_id) do
+      nil ->
+        Logger.warning("Cannot steer Lead #{lead_id}: Lead not found")
+        :keep_state_and_data
+
+      lead ->
+        if lead.pid do
+          # Send steering to Lead
+          send(lead.pid, {:foreman_steering, content})
+          Logger.info("Sent steering to Lead #{lead_id}")
+          :keep_state_and_data
+        else
+          Logger.warning("Cannot steer Lead #{lead_id}: Lead PID not available")
+          :keep_state_and_data
+        end
+    end
   end
 
-  def handle_event(:info, {:agent_action, :abort_lead, lead_id}, :executing, _data) do
+  def handle_event(:info, {:agent_action, :abort_lead, lead_id}, :executing, data) do
     Logger.info("ForemanAgent aborting Lead #{lead_id}")
-    # Stop Lead (stub for now)
-    :keep_state_and_data
+
+    case Map.get(data.leads, lead_id) do
+      nil ->
+        Logger.warning("Cannot abort Lead #{lead_id}: Lead not found")
+        :keep_state_and_data
+
+      lead ->
+        if lead.pid do
+          do_abort_lead(lead_id, lead.pid, data)
+        else
+          Logger.warning("Cannot abort Lead #{lead_id}: Lead PID not available")
+          :keep_state_and_data
+        end
+    end
   end
 
   # Handle user prompts during execution
@@ -366,7 +463,11 @@ defmodule Deft.Job.Foreman do
 
     # Auto-promote certain message types to site log
     if type in [:contract, :decision, :critical_finding] and data.site_log_pid do
-      Store.write(data.site_log_pid, to_string(type), %{
+      # Generate unique key with type prefix
+      unique_id = :erlang.unique_integer([:positive])
+      key = "#{type}-#{unique_id}"
+
+      Store.write(data.site_log_pid, key, %{
         content: content,
         metadata: metadata,
         timestamp: System.system_time(:millisecond)
@@ -448,6 +549,169 @@ defmodule Deft.Job.Foreman do
       {lead_id, _ref} -> {:ok, lead_id}
       nil -> :not_found
     end
+  end
+
+  defp do_abort_lead(lead_id, lead_pid, data) do
+    # Stop Lead process
+    Process.exit(lead_pid, :shutdown)
+    Logger.info("Aborted Lead #{lead_id}")
+
+    # Clean up monitor if present
+    cleanup_lead_monitor(data.lead_monitors, lead_id)
+
+    # Remove from tracking
+    data =
+      data
+      |> Map.update!(:leads, &Map.delete(&1, lead_id))
+      |> Map.update!(:started_leads, &MapSet.delete(&1, lead_id))
+      |> Map.update!(:blocked_leads, &Map.delete(&1, lead_id))
+      |> Map.update!(:lead_monitors, &Map.delete(&1, lead_id))
+
+    {:keep_state, data}
+  end
+
+  defp cleanup_lead_monitor(monitors, lead_id) do
+    case Map.get(monitors, lead_id) do
+      nil -> :ok
+      monitor_ref -> Process.demonitor(monitor_ref, [:flush])
+    end
+  end
+
+  defp run_research_runner(topic, data) do
+    runner_model = Map.get(data.config, :research_runner_model, "claude-sonnet-4")
+    provider_name = Map.get(data.config, :provider_name, "anthropic")
+
+    runner_config = %{
+      model: runner_model,
+      provider: Deft.Provider.Anthropic,
+      provider_name: provider_name,
+      temperature: 0.7
+    }
+
+    instructions = """
+    Research the following topic in the codebase:
+
+    #{topic}
+
+    Provide findings that will help plan the implementation.
+    """
+
+    context = """
+    Working directory: #{data.working_dir}
+    Job: #{data.session_id}
+    """
+
+    opts = %{
+      job_id: data.session_id,
+      config: runner_config,
+      worktree_path: data.working_dir
+    }
+
+    case Runner.run(:research, instructions, context, opts) do
+      {:ok, output} ->
+        %{topic: topic, status: :success, findings: output}
+
+      {:error, reason} ->
+        %{topic: topic, status: :error, error: reason}
+    end
+  end
+
+  defp collect_research_results(tasks, timeout, data) do
+    results =
+      Enum.map(tasks, fn task ->
+        case Task.yield(task, timeout) || Task.shutdown(task) do
+          {:ok, result} -> result
+          nil -> %{topic: "unknown", status: :timeout, error: "Research task timed out"}
+          {:exit, reason} -> %{topic: "unknown", status: :error, error: inspect(reason)}
+        end
+      end)
+
+    # Format results and send to ForemanAgent
+    findings_summary = format_research_findings(results)
+
+    if data.foreman_agent_pid do
+      prompt = """
+      Research complete. Here are the findings:
+
+      #{findings_summary}
+
+      Based on these findings, create a work decomposition plan.
+      """
+
+      Deft.Agent.prompt(data.foreman_agent_pid, prompt)
+    else
+      Logger.warning("ForemanAgent not available to receive research results")
+    end
+  end
+
+  defp format_research_findings(results) do
+    results
+    |> Enum.with_index(1)
+    |> Enum.map(fn {result, idx} ->
+      case result.status do
+        :success ->
+          """
+          ## Finding #{idx}: #{result.topic}
+
+          #{result.findings}
+          """
+
+        :error ->
+          """
+          ## Finding #{idx}: #{result.topic}
+
+          **Error:** #{result.error}
+          """
+
+        :timeout ->
+          """
+          ## Finding #{idx}: #{result.topic}
+
+          **Timeout:** Research task exceeded time limit
+          """
+      end
+    end)
+    |> Enum.join("\n\n")
+  end
+
+  defp present_plan_to_user(data, deliverables) do
+    plan_summary = format_plan_for_user(deliverables)
+
+    Logger.info("Presenting plan to user:\n#{plan_summary}")
+
+    # Send to CLI if available
+    if data.cli_pid do
+      send(data.cli_pid, {:foreman_plan, plan_summary, deliverables})
+    end
+
+    # Broadcast to Registry for web UI and other subscribers
+    Registry.dispatch(Deft.Registry, {:job, data.session_id}, fn entries ->
+      for {pid, _} <- entries do
+        send(pid, {:foreman_plan, plan_summary, deliverables})
+      end
+    end)
+  end
+
+  defp format_plan_for_user(deliverables) do
+    """
+    # Work Plan
+
+    The following deliverables have been identified:
+
+    #{Enum.map_join(deliverables, "\n\n", &format_deliverable/1)}
+
+    Please review and approve or reject this plan.
+    """
+  end
+
+  defp format_deliverable(deliverable) do
+    """
+    ## #{deliverable[:name] || "Unnamed Deliverable"}
+
+    #{deliverable[:description] || "No description"}
+
+    Dependencies: #{inspect(deliverable[:dependencies] || [])}
+    """
   end
 
   defp cleanup(data) do
