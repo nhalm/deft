@@ -1560,6 +1560,9 @@ defmodule Deft.Agent do
         {:error, "Tool crashed: " <> reason} ->
           Logger.error("#{log_prefix(session_id)} Tool crashed: #{tool_name}, reason: #{reason}")
 
+        {:error, "Tool execution error: " <> reason} ->
+          Logger.error("#{log_prefix(session_id)} Tool crashed: #{tool_name}, reason: #{reason}")
+
         _ ->
           :ok
       end

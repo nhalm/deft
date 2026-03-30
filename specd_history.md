@@ -1,4 +1,5 @@
 # History
+- **logging v0.6 (2026-03-30):** Fix `log_tool_crashes/2` in `lib/deft/agent.ex:1557-1566` to also match `"Tool execution error: " <> reason`: currently only matches `"Tool crashed: "` prefix (process exit path), but rescued exceptions in `execute_tool` return `"Tool execution error: ..."` which silently passes through without error-level logging — spec §4 requires all tool crashes logged at error level
 - **logging v0.6 (2026-03-30):** Remove error-level logging from `Store.append/3` and `Store.append_to_path/2` in `lib/deft/session/store.ex:66` and `:94`
 - **logging v0.6 (2026-03-30):** Fix `Agent.run/2` to log at warning level when `Store.append` fails (currently discards the return value with `_ = Store.append(...)`), respecting the "only callers log" principle
 - **logging v0.6 (2026-03-30):** Add debug-level logging for branch operations in `lib/deft/job/foreman.ex`: log before `create_lead_worktree` and `cleanup_lead_worktree` calls (spec §5 requires "Branch operations (create, merge, cleanup)" at debug level)
