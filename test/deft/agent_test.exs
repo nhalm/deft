@@ -731,4 +731,51 @@ defmodule Deft.AgentTest do
       assert state_data.retry_delay == 1000
     end
   end
+
+  describe "sub-agent mode event broadcasting" do
+    test "broadcasts events via Registry when started with parent_pid" do
+      # Create a mock parent process PID
+      parent_pid = self()
+      session_id = "sub_agent_test_#{:rand.uniform(10000)}"
+
+      # Start ScriptedProvider with a simple response
+      {:ok, provider_pid} =
+        ScriptedProvider.start_link(
+          responses: [
+            %{
+              text: "Hello from sub-agent",
+              usage: %{input: 10, output: 5}
+            }
+          ]
+        )
+
+      # Start agent in sub-agent mode with parent_pid
+      {:ok, agent} =
+        Agent.start_link(
+          session_id: session_id,
+          config: %{
+            provider: ScriptedProvider,
+            provider_pid: provider_pid,
+            model: "test-model"
+          },
+          parent_pid: parent_pid
+        )
+
+      # Subscribe to agent events using the same session_id
+      Registry.register(Deft.Registry, {:session, session_id}, [])
+
+      # Send a prompt to trigger the agent loop
+      Deft.Agent.prompt(agent, "Test prompt")
+
+      # Verify that events are broadcast via Registry
+      assert_receive {:agent_event, {:state_change, :calling}}, 1000
+      assert_receive {:agent_event, {:state_change, :streaming}}, 1000
+      assert_receive {:agent_event, {:text_delta, _text}}, 1000
+      assert_receive {:agent_event, {:state_change, :idle}}, 1000
+
+      # Verify the agent has the parent_pid set in its state data
+      {_state_name, state_data} = :sys.get_state(agent)
+      assert state_data.parent_pid == parent_pid
+    end
+  end
 end

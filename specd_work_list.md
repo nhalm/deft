@@ -33,10 +33,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Remove old tuple-state Foreman implementation (the fused orchestrator+agent gen_statem) and replace with new split architecture (blocked: all above items)
 - Remove old tuple-state Lead implementation and replace with new split architecture (blocked: all above items)
 
-## harness v0.3
-
-- Ensure `Deft.Agent` broadcasts events via Registry in both standalone and sub-agent modes so orchestrators and web UI can subscribe
-
 ## sessions v0.7
 
 - Update `Deft.Session.Store` to support writing agent sessions to job-scoped paths (`jobs/<job_id>/foreman_session.jsonl`, `jobs/<job_id>/lead_<id>_session.jsonl`) in addition to user session paths
