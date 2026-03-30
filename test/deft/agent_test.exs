@@ -734,6 +734,10 @@ defmodule Deft.AgentTest do
 
   describe "sub-agent mode event broadcasting" do
     test "broadcasts events via Registry when started with parent_pid" do
+      # Create a temporary directory for test sessions
+      tmp_dir = System.tmp_dir!() |> Path.join("deft-test-#{:rand.uniform(1_000_000)}")
+      File.mkdir_p!(tmp_dir)
+
       # Create a mock parent process PID
       parent_pid = self()
       session_id = "sub_agent_test_#{:rand.uniform(10000)}"
@@ -756,10 +760,17 @@ defmodule Deft.AgentTest do
           config: %{
             provider: ScriptedProvider,
             provider_pid: provider_pid,
-            model: "test-model"
+            model: "test-model",
+            working_dir: tmp_dir
           },
           parent_pid: parent_pid
         )
+
+      on_exit(fn ->
+        # Stop the agent before cleanup to avoid race conditions
+        if Process.alive?(agent), do: GenServer.stop(agent, :normal)
+        File.rm_rf(tmp_dir)
+      end)
 
       # Subscribe to agent events using the same session_id
       Registry.register(Deft.Registry, {:session, session_id}, [])

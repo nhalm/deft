@@ -19,5 +19,4 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## standards v0.4
 
-- Fix test session leak in `test/deft/agent_test.exs`: the "sub-agent mode event broadcasting" test (line ~735) starts an Agent without `working_dir` in config, so `File.cwd!()` resolves to the repo root and session files land in the real project's sessions directory. Fix: create a temp dir, pass `working_dir: tmp_dir` in the agent config, and add `on_exit` cleanup to remove the temp dir.
 - Delete 156 leaked test session files (`sub_agent_test_*` and `test_session_*`) from `~/.deft/projects/Users-nickhalm-personal-memory/sessions/`. These are artifacts from the unfixed test above. Clean up by removing matching files in the sessions directory.
