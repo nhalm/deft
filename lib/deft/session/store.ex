@@ -61,9 +61,7 @@ defmodule Deft.Session.Store do
          :ok <- File.write(path, line, [:append]) do
       :ok
     else
-      {:error, reason} = error ->
-        require Logger
-        Logger.error("[Session] Failed to append to session #{session_id}: #{inspect(reason)}")
+      {:error, _reason} = error ->
         error
     end
   end
@@ -89,9 +87,7 @@ defmodule Deft.Session.Store do
          :ok <- File.write(path, line, [:append]) do
       :ok
     else
-      {:error, reason} = error ->
-        require Logger
-        Logger.error("[Session] Failed to append to session file #{path}: #{inspect(reason)}")
+      {:error, _reason} = error ->
         error
     end
   end

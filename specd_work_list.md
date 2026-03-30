@@ -16,7 +16,3 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
-
-## logging v0.6
-
-- Remove error-level logging from `Store.append/3` and `Store.append_to_path/2` in `lib/deft/session/store.ex:66` and `:94`
