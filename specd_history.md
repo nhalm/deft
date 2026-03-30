@@ -1,4 +1,5 @@
 # History
+- **orchestration v0.7 (2026-03-30):** Update `Deft.Job.Supervisor` to start ForemanAgent + its ToolRunner as separate children alongside the Foreman
 - **orchestration v0.7 (2026-03-30):** Implement Lead→LeadAgent prompt flow: Lead calls `Deft.Agent.prompt/2` with deliverable assignment, Runner results, and Foreman steering
 - **orchestration v0.7 (2026-03-30):** Add `{:foreman_contract, contract}` handler to Lead: forwards dependency contracts from Foreman to LeadAgent as prompts, enabling partial dependency unblocking
 - **orchestration v0.7 (2026-03-30):** Fix config key regression in `foreman.ex`: three `Map.get(data.config, ...)` calls use wrong keys — `:research_timeout` (line 210) should be `:job_research_timeout`, `:research_runner_model` (line 846) should be `:job_research_runner_model`, `:provider_name` (line 847) should be `:provider`. All configured values are silently ignored in favor of hardcoded defaults.

@@ -5,6 +5,8 @@ defmodule Deft.Job.Supervisor do
   Supervision tree (one_for_one strategy with :temporary restart for all children):
   - Deft.Store (site log instance)
   - Deft.Job.RateLimiter
+  - Deft.Agent.ToolRunner (for ForemanAgent's tool execution)
+  - Deft.Job.ForemanAgent (standard Deft.Agent)
   - Task.Supervisor (RunnerSupervisor for Foreman's research/verification/merge-resolution Runners)
   - Deft.Job.Foreman
   - Deft.Job.LeadSupervisor (DynamicSupervisor for Leads)
@@ -54,6 +56,16 @@ defmodule Deft.Job.Supervisor do
     # Build via_tuple for Foreman
     foreman_name = {:via, Registry, {Deft.ProcessRegistry, {:foreman, job_id}}}
 
+    # ForemanAgent session_id
+    foreman_agent_session_id = "#{job_id}-foreman"
+
+    # Build via_tuple for ForemanAgent's ToolRunner (must use {:tool_runner, session_id} format)
+    foreman_agent_tool_runner_name =
+      {:via, Registry, {Deft.ProcessRegistry, {:tool_runner, foreman_agent_session_id}}}
+
+    # Build via_tuple for ForemanAgent
+    foreman_agent_name = {:via, Registry, {Deft.ProcessRegistry, {:foreman_agent, job_id}}}
+
     # Build via_tuple for Foreman's RunnerSupervisor
     runner_supervisor_name =
       {:via, Registry, {Deft.ProcessRegistry, {:foreman_runner_supervisor, job_id}}}
@@ -92,6 +104,30 @@ defmodule Deft.Job.Supervisor do
         restart: :temporary
       },
 
+      # ToolRunner for ForemanAgent's tool execution
+      %{
+        id: :foreman_agent_tool_runner,
+        start: {Deft.Agent.ToolRunner, :start_link, [[name: foreman_agent_tool_runner_name]]},
+        type: :supervisor
+      },
+
+      # ForemanAgent (standard Deft.Agent)
+      %{
+        id: Deft.Job.ForemanAgent,
+        start:
+          {Deft.Agent, :start_link,
+           [
+             [
+               session_id: foreman_agent_session_id,
+               config: config,
+               messages: [],
+               parent_pid: foreman_name,
+               name: foreman_agent_name
+             ]
+           ]},
+        restart: :temporary
+      },
+
       # RunnerSupervisor for Foreman's Runners (research, verification, merge-resolution)
       %{
         id: :foreman_runner_supervisor,
@@ -110,6 +146,7 @@ defmodule Deft.Job.Supervisor do
                config: config,
                prompt: prompt,
                rate_limiter_pid: rate_limiter_name,
+               foreman_agent_pid: foreman_agent_name,
                runner_supervisor: runner_supervisor_name,
                working_dir: working_dir,
                resumed_plan: resumed_plan,
