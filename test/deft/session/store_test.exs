@@ -1,6 +1,8 @@
 defmodule Deft.Session.StoreTest do
   use ExUnit.Case, async: false
 
+  alias Deft.Session.Store
+
   alias Deft.Session.Entry.{
     SessionStart,
     Message,
@@ -553,5 +555,100 @@ defmodule Deft.Session.StoreTest do
     |> String.split("\n")
     |> List.first()
     |> String.slice(0..80)
+  end
+
+  describe "agent session paths" do
+    test "foreman_session_path/2 returns correct path" do
+      job_id = "job-123"
+      working_dir = @test_sessions_dir
+
+      path = Store.foreman_session_path(job_id, working_dir)
+
+      assert String.ends_with?(path, "/jobs/#{job_id}/foreman_session.jsonl")
+      assert String.contains?(path, "/.deft/projects/")
+    end
+
+    test "lead_session_path/3 returns correct path" do
+      job_id = "job-456"
+      lead_id = "lead_1"
+      working_dir = @test_sessions_dir
+
+      path = Store.lead_session_path(job_id, lead_id, working_dir)
+
+      assert String.ends_with?(path, "/jobs/#{job_id}/lead_#{lead_id}_session.jsonl")
+      assert String.contains?(path, "/.deft/projects/")
+    end
+
+    test "append_to_path/2 creates parent directories and writes entry" do
+      custom_path = Path.join([@test_sessions_dir, "custom", "path", "session.jsonl"])
+      entry = SessionStart.new("test-id", "/tmp", "claude-sonnet-4-20250514", %{})
+
+      refute File.exists?(custom_path)
+
+      assert :ok = Store.append_to_path(custom_path, entry)
+
+      assert File.exists?(custom_path)
+
+      content = File.read!(custom_path)
+      assert String.contains?(content, ~s("type":"session_start"))
+    end
+
+    test "append_foreman_session/3 writes to correct foreman session path" do
+      job_id = "job-789"
+      working_dir = @test_sessions_dir
+      entry = SessionStart.new("foreman-#{job_id}", working_dir, "claude-haiku-4.5", %{})
+
+      assert :ok = Store.append_foreman_session(job_id, entry, working_dir)
+
+      path = Store.foreman_session_path(job_id, working_dir)
+      assert File.exists?(path)
+
+      content = File.read!(path)
+      assert String.contains?(content, ~s("type":"session_start"))
+      assert String.contains?(content, "claude-haiku-4.5")
+    end
+
+    test "append_lead_session/4 writes to correct lead session path" do
+      job_id = "job-abc"
+      lead_id = "lead_2"
+      working_dir = @test_sessions_dir
+      entry = SessionStart.new("lead-#{lead_id}", working_dir, "claude-haiku-4.5", %{})
+
+      assert :ok =
+               Store.append_lead_session(job_id, lead_id, entry, working_dir)
+
+      path = Store.lead_session_path(job_id, lead_id, working_dir)
+      assert File.exists?(path)
+
+      content = File.read!(path)
+      assert String.contains?(content, ~s("type":"session_start"))
+      assert String.contains?(content, "claude-haiku-4.5")
+    end
+
+    test "agent sessions are not listed in regular session list" do
+      # Create a user session
+      user_session_id = "user-session"
+
+      user_entry =
+        SessionStart.new(user_session_id, @test_sessions_dir, "claude-sonnet-4-20250514", %{})
+
+      append_with_dir(user_session_id, user_entry)
+
+      # Create agent sessions in jobs directory
+      job_id = "job-xyz"
+
+      foreman_entry =
+        SessionStart.new("foreman-#{job_id}", @test_sessions_dir, "claude-haiku-4.5", %{})
+
+      Store.append_foreman_session(job_id, foreman_entry, @test_sessions_dir)
+
+      lead_entry = SessionStart.new("lead-1", @test_sessions_dir, "claude-haiku-4.5", %{})
+      Store.append_lead_session(job_id, "lead_1", lead_entry, @test_sessions_dir)
+
+      # List should only return user session, not agent sessions
+      assert {:ok, sessions} = list_with_dir()
+      assert length(sessions) == 1
+      assert hd(sessions).session_id == user_session_id
+    end
   end
 end

@@ -1,4 +1,6 @@
 # History
+- **sessions v0.7 (2026-03-29):** Ensure session listing (`deft issue list`, web UI picker) only returns user sessions, not agent sessions
+- **sessions v0.7 (2026-03-29):** Update `Deft.Session.Store` to support writing agent sessions to job-scoped paths (`jobs/<job_id>/foreman_session.jsonl`, `jobs/<job_id>/lead_<id>_session.jsonl`) in addition to user session paths
 - **orchestration v0.7 (2026-03-29):** Implement Lead injection of Foreman steering: on receiving `{:foreman_steering, content}`, format as prompt and call `Deft.Agent.prompt/2` on LeadAgent
 - **orchestration v0.7 (2026-03-29):** Wire Lead `handle_info` to process `{:agent_action, ...}` messages from LeadAgent — dispatch to Runner spawning, contract publishing, Foreman reporting, blocker escalation
 - **orchestration v0.7 (2026-03-30):** Implement 4 LeadAgent tools (`spawn_runner`, `publish_contract`, `report_status`, `request_help`) as thin wrappers that `send(lead_pid, {:agent_action, action, payload})`

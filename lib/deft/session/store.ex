@@ -2,8 +2,18 @@ defmodule Deft.Session.Store do
   @moduledoc """
   Session persistence to JSONL format.
 
-  Sessions are stored as `~/.deft/sessions/<session_id>.jsonl` where each
-  line is a JSON object representing one event in the session timeline.
+  There are two kinds of sessions, both using the same JSONL format:
+
+  **User sessions** — conversations between the user and Deft:
+  - Storage: `~/.deft/projects/<path-encoded-repo>/sessions/<session_id>.jsonl`
+  - Listed in the web UI session picker. Resumable by the user.
+  - Use `append/3`, `load/2`, `resume/2`, and `list/1` for user sessions.
+
+  **Agent sessions** — internal LLM conversation history for orchestrated sub-agents:
+  - Storage: `~/.deft/projects/<path-encoded-repo>/jobs/<job_id>/foreman_session.jsonl`
+    and `lead_<id>_session.jsonl`
+  - Not listed in the session picker. Not directly resumable.
+  - Use `append_foreman_session/3`, `append_lead_session/4`, or `append_to_path/2`.
 
   ## Entry Types
 
@@ -11,9 +21,18 @@ defmodule Deft.Session.Store do
 
   ## Functions
 
-  - `append/2` - Append an entry to a session file
-  - `load/1` - Load all entries from a session file
-  - `list/0` - List all sessions with metadata
+  **User sessions:**
+  - `append/3` - Append an entry to a user session file
+  - `load/2` - Load all entries from a session file
+  - `resume/2` - Resume a session and reconstruct state
+  - `list/1` - List all user sessions with metadata
+
+  **Agent sessions:**
+  - `append_to_path/2` - Append an entry to a custom path
+  - `foreman_session_path/2` - Get the path for a Foreman session
+  - `lead_session_path/3` - Get the path for a Lead session
+  - `append_foreman_session/3` - Append to a Foreman session
+  - `append_lead_session/4` - Append to a Lead session
   """
 
   alias Deft.OM.State, as: OMState
@@ -77,6 +96,82 @@ defmodule Deft.Session.Store do
         Logger.error("[Session] Failed to append to session file #{path}: #{inspect(reason)}")
         error
     end
+  end
+
+  @doc """
+  Returns the path for a Foreman agent session file.
+
+  Foreman sessions are stored in the jobs directory:
+  `~/.deft/projects/<path-encoded-repo>/jobs/<job_id>/foreman_session.jsonl`
+
+  ## Examples
+
+      iex> Store.foreman_session_path("job_123", "/tmp")
+      "~/.deft/projects/-tmp/jobs/job_123/foreman_session.jsonl"
+  """
+  @spec foreman_session_path(String.t(), String.t() | nil) :: String.t()
+  def foreman_session_path(job_id, working_dir \\ nil) do
+    working_dir = working_dir || File.cwd!()
+    jobs_dir = Project.jobs_dir(working_dir)
+    Path.join([jobs_dir, job_id, "foreman_session.jsonl"])
+  end
+
+  @doc """
+  Returns the path for a Lead agent session file.
+
+  Lead sessions are stored in the jobs directory:
+  `~/.deft/projects/<path-encoded-repo>/jobs/<job_id>/lead_<lead_id>_session.jsonl`
+
+  ## Examples
+
+      iex> Store.lead_session_path("job_123", "lead_1", "/tmp")
+      "~/.deft/projects/-tmp/jobs/job_123/lead_lead_1_session.jsonl"
+  """
+  @spec lead_session_path(String.t(), String.t(), String.t() | nil) :: String.t()
+  def lead_session_path(job_id, lead_id, working_dir \\ nil) do
+    working_dir = working_dir || File.cwd!()
+    jobs_dir = Project.jobs_dir(working_dir)
+    Path.join([jobs_dir, job_id, "lead_#{lead_id}_session.jsonl"])
+  end
+
+  @doc """
+  Appends an entry to a Foreman agent session.
+
+  Convenience wrapper around `append_to_path/2` that uses the correct path
+  for Foreman sessions.
+
+  ## Examples
+
+      iex> entry = Entry.SessionStart.new("job_123", "/tmp", "claude-haiku-4.5", %{})
+      iex> Store.append_foreman_session("job_123", entry, "/tmp")
+      :ok
+  """
+  @dialyzer {:nowarn_function, append_foreman_session: 3}
+  @spec append_foreman_session(String.t(), Entry.t(), String.t() | nil) ::
+          :ok | {:error, term()}
+  def append_foreman_session(job_id, entry, working_dir \\ nil) do
+    path = foreman_session_path(job_id, working_dir)
+    append_to_path(path, entry)
+  end
+
+  @doc """
+  Appends an entry to a Lead agent session.
+
+  Convenience wrapper around `append_to_path/2` that uses the correct path
+  for Lead sessions.
+
+  ## Examples
+
+      iex> entry = Entry.SessionStart.new("lead_1", "/tmp", "claude-haiku-4.5", %{})
+      iex> Store.append_lead_session("job_123", "lead_1", entry, "/tmp")
+      :ok
+  """
+  @dialyzer {:nowarn_function, append_lead_session: 4}
+  @spec append_lead_session(String.t(), String.t(), Entry.t(), String.t() | nil) ::
+          :ok | {:error, term()}
+  def append_lead_session(job_id, lead_id, entry, working_dir \\ nil) do
+    path = lead_session_path(job_id, lead_id, working_dir)
+    append_to_path(path, entry)
   end
 
   @doc """
