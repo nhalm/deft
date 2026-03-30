@@ -171,8 +171,11 @@ defmodule Deft.Job.Foreman do
       Logger.warning("ForemanAgent not yet available, will prompt when set")
     end
 
-    # Initialize text accumulation buffer for asking phase
-    data = Map.put(data, :asking_text_buffer, "")
+    # Initialize text accumulation buffer and Q&A history for asking phase
+    data =
+      data
+      |> Map.put(:asking_text_buffer, "")
+      |> Map.put(:qa_history, [])
 
     {:keep_state, data}
   end
@@ -272,8 +275,20 @@ defmodule Deft.Job.Foreman do
 
     if text != "" do
       relay_to_user(data, text)
+
+      # Record agent question in Q&A history
+      qa_history = Map.get(data, :qa_history, [])
+
+      updated_qa =
+        qa_history ++
+          [%{role: :agent, content: text, timestamp: System.system_time(:millisecond)}]
+
       # Clear buffer for next question
-      data = Map.put(data, :asking_text_buffer, "")
+      data =
+        data
+        |> Map.put(:asking_text_buffer, "")
+        |> Map.put(:qa_history, updated_qa)
+
       {:keep_state, data}
     else
       :keep_state_and_data
@@ -412,11 +427,45 @@ defmodule Deft.Job.Foreman do
     end
   end
 
-  # Handle user prompts during execution
+  # Handle user prompts
+  def handle_event(:cast, {:prompt, text}, :asking, data) do
+    Logger.debug("User answer received in asking phase: #{text}")
+
+    # Record user answer in Q&A history
+    qa_history = Map.get(data, :qa_history, [])
+
+    updated_qa =
+      qa_history ++ [%{role: :user, content: text, timestamp: System.system_time(:millisecond)}]
+
+    data = Map.put(data, :qa_history, updated_qa)
+
+    # Forward user input to ForemanAgent
+    if data.foreman_agent_pid do
+      Deft.Agent.prompt(data.foreman_agent_pid, text)
+    end
+
+    {:keep_state, data}
+  end
+
+  def handle_event(:cast, {:prompt, text}, state, data)
+      when state in [:executing, :planning, :researching, :decomposing] do
+    Logger.debug("User prompt received in #{state}: #{text}")
+
+    # Build structured context including current job state
+    context = build_user_prompt_context(text, state, data)
+
+    # Forward with context to ForemanAgent
+    if data.foreman_agent_pid do
+      Deft.Agent.prompt(data.foreman_agent_pid, context)
+    end
+
+    :keep_state_and_data
+  end
+
   def handle_event(:cast, {:prompt, text}, state, data) do
     Logger.debug("User prompt received in #{state}: #{text}")
 
-    # Forward user input to ForemanAgent
+    # For other states, just forward as-is
     if data.foreman_agent_pid do
       Deft.Agent.prompt(data.foreman_agent_pid, text)
     end
@@ -452,12 +501,12 @@ defmodule Deft.Job.Foreman do
   end
 
   # Handle Lead messages
-  def handle_event(:info, {:lead_message, type, content, metadata}, _state, data) do
+  def handle_event(:info, {:lead_message, type, content, metadata}, state, data) do
     Logger.debug("Lead message received: #{type}")
 
-    # Forward to ForemanAgent for reasoning
+    # Forward to ForemanAgent with structured context
     if data.foreman_agent_pid do
-      message = format_lead_message(type, content, metadata)
+      message = build_lead_message_context(type, content, metadata, state, data)
       Deft.Agent.prompt(data.foreman_agent_pid, message)
     end
 
@@ -527,20 +576,175 @@ defmodule Deft.Job.Foreman do
   end
 
   defp build_planning_context(data) do
+    qa_section = format_qa_history(Map.get(data, :qa_history, []))
+
     """
     Job: #{data.session_id}
-    Request: #{data.prompt}
+    Initial Request: #{data.prompt}
+    #{qa_section}
 
-    Analyze this request and determine what research is needed before planning the work decomposition.
+    You've completed the asking phase. Now analyze this request with the full context from Q&A and determine what research is needed before planning the work decomposition.
+
+    Use the `request_research` tool to specify research topics.
     """
   end
 
-  defp format_lead_message(type, content, metadata) do
-    """
-    Lead update (#{type}):
-    #{inspect(content)}
+  defp format_qa_history([]), do: ""
 
-    Metadata: #{inspect(metadata)}
+  defp format_qa_history(qa_history) do
+    exchanges =
+      Enum.map(qa_history, fn entry ->
+        role_label = if entry.role == :agent, do: "You asked", else: "User answered"
+        "#{role_label}: #{entry.content}"
+      end)
+      |> Enum.join("\n\n")
+
+    """
+
+    ## Clarification Q&A
+
+    #{exchanges}
+    """
+  end
+
+  defp build_lead_message_context(type, content, metadata, state, data) do
+    lead_id = Map.get(metadata, :lead_id, "unknown")
+    lead_name = Map.get(metadata, :lead_name, "Unknown Lead")
+    leads_status = format_leads_status(data.leads)
+    contracts_info = format_contracts_from_sitelog(data.site_log_pid)
+
+    """
+    ## Lead Update
+
+    **Type:** #{type}
+    **From:** #{lead_name} (#{lead_id})
+    **Job Phase:** #{state}
+
+    ### Message Content
+
+    #{inspect(content, pretty: true, limit: :infinity)}
+
+    ### Metadata
+
+    #{inspect(metadata, pretty: true)}
+
+    ## Current Job State
+
+    ### Active Leads
+
+    #{leads_status}
+    #{contracts_info}
+
+    ### What to do
+
+    Based on this update, decide if you need to:
+    - Spawn a new Lead (use `spawn_lead`)
+    - Unblock a waiting Lead (use `unblock_lead`)
+    - Steer this or another Lead (use `steer_lead`)
+    - Abort a Lead that's stuck (use `abort_lead`)
+    - Or simply acknowledge and continue monitoring
+    """
+  end
+
+  defp format_leads_status(leads) when map_size(leads) == 0 do
+    "No other Leads are currently active."
+  end
+
+  defp format_leads_status(leads) do
+    Enum.map(leads, fn {id, lead_info} ->
+      status = Map.get(lead_info, :status, :unknown)
+      deliverable = Map.get(lead_info, :deliverable, %{})
+      deliverable_name = Map.get(deliverable, :name, "Unnamed")
+      "- Lead #{id}: #{deliverable_name} (#{status})"
+    end)
+    |> Enum.join("\n")
+  end
+
+  defp format_contracts_from_sitelog(nil), do: ""
+
+  defp format_contracts_from_sitelog(site_log_pid) do
+    tid = Store.tid(site_log_pid)
+    all_keys = Store.keys(tid)
+    contract_keys = Enum.filter(all_keys, &String.starts_with?(&1, "contract-"))
+
+    format_contract_list(tid, contract_keys)
+  end
+
+  defp format_contract_list(_tid, []), do: ""
+
+  defp format_contract_list(tid, contract_keys) do
+    formatted_contracts =
+      Enum.map(contract_keys, fn key ->
+        case Store.read(tid, key) do
+          {:ok, entry} ->
+            content = get_in(entry, [:value, :content]) || "No content"
+            "- #{inspect(content)}"
+
+          _other ->
+            "- [Could not read contract #{key}]"
+        end
+      end)
+      |> Enum.join("\n")
+
+    """
+
+    ## Contracts Published
+
+    #{formatted_contracts}
+    """
+  end
+
+  defp build_user_prompt_context(user_text, state, data) do
+    leads_summary = format_leads_status(Map.get(data, :leads, %{}))
+    plan_summary = format_plan_summary(data.plan)
+
+    """
+    ## User Message
+
+    #{user_text}
+
+    ## Current Job Context
+
+    **Phase:** #{state}
+    **Job ID:** #{data.session_id}
+
+    ### Work Plan
+
+    #{plan_summary}
+
+    ### Lead Status
+
+    #{leads_summary}
+
+    ### Response Guidance
+
+    The user may be:
+    - Asking for status (provide a summary)
+    - Providing additional context (incorporate it into your reasoning)
+    - Requesting a change in direction (use steering tools as needed)
+    - Asking to abort something (use `abort_lead` if needed)
+
+    Process their message and respond or take action as appropriate.
+    """
+  end
+
+  defp format_plan_summary(nil), do: "No plan has been created yet."
+
+  defp format_plan_summary(plan) when not is_list(plan),
+    do: "Plan available but format unexpected."
+
+  defp format_plan_summary(plan) do
+    deliverable_list =
+      Enum.map(plan, fn deliverable ->
+        name = Map.get(deliverable, :name, "Unnamed")
+        desc = Map.get(deliverable, :description, "No description")
+        "- #{name}: #{desc}"
+      end)
+      |> Enum.join("\n")
+
+    """
+    Current Work Plan:
+    #{deliverable_list}
     """
   end
 

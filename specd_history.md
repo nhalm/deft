@@ -1,4 +1,5 @@
 # History
+- **orchestration v0.7 (2026-03-29):** Implement Foreman→ForemanAgent prompt flow: Foreman calls `Deft.Agent.prompt/2` with structured context (research results, Lead progress, contracts, user messages)
 - **rate-limiter v0.3 (2026-03-29):** Update `RateLimiter.request/4` priority parameter to accept `:foreman_agent`, `:lead_agent`, `:runner` atoms instead of `:foreman`, `:lead`, `:runner`
 - **harness v0.3 (2026-03-29):** Ensure `Deft.Agent` broadcasts events via Registry in both standalone and sub-agent modes so orchestrators and web UI can subscribe
 - **orchestration v0.7 (2026-03-29):** Wire Foreman `handle_info` to process `{:agent_action, ...}` messages from ForemanAgent — dispatch to research spawning, plan presentation, Lead lifecycle, and steering

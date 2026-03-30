@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.7
 
-- Implement Foreman→ForemanAgent prompt flow: Foreman calls `Deft.Agent.prompt/2` with structured context (research results, Lead progress, contracts, user messages)
 - Create `Deft.Job.Lead` gen_statem with 4 orchestration states (`:planning`, `:executing`, `:verifying`, `:complete`) — no agent loop
 - Create `Deft.Job.LeadAgent` module that starts a standard `Deft.Agent` with Lead-specific system prompt, read-only tools + Lead tools, OM enabled
 - Implement 4 LeadAgent tools (`spawn_runner`, `publish_contract`, `report_status`, `request_help`) as thin wrappers that `send(lead_pid, {:agent_action, action, payload})` (blocked: Create Deft.Job.Lead, Create Deft.Job.LeadAgent)
