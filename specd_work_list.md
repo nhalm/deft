@@ -38,10 +38,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 - Remove old tuple-state Foreman implementation (the fused orchestrator+agent gen_statem) and replace with new split architecture (blocked: all above items)
 - Remove old tuple-state Lead implementation and replace with new split architecture (blocked: all above items)
 
-## tools v0.3
-
-- Add `cache_config` field to `ToolContext` struct (document existing implicit field)
-
 ## harness v0.3
 
 - Add `parent_pid` option to `Deft.Agent.start_link/1` — stored in agent data, passed through to ToolContext on tool execution

@@ -1,4 +1,5 @@
 # History
+- **tools v0.3 (2026-03-29):** Add `cache_config` field to `ToolContext` struct (document existing implicit field)
 - **tools v0.3 (2026-03-29):** Pass `parent_pid` through from agent start options to ToolContext when constructing context for tool execution
 - **tools v0.3 (2026-03-29):** Add `parent_pid :: pid() | nil` field to `Deft.Tool.ToolContext` struct
 - **standards v0.2 (2026-03-29):** Type `Tool.Context.cache_config` field as a proper typed map or struct instead of raw `map()` in `lib/deft/tool.ex`
