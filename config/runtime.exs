@@ -17,7 +17,17 @@ secret_key_base =
 # Read LOG_LEVEL from environment, default to "info"
 # Don't override test environment default (:warning in config/test.exs)
 if config_env() != :test do
-  log_level = System.get_env("LOG_LEVEL", "info") |> String.to_atom()
+  log_level_str = System.get_env("LOG_LEVEL", "info")
+
+  unless log_level_str in ~w(debug info warning error) do
+    raise """
+    Invalid LOG_LEVEL: #{inspect(log_level_str)}
+
+    Valid values: debug | info | warning | error
+    """
+  end
+
+  log_level = String.to_atom(log_level_str)
   config :logger, level: log_level
 end
 
