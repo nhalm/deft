@@ -16,7 +16,3 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
-
-## standards v0.4
-
-- Delete 156 leaked test session files (`sub_agent_test_*` and `test_session_*`) from `~/.deft/projects/Users-nickhalm-personal-memory/sessions/`. These are artifacts from the unfixed test above. Clean up by removing matching files in the sessions directory.
