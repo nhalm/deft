@@ -162,16 +162,25 @@ defmodule Deft.Job.LeadAgent do
     Map.put(config, :om_enabled, true)
   end
 
-  # Add Lead orchestration tools to the config
+  # Add Lead orchestration tools and read-only tools to the config
   defp add_lead_tools(config) do
-    lead_tools = [
+    # Orchestration tools for communicating with the Lead
+    orchestration_tools = [
       Tools.SpawnRunner,
       Tools.PublishContract,
       Tools.ReportStatus,
       Tools.RequestHelp
     ]
 
+    # Read-only tools for codebase exploration
+    read_only_tools = [
+      Deft.Tools.Read,
+      Deft.Tools.Grep,
+      Deft.Tools.Find,
+      Deft.Tools.Ls
+    ]
+
     existing_tools = Map.get(config, :tools, [])
-    Map.put(config, :tools, lead_tools ++ existing_tools)
+    Map.put(config, :tools, orchestration_tools ++ read_only_tools ++ existing_tools)
   end
 end
