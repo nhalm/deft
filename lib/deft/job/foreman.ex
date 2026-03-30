@@ -168,7 +168,7 @@ defmodule Deft.Job.Foreman do
 
     # Subscribe to ForemanAgent events to receive text responses
     if data.foreman_agent_pid do
-      case Registry.register(Deft.Registry, {:session, data.session_id}, []) do
+      case Registry.register(Deft.Registry, {:session, "#{data.session_id}-foreman"}, []) do
         {:ok, _pid} ->
           Logger.debug("Foreman subscribed to ForemanAgent events")
 
@@ -275,7 +275,7 @@ defmodule Deft.Job.Foreman do
 
     # If we're in :asking and didn't send the initial prompt yet, subscribe and send it now
     if state == :asking and data.prompt do
-      case Registry.register(Deft.Registry, {:session, data.session_id}, []) do
+      case Registry.register(Deft.Registry, {:session, "#{data.session_id}-foreman"}, []) do
         {:ok, _pid} ->
           Logger.debug("Foreman subscribed to ForemanAgent events")
 
@@ -328,7 +328,7 @@ defmodule Deft.Job.Foreman do
   def handle_event(:info, {:agent_action, :ready_to_plan}, :asking, data) do
     Logger.info("ForemanAgent ready to plan, transitioning to :planning")
     # Unsubscribe from ForemanAgent events when leaving :asking
-    Registry.unregister(Deft.Registry, {:session, data.session_id})
+    Registry.unregister(Deft.Registry, {:session, "#{data.session_id}-foreman"})
     {:next_state, :planning, data}
   end
 
