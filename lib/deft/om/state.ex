@@ -1058,7 +1058,7 @@ defmodule Deft.OM.State do
         |> Enum.reject(fn msg -> msg.id in state.observed_message_ids end)
 
       Logger.info(
-        "#{log_prefix(state.session_id)} Observer triggered (#{length(unobserved_messages)} observations)"
+        "#{log_prefix(state.session_id)} Observer triggered (#{count_observations(state.active_observations)} observations)"
       )
 
       task_supervisor = Supervisor.task_supervisor_name(state.session_id)
@@ -1432,8 +1432,10 @@ defmodule Deft.OM.State do
       # Target size is 50% of reflection threshold (per spec section 4.3)
       target_size = div(observation_threshold(state.config), 2)
 
+      compression_ratio = Float.round(state.observation_tokens / target_size, 2)
+
       Logger.info(
-        "#{log_prefix(state.session_id)} Reflector triggered: #{state.observation_tokens} -> #{target_size} tokens"
+        "#{log_prefix(state.session_id)} Reflector triggered (compression ratio: #{compression_ratio}x)"
       )
 
       # Emit reflection_started event (level starts at 0)
@@ -1865,6 +1867,13 @@ defmodule Deft.OM.State do
   end
 
   defp parse_datetime_or_nil(%DateTime{} = dt), do: dt
+
+  # Count observation bullet points in text (lines starting with "- ")
+  defp count_observations(observations_text) do
+    observations_text
+    |> String.split("\n")
+    |> Enum.count(fn line -> String.starts_with?(String.trim_leading(line), "- ") end)
+  end
 
   defp log_prefix(session_id) do
     prefix = String.slice(session_id, 0, 8)

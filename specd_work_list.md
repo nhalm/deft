@@ -17,7 +17,3 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## logging v0.5
-
-- Fix Observer triggered log in `lib/deft/om/state.ex` to report observation count, not unobserved message count — currently logs `length(unobserved_messages)` labeled as "observations" but messages ≠ observations
-- Fix Reflector triggered log in `lib/deft/om/state.ex` to include compression ratio — currently logs raw token counts (`"#{tokens} -> #{target} tokens"`) but spec requires the ratio
