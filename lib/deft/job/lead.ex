@@ -170,7 +170,7 @@ defmodule Deft.Job.Lead do
   @impl :gen_statem
   def init(data) do
     Logger.info(
-      "Lead #{data.lead_id} started for deliverable: #{inspect(data.deliverable[:name])}"
+      "[Lead:#{data.lead_id}] Started for deliverable: #{inspect(data.deliverable[:name])}"
     )
 
     {:ok, :planning, data}
@@ -180,7 +180,7 @@ defmodule Deft.Job.Lead do
 
   @impl :gen_statem
   def handle_event(:enter, _old_state, :planning, data) do
-    Logger.info("Lead #{data.lead_id} entering :planning phase")
+    Logger.info("[Lead:#{data.lead_id}] Entering :planning phase")
 
     # Send deliverable assignment + site log context to LeadAgent
     if data.lead_agent_pid do
@@ -193,21 +193,21 @@ defmodule Deft.Job.Lead do
     :keep_state_and_data
   end
 
-  def handle_event(:enter, _old_state, :executing, _data) do
-    Logger.info("Lead entering :executing phase")
+  def handle_event(:enter, _old_state, :executing, data) do
+    Logger.info("[Lead:#{data.lead_id}] Entering :executing phase")
     # Runners will be spawned based on LeadAgent requests
     :keep_state_and_data
   end
 
   def handle_event(:enter, _old_state, :verifying, data) do
-    Logger.info("Lead #{data.lead_id} entering :verifying phase")
+    Logger.info("[Lead:#{data.lead_id}] Entering :verifying phase")
     # Spawn testing Runner
     data = spawn_testing_runner(data)
     {:keep_state, data}
   end
 
   def handle_event(:enter, _old_state, :complete, data) do
-    Logger.info("Lead #{data.lead_id} entering :complete phase")
+    Logger.info("[Lead:#{data.lead_id}] Entering :complete phase")
     # Send completion to Foreman
     send_to_foreman(data, :complete, "Deliverable completed", %{
       lead_id: data.lead_id,
@@ -219,7 +219,7 @@ defmodule Deft.Job.Lead do
 
   # Set LeadAgent PID
   def handle_event(:cast, {:set_lead_agent, agent_pid}, _state, data) do
-    Logger.debug("Lead #{data.lead_id} - LeadAgent PID set: #{inspect(agent_pid)}")
+    Logger.debug("[Lead:#{data.lead_id}] LeadAgent PID set: #{inspect(agent_pid)}")
     data = Map.put(data, :lead_agent_pid, agent_pid)
     {:keep_state, data}
   end
@@ -228,7 +228,7 @@ defmodule Deft.Job.Lead do
 
   def handle_event(:info, {:agent_action, :spawn_runner, type, instructions}, state, data)
       when state in [:planning, :executing] do
-    Logger.info("Lead #{data.lead_id} - LeadAgent requested spawning #{type} Runner")
+    Logger.info("[Lead:#{data.lead_id}] LeadAgent requested spawning #{type} Runner")
 
     # Build Runner context and options
     context = build_runner_context(data)
@@ -277,7 +277,7 @@ defmodule Deft.Job.Lead do
 
   def handle_event(:info, {:agent_action, :publish_contract, content}, state, data)
       when state in [:planning, :executing] do
-    Logger.info("Lead #{data.lead_id} - LeadAgent publishing contract")
+    Logger.info("[Lead:#{data.lead_id}] LeadAgent publishing contract")
 
     send_to_foreman(data, :contract, content, %{
       lead_id: data.lead_id,
@@ -289,7 +289,7 @@ defmodule Deft.Job.Lead do
 
   def handle_event(:info, {:agent_action, :report, report_type, content}, state, data)
       when state in [:planning, :executing] do
-    Logger.info("Lead #{data.lead_id} - LeadAgent reporting: #{report_type}")
+    Logger.info("[Lead:#{data.lead_id}] LeadAgent reporting: #{report_type}")
 
     send_to_foreman(data, report_type, content, %{
       lead_id: data.lead_id,
@@ -301,7 +301,7 @@ defmodule Deft.Job.Lead do
 
   def handle_event(:info, {:agent_action, :blocker, description}, state, data)
       when state in [:planning, :executing] do
-    Logger.warning("Lead #{data.lead_id} - LeadAgent blocked: #{description}")
+    Logger.warning("[Lead:#{data.lead_id}] LeadAgent blocked: #{description}")
 
     send_to_foreman(data, :blocker, description, %{
       lead_id: data.lead_id,
@@ -320,7 +320,7 @@ defmodule Deft.Job.Lead do
 
       runner_info ->
         Logger.warning(
-          "Lead #{data.lead_id} - Runner #{runner_info.runner_type} timed out (task: #{runner_info.task_description})"
+          "[Lead:#{data.lead_id}] Runner #{runner_info.runner_type} timed out (task: #{runner_info.task_description})"
         )
 
         # Kill the timed-out Runner process
@@ -374,7 +374,7 @@ defmodule Deft.Job.Lead do
         :keep_state_and_data
 
       {runner_info, remaining_tasks} ->
-        Logger.info("Lead #{data.lead_id} - Runner #{runner_info.runner_type} completed")
+        Logger.info("[Lead:#{data.lead_id}] Runner #{runner_info.runner_type} completed")
 
         # Cancel the timeout since the Runner completed
         _ =
@@ -411,7 +411,7 @@ defmodule Deft.Job.Lead do
 
       {runner_info, remaining_tasks} ->
         Logger.error(
-          "Lead #{data.lead_id} - Runner #{runner_info.runner_type} failed: #{inspect(reason)}"
+          "[Lead:#{data.lead_id}] Runner #{runner_info.runner_type} failed: #{inspect(reason)}"
         )
 
         # Cancel the timeout since the Runner is done (even if it crashed)
@@ -467,7 +467,7 @@ defmodule Deft.Job.Lead do
   # Handle Foreman steering
   def handle_event(:info, {:foreman_steering, content}, state, data)
       when state in [:planning, :executing] do
-    Logger.info("Lead #{data.lead_id} - Received steering from Foreman")
+    Logger.info("[Lead:#{data.lead_id}] Received steering from Foreman")
 
     # Inject steering into LeadAgent as a prompt with current context
     if data.lead_agent_pid do
@@ -501,7 +501,7 @@ defmodule Deft.Job.Lead do
   # Handle Foreman contract (partial dependency unblocking)
   def handle_event(:info, {:foreman_contract, contract}, state, data)
       when state in [:planning, :executing] do
-    Logger.info("Lead #{data.lead_id} - Received dependency contract from Foreman")
+    Logger.info("[Lead:#{data.lead_id}] Received dependency contract from Foreman")
 
     # Forward contract to LeadAgent as a prompt with context
     if data.lead_agent_pid do
@@ -527,7 +527,7 @@ defmodule Deft.Job.Lead do
   # Fallback for unexpected events
   def handle_event(event_type, event_content, state, data) do
     Logger.warning(
-      "Lead #{data.lead_id} - Unhandled event in state #{state}: #{event_type} #{inspect(event_content)}"
+      "[Lead:#{data.lead_id}] Unhandled event in state #{state}: #{event_type} #{inspect(event_content)}"
     )
 
     :keep_state_and_data
@@ -580,7 +580,7 @@ defmodule Deft.Job.Lead do
       Store.tid(data.site_log_name)
     rescue
       _ ->
-        Logger.warning("Lead #{data.lead_id} - Could not access site log")
+        Logger.warning("[Lead:#{data.lead_id}] Could not access site log")
         nil
     end
   end
@@ -738,13 +738,13 @@ defmodule Deft.Job.Lead do
     case result do
       {:ok, _output} ->
         # Tests passed, transition to complete
-        Logger.info("Lead #{data.lead_id} - Testing passed, transitioning to :complete")
+        Logger.info("[Lead:#{data.lead_id}] Testing passed, transitioning to :complete")
         {:next_state, :complete, data}
 
       {:error, _reason} ->
         # Tests failed, transition back to executing so LeadAgent can remediate
         Logger.info(
-          "Lead #{data.lead_id} - Testing failed, transitioning back to :executing for remediation"
+          "[Lead:#{data.lead_id}] Testing failed, transitioning back to :executing for remediation"
         )
 
         {:next_state, :executing, data}
@@ -756,7 +756,7 @@ defmodule Deft.Job.Lead do
   end
 
   defp spawn_testing_runner(data) do
-    Logger.info("Lead #{data.lead_id} - Spawning testing Runner")
+    Logger.info("[Lead:#{data.lead_id}] Spawning testing Runner")
 
     instructions = """
     Verify the deliverable by running compile checks and tests.
