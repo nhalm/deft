@@ -28,6 +28,7 @@ defmodule Deft.Job.Foreman do
 
   alias Deft.Git.Job, as: GitJob
   alias Deft.Job.LeadSupervisor
+  alias Deft.Job.RateLimiter
   alias Deft.Job.Runner
   alias Deft.Project
   alias Deft.Store
@@ -81,7 +82,8 @@ defmodule Deft.Job.Foreman do
       blocked_leads: %{},
       started_leads: MapSet.new(),
       completed_leads: MapSet.new(),
-      job_start_time: System.monotonic_time(:millisecond)
+      job_start_time: System.monotonic_time(:millisecond),
+      cost_ceiling_reached: false
     }
 
     gen_statem_opts = if name, do: [name: name], else: []
@@ -609,6 +611,58 @@ defmodule Deft.Job.Foreman do
         # Monitor might be for another process (e.g., Runner)
         :keep_state_and_data
     end
+  end
+
+  # Handle cost warning from RateLimiter
+  def handle_event(:info, {:rate_limiter, :cost_warning, cost}, _state, data) do
+    Logger.info("Cost warning: $#{Float.round(cost, 2)} (approaching cost ceiling)")
+
+    # Notify user about cost warning
+    message = """
+    ⚠️  Cost Warning: This job has reached $#{Float.round(cost, 2)} and is approaching the cost ceiling.
+    """
+
+    notify_user(data, :cost_warning, message)
+
+    :keep_state_and_data
+  end
+
+  # Handle cost ceiling reached from RateLimiter
+  def handle_event(:info, {:rate_limiter, :cost_ceiling_reached, cost}, _state, data) do
+    Logger.warning("Cost ceiling reached: $#{Float.round(cost, 2)}, execution paused")
+
+    # Notify user and wait for approval
+    message = """
+    🛑 Cost Ceiling Reached
+
+    This job has reached $#{Float.round(cost, 2)} and execution has been paused.
+
+    The RateLimiter has paused all LLM requests until you approve continued spending.
+
+    To continue: Send 'approve' or use :approve_continued_spending
+    To abort: Send 'abort' or use :abort
+    """
+
+    notify_user(data, :cost_ceiling_reached, message)
+
+    # Set flag to track that we're waiting for cost approval
+    updated_data = %{data | cost_ceiling_reached: true}
+    {:keep_state, updated_data}
+  end
+
+  # Handle user approval for continued spending
+  def handle_event(:cast, :approve_continued_spending, _state, data) do
+    Logger.info("User approved continued spending, notifying RateLimiter")
+
+    # Call RateLimiter to reset cost ceiling flag
+    RateLimiter.approve_continued_spending(data.session_id)
+
+    message = "✅ Continued spending approved. Execution resumed."
+    notify_user(data, :spending_approved, message)
+
+    # Reset flag
+    updated_data = %{data | cost_ceiling_reached: false}
+    {:keep_state, updated_data}
   end
 
   # Catch-all for unhandled events
@@ -1174,6 +1228,20 @@ defmodule Deft.Job.Foreman do
     Registry.dispatch(Deft.Registry, {:job, data.session_id}, fn entries ->
       for {pid, _} <- entries do
         send(pid, {:foreman_plan, plan_summary, deliverables})
+      end
+    end)
+  end
+
+  defp notify_user(data, notification_type, message) do
+    # Send to CLI if available
+    if data.cli_pid do
+      send(data.cli_pid, {:foreman_notification, notification_type, message})
+    end
+
+    # Broadcast to Registry for web UI and other subscribers
+    Registry.dispatch(Deft.Registry, {:job, data.session_id}, fn entries ->
+      for {pid, _} <- entries do
+        send(pid, {:foreman_notification, notification_type, message})
       end
     end)
   end

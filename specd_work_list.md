@@ -17,7 +17,3 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## orchestration v0.7
-
-- Add cost ceiling monitoring in Foreman: handle `{:rate_limiter, :cost_warning, cost}` messages from RateLimiter, pause execution when approaching ceiling, notify user for approval — currently no handler exists and cost warnings are silently dropped (spec section 4.6, 7.2; rate_limiter.ex:646-651 sends the message but foreman.ex has no receiver)
-
