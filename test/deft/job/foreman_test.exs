@@ -54,7 +54,7 @@ defmodule Deft.Job.ForemanTest do
   end
 
   # Setup a Foreman test environment with rate limiter and site log
-  defp setup_foreman_test(session_id, working_dir, opts \\ []) do
+  defp setup_foreman_test(session_id, working_dir, opts) do
     rate_limiter_pid = start_rate_limiter(session_id)
     site_log_pid = start_site_log(session_id, working_dir)
 
