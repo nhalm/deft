@@ -348,6 +348,35 @@ defmodule Deft.Job.Foreman do
     {:next_state, :researching, data}
   end
 
+  def handle_event(:info, {:agent_action, :plan, plan_data}, :planning, data) do
+    deliverables = Map.get(plan_data, :deliverables, [])
+    dependencies = Map.get(plan_data, :dependencies, [])
+    rationale = Map.get(plan_data, :rationale, "")
+
+    Logger.info(
+      "ForemanAgent submitted plan with #{length(deliverables)} deliverables (from :planning state)"
+    )
+
+    # Store the full plan data
+    full_plan = %{
+      deliverables: deliverables,
+      dependencies: dependencies,
+      rationale: rationale
+    }
+
+    data = Map.put(data, :plan, full_plan)
+
+    # Write plan to site log
+    if data.site_log_pid do
+      Store.write(data.site_log_pid, "plan", full_plan)
+    end
+
+    # Present plan to user for approval
+    present_plan_to_user(data, deliverables)
+
+    {:next_state, :decomposing, data}
+  end
+
   def handle_event(:info, {:agent_action, :plan, plan_data}, :researching, data) do
     deliverables = Map.get(plan_data, :deliverables, [])
     dependencies = Map.get(plan_data, :dependencies, [])
