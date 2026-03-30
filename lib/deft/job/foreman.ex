@@ -207,7 +207,7 @@ defmodule Deft.Job.Foreman do
     Logger.info("Foreman entering :researching phase")
 
     # Collect research results from all tasks
-    research_timeout = Map.get(data.config, :research_timeout, 120_000)
+    research_timeout = Map.get(data.config, :job_research_timeout, 120_000)
     research_tasks = Map.get(data, :research_tasks, [])
 
     if length(research_tasks) > 0 do
@@ -921,8 +921,8 @@ defmodule Deft.Job.Foreman do
   end
 
   defp run_research_runner(topic, data) do
-    runner_model = Map.get(data.config, :research_runner_model, "claude-sonnet-4")
-    provider_name = Map.get(data.config, :provider_name, "anthropic")
+    runner_model = Map.get(data.config, :job_research_runner_model, "claude-sonnet-4")
+    provider_name = Map.get(data.config, :provider, "anthropic")
 
     runner_config = %{
       model: runner_model,
