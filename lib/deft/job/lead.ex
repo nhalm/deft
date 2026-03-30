@@ -379,7 +379,7 @@ defmodule Deft.Job.Lead do
 
         # Send results to LeadAgent
         if data.lead_agent_pid do
-          context = build_runner_result_context(runner_info.type, result)
+          context = build_runner_result_context(runner_info.runner_type, result)
           Deft.Agent.prompt(data.lead_agent_pid, context)
         end
 
