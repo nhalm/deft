@@ -40,6 +40,9 @@ defmodule Deft.Job.Lead.Supervisor do
     lead_id = Keyword.fetch!(opts, :lead_id)
     session_id = Keyword.fetch!(opts, :session_id)
     config = Keyword.fetch!(opts, :config)
+    working_dir = Keyword.fetch!(opts, :working_dir)
+    worktree_path = Keyword.fetch!(opts, :worktree_path)
+    deliverable = Keyword.fetch!(opts, :deliverable)
 
     # LeadAgent session_id (session_id is the job_id)
     lead_agent_session_id = "#{session_id}-lead-#{lead_id}"
@@ -69,13 +72,16 @@ defmodule Deft.Job.Lead.Supervisor do
       %{
         id: :lead_agent,
         start:
-          {Deft.Agent, :start_link,
+          {Deft.Job.LeadAgent, :start_link,
            [
              [
                session_id: lead_agent_session_id,
                config: config,
-               messages: [],
                parent_pid: lead_name,
+               working_dir: working_dir,
+               worktree_path: worktree_path,
+               deliverable: deliverable,
+               messages: [],
                name: lead_agent_name
              ]
            ]},

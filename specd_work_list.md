@@ -19,6 +19,5 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.7
 
-- Fix `Deft.Job.Lead.Supervisor` to start LeadAgent via `Deft.Job.LeadAgent.start_link/1` instead of `Deft.Agent.start_link/1` — same issue, LeadAgent has no Lead-specific tools or OM
 - Handle `{:agent_action, :plan, plan_data}` in `:planning` state (not just `:researching`) — after plan rejection the Foreman returns to `:planning`, and if the ForemanAgent resubmits a plan without calling `request_research` first, the message is silently dropped and the job hangs
 - Handle `{:lead_message, :complete, ...}` by removing Lead from `started_leads` and checking `all_leads_complete?` for transition to `:verifying` — currently the normal completion path never transitions to `:verifying` (only the crash path does)
