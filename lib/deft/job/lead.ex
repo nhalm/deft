@@ -102,6 +102,63 @@ defmodule Deft.Job.Lead do
     send(lead, {:foreman_steering, content})
   end
 
+  @doc """
+  Spawns a Runner task and returns updated tracking data.
+
+  This is a public API for testing purposes. In production, Runners are spawned
+  via agent action messages.
+
+  Returns `{:ok, task_ref, monitor_ref, updated_data}` on success.
+  """
+  def spawn_runner(data, runner_type, task_description, instructions, context) do
+    # Build Runner options
+    opts = %{
+      job_id: data.session_id,
+      config: data.config,
+      worktree_path: data.worktree_path,
+      rate_limiter_pid: data.rate_limiter_pid
+    }
+
+    # Spawn Runner task
+    task =
+      Task.Supervisor.async_nolink(
+        data.runner_supervisor,
+        fn -> Runner.run(runner_type, instructions, context, opts) end
+      )
+
+    # Get timeout from config
+    timeout = Map.get(data.config, :job_runner_timeout, 300_000)
+
+    # Set up timeout enforcement
+    timeout_ref = Process.send_after(self(), {:runner_timeout, task.ref}, timeout)
+
+    # Track the runner with all metadata
+    runner_info = %{
+      task_description: task_description,
+      runner_type: runner_type,
+      pid: task.pid,
+      monitor_ref: task.ref,
+      timeout_ref: timeout_ref,
+      started_at: System.monotonic_time(:millisecond)
+    }
+
+    # Update runner tracking
+    runner_tasks = Map.put(data.runner_tasks, task.ref, runner_info)
+    updated_data = Map.put(data, :runner_tasks, runner_tasks)
+
+    {:ok, task.ref, task.ref, updated_data}
+  end
+
+  @doc """
+  Sends a message to the Foreman.
+
+  This is a public API for testing purposes. In production, messages are sent
+  via the private send_to_foreman/4 helper.
+  """
+  def send_lead_message(foreman_pid, type, content, metadata) do
+    send(foreman_pid, {:lead_message, type, content, metadata})
+  end
+
   # gen_statem callbacks
 
   @impl :gen_statem
@@ -187,8 +244,24 @@ defmodule Deft.Job.Lead do
         fn -> Runner.run(type, instructions, context, opts) end
       )
 
-    # Track the task
-    runner_tasks = Map.put(data.runner_tasks, task.ref, %{type: type, task: task})
+    # Get timeout from config
+    timeout = Map.get(data.config, :job_runner_timeout, 300_000)
+
+    # Set up timeout enforcement
+    timeout_ref = Process.send_after(self(), {:runner_timeout, task.ref}, timeout)
+
+    # Track the task with timeout enforcement
+    runner_info = %{
+      task: task,
+      task_description: "#{type} runner",
+      runner_type: type,
+      pid: task.pid,
+      monitor_ref: task.ref,
+      timeout_ref: timeout_ref,
+      started_at: System.monotonic_time(:millisecond)
+    }
+
+    runner_tasks = Map.put(data.runner_tasks, task.ref, runner_info)
     data = Map.put(data, :runner_tasks, runner_tasks)
 
     # Transition to :executing if in :planning
@@ -235,6 +308,49 @@ defmodule Deft.Job.Lead do
     :keep_state_and_data
   end
 
+  # Handle Runner timeout
+  def handle_event(:info, {:runner_timeout, task_ref}, _state, data) do
+    case Map.get(data.runner_tasks, task_ref) do
+      nil ->
+        # Runner already completed or cleaned up
+        :keep_state_and_data
+
+      runner_info ->
+        Logger.warning(
+          "Lead #{data.lead_id} - Runner #{runner_info.runner_type} timed out (task: #{runner_info.task_description})"
+        )
+
+        # Kill the timed-out Runner process
+        if Process.alive?(runner_info.pid) do
+          Process.exit(runner_info.pid, :kill)
+        end
+
+        # Remove from tracking
+        remaining_tasks = Map.delete(data.runner_tasks, task_ref)
+        data = Map.put(data, :runner_tasks, remaining_tasks)
+
+        # Report timeout to Foreman
+        send_to_foreman(data, :error, "Runner #{runner_info.runner_type} timed out", %{
+          lead_id: data.lead_id,
+          runner_type: runner_info.runner_type,
+          task_description: runner_info.task_description
+        })
+
+        # Notify LeadAgent so it can adjust approach
+        if data.lead_agent_pid do
+          timeout_prompt = """
+          Runner #{runner_info.runner_type} timed out while executing: #{runner_info.task_description}
+
+          The task exceeded the configured timeout. Please adjust your approach or break the task into smaller steps.
+          """
+
+          Deft.Agent.prompt(data.lead_agent_pid, timeout_prompt)
+        end
+
+        {:keep_state, data}
+    end
+  end
+
   # Handle Runner task completion
   def handle_event(:info, {ref, result}, state, data) when is_reference(ref) do
     case Map.pop(data.runner_tasks, ref) do
@@ -243,11 +359,17 @@ defmodule Deft.Job.Lead do
         :keep_state_and_data
 
       {runner_info, remaining_tasks} ->
-        Logger.info("Lead #{data.lead_id} - Runner #{runner_info.type} completed")
+        Logger.info("Lead #{data.lead_id} - Runner #{runner_info.runner_type} completed")
+
+        # Cancel the timeout since the Runner completed
+        _ =
+          if runner_info[:timeout_ref] do
+            Process.cancel_timer(runner_info.timeout_ref)
+          end
 
         # Store result
         runner_results = [
-          %{type: runner_info.type, result: result} | data.runner_results
+          %{type: runner_info.runner_type, result: result} | data.runner_results
         ]
 
         data =
@@ -278,21 +400,32 @@ defmodule Deft.Job.Lead do
 
       {runner_info, remaining_tasks} ->
         Logger.error(
-          "Lead #{data.lead_id} - Runner #{runner_info.type} failed: #{inspect(reason)}"
+          "Lead #{data.lead_id} - Runner #{runner_info.runner_type} failed: #{inspect(reason)}"
         )
+
+        # Cancel the timeout since the Runner is done (even if it crashed)
+        _ =
+          if runner_info[:timeout_ref] do
+            Process.cancel_timer(runner_info.timeout_ref)
+          end
 
         data = Map.put(data, :runner_tasks, remaining_tasks)
 
         # Report error to Foreman
-        send_to_foreman(data, :error, "Runner #{runner_info.type} failed: #{inspect(reason)}", %{
-          lead_id: data.lead_id,
-          runner_type: runner_info.type
-        })
+        send_to_foreman(
+          data,
+          :error,
+          "Runner #{runner_info.runner_type} failed: #{inspect(reason)}",
+          %{
+            lead_id: data.lead_id,
+            runner_type: runner_info.runner_type
+          }
+        )
 
         # Send failure to LeadAgent for recovery
         if data.lead_agent_pid do
           context =
-            "Runner #{runner_info.type} failed: #{inspect(reason)}. Please adjust approach."
+            "Runner #{runner_info.runner_type} failed: #{inspect(reason)}. Please adjust approach."
 
           Deft.Agent.prompt(data.lead_agent_pid, context)
         end
@@ -397,7 +530,24 @@ defmodule Deft.Job.Lead do
         fn -> Runner.run(:testing, instructions, context, opts) end
       )
 
-    runner_tasks = Map.put(data.runner_tasks, task.ref, %{type: :testing, task: task})
+    # Get timeout from config
+    timeout = Map.get(data.config, :job_runner_timeout, 300_000)
+
+    # Set up timeout enforcement
+    timeout_ref = Process.send_after(self(), {:runner_timeout, task.ref}, timeout)
+
+    # Track with timeout enforcement
+    runner_info = %{
+      task: task,
+      task_description: "testing runner",
+      runner_type: :testing,
+      pid: task.pid,
+      monitor_ref: task.ref,
+      timeout_ref: timeout_ref,
+      started_at: System.monotonic_time(:millisecond)
+    }
+
+    runner_tasks = Map.put(data.runner_tasks, task.ref, runner_info)
     Map.put(data, :runner_tasks, runner_tasks)
   end
 

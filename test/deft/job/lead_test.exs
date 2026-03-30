@@ -160,9 +160,8 @@ defmodule Deft.Job.LeadTest do
       # Transition Lead to executing state to avoid LLM calls
       :sys.replace_state(lead_pid, fn {_s, d} -> {:executing, d} end)
 
-      # Create a fake runner task ref and monitor ref
+      # Create a fake runner task ref (in real Task, task_ref and monitor_ref are the same)
       task_ref = make_ref()
-      monitor_ref = make_ref()
       fake_pid = spawn(fn -> :ok end)
 
       # Manually update the Lead's state to include this "runner"
@@ -172,7 +171,7 @@ defmodule Deft.Job.LeadTest do
         task_description: "crashing task",
         runner_type: :read_only,
         pid: fake_pid,
-        monitor_ref: monitor_ref,
+        monitor_ref: task_ref,
         timeout_ref: nil,
         started_at: System.monotonic_time(:millisecond)
       }
@@ -181,7 +180,7 @@ defmodule Deft.Job.LeadTest do
       :sys.replace_state(lead_pid, fn {s, _d} -> {s, data} end)
 
       # Send a fake DOWN message to the Lead to simulate a crash
-      send(lead_pid, {:DOWN, monitor_ref, :process, fake_pid, :killed})
+      send(lead_pid, {:DOWN, task_ref, :process, fake_pid, :killed})
 
       # Give the Lead time to process the DOWN message
       Process.sleep(100)
