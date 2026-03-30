@@ -346,21 +346,23 @@ defmodule Deft.Job.Foreman do
     {:next_state, :decomposing, data}
   end
 
-  def handle_event(:info, {:agent_action, :spawn_lead, deliverable}, :executing, data) do
-    Logger.info("ForemanAgent requested spawning Lead for: #{inspect(deliverable[:name])}")
+  def handle_event(:info, {:agent_action, :spawn_lead, deliverable_info}, :executing, data) do
+    # Look up full deliverable from plan by ID
+    deliverable_id = Map.get(deliverable_info, :id)
+    additional_context = Map.get(deliverable_info, :context, "")
 
-    # Generate unique Lead ID
-    lead_id = "lead-#{:erlang.unique_integer([:positive])}"
+    case find_deliverable_by_id(data.plan, deliverable_id) do
+      nil ->
+        Logger.error("Cannot spawn Lead: deliverable '#{deliverable_id}' not found in plan")
+        :keep_state_and_data
 
-    # Check if Lead already started
-    if MapSet.member?(data.started_leads, lead_id) do
-      Logger.warning("Lead #{lead_id} already started, ignoring spawn request")
-      :keep_state_and_data
-    else
-      case do_spawn_lead(lead_id, deliverable, data) do
-        {:ok, updated_data} -> {:keep_state, updated_data}
-        :error -> :keep_state_and_data
-      end
+      deliverable ->
+        handle_spawn_lead_with_deliverable(
+          deliverable,
+          deliverable_id,
+          additional_context,
+          data
+        )
     end
   end
 
@@ -757,6 +759,65 @@ defmodule Deft.Job.Foreman do
       {lead_id, _ref} -> {:ok, lead_id}
       nil -> :not_found
     end
+  end
+
+  defp find_deliverable_by_id(nil, _id), do: nil
+
+  defp find_deliverable_by_id(plan, deliverable_id) when is_map(plan) do
+    # Handle plan as map with :deliverables key (current format from submit_plan)
+    deliverables = Map.get(plan, :deliverables, [])
+    find_in_deliverable_list(deliverables, deliverable_id)
+  end
+
+  defp find_deliverable_by_id(plan, deliverable_id) when is_list(plan) do
+    # Handle plan as list of deliverables (future format after submit_plan fix)
+    find_in_deliverable_list(plan, deliverable_id)
+  end
+
+  defp find_in_deliverable_list(deliverables, deliverable_id) do
+    Enum.find(deliverables, fn d ->
+      Map.get(d, :id) == deliverable_id || Map.get(d, "id") == deliverable_id
+    end)
+  end
+
+  defp handle_spawn_lead_with_deliverable(
+         deliverable,
+         deliverable_id,
+         additional_context,
+         data
+       ) do
+    # Merge additional context from tool call
+    deliverable_with_context =
+      if additional_context != "" do
+        Map.put(deliverable, :additional_context, additional_context)
+      else
+        deliverable
+      end
+
+    Logger.info("ForemanAgent requested spawning Lead for: #{inspect(deliverable[:name])}")
+
+    # Check if Lead already started for this deliverable
+    if deliverable_already_started?(data, deliverable_id) do
+      Logger.warning(
+        "Lead for deliverable #{deliverable_id} already started, ignoring spawn request"
+      )
+
+      :keep_state_and_data
+    else
+      # Generate unique Lead ID
+      lead_id = "lead-#{:erlang.unique_integer([:positive])}"
+
+      case do_spawn_lead(lead_id, deliverable_with_context, data) do
+        {:ok, updated_data} -> {:keep_state, updated_data}
+        :error -> :keep_state_and_data
+      end
+    end
+  end
+
+  defp deliverable_already_started?(data, deliverable_id) do
+    Enum.any?(Map.get(data, :leads, %{}), fn {_id, lead} ->
+      Map.get(lead.deliverable, :id) == deliverable_id
+    end)
   end
 
   defp do_spawn_lead(lead_id, deliverable, data) do
