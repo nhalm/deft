@@ -1029,7 +1029,16 @@ defmodule Deft.Agent do
     # Persist cost entry to session JSONL
     cost_entry = Cost.new(new_session_cost)
     working_dir = Map.get(data.config, :working_dir, File.cwd!())
-    _ = Store.append(data.session_id, cost_entry, working_dir)
+
+    case Store.append(data.session_id, cost_entry, working_dir) do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning(
+          "#{log_prefix(data.session_id)} Failed to append cost entry to session: #{inspect(reason)}"
+        )
+    end
 
     broadcast_event(
       data.session_id,
@@ -1888,7 +1897,16 @@ defmodule Deft.Agent do
       # Persist compaction entry to session JSONL
       working_dir = Map.get(data.config, :working_dir, File.cwd!())
       compaction_entry = Compaction.new(summary_text, pending.messages_to_remove_count)
-      _ = Store.append(data.session_id, compaction_entry, working_dir)
+
+      case Store.append(data.session_id, compaction_entry, working_dir) do
+        :ok ->
+          :ok
+
+        {:error, reason} ->
+          Logger.warning(
+            "#{log_prefix(data.session_id)} Failed to append compaction entry to session: #{inspect(reason)}"
+          )
+      end
 
       new_data = %{
         data
