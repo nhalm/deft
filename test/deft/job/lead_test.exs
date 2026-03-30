@@ -91,8 +91,8 @@ defmodule Deft.Job.LeadTest do
       # Note: The Lead may already be calling the LLM in planning phase
       {state, data} = :sys.get_state(lead_pid)
 
-      # Verify the Lead is in planning phase (may be :idle or :calling)
-      assert match?({:planning, _agent_state}, state)
+      # Verify the Lead is in planning phase
+      assert state == :planning
       assert data.runner_supervisor == runner_supervisor
       assert data.runner_tasks == %{}
 
@@ -158,7 +158,7 @@ defmodule Deft.Job.LeadTest do
         )
 
       # Transition Lead to executing state to avoid LLM calls
-      :sys.replace_state(lead_pid, fn {_s, d} -> {{:executing, :idle}, d} end)
+      :sys.replace_state(lead_pid, fn {_s, d} -> {:executing, d} end)
 
       # Create a fake runner task ref and monitor ref
       task_ref = make_ref()
@@ -431,9 +431,9 @@ defmodule Deft.Job.LeadTest do
           runner_supervisor: runner_supervisor
         )
 
-      # Verify initial state is planning (may be :idle or :calling)
+      # Verify initial state is planning
       {state, _data} = :sys.get_state(lead_pid)
-      assert match?({:planning, _agent_state}, state)
+      assert state == :planning
 
       # Send a foreman steering message
       send(lead_pid, {:foreman_steering, "Steering guidance from Foreman"})
@@ -478,7 +478,7 @@ defmodule Deft.Job.LeadTest do
         )
 
       # Manually transition to executing state
-      :sys.replace_state(lead_pid, fn {_s, d} -> {{:executing, :idle}, d} end)
+      :sys.replace_state(lead_pid, fn {_s, d} -> {:executing, d} end)
 
       # Send a foreman steering message
       send(lead_pid, {:foreman_steering, "Adjust your approach"})
@@ -521,8 +521,8 @@ defmodule Deft.Job.LeadTest do
         )
 
       # Verify initial state is :planning (simple atom, not tuple)
-      state = :sys.get_state(lead_pid)
-      assert state == :planning or match?({:planning, _}, state)
+      {state, _data} = :sys.get_state(lead_pid)
+      assert state == :planning
 
       # Cleanup
       :gen_statem.stop(lead_pid)
