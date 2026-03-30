@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## logging v0.5
 
-- Add `[Foreman:<id>]` bracketed log prefix to all Logger calls in `lib/deft/job/foreman.ex` — currently uses bare strings like `"Foreman started for job ..."` without the spec-required `[Foreman:<id>]` format
 - Add `[Lead:<id>]` bracketed log prefix to all Logger calls in `lib/deft/job/lead.ex` — currently uses `"Lead #{data.lead_id}"` inline without the spec-required bracket format
 - Remove `Logger.info("[Session] Session saved: #{session_id}")` from `Store.append/3` in `lib/deft/session/store.ex` — `append/3` is a low-level function called on every cost entry, tool result, and session start; logging here violates the "only callers log" principle (same violation as `load/2` which was already fixed in v0.5)
 - Fix Observer triggered log in `lib/deft/om/state.ex` to report observation count, not unobserved message count — currently logs `length(unobserved_messages)` labeled as "observations" but messages ≠ observations

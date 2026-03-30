@@ -141,7 +141,7 @@ defmodule Deft.Job.Foreman do
       |> resolve_site_log_pid()
       |> setup_foreman_agent_monitoring()
 
-    Logger.info("Foreman started for job #{data.session_id}")
+    Logger.info("#{log_prefix(data)} Foreman started for job #{data.session_id}")
 
     # Start in :asking phase if auto-approve is not set, otherwise skip to :planning
     auto_approve = Map.get(data.config, :auto_approve_all, false)
@@ -159,7 +159,7 @@ defmodule Deft.Job.Foreman do
 
           case GenServer.whereis(site_log_name) do
             nil ->
-              Logger.error("Site log not found for job #{data.session_id}")
+              Logger.error("#{log_prefix(data)} Site log not found for job #{data.session_id}")
               raise "Site log not started by Job.Supervisor"
 
             pid ->
@@ -177,7 +177,7 @@ defmodule Deft.Job.Foreman do
   defp setup_foreman_agent_monitoring(data) do
     case data.foreman_agent_pid do
       nil ->
-        Logger.warning("ForemanAgent PID not provided during init")
+        Logger.warning("#{log_prefix(data)} ForemanAgent PID not provided during init")
         data
 
       name_or_pid ->
@@ -185,13 +185,19 @@ defmodule Deft.Job.Foreman do
 
         if pid do
           monitor_ref = Process.monitor(pid)
-          Logger.debug("Monitoring ForemanAgent with ref: #{inspect(monitor_ref)}")
+
+          Logger.debug(
+            "#{log_prefix(data)} Monitoring ForemanAgent with ref: #{inspect(monitor_ref)}"
+          )
 
           data
           |> Map.put(:foreman_agent_pid, pid)
           |> Map.put(:foreman_agent_monitor_ref, monitor_ref)
         else
-          Logger.warning("Could not resolve ForemanAgent name to PID: #{inspect(name_or_pid)}")
+          Logger.warning(
+            "#{log_prefix(data)} Could not resolve ForemanAgent name to PID: #{inspect(name_or_pid)}"
+          )
+
           data
         end
     end
@@ -201,23 +207,29 @@ defmodule Deft.Job.Foreman do
   defp resolve_agent_pid(pid) when is_pid(pid), do: pid
   defp resolve_agent_pid(name), do: GenServer.whereis(name)
 
+  # Generate log prefix with job ID prefix (first 8 chars of session ID)
+  defp log_prefix(data) do
+    job_id_prefix = String.slice(data.session_id, 0, 8)
+    "[Foreman:#{job_id_prefix}]"
+  end
+
   @impl :gen_statem
   def handle_event(:enter, _old_state, :asking, data) do
-    Logger.info("Foreman entering :asking phase")
+    Logger.info("#{log_prefix(data)} Foreman entering :asking phase")
 
     # Subscribe to ForemanAgent events to receive text responses
     if data.foreman_agent_pid do
       case Registry.register(Deft.Registry, {:session, "#{data.session_id}-foreman"}, []) do
         {:ok, _pid} ->
-          Logger.debug("Foreman subscribed to ForemanAgent events")
+          Logger.debug("#{log_prefix(data)} Foreman subscribed to ForemanAgent events")
 
         {:error, {:already_registered, _pid}} ->
-          Logger.debug("Foreman already subscribed to ForemanAgent events")
+          Logger.debug("#{log_prefix(data)} Foreman already subscribed to ForemanAgent events")
       end
 
       Deft.Agent.prompt(data.foreman_agent_pid, data.prompt)
     else
-      Logger.warning("ForemanAgent not yet available, will prompt when set")
+      Logger.warning("#{log_prefix(data)} ForemanAgent not yet available, will prompt when set")
     end
 
     # Initialize text accumulation buffer and Q&A history for asking phase
@@ -230,7 +242,7 @@ defmodule Deft.Job.Foreman do
   end
 
   def handle_event(:enter, _old_state, :planning, data) do
-    Logger.info("Foreman entering :planning phase")
+    Logger.info("#{log_prefix(data)} Foreman entering :planning phase")
 
     # In planning, ForemanAgent analyzes the request and calls request_research tool
     # For now, this is a stub until ForemanAgent and tools are implemented
@@ -243,7 +255,7 @@ defmodule Deft.Job.Foreman do
   end
 
   def handle_event(:enter, _old_state, :researching, data) do
-    Logger.info("Foreman entering :researching phase")
+    Logger.info("#{log_prefix(data)} Foreman entering :researching phase")
 
     research_tasks = Map.get(data, :research_tasks, [])
 
@@ -253,7 +265,7 @@ defmodule Deft.Job.Foreman do
       {:keep_state_and_data, {:state_timeout, 0, :collect_research}}
     else
       # No research tasks, skip to decomposing
-      Logger.warning("No research tasks to execute")
+      Logger.warning("#{log_prefix(data)} No research tasks to execute")
       {:next_state, :decomposing, data}
     end
   end
@@ -269,7 +281,10 @@ defmodule Deft.Job.Foreman do
   end
 
   def handle_event(:enter, _old_state, :decomposing, data) do
-    Logger.info("Foreman entering :decomposing phase - waiting for plan approval")
+    Logger.info(
+      "#{log_prefix(data)} Foreman entering :decomposing phase - waiting for plan approval"
+    )
+
     # Present plan to user, wait for approval
     # For now, stub implementation
 
@@ -277,7 +292,7 @@ defmodule Deft.Job.Foreman do
     auto_approve = Map.get(data.config, :auto_approve_all, false)
 
     if auto_approve do
-      Logger.info("Auto-approving plan (--auto-approve-all is set)")
+      Logger.info("#{log_prefix(data)} Auto-approving plan (--auto-approve-all is set)")
 
       # Save plan to persistence
       if data.plan do
@@ -292,31 +307,31 @@ defmodule Deft.Job.Foreman do
     end
   end
 
-  def handle_event(:enter, _old_state, :executing, _data) do
-    Logger.info("Foreman entering :executing phase")
+  def handle_event(:enter, _old_state, :executing, data) do
+    Logger.info("#{log_prefix(data)} Foreman entering :executing phase")
     # Leads will be spawned based on the approved plan
     :keep_state_and_data
   end
 
-  def handle_event(:enter, _old_state, :verifying, _data) do
-    Logger.info("Foreman entering :verifying phase")
+  def handle_event(:enter, _old_state, :verifying, data) do
+    Logger.info("#{log_prefix(data)} Foreman entering :verifying phase")
     # Spawn verification Runner
     :keep_state_and_data
   end
 
-  def handle_event(:enter, _old_state, :complete, _data) do
-    Logger.info("Foreman entering :complete phase")
+  def handle_event(:enter, _old_state, :complete, data) do
+    Logger.info("#{log_prefix(data)} Foreman entering :complete phase")
     # Squash-merge all work, report summary, cleanup
     :keep_state_and_data
   end
 
   # Set ForemanAgent PID
   def handle_event(:cast, {:set_foreman_agent, agent_pid}, state, data) do
-    Logger.debug("ForemanAgent PID set: #{inspect(agent_pid)}")
+    Logger.debug("#{log_prefix(data)} ForemanAgent PID set: #{inspect(agent_pid)}")
 
     # Monitor the ForemanAgent so we can detect crashes
     monitor_ref = Process.monitor(agent_pid)
-    Logger.debug("Monitoring ForemanAgent with ref: #{inspect(monitor_ref)}")
+    Logger.debug("#{log_prefix(data)} Monitoring ForemanAgent with ref: #{inspect(monitor_ref)}")
 
     data =
       data
@@ -327,10 +342,10 @@ defmodule Deft.Job.Foreman do
     if state == :asking and data.prompt do
       case Registry.register(Deft.Registry, {:session, "#{data.session_id}-foreman"}, []) do
         {:ok, _pid} ->
-          Logger.debug("Foreman subscribed to ForemanAgent events")
+          Logger.debug("#{log_prefix(data)} Foreman subscribed to ForemanAgent events")
 
         {:error, {:already_registered, _pid}} ->
-          Logger.debug("Foreman already subscribed to ForemanAgent events")
+          Logger.debug("#{log_prefix(data)} Foreman already subscribed to ForemanAgent events")
       end
 
       Deft.Agent.prompt(agent_pid, data.prompt)
@@ -376,14 +391,16 @@ defmodule Deft.Job.Foreman do
 
   # Handle agent actions from ForemanAgent orchestration tools
   def handle_event(:info, {:agent_action, :ready_to_plan}, :asking, data) do
-    Logger.info("ForemanAgent ready to plan, transitioning to :planning")
+    Logger.info("#{log_prefix(data)} ForemanAgent ready to plan, transitioning to :planning")
     # Unsubscribe from ForemanAgent events when leaving :asking
     Registry.unregister(Deft.Registry, {:session, "#{data.session_id}-foreman"})
     {:next_state, :planning, data}
   end
 
   def handle_event(:info, {:agent_action, :research, topics}, :planning, data) do
-    Logger.info("ForemanAgent requested research on topics: #{inspect(topics)}")
+    Logger.info(
+      "#{log_prefix(data)} ForemanAgent requested research on topics: #{inspect(topics)}"
+    )
 
     # Spawn research Runners in parallel
     research_tasks =
@@ -404,7 +421,7 @@ defmodule Deft.Job.Foreman do
     rationale = Map.get(plan_data, :rationale, "")
 
     Logger.info(
-      "ForemanAgent submitted plan with #{length(deliverables)} deliverables (from :planning state)"
+      "#{log_prefix(data)} ForemanAgent submitted plan with #{length(deliverables)} deliverables (from :planning state)"
     )
 
     # Normalize deliverables and dependencies to use atom keys
@@ -436,7 +453,9 @@ defmodule Deft.Job.Foreman do
     dependencies = Map.get(plan_data, :dependencies, [])
     rationale = Map.get(plan_data, :rationale, "")
 
-    Logger.info("ForemanAgent submitted plan with #{length(deliverables)} deliverables")
+    Logger.info(
+      "#{log_prefix(data)} ForemanAgent submitted plan with #{length(deliverables)} deliverables"
+    )
 
     # Normalize deliverables and dependencies to use atom keys
     normalized_deliverables = Enum.map(deliverables, &normalize_deliverable_keys/1)
@@ -469,7 +488,10 @@ defmodule Deft.Job.Foreman do
 
     case find_deliverable_by_id(data.plan, deliverable_id) do
       nil ->
-        Logger.error("Cannot spawn Lead: deliverable '#{deliverable_id}' not found in plan")
+        Logger.error(
+          "#{log_prefix(data)} Cannot spawn Lead: deliverable '#{deliverable_id}' not found in plan"
+        )
+
         :keep_state_and_data
 
       deliverable ->
@@ -483,70 +505,81 @@ defmodule Deft.Job.Foreman do
   end
 
   def handle_event(:info, {:agent_action, :unblock_lead, lead_id, contract}, :executing, data) do
-    Logger.info("ForemanAgent unblocking Lead #{lead_id}")
+    Logger.info("#{log_prefix(data)} ForemanAgent unblocking Lead #{lead_id}")
 
     case Map.get(data.leads, lead_id) do
       nil ->
-        Logger.warning("Cannot unblock Lead #{lead_id}: Lead not found")
+        Logger.warning("#{log_prefix(data)} Cannot unblock Lead #{lead_id}: Lead not found")
         :keep_state_and_data
 
       lead ->
         if lead.pid do
           # Send contract to Lead
           send(lead.pid, {:foreman_contract, contract})
-          Logger.info("Sent contract to Lead #{lead_id}")
+          Logger.info("#{log_prefix(data)} Sent contract to Lead #{lead_id}")
 
           # Remove from blocked_leads if present
           data = Map.update!(data, :blocked_leads, &Map.delete(&1, lead_id))
           {:keep_state, data}
         else
-          Logger.warning("Cannot unblock Lead #{lead_id}: Lead PID not available")
+          Logger.warning(
+            "#{log_prefix(data)} Cannot unblock Lead #{lead_id}: Lead PID not available"
+          )
+
           :keep_state_and_data
         end
     end
   end
 
   def handle_event(:info, {:agent_action, :steer_lead, lead_id, content}, :executing, data) do
-    Logger.info("ForemanAgent steering Lead #{lead_id}")
+    Logger.info("#{log_prefix(data)} ForemanAgent steering Lead #{lead_id}")
 
     case Map.get(data.leads, lead_id) do
       nil ->
-        Logger.warning("Cannot steer Lead #{lead_id}: Lead not found")
+        Logger.warning("#{log_prefix(data)} Cannot steer Lead #{lead_id}: Lead not found")
         :keep_state_and_data
 
       lead ->
         if lead.pid do
           # Send steering to Lead
           send(lead.pid, {:foreman_steering, content})
-          Logger.info("Sent steering to Lead #{lead_id}")
+          Logger.info("#{log_prefix(data)} Sent steering to Lead #{lead_id}")
           :keep_state_and_data
         else
-          Logger.warning("Cannot steer Lead #{lead_id}: Lead PID not available")
+          Logger.warning(
+            "#{log_prefix(data)} Cannot steer Lead #{lead_id}: Lead PID not available"
+          )
+
           :keep_state_and_data
         end
     end
   end
 
   def handle_event(:info, {:agent_action, :abort_lead, lead_id}, :executing, data) do
-    Logger.info("ForemanAgent aborting Lead #{lead_id}")
+    Logger.info("#{log_prefix(data)} ForemanAgent aborting Lead #{lead_id}")
 
     case Map.get(data.leads, lead_id) do
       nil ->
-        Logger.warning("Cannot abort Lead #{lead_id}: Lead not found")
+        Logger.warning("#{log_prefix(data)} Cannot abort Lead #{lead_id}: Lead not found")
         :keep_state_and_data
 
       lead ->
         if lead.pid do
           do_abort_lead(lead_id, lead.pid, data)
         else
-          Logger.warning("Cannot abort Lead #{lead_id}: Lead PID not available")
+          Logger.warning(
+            "#{log_prefix(data)} Cannot abort Lead #{lead_id}: Lead PID not available"
+          )
+
           :keep_state_and_data
         end
     end
   end
 
   def handle_event(:info, {:agent_action, :fail_deliverable, lead_id}, :executing, data) do
-    Logger.info("ForemanAgent marking deliverable for Lead #{lead_id} as failed")
+    Logger.info(
+      "#{log_prefix(data)} ForemanAgent marking deliverable for Lead #{lead_id} as failed"
+    )
 
     # Move Lead from started_leads to failed_leads
     updated_data =
@@ -556,7 +589,10 @@ defmodule Deft.Job.Foreman do
 
     # Check if all Leads are complete (including failed ones) and transition to :verifying
     if all_leads_complete?(updated_data) do
-      Logger.info("All Leads complete (including failed), transitioning to :verifying")
+      Logger.info(
+        "#{log_prefix(data)} All Leads complete (including failed), transitioning to :verifying"
+      )
+
       {:next_state, :verifying, updated_data}
     else
       {:keep_state, updated_data}
@@ -565,7 +601,7 @@ defmodule Deft.Job.Foreman do
 
   # Handle user prompts
   def handle_event(:cast, {:prompt, text}, :asking, data) do
-    Logger.debug("User answer received in asking phase: #{text}")
+    Logger.debug("#{log_prefix(data)} User answer received in asking phase: #{text}")
 
     # Check for /correct command and promote to site log if present
     handle_correct_command(text, data)
@@ -588,7 +624,7 @@ defmodule Deft.Job.Foreman do
 
   def handle_event(:cast, {:prompt, text}, state, data)
       when state in [:executing, :planning, :researching, :decomposing] do
-    Logger.debug("User prompt received in #{state}: #{text}")
+    Logger.debug("#{log_prefix(data)} User prompt received in #{state}: #{text}")
 
     # Check for /correct command and promote to site log if present
     handle_correct_command(text, data)
@@ -605,7 +641,7 @@ defmodule Deft.Job.Foreman do
   end
 
   def handle_event(:cast, {:prompt, text}, state, data) do
-    Logger.debug("User prompt received in #{state}: #{text}")
+    Logger.debug("#{log_prefix(data)} User prompt received in #{state}: #{text}")
 
     # Check for /correct command and promote to site log if present
     handle_correct_command(text, data)
@@ -620,7 +656,7 @@ defmodule Deft.Job.Foreman do
 
   # Plan approval
   def handle_event(:cast, :approve_plan, :decomposing, data) do
-    Logger.info("Plan approved, transitioning to :executing")
+    Logger.info("#{log_prefix(data)} Plan approved, transitioning to :executing")
 
     # Save plan to persistence
     if data.plan do
@@ -633,13 +669,13 @@ defmodule Deft.Job.Foreman do
   end
 
   def handle_event(:cast, :reject_plan, :decomposing, data) do
-    Logger.info("Plan rejected, returning to :planning")
+    Logger.info("#{log_prefix(data)} Plan rejected, returning to :planning")
     {:next_state, :planning, data}
   end
 
   # Abort
   def handle_event(:cast, :abort, _state, data) do
-    Logger.info("Job aborted")
+    Logger.info("#{log_prefix(data)} Job aborted")
     # Cleanup and stop
     cleanup(data)
     {:stop, :normal, data}
@@ -647,7 +683,7 @@ defmodule Deft.Job.Foreman do
 
   # Handle Lead messages
   def handle_event(:info, {:lead_message, type, content, metadata}, state, data) do
-    Logger.debug("Lead message received: #{type}")
+    Logger.debug("#{log_prefix(data)} Lead message received: #{type}")
 
     # Forward to ForemanAgent with structured context
     if data.foreman_agent_pid do
@@ -668,7 +704,7 @@ defmodule Deft.Job.Foreman do
       # Check if ForemanAgent crashed
       ref == data.foreman_agent_monitor_ref ->
         Logger.error(
-          "ForemanAgent (#{inspect(pid)}) crashed: #{inspect(reason)}. Failing job with cleanup."
+          "#{log_prefix(data)} ForemanAgent (#{inspect(pid)}) crashed: #{inspect(reason)}. Failing job with cleanup."
         )
 
         do_fail_job_on_foreman_agent_crash(reason, data)
@@ -676,7 +712,11 @@ defmodule Deft.Job.Foreman do
       # Check if a Lead crashed
       match?({:ok, _lead_id}, find_lead_by_monitor(data.lead_monitors, ref)) ->
         {:ok, lead_id} = find_lead_by_monitor(data.lead_monitors, ref)
-        Logger.warning("Lead #{lead_id} (#{inspect(pid)}) crashed: #{inspect(reason)}")
+
+        Logger.warning(
+          "#{log_prefix(data)} Lead #{lead_id} (#{inspect(pid)}) crashed: #{inspect(reason)}"
+        )
+
         do_handle_lead_crash(lead_id, state, data)
 
       # Monitor might be for another process (e.g., Runner)
@@ -687,7 +727,9 @@ defmodule Deft.Job.Foreman do
 
   # Handle cost warning from RateLimiter
   def handle_event(:info, {:rate_limiter, :cost_warning, cost}, _state, data) do
-    Logger.info("Cost warning: $#{Float.round(cost, 2)} (approaching cost ceiling)")
+    Logger.info(
+      "#{log_prefix(data)} Cost warning: $#{Float.round(cost, 2)} (approaching cost ceiling)"
+    )
 
     # Notify user about cost warning
     message = """
@@ -701,7 +743,9 @@ defmodule Deft.Job.Foreman do
 
   # Handle cost ceiling reached from RateLimiter
   def handle_event(:info, {:rate_limiter, :cost_ceiling_reached, cost}, _state, data) do
-    Logger.warning("Cost ceiling reached: $#{Float.round(cost, 2)}, execution paused")
+    Logger.warning(
+      "#{log_prefix(data)} Cost ceiling reached: $#{Float.round(cost, 2)}, execution paused"
+    )
 
     # Notify user and wait for approval
     message = """
@@ -724,7 +768,7 @@ defmodule Deft.Job.Foreman do
 
   # Handle user approval for continued spending
   def handle_event(:cast, :approve_continued_spending, _state, data) do
-    Logger.info("User approved continued spending, notifying RateLimiter")
+    Logger.info("#{log_prefix(data)} User approved continued spending, notifying RateLimiter")
 
     # Call RateLimiter to reset cost ceiling flag
     RateLimiter.approve_continued_spending(data.session_id)
@@ -738,9 +782,9 @@ defmodule Deft.Job.Foreman do
   end
 
   # Catch-all for unhandled events
-  def handle_event(event_type, event_content, state, _data) do
+  def handle_event(event_type, event_content, state, data) do
     Logger.warning(
-      "Unhandled event in #{state}: #{inspect(event_type)} #{inspect(event_content)}"
+      "#{log_prefix(data)} Unhandled event in #{state}: #{inspect(event_type)} #{inspect(event_content)}"
     )
 
     :keep_state_and_data
@@ -748,7 +792,7 @@ defmodule Deft.Job.Foreman do
 
   @impl :gen_statem
   def terminate(reason, state, data) do
-    Logger.info("Foreman terminating in #{state}: #{inspect(reason)}")
+    Logger.info("#{log_prefix(data)} Foreman terminating in #{state}: #{inspect(reason)}")
     cleanup(data)
     :ok
   end
@@ -756,7 +800,7 @@ defmodule Deft.Job.Foreman do
   # Private functions
 
   defp relay_to_user(data, text) do
-    Logger.info("Foreman relaying ForemanAgent question to user")
+    Logger.info("#{log_prefix(data)} Foreman relaying ForemanAgent question to user")
 
     # Send to CLI if available
     if data.cli_pid do
@@ -989,12 +1033,14 @@ defmodule Deft.Job.Foreman do
         deliverable
       end
 
-    Logger.info("ForemanAgent requested spawning Lead for: #{inspect(deliverable[:name])}")
+    Logger.info(
+      "#{log_prefix(data)} ForemanAgent requested spawning Lead for: #{inspect(deliverable[:name])}"
+    )
 
     # Check if Lead already started for this deliverable
     if deliverable_already_started?(data, deliverable_id) do
       Logger.warning(
-        "Lead for deliverable #{deliverable_id} already started, ignoring spawn request"
+        "#{log_prefix(data)} Lead for deliverable #{deliverable_id} already started, ignoring spawn request"
       )
 
       :keep_state_and_data
@@ -1033,11 +1079,14 @@ defmodule Deft.Job.Foreman do
         })
         |> put_in([:lead_monitors, lead_id], monitor_ref)
 
-      Logger.info("Lead #{lead_id} started with PID #{inspect(lead_pid)} at #{worktree_path}")
+      Logger.info(
+        "#{log_prefix(data)} Lead #{lead_id} started with PID #{inspect(lead_pid)} at #{worktree_path}"
+      )
+
       {:ok, updated_data}
     else
       {:error, reason} ->
-        Logger.error("Failed to spawn Lead #{lead_id}: #{inspect(reason)}")
+        Logger.error("#{log_prefix(data)} Failed to spawn Lead #{lead_id}: #{inspect(reason)}")
         :error
     end
   end
@@ -1075,7 +1124,7 @@ defmodule Deft.Job.Foreman do
   defp do_abort_lead(lead_id, lead_pid, data) do
     # Stop Lead process
     Process.exit(lead_pid, :shutdown)
-    Logger.info("Aborted Lead #{lead_id}")
+    Logger.info("#{log_prefix(data)} Aborted Lead #{lead_id}")
 
     # Clean up monitor if present
     cleanup_lead_monitor(data.lead_monitors, lead_id)
@@ -1117,7 +1166,7 @@ defmodule Deft.Job.Foreman do
     # Parse /correct command and promote to site log if detected
     case String.trim(text) do
       "/correct " <> message when byte_size(message) > 0 ->
-        Logger.info("User correction detected: #{message}")
+        Logger.info("#{log_prefix(data)} User correction detected: #{message}")
         metadata = %{source: :user}
         promote_lead_message_to_site_log(:correction, message, metadata, data)
 
@@ -1147,7 +1196,7 @@ defmodule Deft.Job.Foreman do
   defp handle_lead_completion(type, metadata, state, data) do
     if type == :complete do
       lead_id = Map.get(metadata, :lead_id)
-      Logger.info("Lead #{lead_id} completed, removing from started_leads")
+      Logger.info("#{log_prefix(data)} Lead #{lead_id} completed, removing from started_leads")
 
       updated_data =
         data
@@ -1156,7 +1205,7 @@ defmodule Deft.Job.Foreman do
 
       # Check if all Leads are complete and transition to :verifying
       if state == :executing and all_leads_complete?(updated_data) do
-        Logger.info("All Leads complete, transitioning to :verifying")
+        Logger.info("#{log_prefix(data)} All Leads complete, transitioning to :verifying")
         {:next_state, :verifying, updated_data}
       else
         {:keep_state, updated_data}
@@ -1168,13 +1217,13 @@ defmodule Deft.Job.Foreman do
 
   defp do_fail_job_on_foreman_agent_crash(reason, data) do
     # ForemanAgent has crashed - fail the entire job with full cleanup
-    Logger.error("Failing job due to ForemanAgent crash: #{inspect(reason)}")
+    Logger.error("#{log_prefix(data)} Failing job due to ForemanAgent crash: #{inspect(reason)}")
 
     # Stop all running Leads
     Enum.each(data.leads, fn {lead_id, lead} ->
       if lead.pid && Process.alive?(lead.pid) do
         Process.exit(lead.pid, :shutdown)
-        Logger.info("Stopped Lead #{lead_id} due to ForemanAgent crash")
+        Logger.info("#{log_prefix(data)} Stopped Lead #{lead_id} due to ForemanAgent crash")
       end
     end)
 
@@ -1200,7 +1249,7 @@ defmodule Deft.Job.Foreman do
       working_dir: data.working_dir
     )
 
-    Logger.info("Cleaned up worktree for crashed Lead #{lead_id}")
+    Logger.info("#{log_prefix(data)} Cleaned up worktree for crashed Lead #{lead_id}")
 
     # Clean up monitor
     cleanup_lead_monitor(data.lead_monitors, lead_id)
@@ -1301,7 +1350,7 @@ defmodule Deft.Job.Foreman do
 
       Deft.Agent.prompt(data.foreman_agent_pid, prompt)
     else
-      Logger.warning("ForemanAgent not available to receive research results")
+      Logger.warning("#{log_prefix(data)} ForemanAgent not available to receive research results")
     end
   end
 
@@ -1338,7 +1387,7 @@ defmodule Deft.Job.Foreman do
   defp present_plan_to_user(data, deliverables) do
     plan_summary = format_plan_for_user(deliverables)
 
-    Logger.info("Presenting plan to user:\n#{plan_summary}")
+    Logger.info("#{log_prefix(data)} Presenting plan to user:\n#{plan_summary}")
 
     # Send to CLI if available
     if data.cli_pid do
