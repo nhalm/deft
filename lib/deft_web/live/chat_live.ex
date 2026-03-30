@@ -458,9 +458,6 @@ defmodule DeftWeb.ChatLive do
 
   @impl true
   def handle_event("keydown", params, socket) do
-    id_prefix = String.slice(socket.assigns.session_id, 0, 8)
-    Logger.debug("[Chat:#{id_prefix}] Event: keydown")
-
     key = params["key"]
     ctrl = params["ctrlKey"] || false
     socket = handle_vim_key(socket, key, ctrl)
