@@ -16,7 +16,3 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
-
-## logging v0.5
-
-- Move "Session loaded" log out of `Store.load/2` in `lib/deft/session/store.ex`: remove the `Logger.info` from `load/2`, add `Logger.info("[Session] Session resumed: #{session_id}, #{length(entries)} entries")` in `resume/2` after a successful load. This stops `list_sessions` from spamming on startup.

@@ -200,9 +200,6 @@ defmodule Deft.Session.Store do
           |> Enum.map(&parse_entry/1)
           |> Enum.reject(&is_nil/1)
 
-        require Logger
-        Logger.info("[Session] Session loaded: #{session_id}, #{length(entries)} entries")
-
         {:ok, entries}
 
       {:error, reason} = error ->
@@ -246,6 +243,9 @@ defmodule Deft.Session.Store do
 
     case load(session_id, working_dir) do
       {:ok, entries} ->
+        require Logger
+        Logger.info("[Session] Session resumed: #{session_id}, #{length(entries)} entries")
+
         state = reconstruct_state(entries)
 
         # Load OM snapshot from separate _om.jsonl file or fall back to observation entries (spec section 1.3)
