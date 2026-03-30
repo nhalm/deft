@@ -77,6 +77,7 @@ defmodule Deft.Job.Foreman do
       site_log_pid: site_log_pid,
       leads: %{},
       lead_monitors: %{},
+      foreman_agent_monitor_ref: nil,
       research_tasks: [],
       plan: nil,
       blocked_leads: %{},
@@ -278,7 +279,15 @@ defmodule Deft.Job.Foreman do
   # Set ForemanAgent PID
   def handle_event(:cast, {:set_foreman_agent, agent_pid}, state, data) do
     Logger.debug("ForemanAgent PID set: #{inspect(agent_pid)}")
-    data = Map.put(data, :foreman_agent_pid, agent_pid)
+
+    # Monitor the ForemanAgent so we can detect crashes
+    monitor_ref = Process.monitor(agent_pid)
+    Logger.debug("Monitoring ForemanAgent with ref: #{inspect(monitor_ref)}")
+
+    data =
+      data
+      |> Map.put(:foreman_agent_pid, agent_pid)
+      |> Map.put(:foreman_agent_monitor_ref, monitor_ref)
 
     # If we're in :asking and didn't send the initial prompt yet, subscribe and send it now
     if state == :asking and data.prompt do
@@ -621,13 +630,23 @@ defmodule Deft.Job.Foreman do
 
   # Handle Lead process DOWN messages
   def handle_event(:info, {:DOWN, ref, :process, pid, reason}, state, data) do
-    case find_lead_by_monitor(data.lead_monitors, ref) do
-      {:ok, lead_id} ->
+    cond do
+      # Check if ForemanAgent crashed
+      ref == data.foreman_agent_monitor_ref ->
+        Logger.error(
+          "ForemanAgent (#{inspect(pid)}) crashed: #{inspect(reason)}. Failing job with cleanup."
+        )
+
+        do_fail_job_on_foreman_agent_crash(reason, data)
+
+      # Check if a Lead crashed
+      match?({:ok, _lead_id}, find_lead_by_monitor(data.lead_monitors, ref)) ->
+        {:ok, lead_id} = find_lead_by_monitor(data.lead_monitors, ref)
         Logger.warning("Lead #{lead_id} (#{inspect(pid)}) crashed: #{inspect(reason)}")
         do_handle_lead_crash(lead_id, state, data)
 
-      :not_found ->
-        # Monitor might be for another process (e.g., Runner)
+      # Monitor might be for another process (e.g., Runner)
+      true ->
         :keep_state_and_data
     end
   end
@@ -1111,6 +1130,33 @@ defmodule Deft.Job.Foreman do
     else
       :keep_state_and_data
     end
+  end
+
+  defp do_fail_job_on_foreman_agent_crash(reason, data) do
+    # ForemanAgent has crashed - fail the entire job with full cleanup
+    Logger.error("Failing job due to ForemanAgent crash: #{inspect(reason)}")
+
+    # Stop all running Leads
+    Enum.each(data.leads, fn {lead_id, lead} ->
+      if lead.pid && Process.alive?(lead.pid) do
+        Process.exit(lead.pid, :shutdown)
+        Logger.info("Stopped Lead #{lead_id} due to ForemanAgent crash")
+      end
+    end)
+
+    # Clean up all Lead worktrees
+    Enum.each(data.leads, fn {lead_id, _lead} ->
+      GitJob.cleanup_lead_worktree(
+        lead_id: lead_id,
+        working_dir: data.working_dir
+      )
+    end)
+
+    # Perform general cleanup (site log, etc.)
+    cleanup(data)
+
+    # Stop the Foreman with an error
+    {:stop, {:foreman_agent_crashed, reason}, data}
   end
 
   defp do_handle_lead_crash(lead_id, _state, data) do

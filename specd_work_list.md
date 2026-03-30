@@ -17,7 +17,3 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## orchestration v0.8
-
-- Add ForemanAgent monitoring: call `Process.monitor` on ForemanAgent PID (on `{:set_foreman_agent, pid}` cast), handle `:DOWN` in `handle_event(:info, ...)` by failing the job with full cleanup — currently ForemanAgent crash leaves Foreman with stale PID, all prompts silently fail, job hangs permanently (foreman.ex:278-280, 604-613)
-

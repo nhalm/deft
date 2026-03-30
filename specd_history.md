@@ -1,4 +1,5 @@
 # History
+- **orchestration v0.8 (2026-03-30):** Add ForemanAgent monitoring: call `Process.monitor` on ForemanAgent PID (on `{:set_foreman_agent, pid}` cast), handle `:DOWN` in `handle_event(:info, ...)` by failing the job with full cleanup — currently ForemanAgent crash leaves Foreman with stale PID, all prompts silently fail, job hangs permanently (foreman.ex:278-280, 604-613)
 - **orchestration v0.9 (2026-03-30):** Update `do_handle_lead_crash` to send crash notification to ForemanAgent via prompt (so agent can decide via `fail_deliverable` tool) instead of silently removing from tracking
 - **orchestration v0.9 (2026-03-30):** Update `all_leads_complete?` to return true when `completed_leads + failed_leads == total_leads` (currently only checks completed_leads, causing hangs when Leads crash)
 - **orchestration v0.9 (2026-03-30):** Add `fail_deliverable` orchestration tool: ForemanAgent can call it when a Lead crashes to decide whether to skip the deliverable or retry with a fresh Lead. Tool sends message to Foreman which moves Lead from started_leads to failed_leads.
