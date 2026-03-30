@@ -907,6 +907,12 @@ defmodule Deft.Agent do
       retry_count = data.retry_count + 1
       delay = data.retry_delay
 
+      error_message = Map.get(error_payload, :message, "Unknown error")
+
+      Logger.warning(
+        "#{log_prefix(data.session_id)} Stream error (retry #{retry_count}/#{max_retries}): #{error_message}"
+      )
+
       # Send delayed message to self for retry
       Process.send_after(self(), {:retry_stream}, delay)
 
