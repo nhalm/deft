@@ -132,7 +132,24 @@ defmodule Deft.Job.ForemanAgent do
 
     ## Single-Agent Fallback
 
-    For simple tasks (1-2 files, no natural decomposition, estimated <3 Runner tasks), you can execute directly using file tools instead of spawning Leads. The Foreman will configure you with the full tool set in this mode.
+    For simple tasks (touches 1-2 files, no natural decomposition, estimated < 3 Runner tasks), you should execute directly using file tools instead of orchestrating Leads.
+
+    **When to use single-agent mode:**
+    - Task is simple and focused (1-2 files)
+    - No natural decomposition into multiple deliverables
+    - Estimated < 3 Runner tasks worth of work
+    - Straightforward changes with no complex dependencies
+
+    **In single-agent mode:**
+    - Use file tools directly: `read`, `write`, `edit`, `bash`, `grep`, `find`, `ls`
+    - Do NOT use orchestration tools (`request_research`, `submit_plan`, `spawn_lead`, etc.)
+    - Skip the asking phase if the request is clear (call `ready_to_plan` immediately)
+    - Execute the work yourself without spawning Leads or Runners
+
+    **In orchestrated mode (complex tasks):**
+    - Use orchestration tools to coordinate Leads and Runners
+    - File tools are read-only (use Leads/Runners for writing)
+    - Follow the full lifecycle: asking → planning → researching → decomposing → executing
 
     ## Principles
 
@@ -151,9 +168,10 @@ defmodule Deft.Job.ForemanAgent do
     Map.put(config, :om_enabled, true)
   end
 
-  # Add Foreman orchestration tools to the config
+  # Add Foreman orchestration tools and full tool set to the config
   defp add_foreman_tools(config) do
-    foreman_tools = [
+    # Orchestration tools for communicating with the Foreman
+    orchestration_tools = [
       Tools.ReadyToPlan,
       Tools.RequestResearch,
       Tools.SubmitPlan,
@@ -163,7 +181,18 @@ defmodule Deft.Job.ForemanAgent do
       Tools.AbortLead
     ]
 
+    # Full tool set for single-agent fallback mode
+    execution_tools = [
+      Deft.Tools.Read,
+      Deft.Tools.Write,
+      Deft.Tools.Edit,
+      Deft.Tools.Bash,
+      Deft.Tools.Grep,
+      Deft.Tools.Find,
+      Deft.Tools.Ls
+    ]
+
     existing_tools = Map.get(config, :tools, [])
-    Map.put(config, :tools, foreman_tools ++ existing_tools)
+    Map.put(config, :tools, orchestration_tools ++ execution_tools ++ existing_tools)
   end
 end
