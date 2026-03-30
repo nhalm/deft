@@ -1,4 +1,5 @@
 # History
+- **orchestration v0.7 (2026-03-30):** Pass RateLimiter PID to each LeadAgent through config when starting it
 - **orchestration v0.7 (2026-03-30):** Pass RateLimiter PID to ForemanAgent through config when starting it in `Deft.Job.Supervisor`
 - **orchestration v0.7 (2026-03-30):** Fix deliverable string/atom key mismatch: normalize deliverable and dependency keys from strings to atoms when storing plan in Foreman, fixing `deliverable_already_started?`, `build_system_prompt`, and `build_planning_context` access
 - **orchestration v0.7 (2026-03-30):** Add read-only tools (Read, Grep, Find, Ls) to `LeadAgent.add_lead_tools/1` — currently only orchestration tools are added, so the LeadAgent's system prompt promises read/grep/find/ls but they error at runtime with "Tool not found"

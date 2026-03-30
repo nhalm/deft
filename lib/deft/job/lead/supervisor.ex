@@ -40,6 +40,7 @@ defmodule Deft.Job.Lead.Supervisor do
     lead_id = Keyword.fetch!(opts, :lead_id)
     session_id = Keyword.fetch!(opts, :session_id)
     config = Keyword.fetch!(opts, :config)
+    rate_limiter_pid = Keyword.fetch!(opts, :rate_limiter_pid)
     working_dir = Keyword.fetch!(opts, :working_dir)
     worktree_path = Keyword.fetch!(opts, :worktree_path)
     deliverable = Keyword.fetch!(opts, :deliverable)
@@ -78,6 +79,7 @@ defmodule Deft.Job.Lead.Supervisor do
                session_id: lead_agent_session_id,
                config: config,
                parent_pid: lead_name,
+               rate_limiter: rate_limiter_pid,
                working_dir: working_dir,
                worktree_path: worktree_path,
                deliverable: deliverable,

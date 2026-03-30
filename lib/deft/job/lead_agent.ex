@@ -31,6 +31,7 @@ defmodule Deft.Job.LeadAgent do
   - `:session_id` — Required. Lead session identifier (e.g., "job-123-lead-a").
   - `:config` — Required. Configuration map.
   - `:parent_pid` — Required. PID of the Lead orchestrator.
+  - `:rate_limiter` — Optional. PID of RateLimiter GenServer for orchestrated jobs.
   - `:working_dir` — Required. Working directory for the project.
   - `:worktree_path` — Required. Path to Lead's git worktree.
   - `:deliverable` — Required. Deliverable assignment map.
@@ -41,6 +42,7 @@ defmodule Deft.Job.LeadAgent do
     session_id = Keyword.fetch!(opts, :session_id)
     config = Keyword.fetch!(opts, :config)
     parent_pid = Keyword.fetch!(opts, :parent_pid)
+    rate_limiter = Keyword.get(opts, :rate_limiter)
     working_dir = Keyword.fetch!(opts, :working_dir)
     worktree_path = Keyword.fetch!(opts, :worktree_path)
     deliverable = Keyword.fetch!(opts, :deliverable)
@@ -74,6 +76,9 @@ defmodule Deft.Job.LeadAgent do
     ]
 
     agent_opts = if name, do: Keyword.put(agent_opts, :name, name), else: agent_opts
+
+    agent_opts =
+      if rate_limiter, do: Keyword.put(agent_opts, :rate_limiter, rate_limiter), else: agent_opts
 
     Agent.start_link(agent_opts)
   end
