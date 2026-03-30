@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.7
 
-- Implement `:asking` phase in Foreman: relay ForemanAgent text responses to user as questions, relay user answers back to ForemanAgent as prompts, transition to `:planning` on `{:agent_action, :ready_to_plan}`
 - Wire Foreman `handle_info` to process `{:agent_action, ...}` messages from ForemanAgent — dispatch to research spawning, plan presentation, Lead lifecycle, and steering
 - Implement Foreman→ForemanAgent prompt flow: Foreman calls `Deft.Agent.prompt/2` with structured context (research results, Lead progress, contracts, user messages)
 - Create `Deft.Job.Lead` gen_statem with 4 orchestration states (`:planning`, `:executing`, `:verifying`, `:complete`) — no agent loop

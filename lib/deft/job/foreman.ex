@@ -155,14 +155,25 @@ defmodule Deft.Job.Foreman do
   def handle_event(:enter, _old_state, :asking, data) do
     Logger.info("Foreman entering :asking phase")
 
-    # Send initial prompt to ForemanAgent to start Q&A
+    # Subscribe to ForemanAgent events to receive text responses
     if data.foreman_agent_pid do
+      case Registry.register(Deft.Registry, {:session, data.session_id}, []) do
+        {:ok, _pid} ->
+          Logger.debug("Foreman subscribed to ForemanAgent events")
+
+        {:error, {:already_registered, _pid}} ->
+          Logger.debug("Foreman already subscribed to ForemanAgent events")
+      end
+
       Deft.Agent.prompt(data.foreman_agent_pid, data.prompt)
     else
       Logger.warning("ForemanAgent not yet available, will prompt when set")
     end
 
-    :keep_state_and_data
+    # Initialize text accumulation buffer for asking phase
+    data = Map.put(data, :asking_text_buffer, "")
+
+    {:keep_state, data}
   end
 
   def handle_event(:enter, _old_state, :planning, data) do
@@ -214,17 +225,50 @@ defmodule Deft.Job.Foreman do
     Logger.debug("ForemanAgent PID set: #{inspect(agent_pid)}")
     data = Map.put(data, :foreman_agent_pid, agent_pid)
 
-    # If we're in :asking and didn't send the initial prompt yet, send it now
+    # If we're in :asking and didn't send the initial prompt yet, subscribe and send it now
     if state == :asking and data.prompt do
+      case Registry.register(Deft.Registry, {:session, data.session_id}, []) do
+        {:ok, _pid} ->
+          Logger.debug("Foreman subscribed to ForemanAgent events")
+
+        {:error, {:already_registered, _pid}} ->
+          Logger.debug("Foreman already subscribed to ForemanAgent events")
+      end
+
       Deft.Agent.prompt(agent_pid, data.prompt)
     end
 
     {:keep_state, data}
   end
 
+  # Handle agent events from ForemanAgent during asking phase
+  def handle_event(:info, {:agent_event, {:text_delta, delta}}, :asking, data) do
+    # Accumulate text from ForemanAgent
+    current_buffer = Map.get(data, :asking_text_buffer, "")
+    new_buffer = current_buffer <> delta
+    data = Map.put(data, :asking_text_buffer, new_buffer)
+    {:keep_state, data}
+  end
+
+  def handle_event(:info, {:agent_event, {:state_change, :idle}}, :asking, data) do
+    # ForemanAgent completed a message - relay accumulated text to user
+    text = Map.get(data, :asking_text_buffer, "")
+
+    if text != "" do
+      relay_to_user(data, text)
+      # Clear buffer for next question
+      data = Map.put(data, :asking_text_buffer, "")
+      {:keep_state, data}
+    else
+      :keep_state_and_data
+    end
+  end
+
   # Handle agent actions from ForemanAgent orchestration tools
   def handle_event(:info, {:agent_action, :ready_to_plan}, :asking, data) do
     Logger.info("ForemanAgent ready to plan, transitioning to :planning")
+    # Unsubscribe from ForemanAgent events when leaving :asking
+    Registry.unregister(Deft.Registry, {:session, data.session_id})
     {:next_state, :planning, data}
   end
 
@@ -364,6 +408,22 @@ defmodule Deft.Job.Foreman do
   end
 
   # Private functions
+
+  defp relay_to_user(data, text) do
+    Logger.info("Foreman relaying ForemanAgent question to user")
+
+    # Send to CLI if available
+    if data.cli_pid do
+      send(data.cli_pid, {:foreman_question, text})
+    end
+
+    # Broadcast to Registry for web UI and other subscribers
+    Registry.dispatch(Deft.Registry, {:job, data.session_id}, fn entries ->
+      for {pid, _} <- entries do
+        send(pid, {:foreman_question, text})
+      end
+    end)
+  end
 
   defp build_planning_context(data) do
     """
