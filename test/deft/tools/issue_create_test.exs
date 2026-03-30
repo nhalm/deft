@@ -35,12 +35,6 @@ defmodule Deft.Tools.IssueCreateTest do
     }
 
     on_exit(fn ->
-      pid = Process.whereis(Deft.Issues)
-
-      if pid && Process.alive?(pid) do
-        GenServer.stop(Deft.Issues)
-      end
-
       File.rm_rf(working_dir)
 
       if Process.alive?(emit_agent) do
