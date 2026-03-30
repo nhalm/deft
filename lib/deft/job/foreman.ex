@@ -141,7 +141,7 @@ defmodule Deft.Job.Foreman do
       |> resolve_site_log_pid()
       |> setup_foreman_agent_monitoring()
 
-    Logger.info("#{log_prefix(data)} Foreman started for job #{data.session_id}")
+    Logger.info("#{log_prefix(data)} Foreman started for job #{data.session_id}: #{data.prompt}")
 
     # Start in :asking phase if auto-approve is not set, otherwise skip to :planning
     auto_approve = Map.get(data.config, :auto_approve_all, false)
