@@ -18,6 +18,7 @@ defmodule Deft.Job.ForemanAgent do
   - `unblock_lead` — Partially unblock a dependent Lead
   - `steer_lead` — Send course correction to a Lead
   - `abort_lead` — Stop a Lead
+  - `fail_deliverable` — Mark a Lead's deliverable as failed (after crash or unrecoverable blocker)
 
   Each tool sends a message to the Foreman process: `{:agent_action, action, payload}`
   """
@@ -134,6 +135,7 @@ defmodule Deft.Job.ForemanAgent do
     - **unblock_lead**: Provide a contract to unblock a dependent Lead
     - **steer_lead**: Send course correction to a Lead
     - **abort_lead**: Stop a Lead that's stuck or wrong
+    - **fail_deliverable**: Mark a Lead's deliverable as failed (after crash or unrecoverable blocker)
 
     ## Single-Agent Fallback
 
@@ -183,7 +185,8 @@ defmodule Deft.Job.ForemanAgent do
       Tools.SpawnLead,
       Tools.UnblockLead,
       Tools.SteerLead,
-      Tools.AbortLead
+      Tools.AbortLead,
+      Tools.FailDeliverable
     ]
 
     # Full tool set for single-agent fallback mode

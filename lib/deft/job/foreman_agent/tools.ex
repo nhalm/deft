@@ -13,7 +13,8 @@ defmodule Deft.Job.ForemanAgent.Tools do
     SpawnLead,
     UnblockLead,
     SteerLead,
-    AbortLead
+    AbortLead,
+    FailDeliverable
   }
 
   @doc """
@@ -27,7 +28,8 @@ defmodule Deft.Job.ForemanAgent.Tools do
       SpawnLead,
       UnblockLead,
       SteerLead,
-      AbortLead
+      AbortLead,
+      FailDeliverable
     ]
   end
 end

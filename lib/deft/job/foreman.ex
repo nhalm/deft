@@ -82,6 +82,7 @@ defmodule Deft.Job.Foreman do
       blocked_leads: %{},
       started_leads: MapSet.new(),
       completed_leads: MapSet.new(),
+      failed_leads: MapSet.new(),
       job_start_time: System.monotonic_time(:millisecond),
       cost_ceiling_reached: false
     }
@@ -498,6 +499,24 @@ defmodule Deft.Job.Foreman do
           Logger.warning("Cannot abort Lead #{lead_id}: Lead PID not available")
           :keep_state_and_data
         end
+    end
+  end
+
+  def handle_event(:info, {:agent_action, :fail_deliverable, lead_id}, :executing, data) do
+    Logger.info("ForemanAgent marking deliverable for Lead #{lead_id} as failed")
+
+    # Move Lead from started_leads to failed_leads
+    updated_data =
+      data
+      |> Map.update!(:started_leads, &MapSet.delete(&1, lead_id))
+      |> Map.update!(:failed_leads, &MapSet.put(&1, lead_id))
+
+    # Check if all Leads are complete (including failed ones) and transition to :verifying
+    if all_leads_complete?(updated_data) do
+      Logger.info("All Leads complete (including failed), transitioning to :verifying")
+      {:next_state, :verifying, updated_data}
+    else
+      {:keep_state, updated_data}
     end
   end
 
@@ -1028,13 +1047,12 @@ defmodule Deft.Job.Foreman do
   end
 
   defp all_leads_complete?(data) do
-    # All Leads are complete when the number of completed Leads equals
+    # All Leads are complete when the number of completed + failed Leads equals
     # the number of deliverables in the plan.
-    # This ensures we don't transition to :verifying if a Lead crashed
-    # (crashed Leads are removed from started_leads but NOT added to completed_leads)
+    # This counts both successfully completed Leads and Leads marked as failed via fail_deliverable.
     if data.plan && data.plan.deliverables do
       expected_count = length(data.plan.deliverables)
-      actual_count = MapSet.size(data.completed_leads)
+      actual_count = MapSet.size(data.completed_leads) + MapSet.size(data.failed_leads)
       actual_count == expected_count
     else
       # Fallback: if no plan exists yet, check if started_leads is empty
@@ -1107,16 +1125,29 @@ defmodule Deft.Job.Foreman do
     # Clean up monitor
     cleanup_lead_monitor(data.lead_monitors, lead_id)
 
-    # Remove from tracking
+    # Remove from tracking (but keep in started_leads for now - will be moved to failed_leads
+    # when ForemanAgent calls fail_deliverable)
     updated_data =
       data
       |> Map.update!(:leads, &Map.delete(&1, lead_id))
-      |> Map.update!(:started_leads, &MapSet.delete(&1, lead_id))
       |> Map.update!(:blocked_leads, &Map.delete(&1, lead_id))
       |> Map.update!(:lead_monitors, &Map.delete(&1, lead_id))
 
-    # DO NOT transition to :verifying after a crash - a crashed Lead is not a completed Lead
-    # The job should remain in its current state and let the Foreman/user handle the failure
+    # Notify ForemanAgent about the crash so it can decide whether to retry or fail
+    crash_notification = """
+    Lead '#{lead_id}' has crashed and its worktree has been cleaned up.
+
+    You must decide how to handle this:
+    - Call `fail_deliverable` with lead_id='#{lead_id}' to mark this deliverable as failed and move forward
+    - OR call `spawn_lead` to retry with a fresh Lead for this deliverable
+
+    Consider the nature of the crash and whether a retry is likely to succeed.
+    """
+
+    if data.foreman_agent_pid do
+      Deft.Agent.prompt(data.foreman_agent_pid, crash_notification)
+    end
+
     {:keep_state, updated_data}
   end
 
