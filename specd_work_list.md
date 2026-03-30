@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.7
 
-- Fix rate limiter provider key mismatch: Runner calls `RateLimiter.request/reconcile` with `"anthropic"` (string from `:provider_name` config), Agent calls with `Deft.Provider.Anthropic` (module from `:provider` config) — creates separate buckets, rate limiter never enforces shared limits across Runners and Agents (runner.ex:239,188 vs agent.ex:839,1009-1012)
 - Add `/correct` command handling in Foreman: parse `/correct <message>` from user prompts, write correction to site log via `promote_lead_message_to_site_log(:correction, ...)`, then forward to ForemanAgent — currently all user prompts are forwarded as-is with no site log write (foreman.ex:503-545, spec sections 7.2, 7.3, 8.2)
 - Add cost ceiling monitoring in Foreman: handle `{:rate_limiter, :cost_warning, cost}` messages from RateLimiter, pause execution when approaching ceiling, notify user for approval — currently no handler exists and cost warnings are silently dropped (spec section 4.6, 7.2; rate_limiter.ex:646-651 sends the message but foreman.ex has no receiver)
 

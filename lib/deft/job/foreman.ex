@@ -1045,12 +1045,10 @@ defmodule Deft.Job.Foreman do
 
   defp run_research_runner(topic, data) do
     runner_model = Map.get(data.config, :job_research_runner_model, "claude-sonnet-4")
-    provider_name = Map.get(data.config, :provider, "anthropic")
 
     runner_config = %{
       model: runner_model,
       provider: Deft.Provider.Anthropic,
-      provider_name: provider_name,
       temperature: 0.7
     }
 
