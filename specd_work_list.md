@@ -19,5 +19,4 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## logging v0.6
 
-- Add task summary to "Lead spawned" log in `lib/deft/job/foreman.ex:1088-1090`: include `deliverable[:name]` in the log message — per §5 Info level "Lead spawned/completed (lead ID, task summary)"
 - Add task summary to "Lead completed" log in `lib/deft/job/foreman.ex:1205`: include the deliverable name from `data.leads[lead_id].deliverable[:name]` — per §5 Info level "Lead spawned/completed (lead ID, task summary)"

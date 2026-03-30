@@ -1085,9 +1085,7 @@ defmodule Deft.Job.Foreman do
         })
         |> put_in([:lead_monitors, lead_id], monitor_ref)
 
-      Logger.info(
-        "#{log_prefix(data)} Lead #{lead_id} started with PID #{inspect(lead_pid)} at #{worktree_path}"
-      )
+      Logger.info("#{log_prefix(data)} Lead spawned: #{lead_id}, task: #{deliverable[:name]}")
 
       {:ok, updated_data}
     else
