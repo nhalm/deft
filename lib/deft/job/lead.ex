@@ -454,6 +454,27 @@ defmodule Deft.Job.Lead do
     :keep_state_and_data
   end
 
+  # Handle Foreman contract (partial dependency unblocking)
+  def handle_event(:info, {:foreman_contract, contract}, state, data)
+      when state in [:planning, :executing] do
+    Logger.info("Lead #{data.lead_id} - Received dependency contract from Foreman")
+
+    # Forward contract to LeadAgent as a prompt
+    if data.lead_agent_pid do
+      contract_prompt = """
+      DEPENDENCY CONTRACT AVAILABLE:
+      #{inspect(contract, pretty: true)}
+
+      A dependency you were waiting for has provided this interface contract.
+      You can now proceed with work that depends on this interface.
+      """
+
+      Deft.Agent.prompt(data.lead_agent_pid, contract_prompt)
+    end
+
+    :keep_state_and_data
+  end
+
   # Fallback for unexpected events
   def handle_event(event_type, event_content, state, data) do
     Logger.warning(
