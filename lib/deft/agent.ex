@@ -219,7 +219,7 @@ defmodule Deft.Agent do
 
   # Handle deferred idle transition from executing_tools enter handler
   def handle_event(:timeout, :no_tool_calls, :executing_tools, data) do
-    handle_idle_transition(data)
+    handle_idle_transition(data, :executing_tools)
   end
 
   def handle_event(:cast, {:prompt, text}, :idle, data) do
@@ -327,7 +327,7 @@ defmodule Deft.Agent do
     else
       # User declined to continue - transition to idle
       broadcast_event(data.session_id, {:turn_limit_declined})
-      handle_idle_transition(data)
+      handle_idle_transition(data, :executing_tools)
     end
   end
 
@@ -427,7 +427,7 @@ defmodule Deft.Agent do
             stream_start_time: nil
         }
 
-        handle_idle_transition(new_data)
+        handle_idle_transition(new_data, :calling)
 
       ref == data.compaction_task_ref ->
         # Compaction task failed - log and continue without compaction
@@ -549,7 +549,7 @@ defmodule Deft.Agent do
         )
 
         new_data = %{data | tool_tasks: []}
-        handle_idle_transition(new_data)
+        handle_idle_transition(new_data, :executing_tools)
 
       ref == data.compaction_task_ref ->
         # Compaction task failed - log and continue without compaction
@@ -620,7 +620,10 @@ defmodule Deft.Agent do
 
       {:error, reason} ->
         broadcast_event(data.session_id, {:error, reason})
-        if from_state == :idle, do: :keep_state_and_data, else: handle_idle_transition(data)
+
+        if from_state == :idle,
+          do: :keep_state_and_data,
+          else: handle_idle_transition(data, from_state)
     end
   end
 
@@ -736,7 +739,7 @@ defmodule Deft.Agent do
         retry_delay: 1000
     }
 
-    handle_idle_transition(new_data)
+    handle_idle_transition(new_data, :calling)
   end
 
   defp get_context_window(config) do
@@ -1088,7 +1091,7 @@ defmodule Deft.Agent do
 
     if Enum.empty?(tool_calls) do
       # No tool calls — go directly to idle (skip executing_tools state)
-      handle_idle_transition(new_data)
+      handle_idle_transition(new_data, :streaming)
     else
       broadcast_event(data.session_id, {:state_change, :executing_tools})
 
@@ -1226,7 +1229,7 @@ defmodule Deft.Agent do
     end
   end
 
-  defp handle_idle_transition(data) do
+  defp handle_idle_transition(data, from_state) do
     data_with_saved = save_unsaved_messages(data)
 
     case :queue.out(data_with_saved.prompt_queue) do
@@ -1239,7 +1242,7 @@ defmodule Deft.Agent do
         |> then(&process_queued_message(&1, new_queue, data_with_saved))
 
       {:empty, _} ->
-        complete_turn_and_transition_idle(data_with_saved)
+        complete_turn_and_transition_idle(data_with_saved, from_state)
     end
   end
 
@@ -1261,11 +1264,11 @@ defmodule Deft.Agent do
     }
   end
 
-  defp complete_turn_and_transition_idle(data) do
+  defp complete_turn_and_transition_idle(data, from_state) do
     turn_duration_ms = calculate_turn_duration(data)
     Logger.info("#{log_prefix(data.session_id)} Turn complete (#{turn_duration_ms}ms)")
     broadcast_event(data.session_id, {:state_change, :idle})
-    Logger.debug("#{log_prefix(data.session_id)} State transition: executing_tools -> idle")
+    Logger.debug("#{log_prefix(data.session_id)} State transition: #{from_state} -> idle")
     {:next_state, :idle, data}
   end
 

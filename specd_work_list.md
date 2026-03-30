@@ -16,7 +16,3 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
-
-## logging v0.6
-
-- Fix `complete_turn_and_transition_idle/1` in `lib/deft/agent.ex:1268` to log the actual source state instead of hardcoded `"executing_tools -> idle"`: `handle_idle_transition` is called from `:calling`, `:streaming`, and `:executing_tools` states, but the debug log always says `executing_tools -> idle` — spec §4 requires accurate state transitions at debug level
