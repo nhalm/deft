@@ -391,12 +391,18 @@ defmodule Deft.Agent do
            config_with_session,
            compacted_data.rate_limiter
          ) do
-      {:ok, stream_ref} ->
+      {:ok, stream_ref, updated_config} ->
         # Monitor the stream process to detect crashes (only if stream_ref is a PID)
         monitor_ref = if is_pid(stream_ref), do: Process.monitor(stream_ref), else: nil
 
-        # Update stream ref, keep retry count
-        new_data = %{compacted_data | stream_ref: stream_ref, stream_monitor_ref: monitor_ref}
+        # Update stream ref and config (with estimated tokens if rate limited), keep retry count
+        new_data = %{
+          compacted_data
+          | stream_ref: stream_ref,
+            stream_monitor_ref: monitor_ref,
+            config: updated_config
+        }
+
         {:keep_state, new_data}
 
       {:error, reason} ->
@@ -603,9 +609,11 @@ defmodule Deft.Agent do
            config_with_session,
            data.rate_limiter
          ) do
-      {:ok, stream_ref} ->
+      {:ok, stream_ref, updated_config} ->
         log_provider_stream_started(data.session_id, provider, config_with_session)
         new_data = build_calling_state_data(data, stream_ref, opts)
+        # Update config with estimated tokens if rate limited
+        new_data = %{new_data | config: updated_config}
         broadcast_event(data.session_id, {:state_change, :calling})
         Logger.debug("#{log_prefix(data.session_id)} State transition: #{from_state} -> calling")
         {:next_state, :calling, new_data}
@@ -818,32 +826,43 @@ defmodule Deft.Agent do
     {:error, :no_provider}
   end
 
+  defp call_provider_stream(provider, messages, tools, config, nil) do
+    # No rate limiter - proceed directly
+    wrap_stream_result(provider.stream(messages, tools, config), config)
+  end
+
   defp call_provider_stream(provider, messages, tools, config, rate_limiter) do
-    # If rate_limiter is configured, request capacity before calling provider
-    if rate_limiter do
-      estimated_tokens = estimate_message_tokens(messages)
-      # Default priority for agent calls
-      priority = 1
+    # Rate limiter configured - request capacity first
+    estimated_tokens = estimate_message_tokens(messages)
+    priority = 1
 
-      case GenServer.call(
-             rate_limiter,
-             {:request, provider, estimated_tokens, priority},
-             :infinity
-           ) do
-        {:ok, estimated_tokens} ->
-          # Store estimated tokens in config for reconciliation
-          config_with_estimate = Map.put(config, :_estimated_tokens, estimated_tokens)
-          provider.stream(messages, tools, config_with_estimate)
+    case request_rate_limit(rate_limiter, provider, estimated_tokens, priority) do
+      {:ok, estimated_tokens} ->
+        config_with_estimate = Map.put(config, :_estimated_tokens, estimated_tokens)
 
-        {:error, reason} = error ->
-          Logger.warning("Rate limiter denied request: #{inspect(reason)}")
-          error
-      end
-    else
-      # No rate limiter - proceed directly
-      provider.stream(messages, tools, config)
+        wrap_stream_result(
+          provider.stream(messages, tools, config_with_estimate),
+          config_with_estimate
+        )
+
+      {:error, _reason} = error ->
+        error
     end
   end
+
+  defp request_rate_limit(rate_limiter, provider, estimated_tokens, priority) do
+    case GenServer.call(rate_limiter, {:request, provider, estimated_tokens, priority}, :infinity) do
+      {:ok, _estimated_tokens} = ok ->
+        ok
+
+      {:error, reason} = error ->
+        Logger.warning("Rate limiter denied request: #{inspect(reason)}")
+        error
+    end
+  end
+
+  defp wrap_stream_result({:ok, stream_ref}, config), do: {:ok, stream_ref, config}
+  defp wrap_stream_result(error, _config), do: error
 
   # Notify OM.State about new messages added
   # Per spec section 3, called after each turn with new messages
