@@ -196,9 +196,9 @@ defmodule Deft.Job.RateLimiter do
   end
 
   # Priority levels (higher number = higher priority)
-  @priority_foreman 3
+  @priority_foreman_agent 3
   @priority_runner 2
-  @priority_lead 1
+  @priority_lead_agent 1
 
   # Starvation protection threshold (milliseconds)
   @starvation_threshold_ms 10_000
@@ -248,14 +248,14 @@ defmodule Deft.Job.RateLimiter do
   - job_id: The job identifier for the RateLimiter instance
   - provider: Provider name (e.g., "anthropic")
   - messages: List of messages (used for token estimation)
-  - caller_type: One of :foreman, :runner, or :lead (determines priority)
+  - caller_type: One of :foreman_agent, :runner, or :lead_agent (determines priority)
   - config: Optional config map (reserved for future use)
 
   ## Returns
   - {:ok, estimated_tokens} - Permission granted, tokens deducted
   - {:error, reason} - Failed to get permission
   """
-  def request(job_id, provider, messages, caller_type \\ :lead, _config \\ %{}) do
+  def request(job_id, provider, messages, caller_type \\ :lead_agent, _config \\ %{}) do
     estimated_tokens = estimate_tokens(messages)
     priority = priority_for_caller(caller_type)
     GenServer.call(via_tuple(job_id), {:request, provider, estimated_tokens, priority}, :infinity)
@@ -693,10 +693,10 @@ defmodule Deft.Job.RateLimiter do
 
   defp estimate_content_block_tokens(_), do: 0
 
-  defp priority_for_caller(:foreman), do: @priority_foreman
+  defp priority_for_caller(:foreman_agent), do: @priority_foreman_agent
   defp priority_for_caller(:runner), do: @priority_runner
-  defp priority_for_caller(:lead), do: @priority_lead
-  defp priority_for_caller(_), do: @priority_lead
+  defp priority_for_caller(:lead_agent), do: @priority_lead_agent
+  defp priority_for_caller(_), do: @priority_lead_agent
 
   defp schedule_queue_check do
     Process.send_after(self(), :check_queue, @queue_check_interval_ms)
@@ -813,8 +813,8 @@ defmodule Deft.Job.RateLimiter do
 
   defp reinsert_with_priority(queue, to_promote, next_queue_id) do
     Enum.reduce(to_promote, {queue, next_queue_id}, fn {_old_key, request}, {queue_acc, id} ->
-      promoted_request = %{request | priority: @priority_foreman}
-      queue_key = {-@priority_foreman, id}
+      promoted_request = %{request | priority: @priority_foreman_agent}
+      queue_key = {-@priority_foreman_agent, id}
       new_queue_acc = :gb_trees.insert(queue_key, promoted_request, queue_acc)
       {new_queue_acc, id + 1}
     end)

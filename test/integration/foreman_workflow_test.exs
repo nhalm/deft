@@ -96,7 +96,7 @@ defmodule Integration.ForemanWorkflowTest do
           # Use a short timeout so we don't wait forever when enqueued
           task =
             Task.async(fn ->
-              RateLimiter.request(job_id, "anthropic", messages, :foreman)
+              RateLimiter.request(job_id, "anthropic", messages, :foreman_agent)
             end)
 
           case Task.yield(task, 100) || Task.shutdown(task) do

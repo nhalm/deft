@@ -37,7 +37,3 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 - Update `Deft.Session.Store` to support writing agent sessions to job-scoped paths (`jobs/<job_id>/foreman_session.jsonl`, `jobs/<job_id>/lead_<id>_session.jsonl`) in addition to user session paths
 - Ensure session listing (`deft issue list`, web UI picker) only returns user sessions, not agent sessions
-
-## rate-limiter v0.3
-
-- Update `RateLimiter.request/4` priority parameter to accept `:foreman_agent`, `:lead_agent`, `:runner` atoms instead of `:foreman`, `:lead`, `:runner`

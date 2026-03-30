@@ -899,7 +899,7 @@ defmodule Deft.Job.Lead do
     provider_name = Map.get(config, :provider, "anthropic")
 
     # Request permission from rate limiter
-    case RateLimiter.request(job_id, provider_name, messages, :lead) do
+    case RateLimiter.request(job_id, provider_name, messages, :lead_agent) do
       {:ok, estimated_tokens} ->
         # Lead uses read-only tools to read codebase and site log during planning
         # Delegates actual implementation work to Runners
