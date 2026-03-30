@@ -1,4 +1,5 @@
 # History
+- **orchestration v0.7 (2026-03-30):** Update `Deft.Job.Lead.Supervisor` to start LeadAgent + its ToolRunner as separate children alongside the Lead
 - **orchestration v0.7 (2026-03-30):** Update `Deft.Job.Supervisor` to start ForemanAgent + its ToolRunner as separate children alongside the Foreman
 - **orchestration v0.7 (2026-03-30):** Implement Lead→LeadAgent prompt flow: Lead calls `Deft.Agent.prompt/2` with deliverable assignment, Runner results, and Foreman steering
 - **orchestration v0.7 (2026-03-30):** Add `{:foreman_contract, contract}` handler to Lead: forwards dependency contracts from Foreman to LeadAgent as prompts, enabling partial dependency unblocking

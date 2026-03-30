@@ -1,16 +1,17 @@
 defmodule Deft.Job.Lead.Supervisor do
   @moduledoc """
-  Per-Lead supervisor that manages a Lead gen_statem and its RunnerSupervisor.
+  Per-Lead supervisor that manages a Lead gen_statem, its LeadAgent, and RunnerSupervisor.
 
-  This one_for_one supervisor ensures that both the Lead process and its
-  RunnerSupervisor are properly supervised as siblings, preventing orphaned
-  RunnerSupervisor processes.
+  This one_for_one supervisor ensures that the Lead orchestrator, its LeadAgent,
+  and both supervisors are properly supervised as siblings.
 
   Process tree per Lead:
   ```
   Deft.Job.Lead.Supervisor (one_for_one)
-  ├── Deft.Job.Lead (gen_statem)
-  └── Deft.Job.RunnerSupervisor (Task.Supervisor)
+  ├── Deft.Agent.ToolRunner (for LeadAgent's tool execution)
+  ├── Deft.Job.LeadAgent (standard Deft.Agent)
+  ├── Deft.Job.RunnerSupervisor (Task.Supervisor)
+  └── Deft.Job.Lead (gen_statem)
   ```
 
   See orchestration spec section 1 for details.
@@ -19,11 +20,13 @@ defmodule Deft.Job.Lead.Supervisor do
   use Supervisor
 
   @doc """
-  Starts a Lead.Supervisor with both the Lead gen_statem and RunnerSupervisor.
+  Starts a Lead.Supervisor with the Lead gen_statem, LeadAgent, and RunnerSupervisor.
 
   ## Options
 
   - `:lead_id` — Required. Lead identifier.
+  - `:session_id` — Required. Job identifier (used for session naming).
+  - `:config` — Required. Configuration map.
   - All other options are passed to the Lead gen_statem.
   """
   def start_link(opts) do
@@ -35,12 +38,49 @@ defmodule Deft.Job.Lead.Supervisor do
   @impl true
   def init(opts) do
     lead_id = Keyword.fetch!(opts, :lead_id)
+    session_id = Keyword.fetch!(opts, :session_id)
+    config = Keyword.fetch!(opts, :config)
+
+    # LeadAgent session_id (session_id is the job_id)
+    lead_agent_session_id = "#{session_id}-lead-#{lead_id}"
+
+    # LeadAgent ToolRunner name (must use {:tool_runner, session_id} format)
+    lead_agent_tool_runner_name =
+      {:via, Registry, {Deft.ProcessRegistry, {:tool_runner, lead_agent_session_id}}}
+
+    # LeadAgent name
+    lead_agent_name = {:via, Registry, {Deft.ProcessRegistry, {:lead_agent, lead_id}}}
+
+    # Lead name
+    lead_name = {:via, Registry, {Deft.ProcessRegistry, {:lead, lead_id}}}
 
     # RunnerSupervisor name for this Lead
     runner_supervisor_name =
       {:via, Registry, {Deft.ProcessRegistry, {:runner_supervisor, lead_id}}}
 
     children = [
+      # ToolRunner for LeadAgent's tool execution
+      %{
+        id: :lead_agent_tool_runner,
+        start: {Deft.Agent.ToolRunner, :start_link, [[name: lead_agent_tool_runner_name]]},
+        type: :supervisor
+      },
+      # LeadAgent (standard Deft.Agent)
+      %{
+        id: :lead_agent,
+        start:
+          {Deft.Agent, :start_link,
+           [
+             [
+               session_id: lead_agent_session_id,
+               config: config,
+               messages: [],
+               parent_pid: lead_name,
+               name: lead_agent_name
+             ]
+           ]},
+        restart: :temporary
+      },
       # RunnerSupervisor (Task.Supervisor) for spawning Runners
       %{
         id: :runner_supervisor,
@@ -52,7 +92,12 @@ defmodule Deft.Job.Lead.Supervisor do
         id: :lead,
         start:
           {Deft.Job.Lead, :start_link,
-           [Keyword.put(opts, :runner_supervisor, runner_supervisor_name)]},
+           [
+             opts
+             |> Keyword.put(:runner_supervisor, runner_supervisor_name)
+             |> Keyword.put(:lead_agent_pid, lead_agent_name)
+             |> Keyword.put(:name, lead_name)
+           ]},
         restart: :temporary
       }
     ]
