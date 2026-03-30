@@ -38,7 +38,8 @@ defmodule Deft.Job.ForemanAgent.Tools.AbortLead do
   end
 
   @impl Deft.Tool
-  def execute(args, %Context{parent_pid: parent_pid}) when is_pid(parent_pid) do
+  def execute(args, %Context{parent_pid: parent_pid})
+      when is_pid(parent_pid) or (is_tuple(parent_pid) and elem(parent_pid, 0) == :via) do
     lead_id = Map.get(args, "lead_id")
     reason = Map.get(args, "reason", "No reason provided")
 

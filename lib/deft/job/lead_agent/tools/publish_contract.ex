@@ -38,7 +38,7 @@ defmodule Deft.Job.LeadAgent.Tools.PublishContract do
 
   @impl Deft.Tool
   def execute(%{"contract" => contract}, %Context{parent_pid: parent_pid})
-      when is_pid(parent_pid) do
+      when is_pid(parent_pid) or (is_tuple(parent_pid) and elem(parent_pid, 0) == :via) do
     send(parent_pid, {:agent_action, :publish_contract, contract})
 
     {:ok, [%Text{text: "Contract published. Dependent Leads will be notified."}]}

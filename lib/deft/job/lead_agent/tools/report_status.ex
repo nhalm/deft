@@ -55,7 +55,7 @@ defmodule Deft.Job.LeadAgent.Tools.ReportStatus do
   def execute(%{"report_type" => report_type, "content" => content}, %Context{
         parent_pid: parent_pid
       })
-      when is_pid(parent_pid) do
+      when is_pid(parent_pid) or (is_tuple(parent_pid) and elem(parent_pid, 0) == :via) do
     # Convert string to atom for report type
     # @report_types ensures all valid atoms are interned at compile time
     type = String.to_existing_atom(report_type)

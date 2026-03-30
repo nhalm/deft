@@ -29,7 +29,8 @@ defmodule Deft.Job.ForemanAgent.Tools.ReadyToPlan do
   end
 
   @impl Deft.Tool
-  def execute(_args, %Context{parent_pid: parent_pid}) when is_pid(parent_pid) do
+  def execute(_args, %Context{parent_pid: parent_pid})
+      when is_pid(parent_pid) or (is_tuple(parent_pid) and elem(parent_pid, 0) == :via) do
     send(parent_pid, {:agent_action, :ready_to_plan})
     {:ok, [%Text{text: "Signaled ready to plan. Transitioning to planning phase."}]}
   end
