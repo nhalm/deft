@@ -206,24 +206,27 @@ defmodule Deft.Job.Foreman do
   def handle_event(:enter, _old_state, :researching, data) do
     Logger.info("Foreman entering :researching phase")
 
-    # Collect research results from all tasks
-    research_timeout = Map.get(data.config, :job_research_timeout, 120_000)
     research_tasks = Map.get(data, :research_tasks, [])
 
     if length(research_tasks) > 0 do
-      # Spawn a task to collect all results and send to ForemanAgent
-      # Use async_nolink to avoid crashing the Foreman if collection fails
-      _task =
-        Task.Supervisor.async_nolink(data.runner_supervisor, fn ->
-          collect_research_results(research_tasks, research_timeout, data)
-        end)
-
-      :keep_state_and_data
+      # Trigger collection via internal event so Foreman process collects results
+      # (Task.yield must be called from the process that owns the tasks)
+      {:keep_state_and_data, {:next_event, :internal, :collect_research}}
     else
       # No research tasks, skip to decomposing
       Logger.warning("No research tasks to execute")
       {:next_state, :decomposing, data}
     end
+  end
+
+  def handle_event(:internal, :collect_research, :researching, data) do
+    research_timeout = Map.get(data.config, :job_research_timeout, 120_000)
+    research_tasks = Map.get(data, :research_tasks, [])
+
+    # Collect results directly in the Foreman process (task owner)
+    collect_research_results(research_tasks, research_timeout, data)
+
+    :keep_state_and_data
   end
 
   def handle_event(:enter, _old_state, :decomposing, data) do
@@ -994,7 +997,7 @@ defmodule Deft.Job.Foreman do
     MapSet.size(data.started_leads) == 0
   end
 
-  defp do_handle_lead_crash(lead_id, state, data) do
+  defp do_handle_lead_crash(lead_id, _state, data) do
     # Clean up the crashed Lead's worktree
     GitJob.cleanup_lead_worktree(
       lead_id: lead_id,
@@ -1014,13 +1017,9 @@ defmodule Deft.Job.Foreman do
       |> Map.update!(:blocked_leads, &Map.delete(&1, lead_id))
       |> Map.update!(:lead_monitors, &Map.delete(&1, lead_id))
 
-    # Check if all Leads are complete
-    if state == :executing and all_leads_complete?(updated_data) do
-      Logger.info("All Leads complete after crash, transitioning to :verifying")
-      {:next_state, :verifying, updated_data}
-    else
-      {:keep_state, updated_data}
-    end
+    # DO NOT transition to :verifying after a crash - a crashed Lead is not a completed Lead
+    # The job should remain in its current state and let the Foreman/user handle the failure
+    {:keep_state, updated_data}
   end
 
   defp run_research_runner(topic, data) do
