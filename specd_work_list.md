@@ -19,6 +19,5 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.7
 
-- Remove old tuple-state Lead implementation and replace with new split architecture
 - Fix `--auto-approve-all` not skipping plan approval in `:decomposing` state: `foreman.ex:159-160` uses `auto_approve_all` only to skip `:asking` → `:planning`, but the `:decomposing` → `:executing` transition at line 479 waits for explicit `approve_plan` cast with no check for `auto_approve_all`. In `--auto-approve-all` or non-interactive mode, the job hangs in `:decomposing` forever.
 - Fix Lead `:verifying` → `:complete` auto-transition ignoring test results: `lead.ex:387-388` transitions to `:complete` when the last runner finishes in `:verifying` regardless of pass/fail. The testing runner result is sent to the LeadAgent (line 381-383) but the transition happens immediately before the LeadAgent can evaluate or spawn corrective runners. Must inspect the Runner result — on failure, transition back to `:executing` so the LeadAgent can remediate; on success, transition to `:complete`.

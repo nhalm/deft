@@ -1,4 +1,5 @@
 # History
+- **orchestration v0.7 (2026-03-30):** Remove old tuple-state Lead implementation and replace with new split architecture
 - **orchestration v0.7 (2026-03-30):** Remove old tuple-state Foreman implementation (the fused orchestrator+agent gen_statem) and replace with new split architecture
 - **orchestration v0.7 (2026-03-30):** Implement single-agent fallback: when Foreman detects simple task, configure ForemanAgent with full tool set (read, write, edit, bash, grep, find, ls) and skip orchestration
 - **orchestration v0.7 (2026-03-30):** Implement Lead crash recovery in Foreman `:DOWN` handler (foreman.ex:534-540): the handler is a TODO stub that returns `:keep_state_and_data`. Must clean up the crashed Lead's worktree, remove Lead from tracking state (`data.leads`, `lead_monitors`, `started_leads`), and check `all_leads_complete?` for phase transition — otherwise job hangs in `:executing` if last Lead crashes. `do_abort_lead` has partial cleanup logic to reuse.
