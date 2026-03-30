@@ -11,6 +11,9 @@ defmodule Deft.Job.LeadAgent.Tools.ReportStatus do
   alias Deft.Message.Text
   alias Deft.Tool.Context
 
+  # Valid report types (atoms interned here so String.to_existing_atom/1 works)
+  @report_types [:status, :decision, :artifact, :critical_finding, :finding, :plan_amendment]
+
   @impl Deft.Tool
   def name, do: "report_status"
 
@@ -54,7 +57,13 @@ defmodule Deft.Job.LeadAgent.Tools.ReportStatus do
       })
       when is_pid(parent_pid) do
     # Convert string to atom for report type
+    # @report_types ensures all valid atoms are interned at compile time
     type = String.to_existing_atom(report_type)
+
+    # Defensive check (should never fail since JSON schema validates enum)
+    unless type in @report_types do
+      raise ArgumentError, "Invalid report_type: #{report_type}"
+    end
 
     send(parent_pid, {:agent_action, :report, type, content})
 
