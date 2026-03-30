@@ -1158,11 +1158,20 @@ defmodule Deft.Job.Foreman do
 
   defp collect_research_results(tasks, timeout, data) do
     results =
-      Enum.map(tasks, fn task ->
-        case Task.yield(task, timeout) || Task.shutdown(task) do
-          {:ok, result} -> result
-          nil -> %{topic: "unknown", status: :timeout, error: "Research task timed out"}
-          {:exit, reason} -> %{topic: "unknown", status: :error, error: inspect(reason)}
+      tasks
+      |> Task.yield_many(timeout)
+      |> Enum.map(fn {task, res} ->
+        case res do
+          {:ok, result} ->
+            result
+
+          nil ->
+            # Task didn't finish in time, shut it down
+            _ = Task.shutdown(task, :brutal_kill)
+            %{topic: "unknown", status: :timeout, error: "Research task timed out"}
+
+          {:exit, reason} ->
+            %{topic: "unknown", status: :error, error: inspect(reason)}
         end
       end)
 
