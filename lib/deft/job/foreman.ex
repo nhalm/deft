@@ -677,7 +677,13 @@ defmodule Deft.Job.Foreman do
   def handle_event(:cast, :abort, _state, data) do
     Logger.info("#{log_prefix(data)} Job aborted")
     # Cleanup and stop
-    cleanup(data)
+    try do
+      cleanup(data)
+    rescue
+      e ->
+        Logger.error("#{log_prefix(data)} Job abort cleanup failed: #{Exception.message(e)}")
+    end
+
     {:stop, :normal, data}
   end
 

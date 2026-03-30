@@ -17,7 +17,3 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## logging v0.5
-
-- Add error-level logging for cleanup failures in the Foreman abort handler (`handle_event(:cast, :abort, ...)` in `lib/deft/job/foreman.ex`) — wrap `cleanup(data)` to catch failures and log at error level per spec §5
-
