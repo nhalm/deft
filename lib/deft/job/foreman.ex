@@ -47,6 +47,7 @@ defmodule Deft.Job.Foreman do
   - `:working_dir` — Optional. Working directory for the project (defaults to File.cwd!()).
   - `:foreman_agent_pid` — Optional. PID of the ForemanAgent (will be set by supervisor).
   - `:cli_pid` — Optional. PID of CLI process for direct user interaction.
+  - `:site_log_pid` — Optional. PID of the Store site log instance (if not provided, will look up by name).
   - `:name` — Optional. Name for the gen_statem process.
   """
   def start_link(opts) do
@@ -58,6 +59,7 @@ defmodule Deft.Job.Foreman do
     working_dir = Keyword.get(opts, :working_dir, File.cwd!())
     foreman_agent_pid = Keyword.get(opts, :foreman_agent_pid)
     cli_pid = Keyword.get(opts, :cli_pid)
+    site_log_pid = Keyword.get(opts, :site_log_pid)
     name = Keyword.get(opts, :name)
 
     initial_data = %{
@@ -69,7 +71,7 @@ defmodule Deft.Job.Foreman do
       working_dir: working_dir,
       foreman_agent_pid: foreman_agent_pid,
       cli_pid: cli_pid,
-      site_log_pid: nil,
+      site_log_pid: site_log_pid,
       leads: %{},
       lead_monitors: %{},
       research_tasks: [],
@@ -127,19 +129,25 @@ defmodule Deft.Job.Foreman do
 
   @impl :gen_statem
   def init(data) do
-    # Create site log instance for this job
-    jobs_dir = Project.jobs_dir(data.working_dir)
-    job_dir = Path.join(jobs_dir, data.session_id)
-    File.mkdir_p!(job_dir)
+    # Get or look up the site log instance started by Job.Supervisor
+    site_log_pid =
+      case data.site_log_pid do
+        nil ->
+          # Look up the site log by name
+          site_log_name = {:via, Registry, {Deft.ProcessRegistry, {:sitelog, data.session_id}}}
 
-    sitelog_path = Path.join(job_dir, "sitelog.dets")
+          case GenServer.whereis(site_log_name) do
+            nil ->
+              Logger.error("Site log not found for job #{data.session_id}")
+              raise "Site log not started by Job.Supervisor"
 
-    {:ok, site_log_pid} =
-      Store.start_link(
-        name: {:sitelog, data.session_id},
-        type: :sitelog,
-        dets_path: sitelog_path
-      )
+            pid ->
+              pid
+          end
+
+        pid ->
+          pid
+      end
 
     data = Map.put(data, :site_log_pid, site_log_pid)
 

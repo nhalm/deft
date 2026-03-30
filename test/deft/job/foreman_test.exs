@@ -36,6 +36,44 @@ defmodule Deft.Job.ForemanTest do
     pid
   end
 
+  # Start a Store (site log) for the given session_id, creating the necessary directories
+  defp start_site_log(session_id, working_dir) do
+    jobs_dir = Project.jobs_dir(working_dir)
+    job_dir = Path.join(jobs_dir, session_id)
+    File.mkdir_p!(job_dir)
+    sitelog_path = Path.join(job_dir, "sitelog.dets")
+
+    {:ok, pid} =
+      Store.start_link(
+        name: {:sitelog, session_id},
+        type: :sitelog,
+        dets_path: sitelog_path
+      )
+
+    pid
+  end
+
+  # Setup a Foreman test environment with rate limiter and site log
+  defp setup_foreman_test(session_id, working_dir, opts \\ []) do
+    rate_limiter_pid = start_rate_limiter(session_id)
+    site_log_pid = start_site_log(session_id, working_dir)
+
+    default_opts = [
+      session_id: session_id,
+      config: %{},
+      prompt: Keyword.get(opts, :prompt, "test prompt"),
+      rate_limiter_pid: rate_limiter_pid,
+      runner_supervisor: Keyword.fetch!(opts, :runner_supervisor),
+      working_dir: working_dir,
+      site_log_pid: site_log_pid
+    ]
+
+    # Merge any additional opts
+    final_opts = Keyword.merge(default_opts, Keyword.drop(opts, [:prompt, :runner_supervisor]))
+
+    {rate_limiter_pid, site_log_pid, final_opts}
+  end
+
   # Mock agent that tracks prompts sent via :gen_statem.cast({:prompt, text})
   defp mock_agent_loop(prompts) do
     receive do
@@ -48,43 +86,32 @@ defmodule Deft.Job.ForemanTest do
     end
   end
 
-  describe "site log instance creation" do
-    test "creates site log on init", %{tmp_dir: tmp_dir, runner_supervisor: runner_supervisor} do
+  describe "site log instance lookup" do
+    test "looks up site log on init when started via Job.Supervisor pattern", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
-      start_rate_limiter(session_id)
 
-      # Start a minimal Foreman (will fail in agent loop but site log should be created)
-      {:ok, foreman_pid} =
-        Foreman.start_link(
-          session_id: session_id,
-          config: %{},
-          prompt: "test prompt",
-          rate_limiter_pid: self(),
-          runner_supervisor: runner_supervisor,
-          working_dir: tmp_dir
-        )
+      # Setup test environment with rate limiter and site log (simulates Job.Supervisor behavior)
+      {_rate_limiter_pid, site_log_pid, foreman_opts} =
+        setup_foreman_test(session_id, tmp_dir, runner_supervisor: runner_supervisor)
 
-      # Get the Foreman's state to verify site log was created
-      # :sys.get_state returns {state, data} for gen_statem
+      # Start Foreman - it should look up the site log
+      {:ok, foreman_pid} = Foreman.start_link(foreman_opts)
+
+      # Get the Foreman's state to verify site log was found
       {_state, data} = :sys.get_state(foreman_pid)
-      assert data.site_log_pid != nil
+      assert data.site_log_pid == site_log_pid
       assert Process.alive?(data.site_log_pid)
 
-      # Verify site log file was created
-      sitelog_path =
-        Path.join([Project.jobs_dir(tmp_dir), session_id, "sitelog.dets"])
-
-      # Wait a bit for async operations
+      # Verify site log file exists
+      sitelog_path = Path.join([Project.jobs_dir(tmp_dir), session_id, "sitelog.dets"])
       Process.sleep(100)
-
       assert File.exists?(sitelog_path)
 
-      # Cleanup - stop Foreman and clean up site log
-      {_state, data} = :sys.get_state(foreman_pid)
-      Store.cleanup(data.site_log_pid)
+      # Cleanup
       :gen_statem.stop(foreman_pid)
-      # Give processes time to fully terminate
-      Process.sleep(50)
     end
 
     test "site log is accessible to Foreman for writes", %{
@@ -92,17 +119,11 @@ defmodule Deft.Job.ForemanTest do
       runner_supervisor: runner_supervisor
     } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
-      start_rate_limiter(session_id)
 
-      {:ok, foreman_pid} =
-        Foreman.start_link(
-          session_id: session_id,
-          config: %{},
-          prompt: "test prompt",
-          rate_limiter_pid: self(),
-          runner_supervisor: runner_supervisor,
-          working_dir: tmp_dir
-        )
+      {_rate_limiter_pid, _site_log_pid, foreman_opts} =
+        setup_foreman_test(session_id, tmp_dir, runner_supervisor: runner_supervisor)
+
+      {:ok, foreman_pid} = Foreman.start_link(foreman_opts)
 
       {_state, data} = :sys.get_state(foreman_pid)
 
@@ -126,12 +147,8 @@ defmodule Deft.Job.ForemanTest do
       assert entry.value == "Test decision"
       assert entry.metadata.category == :decision
 
-      # Cleanup - stop Foreman and clean up site log
-      {_state, data} = :sys.get_state(foreman_pid)
-      Store.cleanup(data.site_log_pid)
+      # Cleanup
       :gen_statem.stop(foreman_pid)
-      # Give processes time to fully terminate
-      Process.sleep(50)
     end
   end
 
@@ -141,17 +158,11 @@ defmodule Deft.Job.ForemanTest do
       runner_supervisor: runner_supervisor
     } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
-      start_rate_limiter(session_id)
 
-      {:ok, foreman_pid} =
-        Foreman.start_link(
-          session_id: session_id,
-          config: %{},
-          prompt: "test prompt",
-          rate_limiter_pid: self(),
-          runner_supervisor: runner_supervisor,
-          working_dir: tmp_dir
-        )
+      {_rate_limiter_pid, _site_log_pid, foreman_opts} =
+        setup_foreman_test(session_id, tmp_dir, runner_supervisor: runner_supervisor)
+
+      {:ok, foreman_pid} = Foreman.start_link(foreman_opts)
 
       {_state, data} = :sys.get_state(foreman_pid)
       tid = Store.tid(data.site_log_pid)
@@ -166,9 +177,7 @@ defmodule Deft.Job.ForemanTest do
       keys = Store.keys(tid)
       assert Enum.any?(keys, fn key -> String.starts_with?(key, "decision-") end)
 
-      # Cleanup - stop Foreman and clean up site log
-      {_state, data} = :sys.get_state(foreman_pid)
-      Store.cleanup(data.site_log_pid)
+      # Cleanup
       :gen_statem.stop(foreman_pid)
       # Give processes time to fully terminate
       Process.sleep(50)
@@ -555,23 +564,22 @@ defmodule Deft.Job.ForemanTest do
       runner_supervisor: runner_supervisor
     } do
       session_id = "test-job-#{:erlang.unique_integer([:positive])}"
-      start_rate_limiter(session_id)
 
-      # Start Foreman
-      {:ok, foreman_pid} =
-        Foreman.start_link(
-          session_id: session_id,
+      {_rate_limiter_pid, _site_log_pid, base_opts} =
+        setup_foreman_test(session_id, tmp_dir, runner_supervisor: runner_supervisor)
+
+      # Start Foreman with additional config
+      foreman_opts =
+        Keyword.merge(base_opts,
           config: %{
             provider: "anthropic",
             provider_module: Deft.ProviderMock,
             job_lead_model: "claude-sonnet-4-20250514",
             job_research_runner_model: "claude-sonnet-4-20250514"
-          },
-          prompt: "test prompt",
-          rate_limiter_pid: self(),
-          runner_supervisor: runner_supervisor,
-          working_dir: tmp_dir
+          }
         )
+
+      {:ok, foreman_pid} = Foreman.start_link(foreman_opts)
 
       # Wait for initialization
       Process.sleep(100)
@@ -582,10 +590,7 @@ defmodule Deft.Job.ForemanTest do
       assert match?({:complete, :idle}, state)
 
       # Cleanup
-      {_state, data} = :sys.get_state(foreman_pid)
-      Store.cleanup(data.site_log_pid)
       :gen_statem.stop(foreman_pid)
-      Process.sleep(50)
     end
 
     test "spawns research runners in parallel", %{
