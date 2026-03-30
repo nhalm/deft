@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.7
 
-- Create `Deft.Job.Foreman` gen_statem with 7 pure orchestration states (`:asking`, `:planning`, `:researching`, `:decomposing`, `:executing`, `:verifying`, `:complete`) — no agent loop, no streaming, no tool execution
 - Create `Deft.Job.ForemanAgent` module that starts a standard `Deft.Agent` with Foreman-specific system prompt and OM enabled
 - Implement 7 ForemanAgent orchestration tools (`ready_to_plan`, `request_research`, `submit_plan`, `spawn_lead`, `unblock_lead`, `steer_lead`, `abort_lead`) as thin wrappers that `send(foreman_pid, {:agent_action, action, payload})` and return `:ok` (blocked: Create Deft.Job.Foreman, Create Deft.Job.ForemanAgent)
 - Implement `:asking` phase in Foreman: relay ForemanAgent text responses to user as questions, relay user answers back to ForemanAgent as prompts, transition to `:planning` on `{:agent_action, :ready_to_plan}` (blocked: Create Deft.Job.Foreman, Create Deft.Job.ForemanAgent)

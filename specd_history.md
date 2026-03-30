@@ -1,4 +1,5 @@
 # History
+- **orchestration v0.7 (2026-03-29):** Create `Deft.Job.Foreman` gen_statem with 7 pure orchestration states (`:asking`, `:planning`, `:researching`, `:decomposing`, `:executing`, `:verifying`, `:complete`) — no agent loop, no streaming, no tool execution
 - **tools v0.3 (2026-03-29):** Add `cache_config` field to `ToolContext` struct (document existing implicit field)
 - **tools v0.3 (2026-03-29):** Pass `parent_pid` through from agent start options to ToolContext when constructing context for tool execution
 - **tools v0.3 (2026-03-29):** Add `parent_pid :: pid() | nil` field to `Deft.Tool.ToolContext` struct
