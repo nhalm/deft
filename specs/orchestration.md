@@ -2,11 +2,17 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.7 |
+| Version | 0.9 |
 | Status | Ready |
-| Last Updated | 2026-03-29 |
+| Last Updated | 2026-03-30 |
 
 ## Changelog
+
+### v0.9 (2026-03-30)
+- Added: ForemanAgent tool `fail_deliverable` — on Lead crash, ForemanAgent decides whether to retry (spawn replacement Lead) or skip (count as failed). Foreman's `all_leads_complete?` check counts completed + failed Leads, not just completed. Resolves issue where Lead crashes left jobs stuck in `:executing`.
+
+### v0.8 (2026-03-30)
+- Added: Foreman must monitor the ForemanAgent via `Process.monitor`. On ForemanAgent crash, the Foreman fails the job with full cleanup (worktrees, Leads, site log).
 
 ### v0.7 (2026-03-29)
 - **Breaking: Split Foreman and Lead into orchestrator + agent process pairs.** The Foreman is no longer "IS the Agent" — it is a pure orchestration gen_statem that owns a separate ForemanAgent (a standard Deft.Agent). Same split for Leads. Eliminates the 24-state tuple-state design. Runners remain Tasks.
@@ -105,7 +111,7 @@ Key invariants:
 - Leads follow the same pattern: Lead (orchestrator) + LeadAgent (standard Deft.Agent).
 - Runners are Tasks spawned via `Task.Supervisor.async_nolink`. Simple inline loops. Leads must enforce Runner timeouts manually.
 - Lead gen_statem child specs use `restart: :temporary` — the Foreman handles Lead crash recovery explicitly.
-- The Foreman monitors all Leads via `Process.monitor`. Leads monitor their Runners via Task refs.
+- The Foreman monitors all Leads and the ForemanAgent via `Process.monitor`. On ForemanAgent crash, the Foreman fails the job with cleanup. Leads monitor their Runners via Task refs.
 - All LLM calls flow through `Deft.Job.RateLimiter` (see [rate-limiter.md](rate-limiter.md)).
 - All Foreman↔Lead communication is via direct OTP messages between the Foreman and Lead orchestrator processes.
 
@@ -126,6 +132,7 @@ The Foreman communicates with its agent through two mechanisms:
 | `unblock_lead` | `{:agent_action, :unblock_lead, lead_id, contract}` | Partially unblock a dependent Lead |
 | `steer_lead` | `{:agent_action, :steer_lead, lead_id, content}` | Send course correction to a Lead |
 | `abort_lead` | `{:agent_action, :abort_lead, lead_id}` | Stop a Lead |
+| `fail_deliverable` | `{:agent_action, :fail_deliverable, lead_id}` | Mark a Lead's deliverable as failed (after crash or unrecoverable blocker). Lead is removed, marked as failed. Foreman's `all_leads_complete?` counts completed + failed, not just completed. |
 
 These tools are implemented as thin wrappers that `send(foreman_pid, message)` and return `:ok` to the agent. The Foreman receives these in `handle_info` and takes action.
 
