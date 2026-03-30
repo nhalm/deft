@@ -398,12 +398,8 @@ defmodule Deft.Job.Lead do
           Deft.Agent.prompt(data.lead_agent_pid, context)
         end
 
-        # If in verifying and no more tasks, transition to complete
-        if state == :verifying and map_size(remaining_tasks) == 0 do
-          {:next_state, :complete, data}
-        else
-          {:keep_state, data}
-        end
+        # Check if we should transition states after this runner completes
+        handle_runner_completion_transition(state, remaining_tasks, result, data)
     end
   end
 
@@ -733,6 +729,30 @@ defmodule Deft.Job.Lead do
     - If you need to publish an interface contract, use the `publish_contract` tool
     - Report progress to the Foreman using `report_status` with important decisions or artifacts
     """
+  end
+
+  # Handle state transitions after a runner completes
+  defp handle_runner_completion_transition(:verifying, remaining_tasks, result, data)
+       when map_size(remaining_tasks) == 0 do
+    # In verifying state with no more tasks - inspect test result to decide next state
+    case result do
+      {:ok, _output} ->
+        # Tests passed, transition to complete
+        Logger.info("Lead #{data.lead_id} - Testing passed, transitioning to :complete")
+        {:next_state, :complete, data}
+
+      {:error, _reason} ->
+        # Tests failed, transition back to executing so LeadAgent can remediate
+        Logger.info(
+          "Lead #{data.lead_id} - Testing failed, transitioning back to :executing for remediation"
+        )
+
+        {:next_state, :executing, data}
+    end
+  end
+
+  defp handle_runner_completion_transition(_state, _remaining_tasks, _result, data) do
+    {:keep_state, data}
   end
 
   defp spawn_testing_runner(data) do

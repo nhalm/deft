@@ -16,7 +16,3 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
-
-## orchestration v0.7
-
-- Fix Lead `:verifying` → `:complete` auto-transition ignoring test results: `lead.ex:387-388` transitions to `:complete` when the last runner finishes in `:verifying` regardless of pass/fail. The testing runner result is sent to the LeadAgent (line 381-383) but the transition happens immediately before the LeadAgent can evaluate or spawn corrective runners. Must inspect the Runner result — on failure, transition back to `:executing` so the LeadAgent can remediate; on success, transition to `:complete`.
