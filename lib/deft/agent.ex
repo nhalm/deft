@@ -1514,6 +1514,7 @@ defmodule Deft.Agent do
     tool_results_with_timing =
       add_timing_to_results(results, tool_calls, data.tool_execution_times, end_time)
 
+    log_tool_crashes(data.session_id, tool_results_with_timing)
     broadcast_tool_completion_events(data.session_id, tool_results_with_timing)
     save_tool_results(tool_results_with_timing, data)
 
@@ -1536,6 +1537,18 @@ defmodule Deft.Agent do
     Logger.info(
       "#{log_prefix(session_id)} Tool execution complete (#{batch_duration_ms}ms, #{success_count} succeeded, #{failure_count} failed)"
     )
+  end
+
+  defp log_tool_crashes(session_id, tool_results_with_timing) do
+    Enum.each(tool_results_with_timing, fn {_tool_use_id, tool_name, result, _duration_ms} ->
+      case result do
+        {:error, "Tool crashed: " <> reason} ->
+          Logger.error("#{log_prefix(session_id)} Tool crashed: #{tool_name}, reason: #{reason}")
+
+        _ ->
+          :ok
+      end
+    end)
   end
 
   defp add_timing_to_results(results, tool_calls, execution_times, end_time) do

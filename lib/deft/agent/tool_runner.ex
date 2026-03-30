@@ -89,8 +89,7 @@ defmodule Deft.Agent.ToolRunner do
   end
 
   # Handle task exit/crash
-  defp handle_task_result({:exit, reason}, {tool_use_id, tool_name, _task}, {_timeout, prefix}) do
-    log_tool_crash(prefix, tool_name, reason)
+  defp handle_task_result({:exit, reason}, {tool_use_id, _tool_name, _task}, {_timeout, _prefix}) do
     {tool_use_id, {:error, "Tool crashed: #{inspect(reason)}"}}
   end
 
@@ -98,10 +97,6 @@ defmodule Deft.Agent.ToolRunner do
   defp handle_task_result(nil, {tool_use_id, _tool_name, task}, {timeout, _prefix}) do
     _ = Task.shutdown(task, :brutal_kill)
     {tool_use_id, {:error, "Tool execution timed out after #{timeout}ms"}}
-  end
-
-  defp log_tool_crash(prefix, tool_name, reason) do
-    Logger.error("#{prefix} Tool crashed: #{tool_name}, reason: #{inspect(reason)}")
   end
 
   # Execute a single tool call

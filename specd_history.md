@@ -1,4 +1,5 @@
 # History
+- **logging v0.6 (2026-03-30):** Move tool crash logging from `ToolRunner` to the Agent layer: remove `Logger.error` from `lib/deft/agent/tool_runner.ex:103-105` (`log_tool_crash/3`), and add error-level logging with `[Agent:<id>]` prefix in the Agent's tool result handler when a tool crash result is received — per §4 Error level and the "only callers log" principle
 - **logging v0.5 (2026-03-30):** Add error-level logging for cleanup failures in the Foreman abort handler (`handle_event(:cast, :abort, ...)` in `lib/deft/job/foreman.ex`) — wrap `cleanup(data)` to catch failures and log at error level per spec §5
 - **logging v0.5 (2026-03-30):** Remove `Logger.debug("[Session] Failed to load session ...")` from `Store.load/2` error path in `lib/deft/session/store.ex` — spec says load does not log; the info-level log was already moved out but this debug-level error log was missed
 - **logging v0.5 (2026-03-30):** Fix Reflector triggered log in `lib/deft/om/state.ex` to include compression ratio — currently logs raw token counts (`"#{tokens} -> #{target} tokens"`) but spec requires the ratio
