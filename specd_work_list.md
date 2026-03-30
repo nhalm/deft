@@ -19,6 +19,5 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## logging v0.5
 
-- Remove `Logger.debug("[Session] Failed to load session ...")` from `Store.load/2` error path in `lib/deft/session/store.ex` — spec says load does not log; the info-level log was already moved out but this debug-level error log was missed
 - Add error-level logging for cleanup failures in the Foreman abort handler (`handle_event(:cast, :abort, ...)` in `lib/deft/job/foreman.ex`) — wrap `cleanup(data)` to catch failures and log at error level per spec §5
 

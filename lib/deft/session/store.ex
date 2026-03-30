@@ -200,9 +200,7 @@ defmodule Deft.Session.Store do
 
         {:ok, entries}
 
-      {:error, reason} = error ->
-        require Logger
-        Logger.debug("[Session] Failed to load session #{session_id}: #{inspect(reason)}")
+      {:error, _reason} = error ->
         error
     end
   end
