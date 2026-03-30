@@ -41,7 +41,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 ## tools v0.3
 
 - Add `cache_config` field to `ToolContext` struct (document existing implicit field)
-- Pass `parent_pid` through from agent start options to ToolContext when constructing context for tool execution
 
 ## harness v0.3
 

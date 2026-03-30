@@ -20,6 +20,7 @@ defmodule Deft.Agent do
   - `messages` — List of conversation messages (canonical `Deft.Message` format)
   - `config` — Configuration map for the agent
   - `session_id` — Unique identifier for the session
+  - `parent_pid` — PID of orchestrator process that owns this agent (optional, nil for standalone sessions)
   - `current_message` — Message being accumulated during streaming (optional)
   - `stream_ref` — Reference to the current stream (optional)
   - `stream_monitor_ref` — Monitor reference for the stream process (optional)
@@ -76,6 +77,7 @@ defmodule Deft.Agent do
   - `:config` — Required. Configuration map for the agent.
   - `:messages` — Optional. Initial conversation messages (default: []).
   - `:session_cost` — Optional. Initial session cost from resumed session (default: 0.0).
+  - `:parent_pid` — Optional. PID of orchestrator process that owns this agent (default: nil).
   - `:name` — Optional. Name for the gen_statem process.
   """
   def child_spec(opts) do
@@ -93,6 +95,7 @@ defmodule Deft.Agent do
     config = Keyword.fetch!(opts, :config)
     initial_messages = Keyword.get(opts, :messages, [])
     initial_session_cost = Keyword.get(opts, :session_cost, 0.0)
+    parent_pid = Keyword.get(opts, :parent_pid)
     name = Keyword.get(opts, :name)
 
     # Get context window from provider model config
@@ -122,7 +125,8 @@ defmodule Deft.Agent do
       tool_execution_times: %{},
       compaction_task_ref: nil,
       compaction_task_pid: nil,
-      pending_compaction_data: nil
+      pending_compaction_data: nil,
+      parent_pid: parent_pid
     }
 
     if name do
@@ -1273,6 +1277,7 @@ defmodule Deft.Agent do
       lead_id: lead_id,
       emit: fn _output -> :ok end,
       file_scope: nil,
+      parent_pid: data.parent_pid,
       bash_timeout: Map.get(data.config, :bash_timeout, 120_000),
       cache_tid: cache_tid,
       cache_config: cache_config
