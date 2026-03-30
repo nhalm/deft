@@ -1,4 +1,5 @@
 # History
+- **sessions v0.7 (2026-03-29):** Fix `deft` (no args) to open browser without creating a session: `execute_command(:new_session, flags)` in `cli.ex:535-556` eagerly creates a session and starts an agent before opening the browser, bypassing the web UI session picker. Should open browser to base URL and let the web UI's `/sessions` picker handle session management per spec section 5.5.
 - **sessions v0.7 (2026-03-29):** Ensure session listing (`deft issue list`, web UI picker) only returns user sessions, not agent sessions
 - **sessions v0.7 (2026-03-29):** Update `Deft.Session.Store` to support writing agent sessions to job-scoped paths (`jobs/<job_id>/foreman_session.jsonl`, `jobs/<job_id>/lead_<id>_session.jsonl`) in addition to user session paths
 - **orchestration v0.7 (2026-03-29):** Implement Lead injection of Foreman steering: on receiving `{:foreman_steering, content}`, format as prompt and call `Deft.Agent.prompt/2` on LeadAgent

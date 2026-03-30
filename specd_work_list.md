@@ -17,10 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## sessions v0.7
-
-- Fix `deft` (no args) to open browser without creating a session: `execute_command(:new_session, flags)` in `cli.ex:535-556` eagerly creates a session and starts an agent before opening the browser, bypassing the web UI session picker. Should open browser to base URL and let the web UI's `/sessions` picker handle session management per spec section 5.5.
-
 ## orchestration v0.7
 
 - Fix `submit_plan` handler type mismatch: `submit_plan.ex` sends `{:agent_action, :plan, %{deliverables: list, dependencies: list, rationale: string}}` but `foreman.ex:322` binds the map to `deliverables` and calls `length(deliverables)` which crashes on a map. Either destructure the map in the handler or send just the deliverables list. (blocked: Update Deft.Job.Supervisor to start ForemanAgent)

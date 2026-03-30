@@ -534,8 +534,6 @@ defmodule Deft.CLI do
 
   defp execute_command(:new_session, flags) do
     working_dir = flags[:working_dir] || File.cwd!()
-    cli_flags = build_cli_flags(flags)
-    config = Config.load(cli_flags, working_dir)
 
     # Clean up orphaned git artifacts from crashed jobs
     _ = cleanup_git_orphans(working_dir, flags[:auto_approve_all])
@@ -543,16 +541,9 @@ defmodule Deft.CLI do
     verify_api_key()
     :ok = Deft.Provider.Registry.register("anthropic", Deft.Provider.Anthropic)
 
-    session_id = generate_session_id()
-    _ = create_session(session_id, working_dir, config)
-    _agent_pid = start_agent(session_id, working_dir, config)
-
-    _ = Registry.register(Deft.Registry, {:session, session_id}, [])
-
-    IO.puts("Deft session #{session_id} started.")
-
-    # Start interactive web UI
-    start_web_ui(session_id)
+    # Open browser to web UI without creating a session
+    # Session management handled by web UI (spec section 5.5)
+    start_web_ui()
   end
 
   defp execute_command({:non_interactive, prompt}, flags) do
@@ -1896,6 +1887,43 @@ defmodule Deft.CLI do
   end
 
   # Start the web UI and block until shutdown
+  # Open browser to web UI without a session (session picker)
+  defp start_web_ui do
+    # Read the actual port from the pidfile
+    port = read_server_port()
+    url = "http://localhost:#{port}"
+
+    # Print URL first
+    IO.puts("\nDeft running at #{url}")
+    IO.puts("Press Ctrl+C to stop.\n")
+
+    # Open browser based on OS
+    _ =
+      try do
+        case :os.type() do
+          {:unix, :darwin} ->
+            # macOS
+            System.cmd("open", [url])
+
+          {:unix, _} ->
+            # Linux and other Unix
+            System.cmd("xdg-open", [url])
+
+          _ ->
+            # Windows or other - skip auto-open
+            {:ok, ""}
+        end
+      rescue
+        e ->
+          # Failed to open browser - warn but don't crash
+          IO.puts(:stderr, "Warning: Could not auto-open browser: #{Exception.message(e)}")
+      end
+
+    # Block until Ctrl+C (BEAM handles shutdown)
+    Process.sleep(:infinity)
+  end
+
+  # Open browser to web UI with a specific session
   defp start_web_ui(session_id) do
     # Read the actual port from the pidfile
     port = read_server_port()
