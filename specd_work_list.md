@@ -29,5 +29,4 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ### Cost ceiling gating
 
-- Update `{:lead_message, ...}` handler: when `data.cost_ceiling_reached` is true, skip forwarding low-priority messages to ForemanAgent entirely. Still buffer them in `lead_message_buffer` for the catch-up prompt.
-- Update `approve_continued_spending` handler: after resetting `cost_ceiling_reached`, flush `lead_message_buffer` as a single consolidated catch-up prompt to ForemanAgent. (blocked: Update lead_message handler for cost ceiling)
+- Update `approve_continued_spending` handler: after resetting `cost_ceiling_reached`, flush `lead_message_buffer` as a single consolidated catch-up prompt to ForemanAgent.

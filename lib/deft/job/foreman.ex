@@ -950,7 +950,6 @@ defmodule Deft.Job.Foreman do
   end
 
   defp buffer_low_priority_message(type, content, metadata, data) do
-    debounce_ms = Map.get(data.config, :job_lead_message_debounce, 2_000)
     buffer_entry = {type, content, metadata}
     new_buffer = data.lead_message_buffer ++ [buffer_entry]
 
@@ -960,10 +959,16 @@ defmodule Deft.Job.Foreman do
         Process.cancel_timer(data.lead_message_timer)
       end
 
-    # Start new timer
-    timer_ref = Process.send_after(self(), :flush_lead_messages, debounce_ms)
-
-    %{data | lead_message_buffer: new_buffer, lead_message_timer: timer_ref}
+    # When cost ceiling is reached, buffer without setting timer
+    # Messages will be flushed as a catch-up prompt when spending is approved
+    if data.cost_ceiling_reached do
+      %{data | lead_message_buffer: new_buffer, lead_message_timer: nil}
+    else
+      # Normal flow: set debounce timer
+      debounce_ms = Map.get(data.config, :job_lead_message_debounce, 2_000)
+      timer_ref = Process.send_after(self(), :flush_lead_messages, debounce_ms)
+      %{data | lead_message_buffer: new_buffer, lead_message_timer: timer_ref}
+    end
   end
 
   defp flush_lead_messages_immediately(
