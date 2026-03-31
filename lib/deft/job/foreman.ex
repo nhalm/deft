@@ -1150,14 +1150,14 @@ defmodule Deft.Job.Foreman do
     # Clean up monitor if present
     cleanup_lead_monitor(data.lead_monitors, lead_id)
 
-    # Remove from tracking and add to completed_leads so all_leads_complete? counts it
+    # Remove from tracking and add to failed_leads so all_leads_complete? counts it
     data =
       data
       |> Map.update!(:leads, &Map.delete(&1, lead_id))
       |> Map.update!(:started_leads, &MapSet.delete(&1, lead_id))
       |> Map.update!(:blocked_leads, &Map.delete(&1, lead_id))
       |> Map.update!(:lead_monitors, &Map.delete(&1, lead_id))
-      |> Map.update!(:completed_leads, &MapSet.put(&1, lead_id))
+      |> Map.update!(:failed_leads, &MapSet.put(&1, lead_id))
 
     {:keep_state, data}
   end
