@@ -25,9 +25,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ### Code-speed orchestration: contract auto-unblocking
 
-- Add `match_contract_to_blocked_leads/2` private function in Foreman: takes contract metadata (lead_id, contract content) and `data`, checks `data.blocked_leads` for Leads whose dependency in `data.plan.dependencies` matches the publishing Lead, returns list of `{blocked_lead_id, lead_pid}` pairs to unblock.
-- Update `{:lead_message, :contract, ...}` handler in Foreman: after promoting to site log, call `match_contract_to_blocked_leads/2`. For each match, send `{:foreman_contract, contract}` directly to the blocked Lead's PID, remove from `blocked_leads`, add to `started_leads`. Then include a summary in the next coalesced prompt to ForemanAgent: "Contract X published by Lead A, auto-forwarded to Lead B." (blocked: Add match_contract_to_blocked_leads/2)
-
 ### Code-speed orchestration: Lead message coalescing
 
 - Add `lead_message_buffer` (list) and `lead_message_timer` (timer ref or nil) fields to Foreman initial state data. Add `job.lead_message_debounce` config key with default 2000ms.

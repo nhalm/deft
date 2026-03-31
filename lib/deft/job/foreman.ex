@@ -681,17 +681,25 @@ defmodule Deft.Job.Foreman do
   def handle_event(:info, {:lead_message, type, content, metadata}, state, data) do
     Logger.debug("#{log_prefix(data)} Lead message received: #{type}")
 
-    # Forward to ForemanAgent with structured context
-    if data.foreman_agent_pid do
-      message = build_lead_message_context(type, content, metadata, state, data)
-      Deft.Agent.prompt(data.foreman_agent_pid, message)
-    end
-
     # Auto-promote certain message types to site log
     promote_lead_message_to_site_log(type, content, metadata, data)
 
+    # Handle contract auto-unblocking at code speed
+    updated_data =
+      if type == :contract and state == :executing do
+        handle_contract_auto_unblocking(content, metadata, data)
+      else
+        data
+      end
+
+    # Forward to ForemanAgent with structured context
+    if updated_data.foreman_agent_pid do
+      message = build_lead_message_context(type, content, metadata, state, updated_data)
+      Deft.Agent.prompt(updated_data.foreman_agent_pid, message)
+    end
+
     # Handle Lead completion - remove from tracking and check for transition to verifying
-    handle_lead_completion(type, metadata, state, data)
+    handle_lead_completion(type, metadata, state, updated_data)
   end
 
   # Handle Lead process DOWN messages
@@ -1008,6 +1016,79 @@ defmodule Deft.Job.Foreman do
     Enum.find(deliverables, fn d ->
       Map.get(d, :id) == deliverable_id || Map.get(d, "id") == deliverable_id
     end)
+  end
+
+  # Match a published contract against the dependency DAG to find blocked leads to unblock
+  defp match_contract_to_blocked_leads(metadata, data) do
+    with publishing_lead_id <- Map.get(metadata, :lead_id),
+         publishing_lead when not is_nil(publishing_lead) <-
+           Map.get(data.leads, publishing_lead_id),
+         publishing_deliverable_id <- Map.get(publishing_lead.deliverable, :id) do
+      find_blocked_leads_for_deliverable(publishing_deliverable_id, data)
+    else
+      _ -> []
+    end
+  end
+
+  defp find_blocked_leads_for_deliverable(publishing_deliverable_id, data) do
+    downstream_deliverable_ids = get_downstream_deliverable_ids(publishing_deliverable_id, data)
+
+    data.blocked_leads
+    |> Enum.filter(fn {lead_id, _} ->
+      lead_matches_downstream_deliverable?(lead_id, downstream_deliverable_ids, data)
+    end)
+    |> Enum.map(fn {lead_id, _} ->
+      lead = Map.get(data.leads, lead_id)
+      {lead_id, lead.pid}
+    end)
+  end
+
+  defp get_downstream_deliverable_ids(publishing_deliverable_id, data) do
+    dependencies = Map.get(data.plan || %{}, :dependencies, [])
+
+    dependencies
+    |> Enum.filter(fn dep -> Map.get(dep, :from) == publishing_deliverable_id end)
+    |> Enum.map(fn dep -> Map.get(dep, :to) end)
+  end
+
+  defp lead_matches_downstream_deliverable?(lead_id, downstream_deliverable_ids, data) do
+    case Map.get(data.leads, lead_id) do
+      nil -> false
+      lead -> Map.get(lead.deliverable, :id) in downstream_deliverable_ids
+    end
+  end
+
+  # Handle contract auto-unblocking at code speed
+  defp handle_contract_auto_unblocking(contract, metadata, data) do
+    matches = match_contract_to_blocked_leads(metadata, data)
+
+    if Enum.empty?(matches) do
+      data
+    else
+      publishing_lead_id = Map.get(metadata, :lead_id)
+      publishing_lead = Map.get(data.leads, publishing_lead_id)
+
+      publishing_deliverable_name =
+        Map.get(publishing_lead.deliverable, :name, publishing_lead_id)
+
+      # Send contract to each blocked lead and update state
+      Enum.reduce(matches, data, fn {blocked_lead_id, blocked_lead_pid}, acc_data ->
+        # Send contract directly to the blocked lead
+        send(blocked_lead_pid, {:foreman_contract, contract})
+
+        blocked_lead = Map.get(acc_data.leads, blocked_lead_id)
+        blocked_deliverable_name = Map.get(blocked_lead.deliverable, :name, blocked_lead_id)
+
+        Logger.info(
+          "#{log_prefix(acc_data)} Contract from #{publishing_deliverable_name} auto-forwarded to #{blocked_deliverable_name}"
+        )
+
+        # Update state: remove from blocked_leads, add to started_leads
+        acc_data
+        |> Map.update!(:blocked_leads, &Map.delete(&1, blocked_lead_id))
+        |> Map.update!(:started_leads, &MapSet.put(&1, blocked_lead_id))
+      end)
+    end
   end
 
   defp handle_spawn_lead_with_deliverable(
