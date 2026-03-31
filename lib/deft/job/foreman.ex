@@ -589,11 +589,12 @@ defmodule Deft.Job.Foreman do
       "#{log_prefix(data)} ForemanAgent marking deliverable for Lead #{lead_id} as failed"
     )
 
-    # Move Lead from started_leads to failed_leads
+    # Move Lead from started_leads to failed_leads, and remove from leads map
     updated_data =
       data
       |> Map.update!(:started_leads, &MapSet.delete(&1, lead_id))
       |> Map.update!(:failed_leads, &MapSet.put(&1, lead_id))
+      |> Map.update!(:leads, &Map.delete(&1, lead_id))
 
     # Check if all Leads are complete (including failed ones) and transition to :verifying
     if all_leads_complete?(updated_data) do
