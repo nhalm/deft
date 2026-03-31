@@ -47,7 +47,8 @@ defmodule Deft.Config do
           job_lead_model: Deft.Provider.model_name(),
           job_runner_model: Deft.Provider.model_name(),
           job_research_runner_model: Deft.Provider.model_name(),
-          job_max_duration: pos_integer()
+          job_max_duration: pos_integer(),
+          job_lead_message_debounce: pos_integer()
         }
 
   @typedoc """
@@ -101,7 +102,8 @@ defmodule Deft.Config do
             optional(:lead_model) => String.t(),
             optional(:runner_model) => String.t(),
             optional(:research_runner_model) => String.t(),
-            optional(:max_duration) => pos_integer()
+            optional(:max_duration) => pos_integer(),
+            optional(:lead_message_debounce) => pos_integer()
           }
         }
 
@@ -143,7 +145,8 @@ defmodule Deft.Config do
     :job_lead_model,
     :job_runner_model,
     :job_research_runner_model,
-    :job_max_duration
+    :job_max_duration,
+    :job_lead_message_debounce
   ]
 
   defstruct [
@@ -184,7 +187,8 @@ defmodule Deft.Config do
     :job_lead_model,
     :job_runner_model,
     :job_research_runner_model,
-    :job_max_duration
+    :job_max_duration,
+    :job_lead_message_debounce
   ]
 
   @doc """
@@ -273,7 +277,8 @@ defmodule Deft.Config do
         lead_model: "claude-sonnet-4-20250514",
         runner_model: "claude-sonnet-4-20250514",
         research_runner_model: "claude-sonnet-4-20250514",
-        max_duration: 1_800_000
+        max_duration: 1_800_000,
+        lead_message_debounce: 2_000
       }
     }
   end
@@ -510,7 +515,8 @@ defmodule Deft.Config do
       job_runner_model: Map.get(job_config, :runner_model, "claude-sonnet-4-20250514"),
       job_research_runner_model:
         Map.get(job_config, :research_runner_model, "claude-sonnet-4-20250514"),
-      job_max_duration: Map.get(job_config, :max_duration, 1_800_000)
+      job_max_duration: Map.get(job_config, :max_duration, 1_800_000),
+      job_lead_message_debounce: Map.get(job_config, :lead_message_debounce, 2_000)
     }
   end
 end

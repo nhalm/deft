@@ -27,9 +27,8 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ### Code-speed orchestration: Lead message coalescing
 
-- Add `lead_message_buffer` (list) and `lead_message_timer` (timer ref or nil) fields to Foreman initial state data. Add `job.lead_message_debounce` config key with default 2000ms.
-- Update `{:lead_message, ...}` handler: only forward to ForemanAgent when in `:executing` state. For low-priority types (`:status`, `:artifact`, `:decision`, `:finding`), append to `lead_message_buffer` and start/reset `lead_message_timer` via `Process.send_after(self(), :flush_lead_messages, debounce)`. For high-priority types (`:contract`, `:blocker`, `:complete`, `:error`, `:critical_finding`), flush the buffer immediately plus the current message into a single consolidated prompt. (blocked: Add lead_message_buffer fields)
-- Add `handle_event(:info, :flush_lead_messages, ...)` handler: build a consolidated prompt from `lead_message_buffer` contents, call `Deft.Agent.prompt/2` once, clear buffer and timer. (blocked: Add lead_message_buffer fields)
+- Update `{:lead_message, ...}` handler: only forward to ForemanAgent when in `:executing` state. For low-priority types (`:status`, `:artifact`, `:decision`, `:finding`), append to `lead_message_buffer` and start/reset `lead_message_timer` via `Process.send_after(self(), :flush_lead_messages, debounce)`. For high-priority types (`:contract`, `:blocker`, `:complete`, `:error`, `:critical_finding`), flush the buffer immediately plus the current message into a single consolidated prompt.
+- Add `handle_event(:info, :flush_lead_messages, ...)` handler: build a consolidated prompt from `lead_message_buffer` contents, call `Deft.Agent.prompt/2` once, clear buffer and timer.
 
 ### Code-speed orchestration: crash decision timeout
 
@@ -40,5 +39,5 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ### Cost ceiling gating
 
-- Update `{:lead_message, ...}` handler: when `data.cost_ceiling_reached` is true, skip forwarding low-priority messages to ForemanAgent entirely. Still buffer them in `lead_message_buffer` for the catch-up prompt. (blocked: Add lead_message_buffer fields)
+- Update `{:lead_message, ...}` handler: when `data.cost_ceiling_reached` is true, skip forwarding low-priority messages to ForemanAgent entirely. Still buffer them in `lead_message_buffer` for the catch-up prompt.
 - Update `approve_continued_spending` handler: after resetting `cost_ceiling_reached`, flush `lead_message_buffer` as a single consolidated catch-up prompt to ForemanAgent. (blocked: Update lead_message handler for cost ceiling)

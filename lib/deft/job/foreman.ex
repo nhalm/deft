@@ -82,7 +82,9 @@ defmodule Deft.Job.Foreman do
       completed_leads: MapSet.new(),
       failed_leads: MapSet.new(),
       job_start_time: System.monotonic_time(:millisecond),
-      cost_ceiling_reached: false
+      cost_ceiling_reached: false,
+      lead_message_buffer: [],
+      lead_message_timer: nil
     }
 
     gen_statem_opts = if name, do: [name: name], else: []
