@@ -27,8 +27,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ### Code-speed orchestration: crash decision timeout
 
-- Update `fail_deliverable` and `spawn_lead` handlers: remove lead_id from `pending_crash_decisions` and cancel the pending timer.
-
 ### Cost ceiling gating
 
 - Update `{:lead_message, ...}` handler: when `data.cost_ceiling_reached` is true, skip forwarding low-priority messages to ForemanAgent entirely. Still buffer them in `lead_message_buffer` for the catch-up prompt.

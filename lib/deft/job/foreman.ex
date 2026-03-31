@@ -478,7 +478,10 @@ defmodule Deft.Job.Foreman do
     deliverable_id = Map.get(deliverable_info, :id)
     additional_context = Map.get(deliverable_info, :context, "")
 
-    case find_deliverable_by_id(data.plan, deliverable_id) do
+    # Cancel crash decision timer if this is a retry for a crashed Lead
+    updated_data = cancel_crash_decision_timer_for_deliverable(data, deliverable_id)
+
+    case find_deliverable_by_id(updated_data.plan, deliverable_id) do
       nil ->
         Logger.error(
           "#{log_prefix(data)} Cannot spawn Lead: deliverable '#{deliverable_id}' not found in plan"
@@ -491,7 +494,7 @@ defmodule Deft.Job.Foreman do
           deliverable,
           deliverable_id,
           additional_context,
-          data
+          updated_data
         )
     end
   end
@@ -573,9 +576,12 @@ defmodule Deft.Job.Foreman do
       "#{log_prefix(data)} ForemanAgent marking deliverable for Lead #{lead_id} as failed"
     )
 
+    # Cancel crash decision timer if this was in response to a crash
+    updated_data = cancel_crash_decision_timer(data, lead_id)
+
     # Move Lead from started_leads to failed_leads, and remove from leads map
     updated_data =
-      data
+      updated_data
       |> Map.update!(:started_leads, &MapSet.delete(&1, lead_id))
       |> Map.update!(:failed_leads, &MapSet.put(&1, lead_id))
       |> Map.update!(:leads, &Map.delete(&1, lead_id))
@@ -811,7 +817,7 @@ defmodule Deft.Job.Foreman do
 
         :keep_state_and_data
 
-      _timer_ref ->
+      _crash_info ->
         # ForemanAgent hasn't responded in time, auto-fail the deliverable
         Logger.warning(
           "#{log_prefix(data)} Lead #{lead_id} crash decision timeout - ForemanAgent did not respond, auto-failing deliverable"
@@ -1177,6 +1183,43 @@ defmodule Deft.Job.Foreman do
     end)
   end
 
+  # Find a crashed lead in pending_crash_decisions that matches the given deliverable_id
+  defp find_crashed_lead_for_deliverable(pending_crash_decisions, deliverable_id) do
+    Enum.find(pending_crash_decisions, fn {_lead_id, crash_info} ->
+      Map.get(crash_info, :deliverable_id) == deliverable_id
+    end)
+  end
+
+  # Cancel crash decision timer for a specific lead_id (used by fail_deliverable)
+  defp cancel_crash_decision_timer(data, lead_id) do
+    case Map.get(data.pending_crash_decisions, lead_id) do
+      nil ->
+        data
+
+      %{timer_ref: timer_ref} ->
+        _ = Process.cancel_timer(timer_ref)
+        Logger.debug("#{log_prefix(data)} Cancelled crash decision timer for Lead #{lead_id}")
+        Map.update!(data, :pending_crash_decisions, &Map.delete(&1, lead_id))
+    end
+  end
+
+  # Cancel crash decision timer for a deliverable_id (used by spawn_lead)
+  defp cancel_crash_decision_timer_for_deliverable(data, deliverable_id) do
+    case find_crashed_lead_for_deliverable(data.pending_crash_decisions, deliverable_id) do
+      nil ->
+        data
+
+      {crashed_lead_id, %{timer_ref: timer_ref}} ->
+        _ = Process.cancel_timer(timer_ref)
+
+        Logger.debug(
+          "#{log_prefix(data)} Cancelled crash decision timer for Lead #{crashed_lead_id} (retry with new Lead for deliverable #{deliverable_id})"
+        )
+
+        Map.update!(data, :pending_crash_decisions, &Map.delete(&1, crashed_lead_id))
+    end
+  end
+
   # Match a published contract against the dependency DAG to find blocked leads to unblock
   defp match_contract_to_blocked_leads(metadata, data) do
     with publishing_lead_id <- Map.get(metadata, :lead_id),
@@ -1535,28 +1578,41 @@ defmodule Deft.Job.Foreman do
   end
 
   defp do_handle_lead_crash(lead_id, _state, data) do
+    # Get deliverable_id before removing the lead
+    deliverable_id = extract_deliverable_id(data.leads, lead_id)
+
     # Clean up the crashed Lead's worktree
     Logger.debug("#{log_prefix(data)} Cleaning up worktree for crashed Lead #{lead_id}")
-
-    GitJob.cleanup_lead_worktree(
-      lead_id: lead_id,
-      working_dir: data.working_dir
-    )
-
+    GitJob.cleanup_lead_worktree(lead_id: lead_id, working_dir: data.working_dir)
     Logger.info("#{log_prefix(data)} Cleaned up worktree for crashed Lead #{lead_id}")
 
     # Clean up monitor
     cleanup_lead_monitor(data.lead_monitors, lead_id)
 
-    # Remove from tracking (but keep in started_leads for now - will be moved to failed_leads
-    # when ForemanAgent calls fail_deliverable)
+    # Remove from tracking
     updated_data =
       data
       |> Map.update!(:leads, &Map.delete(&1, lead_id))
       |> Map.update!(:blocked_leads, &Map.delete(&1, lead_id))
       |> Map.update!(:lead_monitors, &Map.delete(&1, lead_id))
 
-    # Notify ForemanAgent about the crash so it can decide whether to retry or fail
+    # Notify agent and start crash decision timeout
+    updated_data = setup_crash_decision_timeout(updated_data, lead_id, deliverable_id)
+
+    {:keep_state, updated_data}
+  end
+
+  # Extract deliverable_id from a lead, handling various data shapes
+  defp extract_deliverable_id(leads, lead_id) do
+    case Map.get(leads, lead_id) do
+      nil -> nil
+      %{deliverable: deliverable} when is_map(deliverable) -> Map.get(deliverable, :id)
+      _ -> nil
+    end
+  end
+
+  # Notify ForemanAgent of crash and start decision timeout
+  defp setup_crash_decision_timeout(data, lead_id, deliverable_id) do
     crash_notification = """
     Lead '#{lead_id}' has crashed and its worktree has been cleaned up.
 
@@ -1571,7 +1627,6 @@ defmodule Deft.Job.Foreman do
       Deft.Agent.prompt(data.foreman_agent_pid, crash_notification)
     end
 
-    # Start a timeout for the crash decision - if ForemanAgent doesn't respond in time, auto-fail
     timeout_ms = Map.get(data.config, :job_lead_crash_decision_timeout, 60_000)
     timer_ref = Process.send_after(self(), {:lead_crash_timeout, lead_id}, timeout_ms)
 
@@ -1579,11 +1634,9 @@ defmodule Deft.Job.Foreman do
       "#{log_prefix(data)} Started crash decision timeout for Lead #{lead_id} (#{timeout_ms}ms)"
     )
 
-    # Add lead_id to pending_crash_decisions with the timer ref
-    updated_data =
-      Map.update!(updated_data, :pending_crash_decisions, &Map.put(&1, lead_id, timer_ref))
-
-    {:keep_state, updated_data}
+    Map.update!(data, :pending_crash_decisions, fn pending ->
+      Map.put(pending, lead_id, %{timer_ref: timer_ref, deliverable_id: deliverable_id})
+    end)
   end
 
   defp run_research_runner(topic, data) do
