@@ -1219,8 +1219,21 @@ defmodule Deft.Job.Foreman do
       deliverable_name = get_in(data, [:leads, lead_id, :deliverable, :name])
       Logger.info("#{log_prefix(data)} Lead completed: #{lead_id}, task: #{deliverable_name}")
 
+      # Clean up the Lead's worktree
+      Logger.debug("#{log_prefix(data)} Cleaning up worktree for completed Lead #{lead_id}")
+
+      GitJob.cleanup_lead_worktree(
+        lead_id: lead_id,
+        working_dir: data.working_dir
+      )
+
+      # Demonitor the Lead
+      cleanup_lead_monitor(data.lead_monitors, lead_id)
+
       updated_data =
         data
+        |> Map.update!(:leads, &Map.delete(&1, lead_id))
+        |> Map.update!(:lead_monitors, &Map.delete(&1, lead_id))
         |> Map.update!(:started_leads, &MapSet.delete(&1, lead_id))
         |> Map.update!(:completed_leads, &MapSet.put(&1, lead_id))
 

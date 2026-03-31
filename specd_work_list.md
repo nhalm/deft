@@ -21,7 +21,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ### Process lifecycle correctness
 
-- Fix `handle_lead_completion`: after moving lead_id to `completed_leads`, also demonitor the Lead (via `cleanup_lead_monitor`), remove from `leads` map, remove from `lead_monitors` map, and call `GitJob.cleanup_lead_worktree/1` for the Lead's worktree. Currently none of these happen, causing monitor leaks and spurious DOWN handling.
 - Fix `fail_deliverable` handler: after adding lead_id to `failed_leads` and removing from `started_leads`, also remove the entry from `data.leads` map. Currently the stale entry remains, causing misleading Lead status in ForemanAgent prompts.
 - Fix `do_abort_lead`: change `MapSet.put(&1, lead_id)` on `completed_leads` to `MapSet.put(&1, lead_id)` on `failed_leads`. Aborted Leads are not successfully completed — they should count as failed per the spec's `all_leads_complete?` semantics.
 - Fix DOWN handler (`handle_event(:info, {:DOWN, ...})`): check `reason` before dispatching. For ForemanAgent: only call `do_fail_job_on_foreman_agent_crash` if reason is NOT `:normal` or `:shutdown`/`{:shutdown, _}`. For Leads: only call `do_handle_lead_crash` if reason is NOT `:normal` or `:shutdown`/`{:shutdown, _}`. Normal/shutdown exits should be logged and ignored (the completion path handles them).
