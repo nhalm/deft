@@ -1238,13 +1238,13 @@ defmodule Deft.Job.ForemanTest do
         {:executing, data}
       end)
 
-      # Send a lead_message to the Foreman
+      # Send a high-priority lead_message to the Foreman (error is high-priority)
       lead_metadata = %{
         lead_id: "lead-123",
         lead_name: "Test Lead"
       }
 
-      send(foreman_pid, {:lead_message, :status, "Working on database layer", lead_metadata})
+      send(foreman_pid, {:lead_message, :error, "Database connection failed", lead_metadata})
 
       # Wait for message to be processed
       Process.sleep(100)
@@ -1257,11 +1257,11 @@ defmodule Deft.Job.ForemanTest do
           assert length(prompts) == 1
           [prompt_text] = prompts
 
-          # Verify the prompt contains expected structure from build_lead_message_context
-          assert String.contains?(prompt_text, "## Lead Update")
-          assert String.contains?(prompt_text, "**Type:** status")
-          assert String.contains?(prompt_text, "**From:** Test Lead (lead-123)")
-          assert String.contains?(prompt_text, "Working on database layer")
+          # Verify the prompt contains consolidated message structure
+          assert String.contains?(prompt_text, "## Consolidated Lead Updates")
+          assert String.contains?(prompt_text, "**Type:** error")
+          assert String.contains?(prompt_text, "Updates from Test Lead (lead-123)")
+          assert String.contains?(prompt_text, "Database connection failed")
           assert String.contains?(prompt_text, "**Job Phase:** executing")
       after
         500 -> flunk("Did not receive prompts from mock agent")
@@ -1299,12 +1299,14 @@ defmodule Deft.Job.ForemanTest do
         {:executing, data}
       end)
 
-      # Test different message types
+      # Test different message types with new coalescing behavior
+      # :decision is low-priority (buffered), others are high-priority (flush immediately)
       message_types = [
-        {:decision, "Use PostgreSQL for database", %{lead_id: "lead-1"}},
-        {:contract, "API endpoint: POST /api/users", %{lead_id: "lead-2"}},
-        {:blocker, "Need API key configuration", %{lead_id: "lead-3"}},
-        {:critical_finding, "Security vulnerability found", %{lead_id: "lead-4"}}
+        {:decision, "Use PostgreSQL for database", %{lead_id: "lead-1", lead_name: "Lead 1"}},
+        {:contract, "API endpoint: POST /api/users", %{lead_id: "lead-2", lead_name: "Lead 2"}},
+        {:blocker, "Need API key configuration", %{lead_id: "lead-3", lead_name: "Lead 3"}},
+        {:critical_finding, "Security vulnerability found",
+         %{lead_id: "lead-4", lead_name: "Lead 4"}}
       ]
 
       for {type, content, metadata} <- message_types do
@@ -1317,13 +1319,21 @@ defmodule Deft.Job.ForemanTest do
 
       receive do
         {:prompts, prompts} ->
-          assert length(prompts) == 4
+          # With coalescing: decision buffers, contract flushes (decision+contract),
+          # blocker sends immediately, critical_finding sends immediately
+          # Expected: 3 prompts
+          assert length(prompts) == 3
 
-          # Verify each prompt contains the correct message type
-          for {idx, {type, _, _}} <- Enum.with_index(message_types) do
-            prompt = Enum.at(prompts, idx)
-            assert String.contains?(prompt, "**Type:** #{type}")
-          end
+          # First prompt should contain both decision and contract (coalesced)
+          assert String.contains?(Enum.at(prompts, 0), "**Type:** decision")
+          assert String.contains?(Enum.at(prompts, 0), "**Type:** contract")
+          assert String.contains?(Enum.at(prompts, 0), "## Consolidated Lead Updates")
+
+          # Second prompt should contain blocker
+          assert String.contains?(Enum.at(prompts, 1), "**Type:** blocker")
+
+          # Third prompt should contain critical_finding
+          assert String.contains?(Enum.at(prompts, 2), "**Type:** critical_finding")
       after
         500 -> flunk("Did not receive prompts from mock agent")
       end

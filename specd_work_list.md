@@ -25,11 +25,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ### Code-speed orchestration: contract auto-unblocking
 
-### Code-speed orchestration: Lead message coalescing
-
-- Update `{:lead_message, ...}` handler: only forward to ForemanAgent when in `:executing` state. For low-priority types (`:status`, `:artifact`, `:decision`, `:finding`), append to `lead_message_buffer` and start/reset `lead_message_timer` via `Process.send_after(self(), :flush_lead_messages, debounce)`. For high-priority types (`:contract`, `:blocker`, `:complete`, `:error`, `:critical_finding`), flush the buffer immediately plus the current message into a single consolidated prompt.
-- Add `handle_event(:info, :flush_lead_messages, ...)` handler: build a consolidated prompt from `lead_message_buffer` contents, call `Deft.Agent.prompt/2` once, clear buffer and timer.
-
 ### Code-speed orchestration: crash decision timeout
 
 - Add `job.lead_crash_decision_timeout` config key with default 60000ms.

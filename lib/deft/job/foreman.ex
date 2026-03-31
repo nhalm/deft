@@ -694,14 +694,28 @@ defmodule Deft.Job.Foreman do
         data
       end
 
-    # Forward to ForemanAgent with structured context
-    if updated_data.foreman_agent_pid do
-      message = build_lead_message_context(type, content, metadata, state, updated_data)
-      Deft.Agent.prompt(updated_data.foreman_agent_pid, message)
-    end
+    # Route message to ForemanAgent based on state and priority
+    updated_data = route_lead_message_to_agent(type, content, metadata, state, updated_data)
 
     # Handle Lead completion - remove from tracking and check for transition to verifying
     handle_lead_completion(type, metadata, state, updated_data)
+  end
+
+  # Handle flush timer for buffered Lead messages
+  def handle_event(:info, :flush_lead_messages, state, data) do
+    if data.lead_message_buffer != [] and data.foreman_agent_pid do
+      # Build consolidated prompt from buffered messages
+      consolidated_message =
+        build_consolidated_lead_message(data.lead_message_buffer, state, data)
+
+      Deft.Agent.prompt(data.foreman_agent_pid, consolidated_message)
+
+      # Clear buffer and timer
+      {:keep_state, %{data | lead_message_buffer: [], lead_message_timer: nil}}
+    else
+      # No messages to flush or no agent
+      {:keep_state, %{data | lead_message_timer: nil}}
+    end
   end
 
   # Handle Lead process DOWN messages
@@ -850,26 +864,126 @@ defmodule Deft.Job.Foreman do
     """
   end
 
-  defp build_lead_message_context(type, content, metadata, state, data) do
-    lead_id = Map.get(metadata, :lead_id, "unknown")
-    lead_name = Map.get(metadata, :lead_name, "Unknown Lead")
+  defp route_lead_message_to_agent(type, content, metadata, state, data) do
+    if state == :executing and data.foreman_agent_pid do
+      handle_lead_message_by_priority(type, content, metadata, state, data)
+    else
+      # Not in :executing state - log and discard
+      if state != :executing do
+        Logger.debug(
+          "#{log_prefix(data)} Lead message discarded (not in :executing state): #{type}"
+        )
+      end
+
+      data
+    end
+  end
+
+  defp handle_lead_message_by_priority(type, content, metadata, state, data) do
+    low_priority_types = [:status, :artifact, :decision, :finding]
+    high_priority_types = [:contract, :blocker, :complete, :error, :critical_finding]
+
+    cond do
+      type in low_priority_types ->
+        buffer_low_priority_message(type, content, metadata, data)
+
+      type in high_priority_types ->
+        flush_lead_messages_immediately(type, content, metadata, state, data)
+
+      true ->
+        # Unknown type - treat as low priority
+        Logger.warning(
+          "#{log_prefix(data)} Unknown lead message type: #{type}, treating as low priority"
+        )
+
+        buffer_low_priority_message(type, content, metadata, data)
+    end
+  end
+
+  defp buffer_low_priority_message(type, content, metadata, data) do
+    debounce_ms = Map.get(data.config, :job_lead_message_debounce, 2_000)
+    buffer_entry = {type, content, metadata}
+    new_buffer = data.lead_message_buffer ++ [buffer_entry]
+
+    # Cancel existing timer if any
+    _ =
+      if data.lead_message_timer do
+        Process.cancel_timer(data.lead_message_timer)
+      end
+
+    # Start new timer
+    timer_ref = Process.send_after(self(), :flush_lead_messages, debounce_ms)
+
+    %{data | lead_message_buffer: new_buffer, lead_message_timer: timer_ref}
+  end
+
+  defp flush_lead_messages_immediately(
+         high_priority_type,
+         high_priority_content,
+         high_priority_metadata,
+         state,
+         data
+       ) do
+    # Cancel existing timer if any
+    _ =
+      if data.lead_message_timer do
+        Process.cancel_timer(data.lead_message_timer)
+      end
+
+    # Build consolidated message from buffer + current high-priority message
+    all_messages =
+      data.lead_message_buffer ++
+        [{high_priority_type, high_priority_content, high_priority_metadata}]
+
+    consolidated_message = build_consolidated_lead_message(all_messages, state, data)
+
+    # Send to ForemanAgent
+    Deft.Agent.prompt(data.foreman_agent_pid, consolidated_message)
+
+    # Clear buffer and timer
+    %{data | lead_message_buffer: [], lead_message_timer: nil}
+  end
+
+  defp build_consolidated_lead_message(buffered_messages, state, data) do
     leads_status = format_leads_status(data.leads)
     contracts_info = format_contracts_from_sitelog(site_log_name(data))
 
+    # Group messages by Lead
+    grouped_by_lead =
+      Enum.group_by(buffered_messages, fn {_type, _content, metadata} ->
+        lead_id = Map.get(metadata, :lead_id, "unknown")
+        lead_name = Map.get(metadata, :lead_name, "Unknown Lead")
+        {lead_id, lead_name}
+      end)
+
+    # Format each Lead's messages
+    lead_updates =
+      Enum.map(grouped_by_lead, fn {{lead_id, lead_name}, messages} ->
+        formatted_messages =
+          Enum.map(messages, fn {type, content, _metadata} ->
+            """
+            **Type:** #{type}
+            **Content:**
+            #{inspect(content, pretty: true, limit: :infinity)}
+            """
+          end)
+          |> Enum.join("\n\n---\n\n")
+
+        """
+        ### Updates from #{lead_name} (#{lead_id})
+
+        #{formatted_messages}
+        """
+      end)
+      |> Enum.join("\n\n")
+
     """
-    ## Lead Update
+    ## Consolidated Lead Updates
 
-    **Type:** #{type}
-    **From:** #{lead_name} (#{lead_id})
     **Job Phase:** #{state}
+    **Update Count:** #{length(buffered_messages)} message(s) since your last response
 
-    ### Message Content
-
-    #{inspect(content, pretty: true, limit: :infinity)}
-
-    ### Metadata
-
-    #{inspect(metadata, pretty: true)}
+    #{lead_updates}
 
     ## Current Job State
 
@@ -880,7 +994,7 @@ defmodule Deft.Job.Foreman do
 
     ### What to do
 
-    Based on this update, decide if you need to:
+    Based on these updates, decide if you need to:
     - Spawn a new Lead (use `spawn_lead`)
     - Unblock a waiting Lead (use `unblock_lead`)
     - Steer this or another Lead (use `steer_lead`)
@@ -1299,7 +1413,8 @@ defmodule Deft.Job.Foreman do
         {:keep_state, updated_data}
       end
     else
-      :keep_state_and_data
+      # Pass through the data to preserve buffer and other state updates
+      {:keep_state, data}
     end
   end
 
