@@ -791,7 +791,7 @@ defmodule Deft.Job.Foreman do
   end
 
   # Handle user approval for continued spending
-  def handle_event(:cast, :approve_continued_spending, _state, data) do
+  def handle_event(:cast, :approve_continued_spending, state, data) do
     Logger.info("#{log_prefix(data)} User approved continued spending, notifying RateLimiter")
 
     # Call RateLimiter to reset cost ceiling flag
@@ -800,8 +800,27 @@ defmodule Deft.Job.Foreman do
     message = "✅ Continued spending approved. Execution resumed."
     notify_user(data, :spending_approved, message)
 
-    # Reset flag
+    # Reset flag and flush buffered Lead messages as a consolidated catch-up prompt
     updated_data = %{data | cost_ceiling_reached: false}
+
+    updated_data =
+      if updated_data.lead_message_buffer != [] and updated_data.foreman_agent_pid do
+        Logger.info(
+          "#{log_prefix(data)} Flushing #{length(updated_data.lead_message_buffer)} buffered Lead messages as catch-up prompt"
+        )
+
+        # Build consolidated catch-up prompt from buffered messages
+        consolidated_message =
+          build_consolidated_lead_message(updated_data.lead_message_buffer, state, updated_data)
+
+        Deft.Agent.prompt(updated_data.foreman_agent_pid, consolidated_message)
+
+        # Clear buffer and timer
+        %{updated_data | lead_message_buffer: [], lead_message_timer: nil}
+      else
+        updated_data
+      end
+
     {:keep_state, updated_data}
   end
 

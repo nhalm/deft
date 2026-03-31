@@ -26,7 +26,3 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 ### Code-speed orchestration: contract auto-unblocking
 
 ### Code-speed orchestration: crash decision timeout
-
-### Cost ceiling gating
-
-- Update `approve_continued_spending` handler: after resetting `cost_ceiling_reached`, flush `lead_message_buffer` as a single consolidated catch-up prompt to ForemanAgent.
