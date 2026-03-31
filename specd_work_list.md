@@ -27,7 +27,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ### Code-speed orchestration: crash decision timeout
 
-- Add `handle_event(:info, {:lead_crash_timeout, lead_id}, ...)` handler: if lead_id is still in `pending_crash_decisions` (ForemanAgent hasn't responded), auto-fail the deliverable — same logic as `fail_deliverable` handler. Log a warning.
 - Update `fail_deliverable` and `spawn_lead` handlers: remove lead_id from `pending_crash_decisions` and cancel the pending timer.
 
 ### Cost ceiling gating

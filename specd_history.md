@@ -1,4 +1,5 @@
 # History
+- **orchestration v0.10 (2026-03-31):** Add `handle_event(:info, {:lead_crash_timeout, lead_id}, ...)` handler: if lead_id is still in `pending_crash_decisions` (ForemanAgent hasn't responded), auto-fail the deliverable — same logic as `fail_deliverable` handler. Log a warning.
 - **orchestration v0.10 (2026-03-31):** Update `do_handle_lead_crash`: after prompting ForemanAgent, return a `{:state_timeout, timeout, {:lead_crash_timeout, lead_id}}` action (or use `Process.send_after` if multiple crash timeouts need to coexist, since gen_statem only supports one state_timeout per state). Store pending crash lead_ids in a `pending_crash_decisions` map in state data.
 - **orchestration v0.10 (2026-03-31):** Add `job.lead_crash_decision_timeout` config key with default 60000ms.
 - **orchestration v0.10 (2026-03-31):** Add `handle_event(:info, :flush_lead_messages, ...)` handler: build a consolidated prompt from `lead_message_buffer` contents, call `Deft.Agent.prompt/2` once, clear buffer and timer.

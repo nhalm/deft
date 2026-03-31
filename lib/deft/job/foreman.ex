@@ -799,6 +799,48 @@ defmodule Deft.Job.Foreman do
     {:keep_state, updated_data}
   end
 
+  # Handle crash decision timeout - auto-fail if ForemanAgent hasn't responded
+  def handle_event(:info, {:lead_crash_timeout, lead_id}, :executing, data) do
+    # Check if lead_id is still in pending_crash_decisions
+    case Map.get(data.pending_crash_decisions, lead_id) do
+      nil ->
+        # ForemanAgent already responded (called fail_deliverable or spawn_lead), nothing to do
+        Logger.debug(
+          "#{log_prefix(data)} Crash timeout for Lead #{lead_id} fired but already handled, ignoring"
+        )
+
+        :keep_state_and_data
+
+      _timer_ref ->
+        # ForemanAgent hasn't responded in time, auto-fail the deliverable
+        Logger.warning(
+          "#{log_prefix(data)} Lead #{lead_id} crash decision timeout - ForemanAgent did not respond, auto-failing deliverable"
+        )
+
+        # Remove from pending_crash_decisions
+        updated_data =
+          Map.update!(data, :pending_crash_decisions, &Map.delete(&1, lead_id))
+
+        # Apply same logic as fail_deliverable: move to failed_leads and remove from leads map
+        updated_data =
+          updated_data
+          |> Map.update!(:started_leads, &MapSet.delete(&1, lead_id))
+          |> Map.update!(:failed_leads, &MapSet.put(&1, lead_id))
+          |> Map.update!(:leads, &Map.delete(&1, lead_id))
+
+        # Check if all Leads are complete (including failed ones) and transition to :verifying
+        if all_leads_complete?(updated_data) do
+          Logger.info(
+            "#{log_prefix(data)} All Leads complete (including failed), transitioning to :verifying"
+          )
+
+          {:next_state, :verifying, updated_data}
+        else
+          {:keep_state, updated_data}
+        end
+    end
+  end
+
   # Catch-all for unhandled events
   def handle_event(event_type, event_content, state, data) do
     Logger.warning(
