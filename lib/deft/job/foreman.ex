@@ -84,7 +84,8 @@ defmodule Deft.Job.Foreman do
       job_start_time: System.monotonic_time(:millisecond),
       cost_ceiling_reached: false,
       lead_message_buffer: [],
-      lead_message_timer: nil
+      lead_message_timer: nil,
+      pending_crash_decisions: %{}
     }
 
     gen_statem_opts = if name, do: [name: name], else: []
@@ -1527,6 +1528,18 @@ defmodule Deft.Job.Foreman do
     if data.foreman_agent_pid do
       Deft.Agent.prompt(data.foreman_agent_pid, crash_notification)
     end
+
+    # Start a timeout for the crash decision - if ForemanAgent doesn't respond in time, auto-fail
+    timeout_ms = Map.get(data.config, :job_lead_crash_decision_timeout, 60_000)
+    timer_ref = Process.send_after(self(), {:lead_crash_timeout, lead_id}, timeout_ms)
+
+    Logger.debug(
+      "#{log_prefix(data)} Started crash decision timeout for Lead #{lead_id} (#{timeout_ms}ms)"
+    )
+
+    # Add lead_id to pending_crash_decisions with the timer ref
+    updated_data =
+      Map.update!(updated_data, :pending_crash_decisions, &Map.put(&1, lead_id, timer_ref))
 
     {:keep_state, updated_data}
   end
