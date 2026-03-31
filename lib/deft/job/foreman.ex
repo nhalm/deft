@@ -1486,13 +1486,42 @@ defmodule Deft.Job.Foreman do
   end
 
   defp cleanup(data) do
-    # Stop site log
-    if data.site_log_pid && Process.alive?(data.site_log_pid) do
-      Store.cleanup(data.site_log_pid)
+    # 1. Gracefully shut down any running Leads
+    Enum.each(data.leads, fn {lead_id, lead} ->
+      if lead.pid && Process.alive?(lead.pid) do
+        Process.exit(lead.pid, :shutdown)
+        Logger.debug("#{log_prefix(data)} Stopped Lead #{lead_id} during cleanup")
+      end
+    end)
+
+    # 2. Clean up all Lead worktrees
+    Enum.each(data.leads, fn {lead_id, _lead} ->
+      Logger.debug("#{log_prefix(data)} Cleaning up worktree for Lead #{lead_id}")
+
+      GitJob.cleanup_lead_worktree(
+        lead_id: lead_id,
+        working_dir: data.working_dir
+      )
+    end)
+
+    # 3. Demonitor all Leads with :flush
+    Enum.each(data.lead_monitors, fn {_lead_id, monitor_ref} ->
+      Process.demonitor(monitor_ref, [:flush])
+    end)
+
+    # 4. Demonitor ForemanAgent
+    if data.foreman_agent_monitor_ref do
+      Process.demonitor(data.foreman_agent_monitor_ref, [:flush])
     end
 
-    # Stop all Leads (when implemented)
-    # Cleanup worktrees (when implemented)
+    # 5. Stop site log
+    if data.site_log_pid && Process.alive?(data.site_log_pid) do
+      try do
+        Store.cleanup(data.site_log_pid)
+      rescue
+        ArgumentError -> :ok
+      end
+    end
 
     :ok
   end
