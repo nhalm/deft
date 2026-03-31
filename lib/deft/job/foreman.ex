@@ -1305,6 +1305,11 @@ defmodule Deft.Job.Foreman do
     # Perform general cleanup (site log, etc.)
     cleanup(data)
 
+    # Demonitor all Leads to prevent spurious DOWN messages during shutdown
+    Enum.each(data.lead_monitors, fn {_lead_id, monitor_ref} ->
+      Process.demonitor(monitor_ref, [:flush])
+    end)
+
     # Stop the Foreman with an error
     {:stop, {:foreman_agent_crashed, reason}, data}
   end
