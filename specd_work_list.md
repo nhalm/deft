@@ -22,7 +22,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 ### Sibling process resilience
 
 - Replace cached `rate_limiter_pid` in Foreman state with a registered name lookup function: define a private `rate_limiter_pid/1` helper that does `GenServer.whereis({:via, Registry, {Deft.ProcessRegistry, {:rate_limiter, data.session_id}}})`. Replace all `data.rate_limiter_pid` reads with calls to this helper. Remove `rate_limiter_pid` from the initial data map. (blocked: Verify RateLimiter registers under this name in ProcessRegistry)
-- Replace cached `site_log_pid` in Foreman state with the registered name on each use: use `{:via, Registry, {Deft.ProcessRegistry, {:sitelog, data.session_id}}}` directly in Store calls instead of `data.site_log_pid`. Remove `site_log_pid` from initial data map and the `resolve_site_log_pid/1` init helper.
 
 ### Code-speed orchestration: contract auto-unblocking
 

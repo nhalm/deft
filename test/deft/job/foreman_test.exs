@@ -6,6 +6,11 @@ defmodule Deft.Job.ForemanTest do
   alias Deft.Project
   alias Deft.Store
 
+  # Helper to get site log registered name from session_id
+  defp site_log_name(session_id) do
+    {:via, Registry, {Deft.ProcessRegistry, {:sitelog, session_id}}}
+  end
+
   setup do
     # Create temporary directory for test files
     tmp_dir =
@@ -99,10 +104,13 @@ defmodule Deft.Job.ForemanTest do
       # Start Foreman - it should look up the site log
       {:ok, foreman_pid} = Foreman.start_link(foreman_opts)
 
-      # Get the Foreman's state to verify site log was found
+      # Get the Foreman's state to verify it's running
       {_state, data} = :sys.get_state(foreman_pid)
-      assert data.site_log_pid == site_log_pid
-      assert Process.alive?(data.site_log_pid)
+
+      # Verify site log can be looked up by registered name
+      looked_up_pid = GenServer.whereis(site_log_name(data.session_id))
+      assert looked_up_pid == site_log_pid
+      assert Process.alive?(looked_up_pid)
 
       # Verify site log file exists
       sitelog_path = Path.join([Project.jobs_dir(tmp_dir), session_id, "sitelog.dets"])
@@ -127,7 +135,7 @@ defmodule Deft.Job.ForemanTest do
       {_state, data} = :sys.get_state(foreman_pid)
 
       # Verify site log exists and get tid for reads
-      tid = Store.tid(data.site_log_pid)
+      tid = Store.tid(site_log_name(data.session_id))
 
       # Foreman writes to site log via Lead messages
       # Send a decision message which auto-promotes to site log
@@ -164,7 +172,7 @@ defmodule Deft.Job.ForemanTest do
       {:ok, foreman_pid} = Foreman.start_link(foreman_opts)
 
       {_state, data} = :sys.get_state(foreman_pid)
-      tid = Store.tid(data.site_log_pid)
+      tid = Store.tid(site_log_name(data.session_id))
 
       # Send a decision message from a Lead
       send(foreman_pid, {:lead_message, :decision, "Use PostgreSQL for persistence", %{}})
@@ -200,7 +208,7 @@ defmodule Deft.Job.ForemanTest do
         )
 
       {_state, data} = :sys.get_state(foreman_pid)
-      tid = Store.tid(data.site_log_pid)
+      tid = Store.tid(site_log_name(data.session_id))
 
       # Send a contract message from a Lead
       send(
@@ -239,7 +247,7 @@ defmodule Deft.Job.ForemanTest do
         )
 
       {_state, data} = :sys.get_state(foreman_pid)
-      tid = Store.tid(data.site_log_pid)
+      tid = Store.tid(site_log_name(data.session_id))
 
       # Send a critical_finding message from a Lead
       send(foreman_pid, {:lead_message, :critical_finding, "Security vulnerability found", %{}})
@@ -275,7 +283,7 @@ defmodule Deft.Job.ForemanTest do
         )
 
       {_state, data} = :sys.get_state(foreman_pid)
-      tid = Store.tid(data.site_log_pid)
+      tid = Store.tid(site_log_name(data.session_id))
 
       # Send a correction message
       send(foreman_pid, {:lead_message, :correction, "Actually use MySQL, not PostgreSQL", %{}})
@@ -311,7 +319,7 @@ defmodule Deft.Job.ForemanTest do
         )
 
       {_state, data} = :sys.get_state(foreman_pid)
-      tid = Store.tid(data.site_log_pid)
+      tid = Store.tid(site_log_name(data.session_id))
 
       # Send a finding message (not in the auto-promote list)
       send(foreman_pid, {:lead_message, :finding, "Found local implementation detail", %{}})
@@ -360,7 +368,7 @@ defmodule Deft.Job.ForemanTest do
         )
 
       {_state, data} = :sys.get_state(foreman_pid)
-      tid = Store.tid(data.site_log_pid)
+      tid = Store.tid(site_log_name(data.session_id))
 
       # Send a status message
       send(foreman_pid, {:lead_message, :status, "Working on database layer", %{}})
@@ -396,7 +404,7 @@ defmodule Deft.Job.ForemanTest do
         )
 
       {_state, data} = :sys.get_state(foreman_pid)
-      tid = Store.tid(data.site_log_pid)
+      tid = Store.tid(site_log_name(data.session_id))
 
       # Send a blocker message
       send(foreman_pid, {:lead_message, :blocker, "Need API key configuration", %{}})
@@ -426,7 +434,7 @@ defmodule Deft.Job.ForemanTest do
       {:ok, foreman_pid} = Foreman.start_link(foreman_opts)
 
       {_state, data} = :sys.get_state(foreman_pid)
-      tid = Store.tid(data.site_log_pid)
+      tid = Store.tid(site_log_name(data.session_id))
 
       # Send /correct command as user prompt
       :gen_statem.cast(foreman_pid, {:prompt, "/correct Use MySQL instead of PostgreSQL"})
@@ -493,7 +501,7 @@ defmodule Deft.Job.ForemanTest do
       {:ok, foreman_pid} = Foreman.start_link(foreman_opts)
 
       {_state, data} = :sys.get_state(foreman_pid)
-      tid = Store.tid(data.site_log_pid)
+      tid = Store.tid(site_log_name(data.session_id))
 
       # Send regular user prompt (not /correct)
       :gen_statem.cast(foreman_pid, {:prompt, "What's the status?"})
@@ -894,7 +902,7 @@ defmodule Deft.Job.ForemanTest do
 
       # Get site log for verification
       {_state, data} = :sys.get_state(foreman_pid)
-      _tid = Store.tid(data.site_log_pid)
+      _tid = Store.tid(site_log_name(data.session_id))
 
       # Manually write plan (simulating what happens after decomposition)
       plan_path = Path.join([Project.jobs_dir(tmp_dir), session_id, "plan.json"])
@@ -1078,7 +1086,7 @@ defmodule Deft.Job.ForemanTest do
       Process.sleep(100)
 
       {_state, data} = :sys.get_state(foreman_pid)
-      tid = Store.tid(data.site_log_pid)
+      tid = Store.tid(site_log_name(data.session_id))
 
       database_lead_id = "#{session_id}-Database"
 
@@ -1127,7 +1135,7 @@ defmodule Deft.Job.ForemanTest do
         )
 
       {_state, data} = :sys.get_state(foreman_pid)
-      tid = Store.tid(data.site_log_pid)
+      tid = Store.tid(site_log_name(data.session_id))
 
       # Send decision from Lead 1
       send(

@@ -50,7 +50,6 @@ defmodule Deft.Job.Foreman do
   - `:working_dir` — Optional. Working directory for the project (defaults to File.cwd!()).
   - `:foreman_agent_pid` — Optional. PID of the ForemanAgent (will be set by supervisor).
   - `:cli_pid` — Optional. PID of CLI process for direct user interaction.
-  - `:site_log_pid` — Optional. PID of the Store site log instance (if not provided, will look up by name).
   - `:name` — Optional. Name for the gen_statem process.
   """
   def start_link(opts) do
@@ -62,7 +61,6 @@ defmodule Deft.Job.Foreman do
     working_dir = Keyword.get(opts, :working_dir, File.cwd!())
     foreman_agent_pid = Keyword.get(opts, :foreman_agent_pid)
     cli_pid = Keyword.get(opts, :cli_pid)
-    site_log_pid = Keyword.get(opts, :site_log_pid)
     name = Keyword.get(opts, :name)
 
     initial_data = %{
@@ -74,7 +72,6 @@ defmodule Deft.Job.Foreman do
       working_dir: working_dir,
       foreman_agent_pid: foreman_agent_pid,
       cli_pid: cli_pid,
-      site_log_pid: site_log_pid,
       leads: %{},
       lead_monitors: %{},
       foreman_agent_monitor_ref: nil,
@@ -136,10 +133,7 @@ defmodule Deft.Job.Foreman do
 
   @impl :gen_statem
   def init(data) do
-    data =
-      data
-      |> resolve_site_log_pid()
-      |> setup_foreman_agent_monitoring()
+    data = setup_foreman_agent_monitoring(data)
 
     Logger.info("#{log_prefix(data)} Foreman started for job #{data.session_id}: #{data.prompt}")
 
@@ -150,27 +144,9 @@ defmodule Deft.Job.Foreman do
     {:ok, initial_state, data}
   end
 
-  # Private helper to resolve site log PID from registry if not provided
-  defp resolve_site_log_pid(data) do
-    site_log_pid =
-      case data.site_log_pid do
-        nil ->
-          site_log_name = {:via, Registry, {Deft.ProcessRegistry, {:sitelog, data.session_id}}}
-
-          case GenServer.whereis(site_log_name) do
-            nil ->
-              Logger.error("#{log_prefix(data)} Site log not found for job #{data.session_id}")
-              raise "Site log not started by Job.Supervisor"
-
-            pid ->
-              pid
-          end
-
-        pid ->
-          pid
-      end
-
-    Map.put(data, :site_log_pid, site_log_pid)
+  # Private helper to get the site log registered name
+  defp site_log_name(data) do
+    {:via, Registry, {Deft.ProcessRegistry, {:sitelog, data.session_id}}}
   end
 
   # Private helper to set up ForemanAgent monitoring
@@ -455,9 +431,7 @@ defmodule Deft.Job.Foreman do
     data = Map.put(data, :plan, full_plan)
 
     # Write plan to site log
-    if data.site_log_pid do
-      Store.write(data.site_log_pid, "plan", full_plan)
-    end
+    Store.write(site_log_name(data), "plan", full_plan)
 
     # Present plan to user for approval
     present_plan_to_user(data, normalized_deliverables)
@@ -488,9 +462,7 @@ defmodule Deft.Job.Foreman do
     data = Map.put(data, :plan, full_plan)
 
     # Write plan to site log
-    if data.site_log_pid do
-      Store.write(data.site_log_pid, "plan", full_plan)
-    end
+    Store.write(site_log_name(data), "plan", full_plan)
 
     # Present plan to user for approval
     present_plan_to_user(data, normalized_deliverables)
@@ -872,7 +844,7 @@ defmodule Deft.Job.Foreman do
     lead_id = Map.get(metadata, :lead_id, "unknown")
     lead_name = Map.get(metadata, :lead_name, "Unknown Lead")
     leads_status = format_leads_status(data.leads)
-    contracts_info = format_contracts_from_sitelog(data.site_log_pid)
+    contracts_info = format_contracts_from_sitelog(site_log_name(data))
 
     """
     ## Lead Update
@@ -921,10 +893,8 @@ defmodule Deft.Job.Foreman do
     |> Enum.join("\n")
   end
 
-  defp format_contracts_from_sitelog(nil), do: ""
-
-  defp format_contracts_from_sitelog(site_log_pid) do
-    tid = Store.tid(site_log_pid)
+  defp format_contracts_from_sitelog(site_log_name) do
+    tid = Store.tid(site_log_name)
     all_keys = Store.keys(tid)
     contract_keys = Enum.filter(all_keys, &String.starts_with?(&1, "contract-"))
 
@@ -1197,13 +1167,13 @@ defmodule Deft.Job.Foreman do
   end
 
   defp promote_lead_message_to_site_log(type, content, metadata, data) do
-    if type in [:contract, :decision, :correction, :critical_finding] and data.site_log_pid do
+    if type in [:contract, :decision, :correction, :critical_finding] do
       # Generate unique key with type prefix
       unique_id = :erlang.unique_integer([:positive])
       key = "#{type}-#{unique_id}"
 
       Store.write(
-        data.site_log_pid,
+        site_log_name(data),
         key,
         content,
         Map.merge(metadata, %{
@@ -1573,12 +1543,10 @@ defmodule Deft.Job.Foreman do
     end
 
     # 5. Stop site log
-    if data.site_log_pid && Process.alive?(data.site_log_pid) do
-      try do
-        Store.cleanup(data.site_log_pid)
-      rescue
-        ArgumentError -> :ok
-      end
+    try do
+      Store.cleanup(site_log_name(data))
+    rescue
+      ArgumentError -> :ok
     end
 
     :ok
