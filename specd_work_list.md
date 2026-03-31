@@ -19,10 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.10
 
-### Process lifecycle correctness
-
-- Fix `set_foreman_agent` cast handler: before calling `Process.monitor(pid)`, check if `data.foreman_agent_monitor_ref` is non-nil and call `Process.demonitor(old_ref, [:flush])`. Prevents double-monitoring and leaked monitor refs.
-
 ### Sibling process resilience
 
 - Replace cached `rate_limiter_pid` in Foreman state with a registered name lookup function: define a private `rate_limiter_pid/1` helper that does `GenServer.whereis({:via, Registry, {Deft.ProcessRegistry, {:rate_limiter, data.session_id}}})`. Replace all `data.rate_limiter_pid` reads with calls to this helper. Remove `rate_limiter_pid` from the initial data map. (blocked: Verify RateLimiter registers under this name in ProcessRegistry)

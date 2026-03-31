@@ -337,6 +337,15 @@ defmodule Deft.Job.Foreman do
   def handle_event(:cast, {:set_foreman_agent, agent_pid}, state, data) do
     Logger.debug("#{log_prefix(data)} ForemanAgent PID set: #{inspect(agent_pid)}")
 
+    # Demonitor the old ForemanAgent if it exists to prevent double-monitoring
+    if data.foreman_agent_monitor_ref do
+      Process.demonitor(data.foreman_agent_monitor_ref, [:flush])
+
+      Logger.debug(
+        "#{log_prefix(data)} Demonitored old ForemanAgent with ref: #{inspect(data.foreman_agent_monitor_ref)}"
+      )
+    end
+
     # Monitor the ForemanAgent so we can detect crashes
     monitor_ref = Process.monitor(agent_pid)
     Logger.debug("#{log_prefix(data)} Monitoring ForemanAgent with ref: #{inspect(monitor_ref)}")
