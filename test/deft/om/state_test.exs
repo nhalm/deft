@@ -47,7 +47,8 @@ defmodule Deft.OM.StateTest do
       job_runner_model: "claude-sonnet-4-20250514",
       job_research_runner_model: "claude-sonnet-4-20250514",
       job_max_duration: 1_800_000,
-      job_lead_message_debounce: 2_000
+      job_lead_message_debounce: 2_000,
+      job_lead_crash_decision_timeout: 60_000
     }
 
     # Start OM.Supervisor which will start State

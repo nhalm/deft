@@ -27,8 +27,7 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ### Code-speed orchestration: crash decision timeout
 
-- Add `job.lead_crash_decision_timeout` config key with default 60000ms.
-- Update `do_handle_lead_crash`: after prompting ForemanAgent, return a `{:state_timeout, timeout, {:lead_crash_timeout, lead_id}}` action (or use `Process.send_after` if multiple crash timeouts need to coexist, since gen_statem only supports one state_timeout per state). Store pending crash lead_ids in a `pending_crash_decisions` map in state data. (blocked: Add lead_crash_decision_timeout config)
+- Update `do_handle_lead_crash`: after prompting ForemanAgent, return a `{:state_timeout, timeout, {:lead_crash_timeout, lead_id}}` action (or use `Process.send_after` if multiple crash timeouts need to coexist, since gen_statem only supports one state_timeout per state). Store pending crash lead_ids in a `pending_crash_decisions` map in state data.
 - Add `handle_event(:info, {:lead_crash_timeout, lead_id}, ...)` handler: if lead_id is still in `pending_crash_decisions` (ForemanAgent hasn't responded), auto-fail the deliverable — same logic as `fail_deliverable` handler. Log a warning. (blocked: Update do_handle_lead_crash)
 - Update `fail_deliverable` and `spawn_lead` handlers: remove lead_id from `pending_crash_decisions` and cancel the pending timer. (blocked: Update do_handle_lead_crash)
 

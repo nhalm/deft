@@ -1,4 +1,5 @@
 # History
+- **orchestration v0.10 (2026-03-31):** Add `job.lead_crash_decision_timeout` config key with default 60000ms.
 - **orchestration v0.10 (2026-03-31):** Add `handle_event(:info, :flush_lead_messages, ...)` handler: build a consolidated prompt from `lead_message_buffer` contents, call `Deft.Agent.prompt/2` once, clear buffer and timer.
 - **orchestration v0.10 (2026-03-31):** Update `{:lead_message, ...}` handler: only forward to ForemanAgent when in `:executing` state. For low-priority types (`:status`, `:artifact`, `:decision`, `:finding`), append to `lead_message_buffer` and start/reset `lead_message_timer` via `Process.send_after(self(), :flush_lead_messages, debounce)`. For high-priority types (`:contract`, `:blocker`, `:complete`, `:error`, `:critical_finding`), flush the buffer immediately plus the current message into a single consolidated prompt.
 - **orchestration v0.10 (2026-03-31):** Add `lead_message_buffer` (list) and `lead_message_timer` (timer ref or nil) fields to Foreman initial state data. Add `job.lead_message_debounce` config key with default 2000ms.
