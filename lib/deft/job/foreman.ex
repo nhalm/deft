@@ -718,21 +718,12 @@ defmodule Deft.Job.Foreman do
     cond do
       # Check if ForemanAgent crashed
       ref == data.foreman_agent_monitor_ref ->
-        Logger.error(
-          "#{log_prefix(data)} ForemanAgent (#{inspect(pid)}) crashed: #{inspect(reason)}. Failing job with cleanup."
-        )
-
-        do_fail_job_on_foreman_agent_crash(reason, data)
+        handle_foreman_agent_down(pid, reason, data)
 
       # Check if a Lead crashed
       match?({:ok, _lead_id}, find_lead_by_monitor(data.lead_monitors, ref)) ->
         {:ok, lead_id} = find_lead_by_monitor(data.lead_monitors, ref)
-
-        Logger.warning(
-          "#{log_prefix(data)} Lead #{lead_id} (#{inspect(pid)}) crashed: #{inspect(reason)}"
-        )
-
-        do_handle_lead_crash(lead_id, state, data)
+        handle_lead_down(lead_id, pid, reason, state, data)
 
       # Monitor might be for another process (e.g., Runner)
       true ->
@@ -1247,6 +1238,45 @@ defmodule Deft.Job.Foreman do
       end
     else
       :keep_state_and_data
+    end
+  end
+
+  # Check if an exit reason is normal (not a crash)
+  defp normal_exit?(reason) when reason in [:normal, :shutdown], do: true
+  defp normal_exit?({:shutdown, _}), do: true
+  defp normal_exit?(_reason), do: false
+
+  # Handle ForemanAgent DOWN message
+  defp handle_foreman_agent_down(pid, reason, data) do
+    if normal_exit?(reason) do
+      Logger.info(
+        "#{log_prefix(data)} ForemanAgent (#{inspect(pid)}) exited normally: #{inspect(reason)}"
+      )
+
+      :keep_state_and_data
+    else
+      Logger.error(
+        "#{log_prefix(data)} ForemanAgent (#{inspect(pid)}) crashed: #{inspect(reason)}. Failing job with cleanup."
+      )
+
+      do_fail_job_on_foreman_agent_crash(reason, data)
+    end
+  end
+
+  # Handle Lead DOWN message
+  defp handle_lead_down(lead_id, pid, reason, state, data) do
+    if normal_exit?(reason) do
+      Logger.info(
+        "#{log_prefix(data)} Lead #{lead_id} (#{inspect(pid)}) exited normally: #{inspect(reason)}"
+      )
+
+      :keep_state_and_data
+    else
+      Logger.warning(
+        "#{log_prefix(data)} Lead #{lead_id} (#{inspect(pid)}) crashed: #{inspect(reason)}"
+      )
+
+      do_handle_lead_crash(lead_id, state, data)
     end
   end
 

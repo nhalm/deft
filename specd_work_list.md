@@ -21,7 +21,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ### Process lifecycle correctness
 
-- Fix DOWN handler (`handle_event(:info, {:DOWN, ...})`): check `reason` before dispatching. For ForemanAgent: only call `do_fail_job_on_foreman_agent_crash` if reason is NOT `:normal` or `:shutdown`/`{:shutdown, _}`. For Leads: only call `do_handle_lead_crash` if reason is NOT `:normal` or `:shutdown`/`{:shutdown, _}`. Normal/shutdown exits should be logged and ignored (the completion path handles them).
 - Fix `do_fail_job_on_foreman_agent_crash`: before returning `{:stop, ...}`, iterate `data.lead_monitors` and call `Process.demonitor(ref, [:flush])` for each. This prevents the gen_statem from processing spurious Lead DOWN messages during its shutdown sequence, which currently causes double worktree cleanup.
 - Fix `set_foreman_agent` cast handler: before calling `Process.monitor(pid)`, check if `data.foreman_agent_monitor_ref` is non-nil and call `Process.demonitor(old_ref, [:flush])`. Prevents double-monitoring and leaked monitor refs.
 
