@@ -169,8 +169,8 @@ defmodule Deft.Job.ForemanTest do
       # Send a decision message from a Lead
       send(foreman_pid, {:lead_message, :decision, "Use PostgreSQL for persistence", %{}})
 
-      # Wait for processing
-      Process.sleep(100)
+      # Synchronize — :sys.get_state forces all pending messages to be processed first
+      :sys.get_state(foreman_pid)
 
       # Verify decision was written to site log
       keys = Store.keys(tid)
@@ -178,8 +178,6 @@ defmodule Deft.Job.ForemanTest do
 
       # Cleanup
       :gen_statem.stop(foreman_pid)
-      # Give processes time to fully terminate
-      Process.sleep(50)
     end
 
     test "auto-promotes contract messages", %{
@@ -210,8 +208,8 @@ defmodule Deft.Job.ForemanTest do
         {:lead_message, :contract, "API endpoint: POST /api/users", %{endpoint: "users"}}
       )
 
-      # Wait for processing
-      Process.sleep(100)
+      # Synchronize — :sys.get_state forces all pending messages to be processed first
+      :sys.get_state(foreman_pid)
 
       # Verify contract was written to site log
       keys = Store.keys(tid)
@@ -219,8 +217,6 @@ defmodule Deft.Job.ForemanTest do
 
       # Cleanup
       :gen_statem.stop(foreman_pid)
-      # Give processes time to fully terminate
-      Process.sleep(50)
     end
 
     test "auto-promotes critical_finding messages", %{
@@ -248,8 +244,8 @@ defmodule Deft.Job.ForemanTest do
       # Send a critical_finding message from a Lead
       send(foreman_pid, {:lead_message, :critical_finding, "Security vulnerability found", %{}})
 
-      # Wait for processing
-      Process.sleep(100)
+      # Synchronize — :sys.get_state forces all pending messages to be processed first
+      :sys.get_state(foreman_pid)
 
       # Verify critical_finding was written to site log
       keys = Store.keys(tid)
@@ -257,8 +253,6 @@ defmodule Deft.Job.ForemanTest do
 
       # Cleanup
       :gen_statem.stop(foreman_pid)
-      # Give processes time to fully terminate
-      Process.sleep(50)
     end
 
     test "auto-promotes correction messages", %{
@@ -286,8 +280,8 @@ defmodule Deft.Job.ForemanTest do
       # Send a correction message
       send(foreman_pid, {:lead_message, :correction, "Actually use MySQL, not PostgreSQL", %{}})
 
-      # Wait for processing
-      Process.sleep(100)
+      # Synchronize — :sys.get_state forces all pending messages to be processed first
+      :sys.get_state(foreman_pid)
 
       # Verify correction was written to site log
       keys = Store.keys(tid)
@@ -295,8 +289,6 @@ defmodule Deft.Job.ForemanTest do
 
       # Cleanup
       :gen_statem.stop(foreman_pid)
-      # Give processes time to fully terminate
-      Process.sleep(50)
     end
 
     test "never promotes finding messages to site log", %{
@@ -324,8 +316,8 @@ defmodule Deft.Job.ForemanTest do
       # Send a finding message (not in the auto-promote list)
       send(foreman_pid, {:lead_message, :finding, "Found local implementation detail", %{}})
 
-      # Wait for processing
-      Process.sleep(100)
+      # Synchronize — :sys.get_state forces all pending messages to be processed first
+      :sys.get_state(foreman_pid)
 
       # Verify finding was NOT written to site log
       # (only :contract, :decision, :correction, :critical_finding are auto-promoted)
@@ -338,8 +330,7 @@ defmodule Deft.Job.ForemanTest do
         {:lead_message, :finding, "Database uses connection pooling", %{shared: true}}
       )
 
-      # Wait for processing
-      Process.sleep(100)
+      :sys.get_state(foreman_pid)
 
       # Verify shared finding was also NOT written (finding is not an auto-promoted type)
       keys = Store.keys(tid)
@@ -347,8 +338,6 @@ defmodule Deft.Job.ForemanTest do
 
       # Cleanup
       :gen_statem.stop(foreman_pid)
-      # Give processes time to fully terminate
-      Process.sleep(50)
     end
 
     test "never promotes status messages", %{
@@ -376,8 +365,8 @@ defmodule Deft.Job.ForemanTest do
       # Send a status message
       send(foreman_pid, {:lead_message, :status, "Working on database layer", %{}})
 
-      # Wait for processing
-      Process.sleep(100)
+      # Synchronize — :sys.get_state forces all pending messages to be processed first
+      :sys.get_state(foreman_pid)
 
       # Verify status was NOT written to site log
       keys = Store.keys(tid)
@@ -385,8 +374,6 @@ defmodule Deft.Job.ForemanTest do
 
       # Cleanup
       :gen_statem.stop(foreman_pid)
-      # Give processes time to fully terminate
-      Process.sleep(50)
     end
 
     test "never promotes blocker messages", %{
@@ -414,8 +401,8 @@ defmodule Deft.Job.ForemanTest do
       # Send a blocker message
       send(foreman_pid, {:lead_message, :blocker, "Need API key configuration", %{}})
 
-      # Wait for processing
-      Process.sleep(100)
+      # Synchronize — :sys.get_state forces all pending messages to be processed first
+      :sys.get_state(foreman_pid)
 
       # Verify blocker was NOT written to site log
       keys = Store.keys(tid)
@@ -423,8 +410,6 @@ defmodule Deft.Job.ForemanTest do
 
       # Cleanup
       :gen_statem.stop(foreman_pid)
-      # Give processes time to fully terminate
-      Process.sleep(50)
     end
   end
 
