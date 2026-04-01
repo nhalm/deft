@@ -1427,6 +1427,14 @@ defmodule Deft.Job.Foreman do
     # Clean up monitor if present
     cleanup_lead_monitor(data.lead_monitors, lead_id)
 
+    # Clean up the Lead's worktree before removing from tracking
+    Logger.debug("#{log_prefix(data)} Cleaning up worktree for aborted Lead #{lead_id}")
+
+    GitJob.cleanup_lead_worktree(
+      lead_id: lead_id,
+      working_dir: data.working_dir
+    )
+
     # Remove from tracking and add to failed_leads so all_leads_complete? counts it
     data =
       data

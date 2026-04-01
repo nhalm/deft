@@ -1,4 +1,5 @@
 # History
+- **orchestration v0.11 (2026-03-31):** Fix `do_abort_lead`: call `GitJob.cleanup_lead_worktree` before removing Lead from `data.leads` map to prevent worktree leak.
 - **orchestration v0.11 (2026-03-31):** Move `:contract` and `:contract_revision` from the high-priority list to the low-priority list in the Lead message handler. High-priority set becomes: `[:blocker, :complete, :error, :critical_finding]`. Low-priority set becomes: `[:status, :artifact, :decision, :finding, :contract, :contract_revision]`. Contract auto-unblocking already happened at code speed — the agent notification is informational.
 - **orchestration v0.10 (2026-03-31):** Update `approve_continued_spending` handler: after resetting `cost_ceiling_reached`, flush `lead_message_buffer` as a single consolidated catch-up prompt to ForemanAgent.
 - **orchestration v0.10 (2026-03-31):** Update `{:lead_message, ...}` handler: when `data.cost_ceiling_reached` is true, skip forwarding low-priority messages to ForemanAgent entirely. Still buffer them in `lead_message_buffer` for the catch-up prompt.

@@ -19,10 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.11
 
-### Process lifecycle: abort worktree leak
-
-- Fix `do_abort_lead`: call `GitJob.cleanup_lead_worktree` with the Lead's worktree path BEFORE removing the Lead from `data.leads`. The worktree path is available in `data.leads[lead_id].worktree_path`. Currently the Lead is removed from the map first, so neither `do_abort_lead` nor `cleanup/1` ever cleans it.
-
 ### Process lifecycle: fail_deliverable cleanup for non-crashed Leads
 
 - Fix `fail_deliverable` handler: after adding to `failed_leads` and removing from `started_leads`/`leads`, also call `cleanup_lead_monitor(data.lead_monitors, lead_id)` and remove from `lead_monitors`. If the Lead's worktree path is available (check `data.leads[lead_id]` before the map delete), call `GitJob.cleanup_lead_worktree`. Guard both operations — when called after a crash, `do_handle_lead_crash` already handled them. Read the worktree path from `data.leads[lead_id]` before deleting the entry.
