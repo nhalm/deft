@@ -579,6 +579,9 @@ defmodule Deft.Job.Foreman do
     # Cancel crash decision timer if this was in response to a crash
     updated_data = cancel_crash_decision_timer(data, lead_id)
 
+    # Clean up worktree and monitor if this was NOT called after a crash
+    updated_data = cleanup_failed_lead(updated_data, lead_id)
+
     # Move Lead from started_leads to failed_leads, and remove from leads map
     updated_data =
       updated_data
@@ -1445,6 +1448,32 @@ defmodule Deft.Job.Foreman do
       |> Map.update!(:failed_leads, &MapSet.put(&1, lead_id))
 
     {:keep_state, data}
+  end
+
+  # Clean up worktree and monitor for a failed Lead, but only if not already cleaned up
+  # by do_handle_lead_crash (which removes the Lead from the map before calling fail_deliverable)
+  defp cleanup_failed_lead(data, lead_id) do
+    case Map.get(data.leads, lead_id) do
+      nil ->
+        # Lead already removed from map — cleanup already done by do_handle_lead_crash
+        data
+
+      _lead_info ->
+        # Lead still in map — this is a non-crash failure, clean up worktree and monitor
+        Logger.debug(
+          "#{log_prefix(data)} Cleaning up worktree and monitor for failed Lead #{lead_id}"
+        )
+
+        GitJob.cleanup_lead_worktree(
+          lead_id: lead_id,
+          working_dir: data.working_dir
+        )
+
+        cleanup_lead_monitor(data.lead_monitors, lead_id)
+
+        data
+        |> Map.update!(:lead_monitors, &Map.delete(&1, lead_id))
+    end
   end
 
   defp cleanup_lead_monitor(monitors, lead_id) do

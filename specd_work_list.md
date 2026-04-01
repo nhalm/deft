@@ -19,10 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.11
 
-### Process lifecycle: fail_deliverable cleanup for non-crashed Leads
-
-- Fix `fail_deliverable` handler: after adding to `failed_leads` and removing from `started_leads`/`leads`, also call `cleanup_lead_monitor(data.lead_monitors, lead_id)` and remove from `lead_monitors`. If the Lead's worktree path is available (check `data.leads[lead_id]` before the map delete), call `GitJob.cleanup_lead_worktree`. Guard both operations — when called after a crash, `do_handle_lead_crash` already handled them. Read the worktree path from `data.leads[lead_id]` before deleting the entry.
-
 ### Process lifecycle: ForemanAgent crash cleanup ordering
 
 - Fix `do_fail_job_on_foreman_agent_crash`: (1) move the `Enum.each` demonitor loop (currently after `cleanup(data)`) to BEFORE `cleanup(data)`. (2) Remove the redundant manual Lead stop loop (`Process.exit` on each lead) and the redundant worktree cleanup loop — `cleanup(data)` already does both. The function should be: demonitor all Leads with `:flush` → call `cleanup(data)` → return `{:stop, ...}`.
