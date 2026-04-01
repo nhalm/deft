@@ -1300,7 +1300,8 @@ defmodule Deft.Job.ForemanTest do
       end)
 
       # Test different message types with new coalescing behavior
-      # :decision is low-priority (buffered), others are high-priority (flush immediately)
+      # :decision and :contract are low-priority (buffered)
+      # :blocker and :critical_finding are high-priority (flush immediately)
       message_types = [
         {:decision, "Use PostgreSQL for database", %{lead_id: "lead-1", lead_name: "Lead 1"}},
         {:contract, "API endpoint: POST /api/users", %{lead_id: "lead-2", lead_name: "Lead 2"}},
@@ -1319,21 +1320,20 @@ defmodule Deft.Job.ForemanTest do
 
       receive do
         {:prompts, prompts} ->
-          # With coalescing: decision buffers, contract flushes (decision+contract),
-          # blocker sends immediately, critical_finding sends immediately
-          # Expected: 3 prompts
-          assert length(prompts) == 3
+          # With coalescing: decision and contract both buffer,
+          # blocker flushes (decision+contract+blocker in one consolidated message),
+          # critical_finding sends immediately
+          # Expected: 2 prompts
+          assert length(prompts) == 2
 
-          # First prompt should contain both decision and contract (coalesced)
+          # First prompt should contain decision, contract, and blocker (coalesced)
           assert String.contains?(Enum.at(prompts, 0), "**Type:** decision")
           assert String.contains?(Enum.at(prompts, 0), "**Type:** contract")
+          assert String.contains?(Enum.at(prompts, 0), "**Type:** blocker")
           assert String.contains?(Enum.at(prompts, 0), "## Consolidated Lead Updates")
 
-          # Second prompt should contain blocker
-          assert String.contains?(Enum.at(prompts, 1), "**Type:** blocker")
-
-          # Third prompt should contain critical_finding
-          assert String.contains?(Enum.at(prompts, 2), "**Type:** critical_finding")
+          # Second prompt should contain critical_finding
+          assert String.contains?(Enum.at(prompts, 1), "**Type:** critical_finding")
       after
         500 -> flunk("Did not receive prompts from mock agent")
       end

@@ -19,10 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.11
 
-### Message coalescing: reclassify contract as low-priority
-
-- Move `:contract` and `:contract_revision` from the high-priority list to the low-priority list in the Lead message handler. High-priority set becomes: `[:blocker, :complete, :error, :critical_finding]`. Low-priority set becomes: `[:status, :artifact, :decision, :finding, :contract, :contract_revision]`. Contract auto-unblocking already happened at code speed — the agent notification is informational.
-
 ### Process lifecycle: abort worktree leak
 
 - Fix `do_abort_lead`: call `GitJob.cleanup_lead_worktree` with the Lead's worktree path BEFORE removing the Lead from `data.leads`. The worktree path is available in `data.leads[lead_id].worktree_path`. Currently the Lead is removed from the map first, so neither `do_abort_lead` nor `cleanup/1` ever cleans it.

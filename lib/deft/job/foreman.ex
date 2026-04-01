@@ -948,8 +948,8 @@ defmodule Deft.Job.Foreman do
   end
 
   defp handle_lead_message_by_priority(type, content, metadata, state, data) do
-    low_priority_types = [:status, :artifact, :decision, :finding]
-    high_priority_types = [:contract, :blocker, :complete, :error, :critical_finding]
+    low_priority_types = [:status, :artifact, :decision, :finding, :contract, :contract_revision]
+    high_priority_types = [:blocker, :complete, :error, :critical_finding]
 
     cond do
       type in low_priority_types ->
