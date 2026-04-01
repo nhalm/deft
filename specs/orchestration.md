@@ -2,11 +2,18 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.10 |
-| Status | Ready |
+| Version | 0.11 |
+| Status | Draft |
 | Last Updated | 2026-03-31 |
 
 ## Changelog
+
+### v0.11 (2026-03-31)
+- Reclassified `:contract` and `:contract_revision` as low-priority for message coalescing. Since contract auto-unblocking already happens at code speed, the ForemanAgent notification is informational and does not need to flush the buffer. High-priority set is now: `:blocker`, `:complete`, `:error`, `:critical_finding`.
+- `do_abort_lead` must call `GitJob.cleanup_lead_worktree` before removing the Lead from `data.leads`. Previously the worktree was leaked because removal from the map prevented `cleanup/1` from finding it.
+- `fail_deliverable` must demonitor the Lead (if still monitored) and clean up the worktree when called on a non-crashed Lead. When called after a crash, `do_handle_lead_crash` already handled both — `fail_deliverable` must be safe for both paths.
+- `do_fail_job_on_foreman_agent_crash` must demonitor all Leads with `:flush` FIRST, then do cleanup. Previously demonitors happened after `cleanup(data)`, creating a window for spurious DOWN messages. Also remove the redundant manual Lead stop and worktree cleanup — `cleanup(data)` already handles both.
+- Pass RateLimiter registered name (not cached PID) to Leads when spawning them via `start_lead_process`.
 
 ### v0.10 (2026-03-31)
 - **Code-speed orchestration.** The Foreman handles deterministic coordination at code speed and notifies the ForemanAgent asynchronously. Three changes: (1) contract auto-unblocking — Foreman matches published contracts against the plan's dependency DAG and forwards to blocked Leads immediately, notifying ForemanAgent after the fact; (2) Lead message coalescing — low-priority Lead messages (`:status`, `:artifact`) are buffered with a short debounce timer and sent as a single consolidated prompt, while high-priority messages (`:contract`, `:blocker`, `:complete`, `:error`) flush the buffer immediately; (3) crash recovery timeout — if ForemanAgent does not call `fail_deliverable` or `spawn_lead` within a configurable timeout after a Lead crash notification, the Foreman auto-fails the deliverable.
@@ -161,7 +168,9 @@ The Foreman handles **deterministic coordination at code speed** and delegates *
 - Research synthesis
 - Crash triage (retry vs. fail) — but with a timeout fallback
 
-**Lead message coalescing:** Low-priority Lead messages (`:status`, `:artifact`) are buffered in the Foreman's state with a debounce timer (configurable, default 2s). When the timer fires, the Foreman builds a single consolidated prompt: "Updates from your Leads since your last response: [batch]." High-priority messages (`:contract`, `:blocker`, `:complete`, `:error`, `:critical_finding`) flush the buffer and are forwarded immediately. This prevents the ForemanAgent from drowning in rapid-fire status updates during parallel execution.
+**Lead message coalescing:** Low-priority Lead messages (`:status`, `:artifact`, `:decision`, `:finding`, `:contract`, `:contract_revision`) are buffered in the Foreman's state with a debounce timer (configurable, default 2s). When the timer fires, the Foreman builds a single consolidated prompt: "Updates from your Leads since your last response: [batch]." High-priority messages (`:blocker`, `:complete`, `:error`, `:critical_finding`) flush the buffer and are forwarded immediately.
+
+`:contract` is low-priority because contract auto-unblocking already happened at code speed (section 4.4). The ForemanAgent notification is informational — it does not need to trigger an immediate prompt. Under load with 4+ parallel Leads, contract messages are the most frequent high-frequency type; classifying them as high-priority would defeat coalescing by triggering flushes faster than the ForemanAgent can process prompts.
 
 ### 3. Job Lifecycle
 
@@ -416,11 +425,15 @@ The Foreman's `cleanup/1` function runs on **every exit path** — normal comple
 3. **Site log:** Stop the Store process if alive.
 4. **Lead processes:** Gracefully shut down any running Leads via `Process.exit(pid, :shutdown)`.
 
-On `do_fail_job_on_foreman_agent_crash`: demonitor all Leads with `:flush` **before** returning `{:stop, ...}`. This prevents the gen_statem from processing Lead DOWN messages during its shutdown sequence, which would cause double worktree cleanup.
+On `do_fail_job_on_foreman_agent_crash`: demonitor all Leads with `:flush` **first**, then call `cleanup(data)`. Do not duplicate Lead stop or worktree cleanup before `cleanup(data)` — let `cleanup/1` handle it in one place.
 
 On Lead crash (individual): Foreman cleans up that Lead's worktree immediately in `do_handle_lead_crash`.
 
+On Lead abort (`do_abort_lead`): Must call `GitJob.cleanup_lead_worktree` **before** removing the Lead from `data.leads`. Otherwise `cleanup/1` cannot find it.
+
 On Lead normal completion: `handle_lead_completion` demonitors the Lead, removes from `leads` and `lead_monitors`, and cleans up the worktree.
+
+On `fail_deliverable`: Must demonitor the Lead (if still in `lead_monitors`) and clean up the worktree. When called after a crash, `do_handle_lead_crash` already handled both — `fail_deliverable` must check and skip if already done.
 
 Job files at `~/.deft/projects/<path-encoded-repo>/jobs/<job_id>/` are archived (not deleted) for debugging.
 
