@@ -2,11 +2,17 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.11 |
-| Status | Draft |
-| Last Updated | 2026-03-31 |
+| Version | 0.12 |
+| Status | Ready |
+| Last Updated | 2026-04-01 |
 
 ## Changelog
+
+### v0.12 (2026-04-01)
+- **Max-age flush replaces sliding-window debounce.** The debounce timer must use a max-age strategy: track `buffer_start_time` when the first message enters an empty buffer. On each new message, if `now - buffer_start_time >= debounce_ms`, flush immediately. Otherwise, leave the existing timer running (do NOT reset it on each message). This guarantees the agent receives updates every `debounce_ms` regardless of message rate. The prior sliding-window design reset the timer on every message, which starved the timer under sustained load — 4 Leads at 3 msg/sec means a message every ~83ms, so a 2s timer never fires.
+- `handle_lead_completion` must guard against absent lead_id: check `Map.has_key?(data.leads, lead_id)` before mutating tracking sets. A late `:complete` message for an already-failed/aborted Lead must be ignored, not added to `completed_leads` (which would put it in both `completed_leads` and `failed_leads`).
+- On Lead crash retry via `spawn_lead`: `cancel_crash_decision_timer_for_deliverable` must also remove the old crashed lead_id from `started_leads` and add to `failed_leads`. Otherwise the old lead_id is orphaned in `started_leads` permanently.
+- `do_fail_job_on_foreman_agent_crash` and the `:abort` handler must not call `cleanup(data)` before returning `{:stop, ...}` — `terminate/3` already calls it. Remove the explicit pre-stop cleanup to avoid triple/double invocation. For ForemanAgent crash: demonitor all Leads with `:flush` first (to prevent spurious DOWNs), then return `{:stop, ...}` and let `terminate/3` handle the rest.
 
 ### v0.11 (2026-03-31)
 - Reclassified `:contract` and `:contract_revision` as low-priority for message coalescing. Since contract auto-unblocking already happens at code speed, the ForemanAgent notification is informational and does not need to flush the buffer. High-priority set is now: `:blocker`, `:complete`, `:error`, `:critical_finding`.
@@ -168,9 +174,11 @@ The Foreman handles **deterministic coordination at code speed** and delegates *
 - Research synthesis
 - Crash triage (retry vs. fail) — but with a timeout fallback
 
-**Lead message coalescing:** Low-priority Lead messages (`:status`, `:artifact`, `:decision`, `:finding`, `:contract`, `:contract_revision`) are buffered in the Foreman's state with a debounce timer (configurable, default 2s). When the timer fires, the Foreman builds a single consolidated prompt: "Updates from your Leads since your last response: [batch]." High-priority messages (`:blocker`, `:complete`, `:error`, `:critical_finding`) flush the buffer and are forwarded immediately.
+**Lead message coalescing:** Low-priority Lead messages (`:status`, `:artifact`, `:decision`, `:finding`, `:contract`, `:contract_revision`) are buffered in the Foreman's state. High-priority messages (`:blocker`, `:complete`, `:error`, `:critical_finding`) flush the buffer and are forwarded immediately.
 
-`:contract` is low-priority because contract auto-unblocking already happened at code speed (section 4.4). The ForemanAgent notification is informational — it does not need to trigger an immediate prompt. Under load with 4+ parallel Leads, contract messages are the most frequent high-frequency type; classifying them as high-priority would defeat coalescing by triggering flushes faster than the ForemanAgent can process prompts.
+The buffer uses a **max-age flush** strategy (not a sliding-window debounce). The Foreman tracks `buffer_start_time` — the timestamp when the first message entered an empty buffer. On each new low-priority message: if `now - buffer_start_time >= debounce_ms` (configurable, default 2s), flush immediately; otherwise, append to the buffer and leave the existing timer running. The timer is set once when the first message arrives and is NOT reset on subsequent messages. This guarantees the ForemanAgent receives consolidated updates every `debounce_ms` under sustained load.
+
+`:contract` is low-priority because contract auto-unblocking already happened at code speed (section 4.4). The ForemanAgent notification is informational — it does not need to trigger an immediate prompt.
 
 ### 3. Job Lifecycle
 
