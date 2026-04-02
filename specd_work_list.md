@@ -19,10 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.12
 
-### Simplify do_fail_job_on_foreman_agent_crash
-
-- Rewrite `do_fail_job_on_foreman_agent_crash`: remove the manual `Enum.each` loops that stop Leads and clean worktrees (redundant with `cleanup/1`). The function should be: (1) demonitor all Leads with `:flush` by iterating `data.lead_monitors`, (2) demonitor ForemanAgent with `:flush`, (3) return `{:stop, {:foreman_agent_crashed, reason}, data}`. Let `terminate/3` → `cleanup(data)` handle all process stops, worktree cleanup, and site log shutdown.
-
 ### Simplify abort handler
 
 - Rewrite the `:abort` cast handler: remove the explicit `cleanup(data)` call. Just return `{:stop, :normal, data}` and let `terminate/3` handle cleanup. Currently cleanup runs twice (once explicit, once from terminate).

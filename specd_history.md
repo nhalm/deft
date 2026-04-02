@@ -1,4 +1,5 @@
 # History
+- **orchestration v0.12 (2026-04-01):** Simplify do_fail_job_on_foreman_agent_crash
 - **orchestration v0.12 (2026-04-01):** Fix orphaned lead_id in started_leads on crash retry
 - **orchestration v0.12 (2026-04-01):** Guard handle_lead_completion against absent lead_id
 - **orchestration v0.12 (2026-04-01):** Change `buffer_low_priority_message` to use max-age flush instead of sliding-window debounce: add a `buffer_start_time` field (monotonic timestamp or nil) to Foreman initial state data. When a message arrives and the buffer is empty, set `buffer_start_time` to `System.monotonic_time(:millisecond)` and start the timer via `Process.send_after`. When a message arrives and the buffer is non-empty, check if `System.monotonic_time(:millisecond) - buffer_start_time >= debounce_ms` — if so, flush immediately; if not, append to buffer and do NOT reset the timer. Clear `buffer_start_time` on flush.

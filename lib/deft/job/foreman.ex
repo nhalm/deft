@@ -1671,33 +1671,17 @@ defmodule Deft.Job.Foreman do
     # ForemanAgent has crashed - fail the entire job with full cleanup
     Logger.error("#{log_prefix(data)} Failing job due to ForemanAgent crash: #{inspect(reason)}")
 
-    # Stop all running Leads
-    Enum.each(data.leads, fn {lead_id, lead} ->
-      if lead.pid && Process.alive?(lead.pid) do
-        Process.exit(lead.pid, :shutdown)
-        Logger.info("#{log_prefix(data)} Stopped Lead #{lead_id} due to ForemanAgent crash")
-      end
-    end)
-
-    # Clean up all Lead worktrees
-    Enum.each(data.leads, fn {lead_id, _lead} ->
-      Logger.debug("#{log_prefix(data)} Cleaning up worktree for Lead #{lead_id}")
-
-      GitJob.cleanup_lead_worktree(
-        lead_id: lead_id,
-        working_dir: data.working_dir
-      )
-    end)
-
-    # Perform general cleanup (site log, etc.)
-    cleanup(data)
-
     # Demonitor all Leads to prevent spurious DOWN messages during shutdown
     Enum.each(data.lead_monitors, fn {_lead_id, monitor_ref} ->
       Process.demonitor(monitor_ref, [:flush])
     end)
 
-    # Stop the Foreman with an error
+    # Demonitor ForemanAgent
+    if data.foreman_agent_monitor_ref do
+      Process.demonitor(data.foreman_agent_monitor_ref, [:flush])
+    end
+
+    # Stop the Foreman - terminate/3 will call cleanup(data) to handle all cleanup
     {:stop, {:foreman_agent_crashed, reason}, data}
   end
 
