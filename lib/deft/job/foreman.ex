@@ -1577,37 +1577,51 @@ defmodule Deft.Job.Foreman do
   defp handle_lead_completion(type, metadata, state, data) do
     if type == :complete do
       lead_id = Map.get(metadata, :lead_id)
-      deliverable_name = get_in(data, [:leads, lead_id, :deliverable, :name])
-      Logger.info("#{log_prefix(data)} Lead completed: #{lead_id}, task: #{deliverable_name}")
 
-      # Clean up the Lead's worktree
-      Logger.debug("#{log_prefix(data)} Cleaning up worktree for completed Lead #{lead_id}")
+      # Guard against late completion messages for already-removed Leads
+      if not Map.has_key?(data.leads, lead_id) do
+        Logger.warning(
+          "#{log_prefix(data)} Ignoring late completion for lead_id #{lead_id} — already removed from tracking"
+        )
 
-      GitJob.cleanup_lead_worktree(
-        lead_id: lead_id,
-        working_dir: data.working_dir
-      )
-
-      # Demonitor the Lead
-      cleanup_lead_monitor(data.lead_monitors, lead_id)
-
-      updated_data =
-        data
-        |> Map.update!(:leads, &Map.delete(&1, lead_id))
-        |> Map.update!(:lead_monitors, &Map.delete(&1, lead_id))
-        |> Map.update!(:started_leads, &MapSet.delete(&1, lead_id))
-        |> Map.update!(:completed_leads, &MapSet.put(&1, lead_id))
-
-      # Check if all Leads are complete and transition to :verifying
-      if state == :executing and all_leads_complete?(updated_data) do
-        Logger.info("#{log_prefix(data)} All Leads complete, transitioning to :verifying")
-        {:next_state, :verifying, updated_data}
+        {:keep_state, data}
       else
-        {:keep_state, updated_data}
+        process_lead_completion(lead_id, state, data)
       end
     else
       # Pass through the data to preserve buffer and other state updates
       {:keep_state, data}
+    end
+  end
+
+  defp process_lead_completion(lead_id, state, data) do
+    deliverable_name = get_in(data, [:leads, lead_id, :deliverable, :name])
+    Logger.info("#{log_prefix(data)} Lead completed: #{lead_id}, task: #{deliverable_name}")
+
+    # Clean up the Lead's worktree
+    Logger.debug("#{log_prefix(data)} Cleaning up worktree for completed Lead #{lead_id}")
+
+    GitJob.cleanup_lead_worktree(
+      lead_id: lead_id,
+      working_dir: data.working_dir
+    )
+
+    # Demonitor the Lead
+    cleanup_lead_monitor(data.lead_monitors, lead_id)
+
+    updated_data =
+      data
+      |> Map.update!(:leads, &Map.delete(&1, lead_id))
+      |> Map.update!(:lead_monitors, &Map.delete(&1, lead_id))
+      |> Map.update!(:started_leads, &MapSet.delete(&1, lead_id))
+      |> Map.update!(:completed_leads, &MapSet.put(&1, lead_id))
+
+    # Check if all Leads are complete and transition to :verifying
+    if state == :executing and all_leads_complete?(updated_data) do
+      Logger.info("#{log_prefix(data)} All Leads complete, transitioning to :verifying")
+      {:next_state, :verifying, updated_data}
+    else
+      {:keep_state, updated_data}
     end
   end
 

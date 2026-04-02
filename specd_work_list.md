@@ -19,10 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.12
 
-### Guard handle_lead_completion against absent lead_id
-
-- Add a guard at the top of `handle_lead_completion`: extract lead_id from metadata, check `Map.has_key?(data.leads, lead_id)`. If the lead_id is not in `data.leads` (already removed by crash handler, abort, or fail_deliverable), log a warning and return `{:keep_state, data}` without mutating any tracking sets. This prevents a late `:complete` message from putting a lead_id into both `completed_leads` and `failed_leads`.
-
 ### Fix orphaned lead_id in started_leads on crash retry
 
 - In `cancel_crash_decision_timer_for_deliverable` (called when `spawn_lead` retries a crashed deliverable): after cancelling the timer and removing from `pending_crash_decisions`, also remove the old crashed lead_id from `started_leads` and add it to `failed_leads`. The old lead_id is available in `pending_crash_decisions[lead_id].lead_id` or can be found by matching deliverable_id. This requires the crash decision entry to store the original lead_id.
