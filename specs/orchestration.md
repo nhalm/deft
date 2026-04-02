@@ -2,11 +2,14 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.12 |
+| Version | 0.13 |
 | Status | Ready |
 | Last Updated | 2026-04-01 |
 
 ## Changelog
+
+### v0.13 (2026-04-01)
+- **Fix `all_leads_complete?` to track outcomes per deliverable, not per lead.** The current `completed_leads + failed_leads == length(deliverables)` check breaks after a Lead retry: the crashed Lead's ID goes into `failed_leads` and the replacement Lead's ID goes into `completed_leads`, giving a count of 2 for a single deliverable. The Foreman must track which deliverables have a final outcome (completed or definitively failed), not count distinct lead IDs. `all_leads_complete?` returns `true` when every deliverable has an outcome.
 
 ### v0.12 (2026-04-01)
 - **Max-age flush replaces sliding-window debounce.** The debounce timer must use a max-age strategy: track `buffer_start_time` when the first message enters an empty buffer. On each new message, if `now - buffer_start_time >= debounce_ms`, flush immediately. Otherwise, leave the existing timer running (do NOT reset it on each message). This guarantees the agent receives updates every `debounce_ms` regardless of message rate. The prior sliding-window design reset the timer on every message, which starved the timer under sustained load — 4 Leads at 3 msg/sec means a message every ~83ms, so a 2s timer never fires.
@@ -153,7 +156,7 @@ The Foreman communicates with its agent through two mechanisms:
 | `unblock_lead` | `{:agent_action, :unblock_lead, lead_id, contract}` | Manually unblock a Lead (override only — see section 4.4 for auto-unblocking) |
 | `steer_lead` | `{:agent_action, :steer_lead, lead_id, content}` | Send course correction to a Lead |
 | `abort_lead` | `{:agent_action, :abort_lead, lead_id}` | Stop a Lead |
-| `fail_deliverable` | `{:agent_action, :fail_deliverable, lead_id}` | Mark a Lead's deliverable as failed (after crash or unrecoverable blocker). Lead is removed, marked as failed. Foreman's `all_leads_complete?` counts completed + failed, not just completed. |
+| `fail_deliverable` | `{:agent_action, :fail_deliverable, lead_id}` | Mark a Lead's deliverable as failed (after crash or unrecoverable blocker). Lead is removed, marked as failed. Foreman's `all_leads_complete?` checks that every deliverable has a final outcome (completed or failed), not a lead count. |
 
 These tools are implemented as thin wrappers that `send(foreman_pid, message)` and return `:ok` to the agent. The Foreman receives these in `handle_info` and takes action.
 

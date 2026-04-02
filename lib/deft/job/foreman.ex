@@ -78,6 +78,7 @@ defmodule Deft.Job.Foreman do
       started_leads: MapSet.new(),
       completed_leads: MapSet.new(),
       failed_leads: MapSet.new(),
+      deliverable_outcomes: %{},
       job_start_time: System.monotonic_time(:millisecond),
       cost_ceiling_reached: false,
       lead_message_buffer: [],
@@ -579,11 +580,18 @@ defmodule Deft.Job.Foreman do
       "#{log_prefix(data)} ForemanAgent marking deliverable for Lead #{lead_id} as failed"
     )
 
+    # Extract deliverable_id before removing lead from map
+    deliverable_id = get_in(data, [:leads, lead_id, :deliverable, :id])
+
     # Cancel crash decision timer if this was in response to a crash
     updated_data = cancel_crash_decision_timer(data, lead_id)
 
     # Clean up worktree and monitor if this was NOT called after a crash
     updated_data = cleanup_failed_lead(updated_data, lead_id)
+
+    # Record deliverable as failed
+    updated_data =
+      Map.update!(updated_data, :deliverable_outcomes, &Map.put(&1, deliverable_id, :failed))
 
     # Move Lead from started_leads to failed_leads, and remove from leads map
     updated_data =
@@ -835,33 +843,8 @@ defmodule Deft.Job.Foreman do
 
         :keep_state_and_data
 
-      _crash_info ->
-        # ForemanAgent hasn't responded in time, auto-fail the deliverable
-        Logger.warning(
-          "#{log_prefix(data)} Lead #{lead_id} crash decision timeout - ForemanAgent did not respond, auto-failing deliverable"
-        )
-
-        # Remove from pending_crash_decisions
-        updated_data =
-          Map.update!(data, :pending_crash_decisions, &Map.delete(&1, lead_id))
-
-        # Apply same logic as fail_deliverable: move to failed_leads and remove from leads map
-        updated_data =
-          updated_data
-          |> Map.update!(:started_leads, &MapSet.delete(&1, lead_id))
-          |> Map.update!(:failed_leads, &MapSet.put(&1, lead_id))
-          |> Map.update!(:leads, &Map.delete(&1, lead_id))
-
-        # Check if all Leads are complete (including failed ones) and transition to :verifying
-        if all_leads_complete?(updated_data) do
-          Logger.info(
-            "#{log_prefix(data)} All Leads complete (including failed), transitioning to :verifying"
-          )
-
-          {:next_state, :verifying, updated_data}
-        else
-          {:keep_state, updated_data}
-        end
+      crash_info ->
+        auto_fail_crashed_deliverable(lead_id, crash_info, data)
     end
   end
 
@@ -882,6 +865,42 @@ defmodule Deft.Job.Foreman do
   end
 
   # Private functions
+
+  defp auto_fail_crashed_deliverable(lead_id, crash_info, data) do
+    # ForemanAgent hasn't responded in time, auto-fail the deliverable
+    Logger.warning(
+      "#{log_prefix(data)} Lead #{lead_id} crash decision timeout - ForemanAgent did not respond, auto-failing deliverable"
+    )
+
+    # Extract deliverable_id from crash_info
+    deliverable_id = Map.get(crash_info, :deliverable_id)
+
+    # Remove from pending_crash_decisions
+    updated_data =
+      Map.update!(data, :pending_crash_decisions, &Map.delete(&1, lead_id))
+
+    # Record deliverable as failed
+    updated_data =
+      Map.update!(updated_data, :deliverable_outcomes, &Map.put(&1, deliverable_id, :failed))
+
+    # Apply same logic as fail_deliverable: move to failed_leads and remove from leads map
+    updated_data =
+      updated_data
+      |> Map.update!(:started_leads, &MapSet.delete(&1, lead_id))
+      |> Map.update!(:failed_leads, &MapSet.put(&1, lead_id))
+      |> Map.update!(:leads, &Map.delete(&1, lead_id))
+
+    # Check if all Leads are complete (including failed ones) and transition to :verifying
+    if all_leads_complete?(updated_data) do
+      Logger.info(
+        "#{log_prefix(data)} All Leads complete (including failed), transitioning to :verifying"
+      )
+
+      {:next_state, :verifying, updated_data}
+    else
+      {:keep_state, updated_data}
+    end
+  end
 
   defp relay_to_user(data, text) do
     Logger.info("#{log_prefix(data)} Foreman relaying ForemanAgent question to user")
@@ -1527,13 +1546,15 @@ defmodule Deft.Job.Foreman do
   end
 
   defp all_leads_complete?(data) do
-    # All Leads are complete when the number of completed + failed Leads equals
-    # the number of deliverables in the plan.
-    # This counts both successfully completed Leads and Leads marked as failed via fail_deliverable.
+    # All Leads are complete when every deliverable in the plan has an outcome
+    # (either :completed or :failed) in deliverable_outcomes.
     if data.plan && data.plan.deliverables do
-      expected_count = length(data.plan.deliverables)
-      actual_count = MapSet.size(data.completed_leads) + MapSet.size(data.failed_leads)
-      actual_count == expected_count
+      deliverables = data.plan.deliverables
+      deliverable_ids = Enum.map(deliverables, fn d -> Map.get(d, :id) end)
+
+      Enum.all?(deliverable_ids, fn deliverable_id ->
+        Map.has_key?(data.deliverable_outcomes, deliverable_id)
+      end)
     else
       # Fallback: if no plan exists yet, check if started_leads is empty
       MapSet.size(data.started_leads) == 0
@@ -1593,6 +1614,7 @@ defmodule Deft.Job.Foreman do
 
   defp process_lead_completion(lead_id, state, data) do
     deliverable_name = get_in(data, [:leads, lead_id, :deliverable, :name])
+    deliverable_id = get_in(data, [:leads, lead_id, :deliverable, :id])
     Logger.info("#{log_prefix(data)} Lead completed: #{lead_id}, task: #{deliverable_name}")
 
     # Clean up the Lead's worktree
@@ -1608,6 +1630,7 @@ defmodule Deft.Job.Foreman do
 
     updated_data =
       data
+      |> Map.update!(:deliverable_outcomes, &Map.put(&1, deliverable_id, :completed))
       |> Map.update!(:leads, &Map.delete(&1, lead_id))
       |> Map.update!(:lead_monitors, &Map.delete(&1, lead_id))
       |> Map.update!(:started_leads, &MapSet.delete(&1, lead_id))
