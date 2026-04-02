@@ -1500,9 +1500,13 @@ defmodule Deft.Job.Foreman do
       working_dir: data.working_dir
     )
 
+    # Extract deliverable_id before removing from leads map
+    deliverable_id = get_in(data, [:leads, lead_id, :deliverable, :id])
+
     # Remove from tracking and add to failed_leads so all_leads_complete? counts it
     data =
       data
+      |> Map.update!(:deliverable_outcomes, &Map.put(&1, deliverable_id, :failed))
       |> Map.update!(:leads, &Map.delete(&1, lead_id))
       |> Map.update!(:started_leads, &MapSet.delete(&1, lead_id))
       |> Map.update!(:blocked_leads, &Map.delete(&1, lead_id))
