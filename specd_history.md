@@ -1,4 +1,5 @@
 # History
+- **orchestration v0.12 (2026-04-01):** Replace cached `rate_limiter_pid` in Foreman state with a registered name lookup: define a private `rate_limiter_name/1` helper that returns `{:via, Registry, {Deft.ProcessRegistry, {:rate_limiter, data.session_id}}}`. Replace `data.rate_limiter_pid` in `start_lead_process` (passed to Lead opts) with `rate_limiter_name(data)`. Remove `rate_limiter_pid` from the initial data map. RateLimiter registers under `{:rate_limiter, job_id}` in ProcessRegistry (confirmed in `lib/deft/job/rate_limiter.ex:324` and `lib/deft/job/supervisor.ex:54`).
 - **orchestration v0.12 (2026-04-01):** Rewrite the `:abort` cast handler: remove the explicit `cleanup(data)` call. Just return `{:stop, :normal, data}` and let `terminate/3` handle cleanup. Currently cleanup runs twice (once explicit, once from terminate).
 - **orchestration v0.12 (2026-04-01):** Simplify do_fail_job_on_foreman_agent_crash
 - **orchestration v0.12 (2026-04-01):** Fix orphaned lead_id in started_leads on crash retry

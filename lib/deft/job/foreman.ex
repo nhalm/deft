@@ -45,7 +45,6 @@ defmodule Deft.Job.Foreman do
   - `:session_id` — Required. Job identifier.
   - `:config` — Required. Configuration map.
   - `:prompt` — Required. Initial user prompt/issue.
-  - `:rate_limiter_pid` — Required. PID of Deft.Job.RateLimiter.
   - `:runner_supervisor` — Required. PID/name of Task.Supervisor for Foreman's Runners.
   - `:working_dir` — Optional. Working directory for the project (defaults to File.cwd!()).
   - `:foreman_agent_pid` — Optional. PID of the ForemanAgent (will be set by supervisor).
@@ -56,7 +55,6 @@ defmodule Deft.Job.Foreman do
     session_id = Keyword.fetch!(opts, :session_id)
     config = Keyword.fetch!(opts, :config)
     prompt = Keyword.fetch!(opts, :prompt)
-    rate_limiter_pid = Keyword.fetch!(opts, :rate_limiter_pid)
     runner_supervisor = Keyword.fetch!(opts, :runner_supervisor)
     working_dir = Keyword.get(opts, :working_dir, File.cwd!())
     foreman_agent_pid = Keyword.get(opts, :foreman_agent_pid)
@@ -67,7 +65,6 @@ defmodule Deft.Job.Foreman do
       session_id: session_id,
       config: config,
       prompt: prompt,
-      rate_limiter_pid: rate_limiter_pid,
       runner_supervisor: runner_supervisor,
       working_dir: working_dir,
       foreman_agent_pid: foreman_agent_pid,
@@ -151,6 +148,11 @@ defmodule Deft.Job.Foreman do
   # Private helper to get the site log registered name
   defp site_log_name(data) do
     {:via, Registry, {Deft.ProcessRegistry, {:sitelog, data.session_id}}}
+  end
+
+  # Private helper to get the rate limiter registered name
+  defp rate_limiter_name(data) do
+    {:via, Registry, {Deft.ProcessRegistry, {:rate_limiter, data.session_id}}}
   end
 
   # Private helper to set up ForemanAgent monitoring
@@ -1454,7 +1456,7 @@ defmodule Deft.Job.Foreman do
       deliverable: deliverable,
       foreman_pid: self(),
       site_log_name: site_log_name,
-      rate_limiter_pid: data.rate_limiter_pid,
+      rate_limiter_pid: rate_limiter_name(data),
       worktree_path: worktree_path,
       working_dir: data.working_dir,
       runner_supervisor: runner_supervisor_name
