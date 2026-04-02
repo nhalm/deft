@@ -17,3 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
+## orchestration v0.13
+
+- `do_abort_lead` must write to `deliverable_outcomes` (with outcome `:failed`) before removing the Lead from `data.leads`. Currently it adds to `failed_leads` but never updates `deliverable_outcomes`, so `all_leads_complete?` never returns `true` after an abort — the job hangs permanently in `:executing`.
