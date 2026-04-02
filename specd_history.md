@@ -1,4 +1,5 @@
 # History
+- **orchestration v0.12 (2026-04-01):** Rewrite the `:abort` cast handler: remove the explicit `cleanup(data)` call. Just return `{:stop, :normal, data}` and let `terminate/3` handle cleanup. Currently cleanup runs twice (once explicit, once from terminate).
 - **orchestration v0.12 (2026-04-01):** Simplify do_fail_job_on_foreman_agent_crash
 - **orchestration v0.12 (2026-04-01):** Fix orphaned lead_id in started_leads on crash retry
 - **orchestration v0.12 (2026-04-01):** Guard handle_lead_completion against absent lead_id

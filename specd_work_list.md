@@ -19,10 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.12
 
-### Simplify abort handler
-
-- Rewrite the `:abort` cast handler: remove the explicit `cleanup(data)` call. Just return `{:stop, :normal, data}` and let `terminate/3` handle cleanup. Currently cleanup runs twice (once explicit, once from terminate).
-
 ### RateLimiter registered name for Leads
 
 - Replace cached `rate_limiter_pid` in Foreman state with a registered name lookup: define a private `rate_limiter_name/1` helper that returns `{:via, Registry, {Deft.ProcessRegistry, {:rate_limiter, data.session_id}}}`. Replace `data.rate_limiter_pid` in `start_lead_process` (passed to Lead opts) with `rate_limiter_name(data)`. Remove `rate_limiter_pid` from the initial data map. RateLimiter registers under `{:rate_limiter, job_id}` in ProcessRegistry (confirmed in `lib/deft/job/rate_limiter.ex:324` and `lib/deft/job/supervisor.ex:54`).
