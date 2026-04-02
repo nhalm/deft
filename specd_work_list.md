@@ -19,10 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.12
 
-### Max-age flush for message coalescing
-
-- Change `buffer_low_priority_message` to use max-age flush instead of sliding-window debounce: add a `buffer_start_time` field (monotonic timestamp or nil) to Foreman initial state data. When a message arrives and the buffer is empty, set `buffer_start_time` to `System.monotonic_time(:millisecond)` and start the timer via `Process.send_after`. When a message arrives and the buffer is non-empty, check if `System.monotonic_time(:millisecond) - buffer_start_time >= debounce_ms` — if so, flush immediately; if not, append to buffer and do NOT reset the timer. Clear `buffer_start_time` on flush.
-
 ### Guard handle_lead_completion against absent lead_id
 
 - Add a guard at the top of `handle_lead_completion`: extract lead_id from metadata, check `Map.has_key?(data.leads, lead_id)`. If the lead_id is not in `data.leads` (already removed by crash handler, abort, or fail_deliverable), log a warning and return `{:keep_state, data}` without mutating any tracking sets. This prevents a late `:complete` message from putting a lead_id into both `completed_leads` and `failed_leads`.

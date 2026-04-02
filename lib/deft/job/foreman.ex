@@ -85,6 +85,7 @@ defmodule Deft.Job.Foreman do
       cost_ceiling_reached: false,
       lead_message_buffer: [],
       lead_message_timer: nil,
+      buffer_start_time: nil,
       pending_crash_decisions: %{}
     }
 
@@ -720,11 +721,12 @@ defmodule Deft.Job.Foreman do
 
       Deft.Agent.prompt(data.foreman_agent_pid, consolidated_message)
 
-      # Clear buffer and timer
-      {:keep_state, %{data | lead_message_buffer: [], lead_message_timer: nil}}
+      # Clear buffer, timer, and start time
+      {:keep_state,
+       %{data | lead_message_buffer: [], lead_message_timer: nil, buffer_start_time: nil}}
     else
       # No messages to flush or no agent
-      {:keep_state, %{data | lead_message_timer: nil}}
+      {:keep_state, %{data | lead_message_timer: nil, buffer_start_time: nil}}
     end
   end
 
@@ -818,8 +820,8 @@ defmodule Deft.Job.Foreman do
 
         Deft.Agent.prompt(updated_data.foreman_agent_pid, consolidated_message)
 
-        # Clear buffer and timer
-        %{updated_data | lead_message_buffer: [], lead_message_timer: nil}
+        # Clear buffer, timer, and start time
+        %{updated_data | lead_message_buffer: [], lead_message_timer: nil, buffer_start_time: nil}
       else
         updated_data
       end
@@ -973,24 +975,68 @@ defmodule Deft.Job.Foreman do
 
   defp buffer_low_priority_message(type, content, metadata, data) do
     buffer_entry = {type, content, metadata}
-    new_buffer = data.lead_message_buffer ++ [buffer_entry]
+    debounce_ms = Map.get(data.config, :job_lead_message_debounce, 2_000)
 
-    # Cancel existing timer if any
+    cond do
+      # When cost ceiling is reached, buffer without setting timer
+      data.cost_ceiling_reached ->
+        new_buffer = data.lead_message_buffer ++ [buffer_entry]
+        %{data | lead_message_buffer: new_buffer}
+
+      # Buffer is empty: start new buffer with this message and set timer
+      data.lead_message_buffer == [] ->
+        start_new_buffer(buffer_entry, debounce_ms, data)
+
+      # Buffer is non-empty: check if max age reached
+      true ->
+        handle_buffered_message(buffer_entry, debounce_ms, data)
+    end
+  end
+
+  defp start_new_buffer(buffer_entry, debounce_ms, data) do
+    buffer_start_time = System.monotonic_time(:millisecond)
+    timer_ref = Process.send_after(self(), :flush_lead_messages, debounce_ms)
+    new_buffer = [buffer_entry]
+
+    %{
+      data
+      | lead_message_buffer: new_buffer,
+        lead_message_timer: timer_ref,
+        buffer_start_time: buffer_start_time
+    }
+  end
+
+  defp handle_buffered_message(buffer_entry, debounce_ms, data) do
+    current_time = System.monotonic_time(:millisecond)
+    age = current_time - data.buffer_start_time
+
+    if age >= debounce_ms do
+      flush_buffer_with_message(buffer_entry, data)
+    else
+      append_to_buffer(buffer_entry, data)
+    end
+  end
+
+  defp flush_buffer_with_message(buffer_entry, data) do
+    # Cancel timer if any
     _ =
       if data.lead_message_timer do
         Process.cancel_timer(data.lead_message_timer)
       end
 
-    # When cost ceiling is reached, buffer without setting timer
-    # Messages will be flushed as a catch-up prompt when spending is approved
-    if data.cost_ceiling_reached do
-      %{data | lead_message_buffer: new_buffer, lead_message_timer: nil}
-    else
-      # Normal flow: set debounce timer
-      debounce_ms = Map.get(data.config, :job_lead_message_debounce, 2_000)
-      timer_ref = Process.send_after(self(), :flush_lead_messages, debounce_ms)
-      %{data | lead_message_buffer: new_buffer, lead_message_timer: timer_ref}
-    end
+    # Include the new message in the flush
+    all_messages = data.lead_message_buffer ++ [buffer_entry]
+    consolidated_message = build_consolidated_lead_message(all_messages, :running, data)
+
+    Deft.Agent.prompt(data.foreman_agent_pid, consolidated_message)
+
+    # Clear buffer, timer, and start time
+    %{data | lead_message_buffer: [], lead_message_timer: nil, buffer_start_time: nil}
+  end
+
+  defp append_to_buffer(buffer_entry, data) do
+    new_buffer = data.lead_message_buffer ++ [buffer_entry]
+    %{data | lead_message_buffer: new_buffer}
   end
 
   defp flush_lead_messages_immediately(
@@ -1016,8 +1062,8 @@ defmodule Deft.Job.Foreman do
     # Send to ForemanAgent
     Deft.Agent.prompt(data.foreman_agent_pid, consolidated_message)
 
-    # Clear buffer and timer
-    %{data | lead_message_buffer: [], lead_message_timer: nil}
+    # Clear buffer, timer, and start time
+    %{data | lead_message_buffer: [], lead_message_timer: nil, buffer_start_time: nil}
   end
 
   defp build_consolidated_lead_message(buffered_messages, state, data) do
