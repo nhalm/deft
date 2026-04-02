@@ -1289,7 +1289,10 @@ defmodule Deft.Job.Foreman do
           "#{log_prefix(data)} Cancelled crash decision timer for Lead #{crashed_lead_id} (retry with new Lead for deliverable #{deliverable_id})"
         )
 
-        Map.update!(data, :pending_crash_decisions, &Map.delete(&1, crashed_lead_id))
+        data
+        |> Map.update!(:pending_crash_decisions, &Map.delete(&1, crashed_lead_id))
+        |> Map.update!(:started_leads, &MapSet.delete(&1, crashed_lead_id))
+        |> Map.update!(:failed_leads, &MapSet.put(&1, crashed_lead_id))
     end
   end
 

@@ -19,10 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.12
 
-### Fix orphaned lead_id in started_leads on crash retry
-
-- In `cancel_crash_decision_timer_for_deliverable` (called when `spawn_lead` retries a crashed deliverable): after cancelling the timer and removing from `pending_crash_decisions`, also remove the old crashed lead_id from `started_leads` and add it to `failed_leads`. The old lead_id is available in `pending_crash_decisions[lead_id].lead_id` or can be found by matching deliverable_id. This requires the crash decision entry to store the original lead_id.
-
 ### Simplify do_fail_job_on_foreman_agent_crash
 
 - Rewrite `do_fail_job_on_foreman_agent_crash`: remove the manual `Enum.each` loops that stop Leads and clean worktrees (redundant with `cleanup/1`). The function should be: (1) demonitor all Leads with `:flush` by iterating `data.lead_monitors`, (2) demonitor ForemanAgent with `:flush`, (3) return `{:stop, {:foreman_agent_crashed, reason}, data}`. Let `terminate/3` → `cleanup(data)` handle all process stops, worktree cleanup, and site log shutdown.
