@@ -88,7 +88,8 @@ defmodule Deft.Job.Foreman do
       buffer_start_time: nil,
       pending_crash_decisions: %{},
       foreman_agent_restart_count: 0,
-      foreman_agent_restarting: false
+      foreman_agent_restarting: false,
+      lead_modified_files: %{}
     }
 
     gen_statem_opts = if name, do: [name: name], else: []
@@ -687,16 +688,8 @@ defmodule Deft.Job.Foreman do
     # Clean up worktree and monitor if this was NOT called after a crash
     updated_data = cleanup_failed_lead(updated_data, lead_id)
 
-    # Record deliverable as failed
-    updated_data =
-      Map.update!(updated_data, :deliverable_outcomes, &Map.put(&1, deliverable_id, :failed))
-
-    # Move Lead from started_leads to failed_leads, and remove from leads map
-    updated_data =
-      updated_data
-      |> Map.update!(:started_leads, &MapSet.delete(&1, lead_id))
-      |> Map.update!(:failed_leads, &MapSet.put(&1, lead_id))
-      |> Map.update!(:leads, &Map.delete(&1, lead_id))
+    # Record deliverable as failed and move Lead from started_leads to failed_leads
+    updated_data = remove_failed_lead_from_tracking(updated_data, lead_id, deliverable_id)
 
     # Check if all Leads are complete (including failed ones) and transition to :verifying
     if all_leads_complete?(updated_data) do
@@ -803,6 +796,14 @@ defmodule Deft.Job.Foreman do
         handle_contract_auto_unblocking(content, metadata, data)
       else
         data
+      end
+
+    # Handle file-overlap conflict detection at code speed
+    updated_data =
+      if type == :artifact and state == :executing do
+        handle_artifact_conflict_detection(content, metadata, updated_data)
+      else
+        updated_data
       end
 
     # Route message to ForemanAgent based on state and priority
@@ -1532,6 +1533,135 @@ defmodule Deft.Job.Foreman do
     end
   end
 
+  # Handle file-overlap conflict detection at code speed
+  defp handle_artifact_conflict_detection(content, metadata, data) do
+    lead_id = Map.get(metadata, :lead_id)
+
+    # Extract file paths from artifact content
+    files = extract_file_paths(content)
+
+    if MapSet.size(files) == 0 do
+      # No files in this artifact
+      data
+    else
+      # Update lead_modified_files for this lead
+      updated_files_map =
+        Map.update(
+          data.lead_modified_files,
+          lead_id,
+          files,
+          fn existing_files -> MapSet.union(existing_files, files) end
+        )
+
+      # Check for conflicts with other active leads
+      conflicting_leads =
+        updated_files_map
+        |> Enum.filter(fn {other_lead_id, other_files} ->
+          other_lead_id != lead_id and not MapSet.disjoint?(files, other_files)
+        end)
+        |> Enum.map(fn {other_lead_id, other_files} ->
+          overlap = MapSet.intersection(files, other_files)
+          {other_lead_id, overlap}
+        end)
+
+      data_with_updated_files = %{data | lead_modified_files: updated_files_map}
+
+      if Enum.empty?(conflicting_leads) do
+        # No conflicts
+        data_with_updated_files
+      else
+        # Conflict detected - pause leads and notify ForemanAgent
+        handle_file_overlap_conflict(lead_id, conflicting_leads, data_with_updated_files)
+      end
+    end
+  end
+
+  defp extract_file_paths(content) do
+    # Extract lines that look like file paths
+    # A file path typically contains / or starts with common patterns
+    content
+    |> String.split("\n")
+    |> Enum.map(&String.trim/1)
+    |> Enum.filter(fn line ->
+      String.contains?(line, "/") or String.match?(line, ~r/^[\w\-_]+\.\w+$/)
+    end)
+    |> MapSet.new()
+  end
+
+  defp handle_file_overlap_conflict(lead_id, conflicting_leads, data) do
+    lead = Map.get(data.leads, lead_id)
+    lead_name = Map.get(lead.deliverable, :name, lead_id)
+
+    # Send pause steering to all affected leads
+    send_pause_steering_to_leads(lead, lead_name, conflicting_leads, data)
+
+    # Notify ForemanAgent of conflict
+    notify_foreman_agent_of_conflict(lead_name, conflicting_leads, data)
+
+    data
+  end
+
+  defp send_pause_steering_to_leads(lead, lead_name, conflicting_leads, data) do
+    Enum.each(conflicting_leads, fn {other_lead_id, overlap_files} ->
+      other_lead = Map.get(data.leads, other_lead_id)
+      other_lead_name = Map.get(other_lead.deliverable, :name, other_lead_id)
+      overlapping_files_list = MapSet.to_list(overlap_files) |> Enum.join(", ")
+
+      send_pause_message_to_lead(lead, other_lead_name, overlapping_files_list)
+      send_pause_message_to_lead(other_lead, lead_name, overlapping_files_list)
+
+      Logger.warning(
+        "#{log_prefix(data)} File conflict detected between #{lead_name} and #{other_lead_name} on files: #{overlapping_files_list}"
+      )
+    end)
+  end
+
+  defp send_pause_message_to_lead(lead, conflicting_lead_name, files_list) do
+    if lead.pid do
+      pause_message = """
+      **FILE CONFLICT DETECTED**
+
+      Your work overlaps with Lead #{conflicting_lead_name} on these files: #{files_list}
+
+      Please wait for Foreman guidance before continuing work on these files.
+      """
+
+      send(lead.pid, {:foreman_steering, pause_message})
+    end
+  end
+
+  defp notify_foreman_agent_of_conflict(lead_name, conflicting_leads, data) do
+    if data.foreman_agent_pid and not data.foreman_agent_restarting do
+      conflict_summary = build_conflict_summary(lead_name, conflicting_leads, data)
+
+      conflict_prompt = """
+      **FILE OVERLAP CONFLICT**
+
+      Multiple Leads are modifying the same files:
+
+      #{conflict_summary}
+
+      Review the conflict and decide:
+      - Use `steer_lead` to give specific guidance to one or both Leads
+      - Use `abort_lead` if one should stop completely
+      - Provide coordination strategy if both can proceed with caution
+      """
+
+      Deft.Agent.prompt(data.foreman_agent_pid, conflict_prompt)
+    end
+  end
+
+  defp build_conflict_summary(lead_name, conflicting_leads, data) do
+    conflicting_leads
+    |> Enum.map(fn {other_lead_id, overlap_files} ->
+      other_lead = Map.get(data.leads, other_lead_id)
+      other_lead_name = Map.get(other_lead.deliverable, :name, other_lead_id)
+      overlapping_files_list = MapSet.to_list(overlap_files) |> Enum.join(", ")
+      "- #{lead_name} ↔ #{other_lead_name}: #{overlapping_files_list}"
+    end)
+    |> Enum.join("\n")
+  end
+
   defp handle_spawn_lead_with_deliverable(
          deliverable,
          deliverable_id,
@@ -1685,6 +1815,25 @@ defmodule Deft.Job.Foreman do
     )
   end
 
+  defp remove_completed_lead_from_tracking(lead_id, deliverable_id, data) do
+    data
+    |> Map.update!(:deliverable_outcomes, &Map.put(&1, deliverable_id, :completed))
+    |> Map.update!(:leads, &Map.delete(&1, lead_id))
+    |> Map.update!(:lead_monitors, &Map.delete(&1, lead_id))
+    |> Map.update!(:started_leads, &MapSet.delete(&1, lead_id))
+    |> Map.update!(:completed_leads, &MapSet.put(&1, lead_id))
+    |> Map.update!(:lead_modified_files, &Map.delete(&1, lead_id))
+  end
+
+  defp remove_failed_lead_from_tracking(data, lead_id, deliverable_id) do
+    data
+    |> Map.update!(:deliverable_outcomes, &Map.put(&1, deliverable_id, :failed))
+    |> Map.update!(:started_leads, &MapSet.delete(&1, lead_id))
+    |> Map.update!(:failed_leads, &MapSet.put(&1, lead_id))
+    |> Map.update!(:leads, &Map.delete(&1, lead_id))
+    |> Map.update!(:lead_modified_files, &Map.delete(&1, lead_id))
+  end
+
   defp remove_aborted_lead_from_tracking(lead_id, deliverable_id, data) do
     data
     |> Map.update!(:deliverable_outcomes, &Map.put(&1, deliverable_id, :failed))
@@ -1693,6 +1842,7 @@ defmodule Deft.Job.Foreman do
     |> Map.update!(:blocked_leads, &Map.delete(&1, lead_id))
     |> Map.update!(:lead_monitors, &Map.delete(&1, lead_id))
     |> Map.update!(:failed_leads, &MapSet.put(&1, lead_id))
+    |> Map.update!(:lead_modified_files, &Map.delete(&1, lead_id))
   end
 
   # Clean up worktree and monitor for a failed Lead, but only if not already cleaned up
@@ -1811,13 +1961,7 @@ defmodule Deft.Job.Foreman do
     # Demonitor the Lead
     cleanup_lead_monitor(data.lead_monitors, lead_id)
 
-    updated_data =
-      data
-      |> Map.update!(:deliverable_outcomes, &Map.put(&1, deliverable_id, :completed))
-      |> Map.update!(:leads, &Map.delete(&1, lead_id))
-      |> Map.update!(:lead_monitors, &Map.delete(&1, lead_id))
-      |> Map.update!(:started_leads, &MapSet.delete(&1, lead_id))
-      |> Map.update!(:completed_leads, &MapSet.put(&1, lead_id))
+    updated_data = remove_completed_lead_from_tracking(lead_id, deliverable_id, data)
 
     # Check if all Leads are complete and transition to :verifying
     if state == :executing and all_leads_complete?(updated_data) do
@@ -2072,6 +2216,7 @@ defmodule Deft.Job.Foreman do
       |> Map.update!(:leads, &Map.delete(&1, lead_id))
       |> Map.update!(:blocked_leads, &Map.delete(&1, lead_id))
       |> Map.update!(:lead_monitors, &Map.delete(&1, lead_id))
+      |> Map.update!(:lead_modified_files, &Map.delete(&1, lead_id))
 
     # Notify agent and start crash decision timeout
     updated_data = setup_crash_decision_timeout(updated_data, lead_id, deliverable_id)
