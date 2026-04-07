@@ -87,7 +87,8 @@ defmodule Deft.Job.Foreman do
       lead_message_timer: nil,
       buffer_start_time: nil,
       pending_crash_decisions: %{},
-      foreman_agent_restart_count: 0
+      foreman_agent_restart_count: 0,
+      foreman_agent_restarting: false
     }
 
     gen_statem_opts = if name, do: [name: name], else: []
@@ -1072,8 +1073,8 @@ defmodule Deft.Job.Foreman do
     debounce_ms = Map.get(data.config, :job_lead_message_debounce, 2_000)
 
     cond do
-      # When cost ceiling is reached, buffer without setting timer
-      data.cost_ceiling_reached ->
+      # When cost ceiling is reached or ForemanAgent is restarting, buffer without setting timer
+      data.cost_ceiling_reached or data.foreman_agent_restarting ->
         new_buffer = data.lead_message_buffer ++ [buffer_entry]
         %{data | lead_message_buffer: new_buffer}
 
@@ -1120,12 +1121,17 @@ defmodule Deft.Job.Foreman do
 
     # Include the new message in the flush
     all_messages = data.lead_message_buffer ++ [buffer_entry]
-    consolidated_message = build_consolidated_lead_message(all_messages, :running, data)
 
-    Deft.Agent.prompt(data.foreman_agent_pid, consolidated_message)
+    # If ForemanAgent is restarting, just buffer the message without sending
+    if data.foreman_agent_restarting do
+      %{data | lead_message_buffer: all_messages, lead_message_timer: nil, buffer_start_time: nil}
+    else
+      consolidated_message = build_consolidated_lead_message(all_messages, :running, data)
+      Deft.Agent.prompt(data.foreman_agent_pid, consolidated_message)
 
-    # Clear buffer, timer, and start time
-    %{data | lead_message_buffer: [], lead_message_timer: nil, buffer_start_time: nil}
+      # Clear buffer, timer, and start time
+      %{data | lead_message_buffer: [], lead_message_timer: nil, buffer_start_time: nil}
+    end
   end
 
   defp append_to_buffer(buffer_entry, data) do
@@ -1151,13 +1157,18 @@ defmodule Deft.Job.Foreman do
       data.lead_message_buffer ++
         [{high_priority_type, high_priority_content, high_priority_metadata}]
 
-    consolidated_message = build_consolidated_lead_message(all_messages, state, data)
+    # If ForemanAgent is restarting, buffer even high-priority messages
+    if data.foreman_agent_restarting do
+      %{data | lead_message_buffer: all_messages, lead_message_timer: nil, buffer_start_time: nil}
+    else
+      consolidated_message = build_consolidated_lead_message(all_messages, state, data)
 
-    # Send to ForemanAgent
-    Deft.Agent.prompt(data.foreman_agent_pid, consolidated_message)
+      # Send to ForemanAgent
+      Deft.Agent.prompt(data.foreman_agent_pid, consolidated_message)
 
-    # Clear buffer, timer, and start time
-    %{data | lead_message_buffer: [], lead_message_timer: nil, buffer_start_time: nil}
+      # Clear buffer, timer, and start time
+      %{data | lead_message_buffer: [], lead_message_timer: nil, buffer_start_time: nil}
+    end
   end
 
   defp build_consolidated_lead_message(buffered_messages, state, data) do
@@ -1840,6 +1851,9 @@ defmodule Deft.Job.Foreman do
       Process.demonitor(data.foreman_agent_monitor_ref, [:flush])
     end
 
+    # Clear the restarting flag
+    data = %{data | foreman_agent_restarting: false}
+
     # Stop the Foreman - terminate/3 will call cleanup(data) to handle all cleanup
     {:stop, {:foreman_agent_crashed, reason}, data}
   end
@@ -1849,6 +1863,9 @@ defmodule Deft.Job.Foreman do
     if data.foreman_agent_monitor_ref do
       Process.demonitor(data.foreman_agent_monitor_ref, [:flush])
     end
+
+    # Set flag to indicate we're in the restart window
+    data = %{data | foreman_agent_restarting: true}
 
     # Load session messages
     messages = load_foreman_session_messages(data)
@@ -1867,6 +1884,8 @@ defmodule Deft.Job.Foreman do
           "#{log_prefix(data)} ForemanAgent restart failed: #{inspect(start_error)}. Failing job."
         )
 
+        # Clear the restarting flag before failing
+        data = %{data | foreman_agent_restarting: false}
         do_fail_job_on_foreman_agent_crash({:restart_failed, start_error}, data)
     end
   end
@@ -1928,8 +1947,17 @@ defmodule Deft.Job.Foreman do
         |> Map.put(:foreman_agent_pid, foreman_agent_name)
         |> Map.update!(:foreman_agent_restart_count, &(&1 + 1))
 
-      # Send catch-up prompt with current job state
+      # Send catch-up prompt with current job state and buffered messages
       send_restart_catchup_prompt(updated_data)
+
+      # Clear the restarting flag and buffer after sending catch-up
+      updated_data = %{
+        updated_data
+        | foreman_agent_restarting: false,
+          lead_message_buffer: [],
+          lead_message_timer: nil,
+          buffer_start_time: nil
+      }
 
       {:keep_state, updated_data}
     else
@@ -1937,6 +1965,8 @@ defmodule Deft.Job.Foreman do
         "#{log_prefix(data)} ForemanAgent restart failed: could not resolve agent PID. Failing job."
       )
 
+      # Clear the restarting flag before failing
+      data = %{data | foreman_agent_restarting: false}
       do_fail_job_on_foreman_agent_crash({:restart_failed, :pid_resolution}, data)
     end
   end
@@ -2421,6 +2451,27 @@ defmodule Deft.Job.Foreman do
       end)
       |> Enum.join("\n")
 
+    # Build buffered messages section if there are any
+    buffered_messages_section =
+      if data.lead_message_buffer != [] do
+        Logger.info(
+          "#{log_prefix(data)} Flushing #{length(data.lead_message_buffer)} buffered Lead messages in restart catch-up prompt"
+        )
+
+        # Build consolidated lead message from buffer
+        consolidated_lead_updates =
+          build_consolidated_lead_message(data.lead_message_buffer, :executing, data)
+
+        """
+
+        **Buffered Lead messages during restart:**
+
+        #{consolidated_lead_updates}
+        """
+      else
+        ""
+      end
+
     catchup_text = """
     **SYSTEM NOTIFICATION: ForemanAgent restart recovery**
 
@@ -2433,7 +2484,7 @@ defmodule Deft.Job.Foreman do
 
     Deliverable outcomes:
     #{if deliverable_outcomes_summary == "", do: "(none)", else: deliverable_outcomes_summary}
-
+    #{buffered_messages_section}
     Please review the current state and continue coordinating the job. If any Leads were in progress, you may need to check their status or send steering instructions.
     """
 

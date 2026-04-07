@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## orchestration v0.14
 
-- Add `foreman_agent_restarting` flag for degraded-mode buffering: when the flag is true during `:executing`, continue code-speed operations (contract forwarding, completion bookkeeping, crash timeouts) but buffer all messages that would go to ForemanAgent. On successful restart, flush buffer as a single consolidated prompt. Clear flag on restart success or job failure.
 - Add DAG cycle validation in the `submit_plan` handler: validate all `:from`/`:to` IDs reference valid deliverable IDs, no self-loops, no cycles (topological sort). On invalid DAG, reject the plan and prompt ForemanAgent to fix it. Test: submit a plan with A→B→A cycle, verify rejection.
 - Add file-overlap conflict detection in the Foreman: track modified files per Lead from `:artifact` messages in a `%{lead_id => MapSet.t()}` map. On each new `:artifact`, check `MapSet.intersection` against other active Leads. On overlap, pause both Leads and send the conflict to the ForemanAgent for resolution (steer/abort).
 - Queue `{:foreman_steering, ...}` messages in Lead `:verifying` state instead of discarding. Add `queued_steering` list to Lead data. On transition to `:complete`, check queued steering — if present, send to LeadAgent and re-enter `:executing` if steering contradicts verification.
