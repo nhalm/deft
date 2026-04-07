@@ -17,7 +17,3 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## orchestration v0.14
-
-- Fix `setup_crash_decision_timeout` not checking `foreman_agent_restarting` flag: at line 2248, the crash notification prompt is sent via `Deft.Agent.prompt(data.foreman_agent_pid, ...)` without checking `data.foreman_agent_restarting`. Other ForemanAgent-bound messages (coalesced Lead messages at lines 1136/1185/1220, conflict notifications at line 1634) correctly check the flag. Fix: add `and not data.foreman_agent_restarting` guard — when the flag is true, buffer the crash notification and include it in the post-restart catch-up prompt.
-

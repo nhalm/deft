@@ -2249,7 +2249,9 @@ defmodule Deft.Job.Foreman do
     Consider the nature of the crash and whether a retry is likely to succeed.
     """
 
-    if data.foreman_agent_pid do
+    # Only send notification if ForemanAgent is not restarting
+    # When restarting, buffer the notification to include in post-restart catch-up
+    if data.foreman_agent_pid && !data.foreman_agent_restarting do
       Deft.Agent.prompt(data.foreman_agent_pid, crash_notification)
     end
 
@@ -2261,7 +2263,11 @@ defmodule Deft.Job.Foreman do
     )
 
     Map.update!(data, :pending_crash_decisions, fn pending ->
-      Map.put(pending, lead_id, %{timer_ref: timer_ref, deliverable_id: deliverable_id})
+      Map.put(pending, lead_id, %{
+        timer_ref: timer_ref,
+        deliverable_id: deliverable_id,
+        notification: crash_notification
+      })
     end)
   end
 
@@ -2799,6 +2805,35 @@ defmodule Deft.Job.Foreman do
         ""
       end
 
+    # Build pending crash notifications section if there are any
+    crash_notifications_section =
+      if data.pending_crash_decisions != %{} do
+        crash_notifications =
+          data.pending_crash_decisions
+          |> Enum.map(fn {_lead_id, crash_info} ->
+            Map.get(crash_info, :notification, "")
+          end)
+          |> Enum.filter(&(&1 != ""))
+          |> Enum.join("\n\n")
+
+        if crash_notifications != "" do
+          Logger.info(
+            "#{log_prefix(data)} Including #{map_size(data.pending_crash_decisions)} pending crash notifications in restart catch-up prompt"
+          )
+
+          """
+
+          **Pending crash decisions buffered during restart:**
+
+          #{crash_notifications}
+          """
+        else
+          ""
+        end
+      else
+        ""
+      end
+
     catchup_text = """
     **SYSTEM NOTIFICATION: ForemanAgent restart recovery**
 
@@ -2811,7 +2846,7 @@ defmodule Deft.Job.Foreman do
 
     Deliverable outcomes:
     #{if deliverable_outcomes_summary == "", do: "(none)", else: deliverable_outcomes_summary}
-    #{buffered_messages_section}
+    #{buffered_messages_section}#{crash_notifications_section}
     Please review the current state and continue coordinating the job. If any Leads were in progress, you may need to check their status or send steering instructions.
     """
 
