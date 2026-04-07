@@ -1,6 +1,7 @@
 defmodule DeftWeb.SessionsLiveTest do
   use DeftWeb.ConnCase, async: false
 
+  alias Deft.Project
   alias Deft.Session.Entry.{SessionStart, Message}
   alias Deft.Session.Store
   alias Phoenix.ConnTest
@@ -8,8 +9,10 @@ defmodule DeftWeb.SessionsLiveTest do
   setup do
     # Create a unique test working directory for each test
     # Include microseconds and a random component for uniqueness
+    test_id = "#{System.unique_integer([:positive, :monotonic])}_#{:erlang.phash2(make_ref())}"
+
     test_working_dir =
-      "/tmp/deft_sessions_live_test_#{System.unique_integer([:positive, :monotonic])}_#{:erlang.phash2(make_ref())}"
+      "/tmp/deft_sessions_live_test_#{test_id}"
 
     sessions_dir = Path.join([test_working_dir, ".deft", "sessions"])
     File.mkdir_p!(sessions_dir)
@@ -18,14 +21,21 @@ defmodule DeftWeb.SessionsLiveTest do
     original_cwd = File.cwd!()
     File.cd!(test_working_dir)
 
+    # Also clean up any session files that may have leaked to the project sessions dir
+    project_sessions_dir = Project.sessions_dir(test_working_dir)
+
     on_exit(fn ->
       # Restore original working directory
       File.cd!(original_cwd)
       # Clean up test directory
       File.rm_rf!(test_working_dir)
+      # Clean up project sessions dir if different from test dir
+      if project_sessions_dir != sessions_dir do
+        File.rm_rf!(project_sessions_dir)
+      end
     end)
 
-    %{conn: ConnTest.build_conn(), test_working_dir: test_working_dir}
+    %{conn: ConnTest.build_conn(), test_working_dir: test_working_dir, test_id: test_id}
   end
 
   # Helper to get LiveView state
@@ -81,16 +91,19 @@ defmodule DeftWeb.SessionsLiveTest do
   end
 
   describe "mount/3" do
-    test "lists sessions from store", %{conn: conn} do
-      # Create test sessions
-      create_test_session("session_001",
+    test "lists sessions from store", %{conn: conn, test_id: test_id} do
+      # Create test sessions with unique IDs to avoid cross-test leakage
+      sid1 = "session_001_#{test_id}"
+      sid2 = "session_002_#{test_id}"
+
+      create_test_session(sid1,
         message_count: 5,
         last_prompt: "Help me debug"
       )
 
       :timer.sleep(10)
 
-      create_test_session("session_002",
+      create_test_session(sid2,
         message_count: 3,
         last_prompt: "Explain the auth module"
       )
@@ -100,8 +113,8 @@ defmodule DeftWeb.SessionsLiveTest do
 
       # Verify sessions are rendered
       assert html =~ "Sessions"
-      assert html =~ "session_001"
-      assert html =~ "session_002"
+      assert html =~ sid1
+      assert html =~ sid2
       assert html =~ "Help me debug"
       assert html =~ "Explain the auth module"
       # Working directory should be shown
@@ -131,8 +144,8 @@ defmodule DeftWeb.SessionsLiveTest do
       assert html =~ "q to quit"
     end
 
-    test "initializes with first session selected", %{conn: conn} do
-      create_test_session("session_001", message_count: 5, last_prompt: "Test prompt")
+    test "initializes with first session selected", %{conn: conn, test_id: test_id} do
+      create_test_session("session_#{test_id}", message_count: 5, last_prompt: "Test prompt")
 
       {:ok, view, html} = live(conn, "/sessions")
 
@@ -145,13 +158,13 @@ defmodule DeftWeb.SessionsLiveTest do
   end
 
   describe "j/k navigation" do
-    setup %{conn: conn} do
+    setup %{conn: conn, test_id: test_id} do
       # Create test sessions with time delays to ensure proper ordering
-      create_test_session("session_001", message_count: 5, last_prompt: "First session")
+      create_test_session("nav_001_#{test_id}", message_count: 5, last_prompt: "First session")
       :timer.sleep(10)
-      create_test_session("session_002", message_count: 3, last_prompt: "Second session")
+      create_test_session("nav_002_#{test_id}", message_count: 3, last_prompt: "Second session")
       :timer.sleep(10)
-      create_test_session("session_003", message_count: 7, last_prompt: "Third session")
+      create_test_session("nav_003_#{test_id}", message_count: 7, last_prompt: "Third session")
 
       {:ok, view, _html} = live(conn, "/sessions")
 
@@ -220,47 +233,50 @@ defmodule DeftWeb.SessionsLiveTest do
   end
 
   describe "Enter key selection" do
-    setup %{conn: conn} do
-      create_test_session("session_abc123", message_count: 5, last_prompt: "First session")
+    setup %{conn: conn, test_id: test_id} do
+      sid1 = "enter_abc_#{test_id}"
+      sid2 = "enter_def_#{test_id}"
+
+      create_test_session(sid1, message_count: 5, last_prompt: "First session")
       :timer.sleep(10)
-      create_test_session("session_def456", message_count: 3, last_prompt: "Second session")
+      create_test_session(sid2, message_count: 3, last_prompt: "Second session")
 
       {:ok, view, _html} = live(conn, "/sessions")
 
-      %{view: view}
+      %{view: view, sid1: sid1, sid2: sid2}
     end
 
-    test "Enter redirects to chat with selected session_id", %{view: view} do
+    test "Enter redirects to chat with selected session_id", %{view: view, sid2: sid2} do
       # Press Enter on first session (index 0)
-      # Since session_def456 was created last, it will be at index 0 (most recent first)
+      # Since sid2 was created last, it will be at index 0 (most recent first)
       view |> element(".sessions-picker") |> render_keydown(%{"key" => "Enter"})
 
-      # Should redirect to the most recent session (session_def456)
-      assert_redirect(view, "/?session=session_def456")
+      # Should redirect to the most recent session (sid2)
+      assert_redirect(view, "/?session=#{sid2}")
     end
 
-    test "Enter redirects to correct session after navigation", %{view: view} do
+    test "Enter redirects to correct session after navigation", %{view: view, sid1: sid1} do
       # Navigate to second session (which will be first in most-recent-first order)
-      # Since session_def456 was created last, it's at index 0
-      # session_abc123 is at index 1
+      # Since sid2 was created last, it's at index 0
+      # sid1 is at index 1
       view |> element(".sessions-picker") |> render_keydown(%{"key" => "j"})
       assert get_assign(view, :selected_index) == 1
 
       # Press Enter
       view |> element(".sessions-picker") |> render_keydown(%{"key" => "Enter"})
 
-      # Should redirect to session_abc123 (the older session)
-      assert_redirect(view, "/?session=session_abc123")
+      # Should redirect to sid1 (the older session)
+      assert_redirect(view, "/?session=#{sid1}")
     end
   end
 
   describe "q key - quit/back" do
-    test "q redirects to most recent session", %{conn: conn} do
+    test "q redirects to most recent session", %{conn: conn, test_id: test_id} do
       # Create test sessions
-      create_test_session("session_newer", message_count: 2, last_prompt: "Newer")
+      create_test_session("quit_newer_#{test_id}", message_count: 2, last_prompt: "Newer")
       # Ensure different timestamps
       :timer.sleep(10)
-      create_test_session("session_older", message_count: 1, last_prompt: "Older")
+      create_test_session("quit_older_#{test_id}", message_count: 1, last_prompt: "Older")
 
       {:ok, view, _html} = live(conn, "/sessions")
 
@@ -287,8 +303,8 @@ defmodule DeftWeb.SessionsLiveTest do
   end
 
   describe "other keys" do
-    test "ignores unknown keys", %{conn: conn} do
-      create_test_session("session_001", message_count: 5, last_prompt: "Test")
+    test "ignores unknown keys", %{conn: conn, test_id: test_id} do
+      create_test_session("keys_#{test_id}", message_count: 5, last_prompt: "Test")
 
       {:ok, view, _html} = live(conn, "/sessions")
 
@@ -305,8 +321,8 @@ defmodule DeftWeb.SessionsLiveTest do
   end
 
   describe "session metadata display" do
-    test "formats datetime correctly", %{conn: conn} do
-      create_test_session("session_001", message_count: 5, last_prompt: "Test")
+    test "formats datetime correctly", %{conn: conn, test_id: test_id} do
+      create_test_session("meta_dt_#{test_id}", message_count: 5, last_prompt: "Test")
 
       {:ok, _view, html} = live(conn, "/sessions")
 
@@ -315,24 +331,28 @@ defmodule DeftWeb.SessionsLiveTest do
       assert html =~ ~r/\d{4}-\d{2}-\d{2}/
     end
 
-    test "shows message count", %{conn: conn} do
-      create_test_session("session_001", message_count: 42, last_prompt: "Test")
+    test "shows message count", %{conn: conn, test_id: test_id} do
+      create_test_session("meta_count_#{test_id}", message_count: 42, last_prompt: "Test")
 
       {:ok, _view, html} = live(conn, "/sessions")
 
       assert html =~ "42 messages"
     end
 
-    test "shows working directory", %{conn: conn, test_working_dir: test_working_dir} do
-      create_test_session("session_001", message_count: 5, last_prompt: "Test")
+    test "shows working directory", %{
+      conn: conn,
+      test_working_dir: test_working_dir,
+      test_id: test_id
+    } do
+      create_test_session("meta_dir_#{test_id}", message_count: 5, last_prompt: "Test")
 
       {:ok, _view, html} = live(conn, "/sessions")
 
       assert html =~ test_working_dir
     end
 
-    test "displays last user prompt", %{conn: conn} do
-      create_test_session("session_001",
+    test "displays last user prompt", %{conn: conn, test_id: test_id} do
+      create_test_session("meta_prompt_#{test_id}",
         message_count: 5,
         last_prompt: "Help me refactor this function to use pattern matching"
       )
@@ -342,9 +362,9 @@ defmodule DeftWeb.SessionsLiveTest do
       assert html =~ "Help me refactor this function to use pattern matching"
     end
 
-    test "hides last prompt div when prompt is empty", %{conn: conn} do
+    test "hides last prompt div when prompt is empty", %{conn: conn, test_id: test_id} do
       # Create session with no messages - will have empty last_user_prompt
-      create_test_session("session_001", message_count: 0, last_prompt: "")
+      create_test_session("meta_empty_#{test_id}", message_count: 0, last_prompt: "")
 
       {:ok, _view, html} = live(conn, "/sessions")
 
