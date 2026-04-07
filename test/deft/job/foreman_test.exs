@@ -1483,4 +1483,208 @@ defmodule Deft.Job.ForemanTest do
       assert String.contains?(text, "SINGLE_AGENT_FALLBACK: true")
     end
   end
+
+  describe "DAG cycle validation" do
+    test "rejects plan with A→B→A cycle", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
+      session_id = "test-job-#{:erlang.unique_integer([:positive])}"
+
+      {_rate_limiter_pid, _site_log_pid, foreman_opts} =
+        setup_foreman_test(session_id, tmp_dir, runner_supervisor: runner_supervisor)
+
+      # Start a mock agent to track prompts sent to it
+      mock_agent_pid = spawn(fn -> mock_agent_loop([]) end)
+
+      foreman_opts = Keyword.put(foreman_opts, :foreman_agent_pid, mock_agent_pid)
+      {:ok, foreman_pid} = Foreman.start_link(foreman_opts)
+
+      # Wait for init
+      Process.sleep(50)
+
+      # Transition to planning phase
+      send(foreman_pid, {:agent_action, :ready_to_plan})
+      Process.sleep(50)
+
+      # Verify state transitioned to planning
+      {state, _data} = :sys.get_state(foreman_pid)
+      assert state == :planning
+
+      # Submit a plan with a cycle: A→B→A
+      plan_with_cycle = %{
+        deliverables: [
+          %{"id" => "task-a", "description" => "Task A"},
+          %{"id" => "task-b", "description" => "Task B"}
+        ],
+        dependencies: [
+          %{"from" => "task-a", "to" => "task-b"},
+          %{"from" => "task-b", "to" => "task-a"}
+        ],
+        rationale: "Test plan with cycle"
+      }
+
+      # Send plan action from planning state
+      send(foreman_pid, {:agent_action, :plan, plan_with_cycle})
+
+      # Wait for processing
+      Process.sleep(100)
+
+      # Verify Foreman is still in planning state (didn't transition to decomposing)
+      {state, _data} = :sys.get_state(foreman_pid)
+      assert state == :planning
+
+      # Verify ForemanAgent received rejection prompt
+      send(mock_agent_pid, {:get_prompts, self()})
+
+      assert_receive {:prompts, prompts}, 1000
+
+      # The last prompt should be the rejection message
+      rejection_prompt = List.last(prompts)
+      assert is_binary(rejection_prompt)
+      assert String.contains?(rejection_prompt, "invalid dependency graph")
+      assert String.contains?(rejection_prompt, "Cycle detected")
+
+      # Cleanup
+      Process.exit(mock_agent_pid, :kill)
+      :gen_statem.stop(foreman_pid)
+    end
+
+    test "rejects plan with self-loop", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
+      session_id = "test-job-#{:erlang.unique_integer([:positive])}"
+
+      {_rate_limiter_pid, _site_log_pid, foreman_opts} =
+        setup_foreman_test(session_id, tmp_dir, runner_supervisor: runner_supervisor)
+
+      mock_agent_pid = spawn(fn -> mock_agent_loop([]) end)
+      foreman_opts = Keyword.put(foreman_opts, :foreman_agent_pid, mock_agent_pid)
+      {:ok, foreman_pid} = Foreman.start_link(foreman_opts)
+
+      Process.sleep(50)
+
+      # Transition to planning phase
+      send(foreman_pid, {:agent_action, :ready_to_plan})
+      Process.sleep(50)
+
+      # Submit a plan with a self-loop: A→A
+      plan_with_self_loop = %{
+        deliverables: [
+          %{"id" => "task-a", "description" => "Task A"}
+        ],
+        dependencies: [
+          %{"from" => "task-a", "to" => "task-a"}
+        ],
+        rationale: "Test plan with self-loop"
+      }
+
+      send(foreman_pid, {:agent_action, :plan, plan_with_self_loop})
+      Process.sleep(100)
+
+      # Verify ForemanAgent received rejection prompt
+      send(mock_agent_pid, {:get_prompts, self()})
+      assert_receive {:prompts, prompts}, 1000
+
+      rejection_prompt = List.last(prompts)
+      assert String.contains?(rejection_prompt, "invalid dependency graph")
+      assert String.contains?(rejection_prompt, "Self-loops detected")
+
+      # Cleanup
+      Process.exit(mock_agent_pid, :kill)
+      :gen_statem.stop(foreman_pid)
+    end
+
+    test "rejects plan with invalid deliverable ID in dependency", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
+      session_id = "test-job-#{:erlang.unique_integer([:positive])}"
+
+      {_rate_limiter_pid, _site_log_pid, foreman_opts} =
+        setup_foreman_test(session_id, tmp_dir, runner_supervisor: runner_supervisor)
+
+      mock_agent_pid = spawn(fn -> mock_agent_loop([]) end)
+      foreman_opts = Keyword.put(foreman_opts, :foreman_agent_pid, mock_agent_pid)
+      {:ok, foreman_pid} = Foreman.start_link(foreman_opts)
+
+      Process.sleep(50)
+
+      # Transition to planning phase
+      send(foreman_pid, {:agent_action, :ready_to_plan})
+      Process.sleep(50)
+
+      # Submit a plan with invalid deliverable ID reference
+      plan_with_invalid_ref = %{
+        deliverables: [
+          %{"id" => "task-a", "description" => "Task A"}
+        ],
+        dependencies: [
+          %{"from" => "task-a", "to" => "nonexistent-task"}
+        ],
+        rationale: "Test plan with invalid reference"
+      }
+
+      send(foreman_pid, {:agent_action, :plan, plan_with_invalid_ref})
+      Process.sleep(100)
+
+      # Verify ForemanAgent received rejection prompt
+      send(mock_agent_pid, {:get_prompts, self()})
+      assert_receive {:prompts, prompts}, 1000
+
+      rejection_prompt = List.last(prompts)
+      assert String.contains?(rejection_prompt, "invalid dependency graph")
+      assert String.contains?(rejection_prompt, "Invalid deliverable IDs")
+
+      # Cleanup
+      Process.exit(mock_agent_pid, :kill)
+      :gen_statem.stop(foreman_pid)
+    end
+
+    test "accepts valid DAG plan", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
+      session_id = "test-job-#{:erlang.unique_integer([:positive])}"
+
+      {_rate_limiter_pid, _site_log_pid, foreman_opts} =
+        setup_foreman_test(session_id, tmp_dir, runner_supervisor: runner_supervisor)
+
+      mock_agent_pid = spawn(fn -> mock_agent_loop([]) end)
+      foreman_opts = Keyword.put(foreman_opts, :foreman_agent_pid, mock_agent_pid)
+      {:ok, foreman_pid} = Foreman.start_link(foreman_opts)
+
+      Process.sleep(50)
+
+      # Transition to planning phase
+      send(foreman_pid, {:agent_action, :ready_to_plan})
+      Process.sleep(50)
+
+      # Submit a valid plan: A→B→C (linear DAG)
+      valid_plan = %{
+        deliverables: [
+          %{"id" => "task-a", "description" => "Task A"},
+          %{"id" => "task-b", "description" => "Task B"},
+          %{"id" => "task-c", "description" => "Task C"}
+        ],
+        dependencies: [
+          %{"from" => "task-a", "to" => "task-b"},
+          %{"from" => "task-b", "to" => "task-c"}
+        ],
+        rationale: "Valid linear plan"
+      }
+
+      send(foreman_pid, {:agent_action, :plan, valid_plan})
+      Process.sleep(100)
+
+      # Verify Foreman transitioned to decomposing state
+      {state, _data} = :sys.get_state(foreman_pid)
+      assert state == :decomposing
+
+      # Cleanup
+      Process.exit(mock_agent_pid, :kill)
+      :gen_statem.stop(foreman_pid)
+    end
+  end
 end

@@ -468,22 +468,51 @@ defmodule Deft.Job.Foreman do
     normalized_deliverables = Enum.map(deliverables, &normalize_deliverable_keys/1)
     normalized_dependencies = Enum.map(dependencies, &normalize_dependency_keys/1)
 
-    # Store the full plan data
-    full_plan = %{
-      deliverables: normalized_deliverables,
-      dependencies: normalized_dependencies,
-      rationale: rationale
-    }
+    # Validate the dependency DAG
+    case validate_dag(normalized_deliverables, normalized_dependencies) do
+      :ok ->
+        # Store the full plan data
+        full_plan = %{
+          deliverables: normalized_deliverables,
+          dependencies: normalized_dependencies,
+          rationale: rationale
+        }
 
-    data = Map.put(data, :plan, full_plan)
+        data = Map.put(data, :plan, full_plan)
 
-    # Write plan to site log
-    Store.write(site_log_name(data), "plan", full_plan)
+        # Write plan to site log
+        Store.write(site_log_name(data), "plan", full_plan)
 
-    # Present plan to user for approval
-    present_plan_to_user(data, normalized_deliverables)
+        # Present plan to user for approval
+        present_plan_to_user(data, normalized_deliverables)
 
-    {:next_state, :decomposing, data}
+        {:next_state, :decomposing, data}
+
+      {:error, reason} ->
+        Logger.warning("#{log_prefix(data)} Plan rejected due to invalid DAG: #{reason}")
+
+        # Send rejection message to ForemanAgent and ask it to fix the plan
+        rejection_prompt = """
+        The submitted plan has an invalid dependency graph and was rejected.
+
+        Error: #{reason}
+
+        Please fix the dependency graph and submit a corrected plan. Ensure that:
+        1. All :from and :to IDs in dependencies reference valid deliverable IDs
+        2. No self-loops exist (where a deliverable depends on itself)
+        3. No cycles exist in the dependency graph
+
+        Original plan:
+        - Deliverables: #{inspect(normalized_deliverables, pretty: true)}
+        - Dependencies: #{inspect(normalized_dependencies, pretty: true)}
+        """
+
+        if data.foreman_agent_pid do
+          Deft.Agent.prompt(data.foreman_agent_pid, rejection_prompt)
+        end
+
+        :keep_state_and_data
+    end
   end
 
   def handle_event(:info, {:agent_action, :plan, plan_data}, :researching, data) do
@@ -499,22 +528,51 @@ defmodule Deft.Job.Foreman do
     normalized_deliverables = Enum.map(deliverables, &normalize_deliverable_keys/1)
     normalized_dependencies = Enum.map(dependencies, &normalize_dependency_keys/1)
 
-    # Store the full plan data
-    full_plan = %{
-      deliverables: normalized_deliverables,
-      dependencies: normalized_dependencies,
-      rationale: rationale
-    }
+    # Validate the dependency DAG
+    case validate_dag(normalized_deliverables, normalized_dependencies) do
+      :ok ->
+        # Store the full plan data
+        full_plan = %{
+          deliverables: normalized_deliverables,
+          dependencies: normalized_dependencies,
+          rationale: rationale
+        }
 
-    data = Map.put(data, :plan, full_plan)
+        data = Map.put(data, :plan, full_plan)
 
-    # Write plan to site log
-    Store.write(site_log_name(data), "plan", full_plan)
+        # Write plan to site log
+        Store.write(site_log_name(data), "plan", full_plan)
 
-    # Present plan to user for approval
-    present_plan_to_user(data, normalized_deliverables)
+        # Present plan to user for approval
+        present_plan_to_user(data, normalized_deliverables)
 
-    {:next_state, :decomposing, data}
+        {:next_state, :decomposing, data}
+
+      {:error, reason} ->
+        Logger.warning("#{log_prefix(data)} Plan rejected due to invalid DAG: #{reason}")
+
+        # Send rejection message to ForemanAgent and ask it to fix the plan
+        rejection_prompt = """
+        The submitted plan has an invalid dependency graph and was rejected.
+
+        Error: #{reason}
+
+        Please fix the dependency graph and submit a corrected plan. Ensure that:
+        1. All :from and :to IDs in dependencies reference valid deliverable IDs
+        2. No self-loops exist (where a deliverable depends on itself)
+        3. No cycles exist in the dependency graph
+
+        Original plan:
+        - Deliverables: #{inspect(normalized_deliverables, pretty: true)}
+        - Dependencies: #{inspect(normalized_dependencies, pretty: true)}
+        """
+
+        if data.foreman_agent_pid do
+          Deft.Agent.prompt(data.foreman_agent_pid, rejection_prompt)
+        end
+
+        :keep_state_and_data
+    end
   end
 
   def handle_event(:info, {:agent_action, :spawn_lead, deliverable_info}, :executing, data) do
@@ -2236,6 +2294,126 @@ defmodule Deft.Job.Foreman do
       to: Map.get(dependency, "to"),
       contract: Map.get(dependency, "contract")
     }
+  end
+
+  # Validate the dependency DAG for a plan
+  # Returns :ok or {:error, reason}
+  defp validate_dag(deliverables, dependencies) do
+    deliverable_ids = MapSet.new(deliverables, & &1[:id])
+
+    with :ok <- validate_dependency_references(dependencies, deliverable_ids),
+         :ok <- validate_no_self_loops(dependencies),
+         :ok <- validate_no_cycles(dependencies) do
+      :ok
+    end
+  end
+
+  # Check that all :from and :to IDs in dependencies reference valid deliverable IDs
+  defp validate_dependency_references(dependencies, deliverable_ids) do
+    invalid_deps =
+      Enum.filter(dependencies, fn dep ->
+        from_id = dep[:from]
+        to_id = dep[:to]
+        not MapSet.member?(deliverable_ids, from_id) or not MapSet.member?(deliverable_ids, to_id)
+      end)
+
+    if Enum.empty?(invalid_deps) do
+      :ok
+    else
+      invalid_ids =
+        Enum.flat_map(invalid_deps, fn dep ->
+          [dep[:from], dep[:to]]
+        end)
+        |> Enum.uniq()
+        |> Enum.reject(&MapSet.member?(deliverable_ids, &1))
+
+      {:error, "Invalid deliverable IDs in dependencies: #{inspect(invalid_ids)}"}
+    end
+  end
+
+  # Check for self-loops (where from == to)
+  defp validate_no_self_loops(dependencies) do
+    self_loops = Enum.filter(dependencies, fn dep -> dep[:from] == dep[:to] end)
+
+    if Enum.empty?(self_loops) do
+      :ok
+    else
+      loop_ids = Enum.map(self_loops, & &1[:from])
+      {:error, "Self-loops detected in dependencies: #{inspect(loop_ids)}"}
+    end
+  end
+
+  # Check for cycles using topological sort (Kahn's algorithm)
+  defp validate_no_cycles(dependencies) do
+    # Build adjacency list and in-degree map
+    {graph, in_degree} = build_graph(dependencies)
+
+    # Find all nodes with in-degree 0
+    queue = Enum.filter(Map.keys(graph), fn node -> Map.get(in_degree, node, 0) == 0 end)
+
+    # Perform topological sort
+    case topological_sort(queue, graph, in_degree, []) do
+      {:ok, _sorted} ->
+        :ok
+
+      {:error, remaining} ->
+        {:error, "Cycle detected in dependency graph involving: #{inspect(remaining)}"}
+    end
+  end
+
+  # Build adjacency list and in-degree map from dependencies
+  defp build_graph(dependencies) do
+    # Initialize graph with all nodes
+    all_nodes =
+      Enum.flat_map(dependencies, fn dep -> [dep[:from], dep[:to]] end)
+      |> Enum.uniq()
+
+    initial_graph = Map.new(all_nodes, fn node -> {node, []} end)
+    initial_in_degree = Map.new(all_nodes, fn node -> {node, 0} end)
+
+    # Build adjacency list and count in-degrees
+    Enum.reduce(dependencies, {initial_graph, initial_in_degree}, fn dep, {graph, in_degree} ->
+      from = dep[:from]
+      to = dep[:to]
+
+      graph = Map.update!(graph, from, fn neighbors -> [to | neighbors] end)
+      in_degree = Map.update!(in_degree, to, &(&1 + 1))
+
+      {graph, in_degree}
+    end)
+  end
+
+  # Kahn's algorithm for topological sort
+  # Returns {:ok, sorted_list} or {:error, remaining_nodes_with_cycles}
+  defp topological_sort([], graph, in_degree, sorted) do
+    # Check if all nodes were processed
+    remaining = Enum.filter(Map.keys(graph), fn node -> Map.get(in_degree, node, 0) > 0 end)
+
+    if Enum.empty?(remaining) do
+      {:ok, Enum.reverse(sorted)}
+    else
+      {:error, remaining}
+    end
+  end
+
+  defp topological_sort([node | rest], graph, in_degree, sorted) do
+    # Get neighbors of current node
+    neighbors = Map.get(graph, node, [])
+
+    # Decrease in-degree of neighbors and add to queue if in-degree becomes 0
+    {new_queue, new_in_degree} =
+      Enum.reduce(neighbors, {rest, in_degree}, fn neighbor, {queue, degrees} ->
+        new_degree = Map.get(degrees, neighbor) - 1
+        degrees = Map.put(degrees, neighbor, new_degree)
+
+        if new_degree == 0 do
+          {[neighbor | queue], degrees}
+        else
+          {queue, degrees}
+        end
+      end)
+
+    topological_sort(new_queue, graph, new_in_degree, [node | sorted])
   end
 
   defp cleanup(data) do
