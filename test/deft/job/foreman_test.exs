@@ -651,6 +651,104 @@ defmodule Deft.Job.ForemanTest do
     end
   end
 
+  describe "Infrastructure crash handling" do
+    test "fails job cleanly when Store crashes", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
+      session_id = "test-job-#{:erlang.unique_integer([:positive])}"
+      start_rate_limiter(session_id)
+      site_log_pid = start_site_log(session_id, tmp_dir)
+
+      # Unlink Store from test process so we can kill it without killing the test
+      Process.unlink(site_log_pid)
+
+      {:ok, foreman_pid} =
+        Foreman.start_link(
+          session_id: session_id,
+          config: %{},
+          prompt: "test prompt",
+          rate_limiter_pid: self(),
+          runner_supervisor: runner_supervisor,
+          working_dir: tmp_dir,
+          site_log_pid: site_log_pid
+        )
+
+      # Unlink Foreman from test process so its crash doesn't kill the test
+      Process.unlink(foreman_pid)
+
+      # Monitor Foreman to detect when it exits
+      foreman_ref = Process.monitor(foreman_pid)
+
+      # Wait for Foreman to initialize
+      Process.sleep(50)
+
+      # Verify Store is being monitored
+      {_state, data} = :sys.get_state(foreman_pid)
+      assert Map.has_key?(data, :store_monitor_ref)
+      assert data.store_monitor_ref != nil
+
+      # Kill the Store process to simulate a crash
+      Process.exit(site_log_pid, :kill)
+
+      # Wait for Foreman to exit with infrastructure crash reason
+      assert_receive {:DOWN, ^foreman_ref, :process, ^foreman_pid,
+                      {:store, :infrastructure_crash, :killed}},
+                     1000
+
+      # Verify Foreman has stopped (job failed)
+      refute Process.alive?(foreman_pid)
+    end
+
+    test "fails job cleanly when RateLimiter crashes", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
+      session_id = "test-job-#{:erlang.unique_integer([:positive])}"
+      rate_limiter_pid = start_rate_limiter(session_id)
+      site_log_pid = start_site_log(session_id, tmp_dir)
+
+      # Unlink RateLimiter from test process so we can kill it without killing the test
+      Process.unlink(rate_limiter_pid)
+
+      {:ok, foreman_pid} =
+        Foreman.start_link(
+          session_id: session_id,
+          config: %{},
+          prompt: "test prompt",
+          rate_limiter_pid: rate_limiter_pid,
+          runner_supervisor: runner_supervisor,
+          working_dir: tmp_dir,
+          site_log_pid: site_log_pid
+        )
+
+      # Unlink Foreman from test process so its crash doesn't kill the test
+      Process.unlink(foreman_pid)
+
+      # Monitor Foreman to detect when it exits
+      foreman_ref = Process.monitor(foreman_pid)
+
+      # Wait for Foreman to initialize
+      Process.sleep(50)
+
+      # Verify RateLimiter is being monitored
+      {_state, data} = :sys.get_state(foreman_pid)
+      assert Map.has_key?(data, :rate_limiter_monitor_ref)
+      assert data.rate_limiter_monitor_ref != nil
+
+      # Kill the RateLimiter process to simulate a crash
+      Process.exit(rate_limiter_pid, :kill)
+
+      # Wait for Foreman to exit with infrastructure crash reason
+      assert_receive {:DOWN, ^foreman_ref, :process, ^foreman_pid,
+                      {:rate_limiter, :infrastructure_crash, :killed}},
+                     1000
+
+      # Verify Foreman has stopped (job failed)
+      refute Process.alive?(foreman_pid)
+    end
+  end
+
   describe "research phase" do
     test "enters researching phase after planning", %{
       tmp_dir: tmp_dir,

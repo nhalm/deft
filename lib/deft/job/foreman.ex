@@ -135,7 +135,11 @@ defmodule Deft.Job.Foreman do
 
   @impl :gen_statem
   def init(data) do
-    data = setup_foreman_agent_monitoring(data)
+    data =
+      data
+      |> setup_foreman_agent_monitoring()
+      |> setup_store_monitoring()
+      |> setup_rate_limiter_monitoring()
 
     Logger.info("#{log_prefix(data)} Foreman started for job #{data.session_id}: #{data.prompt}")
 
@@ -183,6 +187,46 @@ defmodule Deft.Job.Foreman do
 
           data
         end
+    end
+  end
+
+  # Private helper to set up Store monitoring
+  defp setup_store_monitoring(data) do
+    store_name = site_log_name(data)
+    pid = resolve_agent_pid(store_name)
+
+    if pid do
+      monitor_ref = Process.monitor(pid)
+
+      Logger.debug("#{log_prefix(data)} Monitoring Store with ref: #{inspect(monitor_ref)}")
+
+      Map.put(data, :store_monitor_ref, monitor_ref)
+    else
+      Logger.warning(
+        "#{log_prefix(data)} Could not resolve Store name to PID: #{inspect(store_name)}"
+      )
+
+      data
+    end
+  end
+
+  # Private helper to set up RateLimiter monitoring
+  defp setup_rate_limiter_monitoring(data) do
+    rate_limiter_name = rate_limiter_name(data)
+    pid = resolve_agent_pid(rate_limiter_name)
+
+    if pid do
+      monitor_ref = Process.monitor(pid)
+
+      Logger.debug("#{log_prefix(data)} Monitoring RateLimiter with ref: #{inspect(monitor_ref)}")
+
+      Map.put(data, :rate_limiter_monitor_ref, monitor_ref)
+    else
+      Logger.warning(
+        "#{log_prefix(data)} Could not resolve RateLimiter name to PID: #{inspect(rate_limiter_name)}"
+      )
+
+      data
     end
   end
 
@@ -738,6 +782,14 @@ defmodule Deft.Job.Foreman do
       # Check if ForemanAgent crashed
       ref == data.foreman_agent_monitor_ref ->
         handle_foreman_agent_down(pid, reason, data)
+
+      # Check if Store crashed
+      ref == Map.get(data, :store_monitor_ref) ->
+        handle_store_down(pid, reason, data)
+
+      # Check if RateLimiter crashed
+      ref == Map.get(data, :rate_limiter_monitor_ref) ->
+        handle_rate_limiter_down(pid, reason, data)
 
       # Check if a Lead crashed
       match?({:ok, _lead_id}, find_lead_by_monitor(data.lead_monitors, ref)) ->
@@ -1700,6 +1752,24 @@ defmodule Deft.Job.Foreman do
     end
   end
 
+  # Handle Store DOWN message
+  defp handle_store_down(pid, reason, data) do
+    Logger.error(
+      "#{log_prefix(data)} Store (#{inspect(pid)}) crashed: #{inspect(reason)}. Failing job with cleanup."
+    )
+
+    do_fail_job_on_infrastructure_crash(:store, reason, data)
+  end
+
+  # Handle RateLimiter DOWN message
+  defp handle_rate_limiter_down(pid, reason, data) do
+    Logger.error(
+      "#{log_prefix(data)} RateLimiter (#{inspect(pid)}) crashed: #{inspect(reason)}. Failing job with cleanup."
+    )
+
+    do_fail_job_on_infrastructure_crash(:rate_limiter, reason, data)
+  end
+
   # Handle Lead DOWN message
   defp handle_lead_down(lead_id, pid, reason, state, data) do
     if normal_exit?(reason) do
@@ -1733,6 +1803,31 @@ defmodule Deft.Job.Foreman do
 
     # Stop the Foreman - terminate/3 will call cleanup(data) to handle all cleanup
     {:stop, {:foreman_agent_crashed, reason}, data}
+  end
+
+  defp do_fail_job_on_infrastructure_crash(component, reason, data) do
+    # Store or RateLimiter has crashed - unrecoverable infrastructure failure
+    Logger.error("#{log_prefix(data)} Failing job due to #{component} crash: #{inspect(reason)}")
+
+    # Demonitor all processes to prevent spurious DOWN messages during shutdown
+    Enum.each(data.lead_monitors, fn {_lead_id, monitor_ref} ->
+      Process.demonitor(monitor_ref, [:flush])
+    end)
+
+    if data.foreman_agent_monitor_ref do
+      Process.demonitor(data.foreman_agent_monitor_ref, [:flush])
+    end
+
+    if Map.get(data, :store_monitor_ref) do
+      Process.demonitor(data.store_monitor_ref, [:flush])
+    end
+
+    if Map.get(data, :rate_limiter_monitor_ref) do
+      Process.demonitor(data.rate_limiter_monitor_ref, [:flush])
+    end
+
+    # Stop the Foreman - terminate/3 will call cleanup(data) to handle all cleanup
+    {:stop, {component, :infrastructure_crash, reason}, data}
   end
 
   defp do_handle_lead_crash(lead_id, _state, data) do
@@ -2002,6 +2097,14 @@ defmodule Deft.Job.Foreman do
       if data.foreman_agent_monitor_ref do
         Process.demonitor(data.foreman_agent_monitor_ref, [:flush])
       end
+
+      if Map.get(data, :store_monitor_ref) do
+        Process.demonitor(data.store_monitor_ref, [:flush])
+      end
+
+      if Map.get(data, :rate_limiter_monitor_ref) do
+        Process.demonitor(data.rate_limiter_monitor_ref, [:flush])
+      end
     rescue
       error ->
         Logger.warning("#{log_prefix(data)} Error demonitoring processes: #{inspect(error)}")
@@ -2054,6 +2157,9 @@ defmodule Deft.Job.Foreman do
       Store.cleanup(site_log_name(data))
     rescue
       ArgumentError -> :ok
+    catch
+      # Store may already be dead if it crashed
+      :exit, {:noproc, _} -> :ok
     end
   end
 end
