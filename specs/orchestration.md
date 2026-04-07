@@ -2,11 +2,14 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.14 |
+| Version | 0.15 |
 | Status | Ready |
 | Last Updated | 2026-04-07 |
 
 ## Changelog
+
+### v0.15 (2026-04-07)
+- **Fix Lead `:complete` state ordering: check queued steering before sending `:complete` to Foreman.** The previous spec said to send `:complete` first, then apply queued steering. This causes the Foreman to remove the Lead from tracking and mark the deliverable done before the Lead potentially re-enters `:executing`. The Lead's subsequent work becomes invisible to the Foreman. The correct sequence is: check queued steering first; if steering triggers re-execution, re-enter `:executing` without sending `:complete`.
 
 ### v0.14 (2026-04-07)
 - **Expert review: 10 findings across supervision, state machine, and code-speed boundary.** Three-reviewer audit validated against code. Key changes:
@@ -301,7 +304,7 @@ The Lead gen_statem has simpler phases than the Foreman:
 | `:planning` | Sends deliverable assignment + context to LeadAgent | Reads assignment, research findings, contracts from site log. Decomposes into task list. |
 | `:executing` | Spawns Runners on request, collects results, sends to LeadAgent | Evaluates Runner output, decides next tasks, calls `spawn_runner` / `publish_contract` / `report_status` |
 | `:verifying` | Spawns testing Runner. Queues any incoming `{:foreman_steering, ...}` messages. | (idle — waiting for verification) |
-| `:complete` | Sends `:complete` to Foreman. Applies any queued steering — if steering contradicts the verification result, re-enters `:executing`. | Generates deliverable summary |
+| `:complete` | Checks queued steering first — if steering contradicts the verification result, re-enters `:executing` without notifying the Foreman. Only sends `:complete` to Foreman when no queued steering triggers re-execution. | Generates deliverable summary |
 
 #### 5.3 Active Steering
 

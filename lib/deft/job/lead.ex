@@ -209,16 +209,16 @@ defmodule Deft.Job.Lead do
 
   def handle_event(:enter, _old_state, :complete, data) do
     Logger.info("[Lead:#{data.lead_id}] Entering :complete phase")
-    # Send completion to Foreman
-    send_to_foreman(data, :complete, "Deliverable completed", %{
-      lead_id: data.lead_id,
-      deliverable: data.deliverable
-    })
 
-    # Check if there's queued steering to apply
+    # Check if there's queued steering to apply BEFORE sending completion to Foreman
     case data.queued_steering do
       [] ->
-        # No queued steering, stay in complete
+        # No queued steering, send completion to Foreman
+        send_to_foreman(data, :complete, "Deliverable completed", %{
+          lead_id: data.lead_id,
+          deliverable: data.deliverable
+        })
+
         :keep_state_and_data
 
       [steering_content | _rest] ->
@@ -247,7 +247,7 @@ defmodule Deft.Job.Lead do
           Deft.Agent.prompt(data.lead_agent_pid, steering_prompt)
         end
 
-        # Clear queued steering and re-enter executing
+        # Clear queued steering and re-enter executing without notifying Foreman
         data = Map.put(data, :queued_steering, [])
         {:next_state, :executing, data}
     end
