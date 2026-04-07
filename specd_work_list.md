@@ -17,3 +17,7 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
+## orchestration v0.16
+
+- Add `foreman_agent_restarting` guard to the `:flush_lead_messages` timer handler in `foreman.ex`. When `data.foreman_agent_restarting` is true, the handler must be a no-op (`:keep_state_and_data`) — do not send to ForemanAgent, do not clear the buffer. The buffer contents will be included in the restart catch-up prompt. Add test: set a debounce timer, crash ForemanAgent, verify the timer firing does not clear the buffer or raise.
+

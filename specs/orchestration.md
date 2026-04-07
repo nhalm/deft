@@ -2,11 +2,14 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.15 |
-| Status | Implemented |
+| Version | 0.16 |
+| Status | Ready |
 | Last Updated | 2026-04-07 |
 
 ## Changelog
+
+### v0.16 (2026-04-07)
+- **Flush timer must check `foreman_agent_restarting` flag.** The `:flush_lead_messages` timer handler must guard against the `foreman_agent_restarting` flag. A debounce timer set before ForemanAgent crash can fire during the restart window, sending a prompt to the dead/restarting agent and clearing the buffer (losing messages that should be in the restart catch-up prompt). When `foreman_agent_restarting` is true, the flush handler must be a no-op — leave the buffer intact for the catch-up prompt.
 
 ### v0.15 (2026-04-07)
 - **Fix Lead `:complete` state ordering: check queued steering before sending `:complete` to Foreman.** The previous spec said to send `:complete` first, then apply queued steering. This causes the Foreman to remove the Lead from tracking and mark the deliverable done before the Lead potentially re-enters `:executing`. The Lead's subsequent work becomes invisible to the Foreman. The correct sequence is: check queued steering first; if steering triggers re-execution, re-enter `:executing` without sending `:complete`.
@@ -196,6 +199,8 @@ The Foreman handles **deterministic coordination at code speed** and delegates *
 **Lead message coalescing:** Low-priority Lead messages (`:status`, `:artifact`, `:decision`, `:finding`, `:contract`, `:contract_revision`) are buffered in the Foreman's state. High-priority messages (`:blocker`, `:complete`, `:error`, `:critical_finding`) flush the buffer and are forwarded immediately.
 
 The buffer uses a **max-age flush** strategy (not a sliding-window debounce). The Foreman tracks `buffer_start_time` — the timestamp when the first message entered an empty buffer. On each new low-priority message: if `now - buffer_start_time >= debounce_ms` (configurable, default 2s), flush immediately; otherwise, append to the buffer and leave the existing timer running. The timer is set once when the first message arrives and is NOT reset on subsequent messages. This guarantees the ForemanAgent receives consolidated updates every `debounce_ms` under sustained load.
+
+The flush timer handler must also check the `foreman_agent_restarting` flag. When true, the handler must be a no-op — leave the buffer intact so its contents are included in the restart catch-up prompt. The timer may have been set before the ForemanAgent crashed; firing it during the restart window would send to a dead process and lose buffered messages.
 
 `:contract` is low-priority because contract auto-unblocking already happened at code speed (section 4.4). The ForemanAgent notification is informational — it does not need to trigger an immediate prompt.
 
