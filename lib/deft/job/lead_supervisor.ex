@@ -61,7 +61,10 @@ defmodule Deft.Job.LeadSupervisor do
     end
   end
 
-  defp via_tuple(job_id) do
+  @doc """
+  Returns the via tuple for the LeadSupervisor for the given job_id.
+  """
+  def via_tuple(job_id) do
     {:via, Registry, {Deft.ProcessRegistry, {:lead_supervisor, job_id}}}
   end
 end

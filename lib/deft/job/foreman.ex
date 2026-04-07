@@ -1435,6 +1435,9 @@ defmodule Deft.Job.Foreman do
       # Monitor the Lead process
       monitor_ref = Process.monitor(lead_pid)
 
+      # Store the supervisor child_id for termination
+      supervisor_child_id = {:lead, lead_id}
+
       # Track Lead with monitoring
       updated_data =
         data
@@ -1443,6 +1446,7 @@ defmodule Deft.Job.Foreman do
           deliverable: deliverable,
           status: :running,
           pid: lead_pid,
+          supervisor_child_id: supervisor_child_id,
           worktree_path: worktree_path
         })
         |> put_in([:lead_monitors, lead_id], monitor_ref)
@@ -1489,36 +1493,56 @@ defmodule Deft.Job.Foreman do
     LeadSupervisor.start_lead(data.session_id, lead_opts)
   end
 
-  defp do_abort_lead(lead_id, lead_pid, data) do
-    # Stop Lead process
-    Process.exit(lead_pid, :shutdown)
-    Logger.info("#{log_prefix(data)} Aborted Lead #{lead_id}")
+  defp do_abort_lead(lead_id, _lead_pid, data) do
+    # Extract deliverable_id and supervisor_child_id before removing from leads map
+    deliverable_id = get_in(data, [:leads, lead_id, :deliverable, :id])
+    supervisor_child_id = get_in(data, [:leads, lead_id, :supervisor_child_id])
 
     # Clean up monitor if present
     cleanup_lead_monitor(data.lead_monitors, lead_id)
 
-    # Clean up the Lead's worktree before removing from tracking
+    # Stop Lead supervisor subtree via DynamicSupervisor
+    # This cascades shutdown to Lead, LeadAgent, ToolRunner, and RunnerSupervisor
+    terminate_lead_supervisor(lead_id, supervisor_child_id, data)
+
+    # Clean up the Lead's worktree AFTER termination
+    cleanup_lead_worktree(lead_id, data)
+
+    # Remove from tracking and mark as failed
+    data = remove_aborted_lead_from_tracking(lead_id, deliverable_id, data)
+
+    {:keep_state, data}
+  end
+
+  defp terminate_lead_supervisor(lead_id, supervisor_child_id, data) do
+    lead_supervisor = LeadSupervisor.via_tuple(data.session_id)
+
+    case DynamicSupervisor.terminate_child(lead_supervisor, supervisor_child_id) do
+      :ok ->
+        Logger.info("#{log_prefix(data)} Aborted Lead #{lead_id}")
+
+      {:error, :not_found} ->
+        Logger.warning("#{log_prefix(data)} Lead #{lead_id} supervisor not found during abort")
+    end
+  end
+
+  defp cleanup_lead_worktree(lead_id, data) do
     Logger.debug("#{log_prefix(data)} Cleaning up worktree for aborted Lead #{lead_id}")
 
     GitJob.cleanup_lead_worktree(
       lead_id: lead_id,
       working_dir: data.working_dir
     )
+  end
 
-    # Extract deliverable_id before removing from leads map
-    deliverable_id = get_in(data, [:leads, lead_id, :deliverable, :id])
-
-    # Remove from tracking and add to failed_leads so all_leads_complete? counts it
-    data =
-      data
-      |> Map.update!(:deliverable_outcomes, &Map.put(&1, deliverable_id, :failed))
-      |> Map.update!(:leads, &Map.delete(&1, lead_id))
-      |> Map.update!(:started_leads, &MapSet.delete(&1, lead_id))
-      |> Map.update!(:blocked_leads, &Map.delete(&1, lead_id))
-      |> Map.update!(:lead_monitors, &Map.delete(&1, lead_id))
-      |> Map.update!(:failed_leads, &MapSet.put(&1, lead_id))
-
-    {:keep_state, data}
+  defp remove_aborted_lead_from_tracking(lead_id, deliverable_id, data) do
+    data
+    |> Map.update!(:deliverable_outcomes, &Map.put(&1, deliverable_id, :failed))
+    |> Map.update!(:leads, &Map.delete(&1, lead_id))
+    |> Map.update!(:started_leads, &MapSet.delete(&1, lead_id))
+    |> Map.update!(:blocked_leads, &Map.delete(&1, lead_id))
+    |> Map.update!(:lead_monitors, &Map.delete(&1, lead_id))
+    |> Map.update!(:failed_leads, &MapSet.put(&1, lead_id))
   end
 
   # Clean up worktree and monitor for a failed Lead, but only if not already cleaned up
@@ -1954,41 +1978,82 @@ defmodule Deft.Job.Foreman do
   end
 
   defp cleanup(data) do
-    # 1. Gracefully shut down any running Leads
-    Enum.each(data.leads, fn {lead_id, lead} ->
-      if lead.pid && Process.alive?(lead.pid) do
-        Process.exit(lead.pid, :shutdown)
-        Logger.debug("#{log_prefix(data)} Stopped Lead #{lead_id} during cleanup")
+    # 1. Demonitor all processes (Leads with :flush, ForemanAgent)
+    cleanup_demonitor_all(data)
+
+    # 2. Stop each Lead's supervisor subtree via DynamicSupervisor
+    cleanup_terminate_lead_supervisors(data)
+
+    # 3. Clean up all Lead worktrees
+    cleanup_all_lead_worktrees(data)
+
+    # 4. Stop site log
+    cleanup_site_log(data)
+
+    :ok
+  end
+
+  defp cleanup_demonitor_all(data) do
+    try do
+      Enum.each(data.lead_monitors, fn {_lead_id, monitor_ref} ->
+        Process.demonitor(monitor_ref, [:flush])
+      end)
+
+      if data.foreman_agent_monitor_ref do
+        Process.demonitor(data.foreman_agent_monitor_ref, [:flush])
       end
-    end)
-
-    # 2. Clean up all Lead worktrees
-    Enum.each(data.leads, fn {lead_id, _lead} ->
-      Logger.debug("#{log_prefix(data)} Cleaning up worktree for Lead #{lead_id}")
-
-      GitJob.cleanup_lead_worktree(
-        lead_id: lead_id,
-        working_dir: data.working_dir
-      )
-    end)
-
-    # 3. Demonitor all Leads with :flush
-    Enum.each(data.lead_monitors, fn {_lead_id, monitor_ref} ->
-      Process.demonitor(monitor_ref, [:flush])
-    end)
-
-    # 4. Demonitor ForemanAgent
-    if data.foreman_agent_monitor_ref do
-      Process.demonitor(data.foreman_agent_monitor_ref, [:flush])
+    rescue
+      error ->
+        Logger.warning("#{log_prefix(data)} Error demonitoring processes: #{inspect(error)}")
     end
+  end
 
-    # 5. Stop site log
+  defp cleanup_terminate_lead_supervisors(data) do
+    try do
+      lead_supervisor = LeadSupervisor.via_tuple(data.session_id)
+
+      Enum.each(data.leads, fn {lead_id, lead} ->
+        supervisor_child_id = Map.get(lead, :supervisor_child_id)
+
+        if supervisor_child_id do
+          case DynamicSupervisor.terminate_child(lead_supervisor, supervisor_child_id) do
+            :ok ->
+              Logger.debug("#{log_prefix(data)} Stopped Lead #{lead_id} during cleanup")
+
+            {:error, :not_found} ->
+              Logger.debug(
+                "#{log_prefix(data)} Lead #{lead_id} supervisor not found during cleanup"
+              )
+          end
+        end
+      end)
+    rescue
+      error ->
+        Logger.warning("#{log_prefix(data)} Error stopping Lead supervisors: #{inspect(error)}")
+    end
+  end
+
+  defp cleanup_all_lead_worktrees(data) do
+    try do
+      Enum.each(data.leads, fn {lead_id, _lead} ->
+        Logger.debug("#{log_prefix(data)} Cleaning up worktree for Lead #{lead_id}")
+
+        GitJob.cleanup_lead_worktree(
+          lead_id: lead_id,
+          working_dir: data.working_dir
+        )
+      end)
+    rescue
+      error ->
+        Logger.warning("#{log_prefix(data)} Error cleaning up Lead worktrees: #{inspect(error)}")
+    end
+  end
+
+  defp cleanup_site_log(data) do
     try do
       Store.cleanup(site_log_name(data))
     rescue
       ArgumentError -> :ok
     end
-
-    :ok
   end
 end
