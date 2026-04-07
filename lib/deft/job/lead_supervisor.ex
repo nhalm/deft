@@ -30,11 +30,14 @@ defmodule Deft.Job.LeadSupervisor do
   @doc """
   Starts a Lead under this supervisor.
 
-  Returns `{:ok, pid}` or `{:error, reason}`.
+  Returns `{:ok, {lead_supervisor_pid, lead_pid}}` or `{:error, reason}`.
 
-  The returned PID is the Lead.Supervisor (which contains both the Lead
-  gen_statem and RunnerSupervisor). To get the Lead gen_statem PID, use
-  `Deft.Job.Lead.Supervisor.lead_pid/1`.
+  The returned `lead_supervisor_pid` is the Lead.Supervisor PID (the actual
+  child process of the DynamicSupervisor), which must be passed to
+  `DynamicSupervisor.terminate_child/2` to stop the Lead subtree.
+
+  The returned `lead_pid` is the Lead gen_statem PID, which is used for
+  monitoring and message passing.
 
   ## Options
 
@@ -51,10 +54,10 @@ defmodule Deft.Job.LeadSupervisor do
     }
 
     case DynamicSupervisor.start_child(supervisor, child_spec) do
-      {:ok, _lead_supervisor_pid} ->
-        # Return the Lead gen_statem PID, not the Lead.Supervisor PID
+      {:ok, lead_supervisor_pid} ->
+        # Return both PIDs: the Lead.Supervisor (for termination) and Lead gen_statem (for monitoring/messages)
         lead_pid = Deft.Job.Lead.Supervisor.lead_pid(Keyword.fetch!(opts, :lead_id))
-        {:ok, lead_pid}
+        {:ok, {lead_supervisor_pid, lead_pid}}
 
       error ->
         error

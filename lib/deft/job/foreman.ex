@@ -1715,14 +1715,13 @@ defmodule Deft.Job.Foreman do
 
   defp do_spawn_lead(lead_id, deliverable, data) do
     with {:ok, worktree_path} <- create_lead_worktree(lead_id, data),
-         {:ok, lead_pid} <- start_lead_process(lead_id, deliverable, worktree_path, data) do
-      # Monitor the Lead process
+         {:ok, {lead_supervisor_pid, lead_pid}} <-
+           start_lead_process(lead_id, deliverable, worktree_path, data) do
+      # Monitor the Lead gen_statem process
       monitor_ref = Process.monitor(lead_pid)
 
-      # Store the supervisor child_id for termination
-      supervisor_child_id = {:lead, lead_id}
-
       # Track Lead with monitoring
+      # Store lead_supervisor_pid (the DynamicSupervisor child) for termination
       updated_data =
         data
         |> Map.update!(:started_leads, &MapSet.put(&1, lead_id))
@@ -1730,7 +1729,7 @@ defmodule Deft.Job.Foreman do
           deliverable: deliverable,
           status: :running,
           pid: lead_pid,
-          supervisor_child_id: supervisor_child_id,
+          supervisor_pid: lead_supervisor_pid,
           worktree_path: worktree_path
         })
         |> put_in([:lead_monitors, lead_id], monitor_ref)
@@ -1778,16 +1777,16 @@ defmodule Deft.Job.Foreman do
   end
 
   defp do_abort_lead(lead_id, _lead_pid, data) do
-    # Extract deliverable_id and supervisor_child_id before removing from leads map
+    # Extract deliverable_id and supervisor_pid before removing from leads map
     deliverable_id = get_in(data, [:leads, lead_id, :deliverable, :id])
-    supervisor_child_id = get_in(data, [:leads, lead_id, :supervisor_child_id])
+    supervisor_pid = get_in(data, [:leads, lead_id, :supervisor_pid])
 
     # Clean up monitor if present
     cleanup_lead_monitor(data.lead_monitors, lead_id)
 
     # Stop Lead supervisor subtree via DynamicSupervisor
     # This cascades shutdown to Lead, LeadAgent, ToolRunner, and RunnerSupervisor
-    terminate_lead_supervisor(lead_id, supervisor_child_id, data)
+    terminate_lead_supervisor(lead_id, supervisor_pid, data)
 
     # Clean up the Lead's worktree AFTER termination
     cleanup_lead_worktree(lead_id, data)
@@ -1798,10 +1797,10 @@ defmodule Deft.Job.Foreman do
     {:keep_state, data}
   end
 
-  defp terminate_lead_supervisor(lead_id, supervisor_child_id, data) do
+  defp terminate_lead_supervisor(lead_id, supervisor_pid, data) do
     lead_supervisor = LeadSupervisor.via_tuple(data.session_id)
 
-    case DynamicSupervisor.terminate_child(lead_supervisor, supervisor_child_id) do
+    case DynamicSupervisor.terminate_child(lead_supervisor, supervisor_pid) do
       :ok ->
         Logger.info("#{log_prefix(data)} Aborted Lead #{lead_id}")
 
@@ -2615,10 +2614,10 @@ defmodule Deft.Job.Foreman do
       lead_supervisor = LeadSupervisor.via_tuple(data.session_id)
 
       Enum.each(data.leads, fn {lead_id, lead} ->
-        supervisor_child_id = Map.get(lead, :supervisor_child_id)
+        supervisor_pid = Map.get(lead, :supervisor_pid)
 
-        if supervisor_child_id do
-          case DynamicSupervisor.terminate_child(lead_supervisor, supervisor_child_id) do
+        if supervisor_pid do
+          case DynamicSupervisor.terminate_child(lead_supervisor, supervisor_pid) do
             :ok ->
               Logger.debug("#{log_prefix(data)} Stopped Lead #{lead_id} during cleanup")
 
