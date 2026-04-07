@@ -819,19 +819,26 @@ defmodule Deft.Job.Foreman do
 
   # Handle flush timer for buffered Lead messages
   def handle_event(:info, :flush_lead_messages, state, data) do
-    if data.lead_message_buffer != [] and data.foreman_agent_pid do
-      # Build consolidated prompt from buffered messages
-      consolidated_message =
-        build_consolidated_lead_message(data.lead_message_buffer, state, data)
+    cond do
+      # When ForemanAgent is restarting, leave buffer intact for catch-up prompt
+      data.foreman_agent_restarting ->
+        :keep_state_and_data
 
-      Deft.Agent.prompt(data.foreman_agent_pid, consolidated_message)
+      # Buffer is non-empty and agent is available
+      data.lead_message_buffer != [] and data.foreman_agent_pid ->
+        # Build consolidated prompt from buffered messages
+        consolidated_message =
+          build_consolidated_lead_message(data.lead_message_buffer, state, data)
 
-      # Clear buffer, timer, and start time
-      {:keep_state,
-       %{data | lead_message_buffer: [], lead_message_timer: nil, buffer_start_time: nil}}
-    else
+        Deft.Agent.prompt(data.foreman_agent_pid, consolidated_message)
+
+        # Clear buffer, timer, and start time
+        {:keep_state,
+         %{data | lead_message_buffer: [], lead_message_timer: nil, buffer_start_time: nil}}
+
       # No messages to flush or no agent
-      {:keep_state, %{data | lead_message_timer: nil, buffer_start_time: nil}}
+      true ->
+        {:keep_state, %{data | lead_message_timer: nil, buffer_start_time: nil}}
     end
   end
 

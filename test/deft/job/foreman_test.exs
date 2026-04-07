@@ -1441,6 +1441,76 @@ defmodule Deft.Job.ForemanTest do
       :gen_statem.stop(foreman_pid)
       Process.sleep(50)
     end
+
+    test "flush timer does not clear buffer when ForemanAgent is restarting", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor
+    } do
+      session_id = "test-job-#{:erlang.unique_integer([:positive])}"
+      start_rate_limiter(session_id)
+      site_log_pid = start_site_log(session_id, tmp_dir)
+
+      {:ok, foreman_pid} =
+        Foreman.start_link(
+          session_id: session_id,
+          config: %{auto_approve_all: true, job_lead_message_debounce_ms: 5000},
+          prompt: "test prompt",
+          rate_limiter_pid: self(),
+          runner_supervisor: runner_supervisor,
+          working_dir: tmp_dir,
+          site_log_pid: site_log_pid
+        )
+
+      # Create a mock ForemanAgent
+      mock_agent_pid = spawn(fn -> mock_agent_loop([]) end)
+      Foreman.set_foreman_agent(foreman_pid, mock_agent_pid)
+
+      # Transition to :executing state
+      :sys.replace_state(foreman_pid, fn {_state, data} ->
+        {:executing, data}
+      end)
+
+      # Send a low-priority message to start the buffer and debounce timer
+      lead_metadata = %{lead_id: "lead-1", lead_name: "Test Lead"}
+      send(foreman_pid, {:lead_message, :status, "Working on task", lead_metadata})
+
+      # Wait for message to be buffered
+      Process.sleep(50)
+
+      # Verify buffer has one message and timer is set
+      {_state, data_before} = :sys.get_state(foreman_pid)
+      assert length(data_before.lead_message_buffer) == 1
+      assert data_before.lead_message_timer != nil
+
+      # Simulate ForemanAgent crash by setting foreman_agent_restarting flag
+      :sys.replace_state(foreman_pid, fn {state, data} ->
+        {state, %{data | foreman_agent_restarting: true}}
+      end)
+
+      # Manually trigger the flush timer event
+      send(foreman_pid, :flush_lead_messages)
+      Process.sleep(50)
+
+      # Verify buffer was NOT cleared and foreman_agent_restarting is still true
+      {_state, data_after} = :sys.get_state(foreman_pid)
+      assert length(data_after.lead_message_buffer) == 1
+      assert data_after.foreman_agent_restarting == true
+
+      # Verify no prompt was sent to the mock agent
+      send(mock_agent_pid, {:get_prompts, self()})
+
+      receive do
+        {:prompts, prompts} ->
+          assert length(prompts) == 0
+      after
+        500 -> flunk("Did not receive prompts from mock agent")
+      end
+
+      # Cleanup
+      Process.exit(mock_agent_pid, :kill)
+      :gen_statem.stop(foreman_pid)
+      Process.sleep(50)
+    end
   end
 
   describe "single-agent fallback" do
