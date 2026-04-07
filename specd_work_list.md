@@ -17,3 +17,6 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
+## orchestration v0.14
+
+- Fix `DynamicSupervisor.terminate_child` calls to pass a PID instead of child spec ID tuple. `do_spawn_lead` stores `supervisor_child_id = {:lead, lead_id}` (the child spec `:id`, a tuple), but `DynamicSupervisor.terminate_child/2` requires a PID. This always returns `{:error, :not_found}`, silently leaving Lead subtrees (Lead, LeadAgent, ToolRunner, RunnerSupervisor) running after abort or cleanup. Fix: have `LeadSupervisor.start_lead` return the Lead.Supervisor PID from `start_child`, store it in `leads` map, and pass it to `terminate_child`.
