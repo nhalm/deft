@@ -16,3 +16,7 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
+
+## orchestration v0.16
+
+- Fix Lead `:complete` state entry to consume ALL queued steering items, not just the first. Currently `lead.ex:224` matches `[steering_content | _rest]` and line 251 clears the entire queue — `_rest` is never applied. Either concatenate all queued steering into a single prompt, or keep the tail in `queued_steering` so subsequent `:complete` entries drain the queue one at a time.
