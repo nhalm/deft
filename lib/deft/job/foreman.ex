@@ -27,10 +27,12 @@ defmodule Deft.Job.Foreman do
   @behaviour :gen_statem
 
   alias Deft.Git.Job, as: GitJob
+  alias Deft.Job.ForemanAgent
   alias Deft.Job.LeadSupervisor
   alias Deft.Job.RateLimiter
   alias Deft.Job.Runner
   alias Deft.Project
+  alias Deft.Session.Store, as: SessionStore
   alias Deft.Store
 
   require Logger
@@ -84,7 +86,8 @@ defmodule Deft.Job.Foreman do
       lead_message_buffer: [],
       lead_message_timer: nil,
       buffer_start_time: nil,
-      pending_crash_decisions: %{}
+      pending_crash_decisions: %{},
+      foreman_agent_restart_count: 0
     }
 
     gen_statem_opts = if name, do: [name: name], else: []
@@ -1770,11 +1773,21 @@ defmodule Deft.Job.Foreman do
 
       :keep_state_and_data
     else
-      Logger.error(
-        "#{log_prefix(data)} ForemanAgent (#{inspect(pid)}) crashed: #{inspect(reason)}. Failing job with cleanup."
-      )
+      restart_count = Map.get(data, :foreman_agent_restart_count, 0)
 
-      do_fail_job_on_foreman_agent_crash(reason, data)
+      if restart_count == 0 do
+        Logger.warning(
+          "#{log_prefix(data)} ForemanAgent (#{inspect(pid)}) crashed: #{inspect(reason)}. Attempting restart (first crash)."
+        )
+
+        do_restart_foreman_agent(reason, data)
+      else
+        Logger.error(
+          "#{log_prefix(data)} ForemanAgent (#{inspect(pid)}) crashed: #{inspect(reason)}. Second crash after restart - failing job with cleanup."
+        )
+
+        do_fail_job_on_foreman_agent_crash(reason, data)
+      end
     end
   end
 
@@ -1829,6 +1842,103 @@ defmodule Deft.Job.Foreman do
 
     # Stop the Foreman - terminate/3 will call cleanup(data) to handle all cleanup
     {:stop, {:foreman_agent_crashed, reason}, data}
+  end
+
+  defp do_restart_foreman_agent(_reason, data) do
+    # Demonitor the crashed ForemanAgent
+    if data.foreman_agent_monitor_ref do
+      Process.demonitor(data.foreman_agent_monitor_ref, [:flush])
+    end
+
+    # Load session messages
+    messages = load_foreman_session_messages(data)
+
+    # Build ForemanAgent configuration
+    foreman_agent_name = build_foreman_agent_name(data)
+    agent_opts = build_foreman_agent_opts(data, messages, foreman_agent_name)
+
+    # Start new ForemanAgent and handle result
+    case ForemanAgent.start_link(agent_opts) do
+      {:ok, _agent_pid} ->
+        handle_foreman_agent_restart_success(foreman_agent_name, data)
+
+      {:error, start_error} ->
+        Logger.error(
+          "#{log_prefix(data)} ForemanAgent restart failed: #{inspect(start_error)}. Failing job."
+        )
+
+        do_fail_job_on_foreman_agent_crash({:restart_failed, start_error}, data)
+    end
+  end
+
+  defp load_foreman_session_messages(data) do
+    session_path = SessionStore.foreman_session_path(data.session_id, data.working_dir)
+
+    case File.read(session_path) do
+      {:ok, content} ->
+        content
+        |> String.split("\n", trim: true)
+        |> Enum.map(&parse_session_entry/1)
+        |> Enum.reject(&is_nil/1)
+        |> extract_messages_from_entries()
+
+      {:error, file_error} ->
+        Logger.warning(
+          "#{log_prefix(data)} Could not load ForemanAgent session JSONL: #{inspect(file_error)}. Starting with empty messages."
+        )
+
+        []
+    end
+  end
+
+  defp build_foreman_agent_name(data) do
+    {:via, Registry, {Deft.ProcessRegistry, {:foreman_agent, data.session_id}}}
+  end
+
+  defp build_foreman_agent_opts(data, messages, foreman_agent_name) do
+    foreman_agent_session_id = "#{data.session_id}-foreman"
+    rate_limiter_name = rate_limiter_name(data)
+    foreman_name = {:via, Registry, {Deft.ProcessRegistry, {:foreman, data.session_id}}}
+
+    [
+      session_id: foreman_agent_session_id,
+      config: data.config,
+      parent_pid: foreman_name,
+      rate_limiter: rate_limiter_name,
+      working_dir: data.working_dir,
+      messages: messages,
+      name: foreman_agent_name
+    ]
+  end
+
+  defp handle_foreman_agent_restart_success(foreman_agent_name, data) do
+    pid = resolve_agent_pid(foreman_agent_name)
+
+    if pid do
+      monitor_ref = Process.monitor(pid)
+
+      Logger.info(
+        "#{log_prefix(data)} ForemanAgent restarted successfully. Monitoring with ref: #{inspect(monitor_ref)}"
+      )
+
+      # Update data with new monitor ref and increment restart count
+      updated_data =
+        data
+        |> Map.put(:foreman_agent_monitor_ref, monitor_ref)
+        |> Map.put(:foreman_agent_pid, foreman_agent_name)
+        |> Map.update!(:foreman_agent_restart_count, &(&1 + 1))
+
+      # Send catch-up prompt with current job state
+      send_restart_catchup_prompt(updated_data)
+
+      {:keep_state, updated_data}
+    else
+      Logger.error(
+        "#{log_prefix(data)} ForemanAgent restart failed: could not resolve agent PID. Failing job."
+      )
+
+      do_fail_job_on_foreman_agent_crash({:restart_failed, :pid_resolution}, data)
+    end
   end
 
   defp do_fail_job_on_infrastructure_crash(component, reason, data) do
@@ -2186,6 +2296,152 @@ defmodule Deft.Job.Foreman do
     catch
       # Store may already be dead if it crashed
       :exit, {:noproc, _} -> :ok
+    end
+  end
+
+  # Parse a JSONL line into a session entry
+  defp parse_session_entry(line) do
+    case Jason.decode(line, keys: :atoms) do
+      {:ok, data} -> deserialize_session_entry(data)
+      {:error, _reason} -> nil
+    end
+  end
+
+  # Deserialize JSON data into message entry (only Message type for ForemanAgent)
+  defp deserialize_session_entry(%{type: type} = data)
+       when type in ["message", :message] do
+    %{
+      type: :message,
+      message_id: data.message_id,
+      role: parse_role(data.role),
+      content: data.content,
+      timestamp: parse_datetime_for_entry(data.timestamp)
+    }
+  end
+
+  defp deserialize_session_entry(_unknown), do: nil
+
+  defp parse_role(role) when role in [:user, :assistant, :system], do: role
+  defp parse_role(role) when is_binary(role), do: String.to_existing_atom(role)
+  defp parse_role(_), do: :user
+
+  defp parse_datetime_for_entry(dt) when is_binary(dt) do
+    case DateTime.from_iso8601(dt) do
+      {:ok, datetime, _offset} -> datetime
+      {:error, _} -> DateTime.utc_now()
+    end
+  end
+
+  defp parse_datetime_for_entry(%DateTime{} = dt), do: dt
+  defp parse_datetime_for_entry(_), do: DateTime.utc_now()
+
+  # Extract messages from session entries
+  defp extract_messages_from_entries(entries) do
+    entries
+    |> Enum.filter(&match?(%{type: :message}, &1))
+    |> Enum.map(&entry_to_deft_message/1)
+  end
+
+  # Convert entry to Deft.Message
+  defp entry_to_deft_message(entry) do
+    %Deft.Message{
+      id: entry.message_id,
+      role: entry.role,
+      content: deserialize_message_content(entry.content),
+      timestamp: entry.timestamp
+    }
+  end
+
+  defp deserialize_message_content(content) when is_list(content) do
+    content
+    |> Enum.map(&deserialize_content_block/1)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp deserialize_message_content(_), do: []
+
+  defp deserialize_content_block(%{type: "text"} = block) do
+    %Deft.Message.Text{text: block[:text] || ""}
+  end
+
+  defp deserialize_content_block(%{type: :text} = block) do
+    %Deft.Message.Text{text: block[:text] || ""}
+  end
+
+  defp deserialize_content_block(%{type: "tool_use"} = block) do
+    %Deft.Message.ToolUse{
+      id: block[:id] || "",
+      name: block[:name] || "",
+      args: block[:input] || block[:args] || %{}
+    }
+  end
+
+  defp deserialize_content_block(%{type: :tool_use} = block) do
+    %Deft.Message.ToolUse{
+      id: block[:id] || "",
+      name: block[:name] || "",
+      args: block[:input] || block[:args] || %{}
+    }
+  end
+
+  defp deserialize_content_block(%{type: "tool_result"} = block) do
+    %Deft.Message.ToolResult{
+      tool_use_id: block[:tool_use_id] || "",
+      name: block[:name],
+      content: block[:content] || "",
+      is_error: block[:is_error] || false
+    }
+  end
+
+  defp deserialize_content_block(%{type: :tool_result} = block) do
+    %Deft.Message.ToolResult{
+      tool_use_id: block[:tool_use_id] || "",
+      name: block[:name],
+      content: block[:content] || "",
+      is_error: block[:is_error] || false
+    }
+  end
+
+  defp deserialize_content_block(_unknown), do: nil
+
+  # Send catch-up prompt to restarted ForemanAgent
+  defp send_restart_catchup_prompt(data) do
+    # Build current job state summary
+    active_leads_summary =
+      data.leads
+      |> Enum.map(fn {lead_id, lead} ->
+        "- #{lead_id}: deliverable '#{lead.deliverable.id}' (#{lead.deliverable.description})"
+      end)
+      |> Enum.join("\n")
+
+    deliverable_outcomes_summary =
+      data.deliverable_outcomes
+      |> Enum.map(fn {deliverable_id, outcome} ->
+        "- #{deliverable_id}: #{outcome}"
+      end)
+      |> Enum.join("\n")
+
+    catchup_text = """
+    **SYSTEM NOTIFICATION: ForemanAgent restart recovery**
+
+    You crashed and were automatically restarted. Your conversation history has been restored from the session log.
+
+    **Current job state:**
+
+    Active Leads:
+    #{if active_leads_summary == "", do: "(none)", else: active_leads_summary}
+
+    Deliverable outcomes:
+    #{if deliverable_outcomes_summary == "", do: "(none)", else: deliverable_outcomes_summary}
+
+    Please review the current state and continue coordinating the job. If any Leads were in progress, you may need to check their status or send steering instructions.
+    """
+
+    Logger.info("#{log_prefix(data)} Sending catch-up prompt to restarted ForemanAgent")
+
+    # Send the catch-up prompt
+    if data.foreman_agent_pid do
+      Deft.Agent.prompt(data.foreman_agent_pid, catchup_text)
     end
   end
 end
