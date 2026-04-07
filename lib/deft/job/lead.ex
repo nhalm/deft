@@ -82,6 +82,7 @@ defmodule Deft.Job.Lead do
       runner_tasks: %{},
       runner_results: [],
       task_list: [],
+      queued_steering: [],
       lead_start_time: System.monotonic_time(:millisecond)
     }
 
@@ -214,7 +215,42 @@ defmodule Deft.Job.Lead do
       deliverable: data.deliverable
     })
 
-    :keep_state_and_data
+    # Check if there's queued steering to apply
+    case data.queued_steering do
+      [] ->
+        # No queued steering, stay in complete
+        :keep_state_and_data
+
+      [steering_content | _rest] ->
+        # Apply queued steering by injecting into LeadAgent
+        Logger.info(
+          "[Lead:#{data.lead_id}] Applying queued steering after verification, re-entering :executing"
+        )
+
+        if data.lead_agent_pid do
+          steering_prompt = """
+          **FOREMAN STEERING (Queued During Verification)**
+
+          The Foreman sent guidance while verification was in progress:
+
+          #{steering_content}
+
+          **Current Status:**
+          - Deliverable: #{data.deliverable[:name]}
+          - Verification has completed
+          - The Foreman's steering may indicate changes needed despite passing tests
+
+          **Action Required:**
+          Review the Foreman's guidance and determine if changes are needed. If the steering contradicts the verification result or requests modifications, implement them now.
+          """
+
+          Deft.Agent.prompt(data.lead_agent_pid, steering_prompt)
+        end
+
+        # Clear queued steering and re-enter executing
+        data = Map.put(data, :queued_steering, [])
+        {:next_state, :executing, data}
+    end
   end
 
   # Set LeadAgent PID
@@ -496,6 +532,19 @@ defmodule Deft.Job.Lead do
     end
 
     :keep_state_and_data
+  end
+
+  # Handle Foreman steering in :verifying state - queue it instead of processing
+  def handle_event(:info, {:foreman_steering, content}, :verifying, data) do
+    Logger.info(
+      "[Lead:#{data.lead_id}] Received steering from Foreman during :verifying, queuing"
+    )
+
+    # Queue the steering to be applied after verification completes
+    queued_steering = [content | data.queued_steering]
+    data = Map.put(data, :queued_steering, queued_steering)
+
+    {:keep_state, data}
   end
 
   # Handle Foreman contract (partial dependency unblocking)

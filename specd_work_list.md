@@ -17,6 +17,3 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## orchestration v0.14
-
-- Queue `{:foreman_steering, ...}` messages in Lead `:verifying` state instead of discarding. Add `queued_steering` list to Lead data. On transition to `:complete`, check queued steering — if present, send to LeadAgent and re-enter `:executing` if steering contradicts verification.
