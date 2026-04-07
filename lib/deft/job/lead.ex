@@ -213,43 +213,10 @@ defmodule Deft.Job.Lead do
     # Check if there's queued steering to apply BEFORE sending completion to Foreman
     case data.queued_steering do
       [] ->
-        # No queued steering, send completion to Foreman
-        send_to_foreman(data, :complete, "Deliverable completed", %{
-          lead_id: data.lead_id,
-          deliverable: data.deliverable
-        })
+        complete_without_steering(data)
 
-        :keep_state_and_data
-
-      [steering_content | _rest] ->
-        # Apply queued steering by injecting into LeadAgent
-        Logger.info(
-          "[Lead:#{data.lead_id}] Applying queued steering after verification, re-entering :executing"
-        )
-
-        if data.lead_agent_pid do
-          steering_prompt = """
-          **FOREMAN STEERING (Queued During Verification)**
-
-          The Foreman sent guidance while verification was in progress:
-
-          #{steering_content}
-
-          **Current Status:**
-          - Deliverable: #{data.deliverable[:name]}
-          - Verification has completed
-          - The Foreman's steering may indicate changes needed despite passing tests
-
-          **Action Required:**
-          Review the Foreman's guidance and determine if changes are needed. If the steering contradicts the verification result or requests modifications, implement them now.
-          """
-
-          Deft.Agent.prompt(data.lead_agent_pid, steering_prompt)
-        end
-
-        # Clear queued steering and re-enter executing without notifying Foreman
-        data = Map.put(data, :queued_steering, [])
-        {:next_state, :executing, data}
+      queued_items when is_list(queued_items) and length(queued_items) > 0 ->
+        complete_with_queued_steering(data, queued_items)
     end
   end
 
@@ -583,6 +550,70 @@ defmodule Deft.Job.Lead do
   end
 
   # Private helpers
+
+  defp complete_without_steering(data) do
+    # No queued steering, send completion to Foreman
+    send_to_foreman(data, :complete, "Deliverable completed", %{
+      lead_id: data.lead_id,
+      deliverable: data.deliverable
+    })
+
+    :keep_state_and_data
+  end
+
+  defp complete_with_queued_steering(data, queued_items) do
+    # Apply ALL queued steering by concatenating into a single prompt
+    Logger.info(
+      "[Lead:#{data.lead_id}] Applying #{length(queued_items)} queued steering item(s) after verification, re-entering :executing"
+    )
+
+    apply_queued_steering_to_agent(data, queued_items)
+
+    # Clear queued steering and re-enter executing without notifying Foreman
+    data = Map.put(data, :queued_steering, [])
+    {:next_state, :executing, data}
+  end
+
+  defp apply_queued_steering_to_agent(data, queued_items) do
+    if data.lead_agent_pid do
+      combined_steering = combine_steering_items(queued_items)
+      steering_prompt = build_queued_steering_prompt(data, combined_steering)
+      Deft.Agent.prompt(data.lead_agent_pid, steering_prompt)
+    end
+  end
+
+  defp combine_steering_items(queued_items) do
+    queued_items
+    |> Enum.with_index(1)
+    |> Enum.map(fn {content, index} ->
+      format_steering_item(content, index, length(queued_items))
+    end)
+    |> Enum.join("\n\n")
+  end
+
+  defp format_steering_item(content, index, total_items) when total_items > 1 do
+    "**Steering Item #{index}:**\n#{content}"
+  end
+
+  defp format_steering_item(content, _index, _total_items), do: content
+
+  defp build_queued_steering_prompt(data, combined_steering) do
+    """
+    **FOREMAN STEERING (Queued During Verification)**
+
+    The Foreman sent guidance while verification was in progress:
+
+    #{combined_steering}
+
+    **Current Status:**
+    - Deliverable: #{data.deliverable[:name]}
+    - Verification has completed
+    - The Foreman's steering may indicate changes needed despite passing tests
+
+    **Action Required:**
+    Review the Foreman's guidance and determine if changes are needed. If the steering contradicts the verification result or requests modifications, implement them now.
+    """
+  end
 
   defp build_planning_context(data, site_log_context) do
     """
