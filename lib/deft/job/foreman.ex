@@ -1408,12 +1408,17 @@ defmodule Deft.Job.Foreman do
 
       :keep_state_and_data
     else
+      # Clear any previous outcome for this deliverable (e.g., from auto-fail after crash)
+      # This prevents premature transition to :verifying when retrying a failed deliverable
+      updated_data = Map.update!(data, :deliverable_outcomes, &Map.delete(&1, deliverable_id))
+
       # Generate unique Lead ID
       lead_id = "lead-#{:erlang.unique_integer([:positive])}"
 
-      case do_spawn_lead(lead_id, deliverable_with_context, data) do
+      case do_spawn_lead(lead_id, deliverable_with_context, updated_data) do
         {:ok, updated_data} -> {:keep_state, updated_data}
-        :error -> :keep_state_and_data
+        # On spawn failure, still keep the cleared outcome so ForemanAgent can retry
+        :error -> {:keep_state, updated_data}
       end
     end
   end
