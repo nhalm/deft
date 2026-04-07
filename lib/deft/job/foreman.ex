@@ -47,7 +47,7 @@ defmodule Deft.Job.Foreman do
   - `:prompt` — Required. Initial user prompt/issue.
   - `:runner_supervisor` — Required. PID/name of Task.Supervisor for Foreman's Runners.
   - `:working_dir` — Optional. Working directory for the project (defaults to File.cwd!()).
-  - `:foreman_agent_pid` — Optional. PID of the ForemanAgent (will be set by supervisor).
+  - `:foreman_agent_pid` — Optional. Via-tuple or PID of the ForemanAgent (will be set by supervisor).
   - `:cli_pid` — Optional. PID of CLI process for direct user interaction.
   - `:name` — Optional. Name for the gen_statem process.
   """
@@ -92,10 +92,12 @@ defmodule Deft.Job.Foreman do
   end
 
   @doc """
-  Sets the ForemanAgent PID after the agent is started by the supervisor.
+  Sets the ForemanAgent after the agent is started by the supervisor.
+
+  Accepts either a via-tuple (production) or raw PID (tests).
   """
-  def set_foreman_agent(foreman, agent_pid) do
-    :gen_statem.cast(foreman, {:set_foreman_agent, agent_pid})
+  def set_foreman_agent(foreman, agent_name_or_pid) do
+    :gen_statem.cast(foreman, {:set_foreman_agent, agent_name_or_pid})
   end
 
   @doc """
@@ -168,6 +170,7 @@ defmodule Deft.Job.Foreman do
         data
 
       name_or_pid ->
+        # Resolve to PID for monitoring, but keep the via-tuple/name for communication
         pid = resolve_agent_pid(name_or_pid)
 
         if pid do
@@ -177,8 +180,8 @@ defmodule Deft.Job.Foreman do
             "#{log_prefix(data)} Monitoring ForemanAgent with ref: #{inspect(monitor_ref)}"
           )
 
+          # Keep the via-tuple in foreman_agent_pid for Deft.Agent.prompt/2 calls
           data
-          |> Map.put(:foreman_agent_pid, pid)
           |> Map.put(:foreman_agent_monitor_ref, monitor_ref)
         else
           Logger.warning(
@@ -361,8 +364,8 @@ defmodule Deft.Job.Foreman do
   end
 
   # Set ForemanAgent PID
-  def handle_event(:cast, {:set_foreman_agent, agent_pid}, state, data) do
-    Logger.debug("#{log_prefix(data)} ForemanAgent PID set: #{inspect(agent_pid)}")
+  def handle_event(:cast, {:set_foreman_agent, agent_name_or_pid}, state, data) do
+    Logger.debug("#{log_prefix(data)} ForemanAgent set: #{inspect(agent_name_or_pid)}")
 
     # Demonitor the old ForemanAgent if it exists to prevent double-monitoring
     if data.foreman_agent_monitor_ref do
@@ -373,29 +376,18 @@ defmodule Deft.Job.Foreman do
       )
     end
 
-    # Monitor the ForemanAgent so we can detect crashes
-    monitor_ref = Process.monitor(agent_pid)
-    Logger.debug("#{log_prefix(data)} Monitoring ForemanAgent with ref: #{inspect(monitor_ref)}")
+    # Resolve to PID for monitoring, but keep the via-tuple/name for communication
+    case resolve_agent_pid(agent_name_or_pid) do
+      nil ->
+        Logger.warning(
+          "#{log_prefix(data)} Could not resolve ForemanAgent to PID: #{inspect(agent_name_or_pid)}"
+        )
 
-    data =
-      data
-      |> Map.put(:foreman_agent_pid, agent_pid)
-      |> Map.put(:foreman_agent_monitor_ref, monitor_ref)
+        {:keep_state, data}
 
-    # If we're in :asking and didn't send the initial prompt yet, subscribe and send it now
-    if state == :asking and data.prompt do
-      case Registry.register(Deft.Registry, {:session, "#{data.session_id}-foreman"}, []) do
-        {:ok, _pid} ->
-          Logger.debug("#{log_prefix(data)} Foreman subscribed to ForemanAgent events")
-
-        {:error, {:already_registered, _pid}} ->
-          Logger.debug("#{log_prefix(data)} Foreman already subscribed to ForemanAgent events")
-      end
-
-      Deft.Agent.prompt(agent_pid, data.prompt)
+      pid ->
+        do_set_foreman_agent(pid, agent_name_or_pid, state, data)
     end
-
-    {:keep_state, data}
   end
 
   # Handle agent events from ForemanAgent during asking phase
@@ -917,6 +909,40 @@ defmodule Deft.Job.Foreman do
   end
 
   # Private functions
+
+  defp do_set_foreman_agent(pid, agent_name_or_pid, state, data) do
+    # Monitor the ForemanAgent so we can detect crashes
+    monitor_ref = Process.monitor(pid)
+
+    Logger.debug("#{log_prefix(data)} Monitoring ForemanAgent with ref: #{inspect(monitor_ref)}")
+
+    # Keep the via-tuple in foreman_agent_pid for Deft.Agent.prompt/2 calls
+    data =
+      data
+      |> Map.put(:foreman_agent_pid, agent_name_or_pid)
+      |> Map.put(:foreman_agent_monitor_ref, monitor_ref)
+
+    # If we're in :asking and didn't send the initial prompt yet, subscribe and send it now
+    data = maybe_send_initial_prompt_on_set_agent(state, data, agent_name_or_pid)
+
+    {:keep_state, data}
+  end
+
+  defp maybe_send_initial_prompt_on_set_agent(:asking, data, agent_name_or_pid)
+       when not is_nil(data.prompt) do
+    case Registry.register(Deft.Registry, {:session, "#{data.session_id}-foreman"}, []) do
+      {:ok, _pid} ->
+        Logger.debug("#{log_prefix(data)} Foreman subscribed to ForemanAgent events")
+
+      {:error, {:already_registered, _pid}} ->
+        Logger.debug("#{log_prefix(data)} Foreman already subscribed to ForemanAgent events")
+    end
+
+    Deft.Agent.prompt(agent_name_or_pid, data.prompt)
+    data
+  end
+
+  defp maybe_send_initial_prompt_on_set_agent(_state, data, _agent_name_or_pid), do: data
 
   defp auto_fail_crashed_deliverable(lead_id, crash_info, data) do
     # ForemanAgent hasn't responded in time, auto-fail the deliverable
