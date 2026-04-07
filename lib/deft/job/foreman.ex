@@ -679,8 +679,12 @@ defmodule Deft.Job.Foreman do
       "#{log_prefix(data)} ForemanAgent marking deliverable for Lead #{lead_id} as failed"
     )
 
-    # Extract deliverable_id before removing lead from map
-    deliverable_id = get_in(data, [:leads, lead_id, :deliverable, :id])
+    # Extract deliverable_id — for crashed Leads, read from pending_crash_decisions
+    # (the lead was already removed from data.leads by do_handle_lead_crash).
+    # For non-crashed Leads, fall back to reading from data.leads.
+    deliverable_id =
+      get_in(data, [:pending_crash_decisions, lead_id, :deliverable_id]) ||
+        get_in(data, [:leads, lead_id, :deliverable, :id])
 
     # Cancel crash decision timer if this was in response to a crash
     updated_data = cancel_crash_decision_timer(data, lead_id)
