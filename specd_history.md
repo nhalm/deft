@@ -1,4 +1,5 @@
 # History
+- **web-ui v0.6 (2026-04-08):** Fix `.header-button` CSS: set `font-size: 13px`, `padding: 6px 12px`, `color: var(--text-secondary)`, visible border, hover state. Remove the settings button (no settings page exists)
 - **web-ui v0.6 (2026-04-08):** ChatLive `mount/3`: after creating the session, update the browser URL to `/?session=<id>` via `push_patch` so page refresh reconnects to the same session
 - **web-ui v0.6 (2026-04-08):** ChatLive `mount/3`: when no `?session=` param, auto-create a new session (generate ID, call `Session.Supervisor.start_session/1` with working dir and config), subscribe to events, initialize assigns — remove the redirect to `/sessions`
 - **orchestration v0.16 (2026-04-07):** Fix Lead `:complete` state entry to consume ALL queued steering items, not just the first. Currently `lead.ex:224` matches `[steering_content | _rest]` and line 251 clears the entire queue — `_rest` is never applied. Either concatenate all queued steering into a single prompt, or keep the tail in `queued_steering` so subsequent `:complete` entries drain the queue one at a time.
