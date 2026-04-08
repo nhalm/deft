@@ -17,7 +17,3 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## web-ui v0.6
-
-- Add JS hook `OpenSession` in `app.js` that listens for `open_session` push events and calls `window.open(url, "_blank")`
-

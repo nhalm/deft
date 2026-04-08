@@ -167,6 +167,16 @@ const SyntaxHighlight = {
   }
 }
 
+// OpenSession Hook
+// Opens a session in a new browser tab when the server pushes an "open_session" event
+const OpenSession = {
+  mounted() {
+    this.handleEvent("open_session", ({ url }) => {
+      window.open(url, "_blank")
+    })
+  }
+}
+
 // Initialize LiveSocket when DOM is ready
 document.addEventListener("DOMContentLoaded", () => {
   // Get CSRF token from meta tag
@@ -179,7 +189,8 @@ document.addEventListener("DOMContentLoaded", () => {
       ScrollControl,
       InputFocus,
       TextareaInput,
-      SyntaxHighlight
+      SyntaxHighlight,
+      OpenSession
     },
     metadata: {
       keydown: (e) => ({ ctrlKey: e.ctrlKey })
