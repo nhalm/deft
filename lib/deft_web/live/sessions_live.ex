@@ -89,7 +89,7 @@ defmodule DeftWeb.SessionsLive do
 
     if selected_index < length(sessions) do
       session = Enum.at(sessions, selected_index)
-      {:noreply, push_navigate(socket, to: "/?session=#{session.session_id}")}
+      {:noreply, push_event(socket, "open_session", %{url: "/?session=#{session.session_id}"})}
     else
       {:noreply, socket}
     end

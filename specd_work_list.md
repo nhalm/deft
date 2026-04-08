@@ -19,6 +19,5 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## web-ui v0.6
 
-- Change SessionsLive Enter handler: replace `push_navigate(socket, to: "/?session=...")` with `push_event(socket, "open_session", %{url: "/?session=..."})` and add a JS hook that calls `window.open(url, "_blank")`
 - Add JS hook `OpenSession` in `app.js` that listens for `open_session` push events and calls `window.open(url, "_blank")`
 

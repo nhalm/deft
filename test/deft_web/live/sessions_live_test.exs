@@ -246,16 +246,19 @@ defmodule DeftWeb.SessionsLiveTest do
       %{view: view, sid1: sid1, sid2: sid2}
     end
 
-    test "Enter redirects to chat with selected session_id", %{view: view, sid2: sid2} do
+    test "Enter opens session in new tab via push_event", %{view: view, sid2: sid2} do
       # Press Enter on first session (index 0)
       # Since sid2 was created last, it will be at index 0 (most recent first)
-      view |> element(".sessions-picker") |> render_keydown(%{"key" => "Enter"})
+      html = view |> element(".sessions-picker") |> render_keydown(%{"key" => "Enter"})
 
-      # Should redirect to the most recent session (sid2)
-      assert_redirect(view, "/?session=#{sid2}")
+      # Should push an open_session event (opens in new tab via JS hook)
+      # We verify that no redirect occurred (stays on sessions page)
+      assert html =~ "Sessions"
+      # The selected session is still visible
+      assert html =~ sid2
     end
 
-    test "Enter redirects to correct session after navigation", %{view: view, sid1: sid1} do
+    test "Enter opens correct session after navigation", %{view: view, sid1: sid1} do
       # Navigate to second session (which will be first in most-recent-first order)
       # Since sid2 was created last, it's at index 0
       # sid1 is at index 1
@@ -263,10 +266,12 @@ defmodule DeftWeb.SessionsLiveTest do
       assert get_assign(view, :selected_index) == 1
 
       # Press Enter
-      view |> element(".sessions-picker") |> render_keydown(%{"key" => "Enter"})
+      html = view |> element(".sessions-picker") |> render_keydown(%{"key" => "Enter"})
 
-      # Should redirect to sid1 (the older session)
-      assert_redirect(view, "/?session=#{sid1}")
+      # Should push an open_session event for sid1 (opens in new tab via JS hook)
+      # We verify that no redirect occurred (stays on sessions page)
+      assert html =~ "Sessions"
+      assert html =~ sid1
     end
   end
 
