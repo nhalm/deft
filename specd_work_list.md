@@ -17,3 +17,8 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
+## web-ui v0.6
+
+- Attach `phx-hook="OpenSession"` to a DOM element in the SessionsLive template so `push_event(socket, "open_session", ...)` is received by the JS hook — currently Enter and click both silently fail to open sessions in a new tab
+- Add `handle_event("show_help", _params, socket)` clause in ChatLive — currently clicking the Help button crashes the LiveView with an unhandled event error
+
