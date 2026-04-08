@@ -30,7 +30,7 @@ defmodule DeftWeb.SessionsLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="sessions-picker" phx-window-keydown="keydown">
+    <div id="sessions-picker" class="sessions-picker" phx-window-keydown="keydown" phx-hook="OpenSession">
       <header class="header">
         <h1>Sessions</h1>
         <p class="help-text">j/k to navigate • Enter to select • q to quit</p>
