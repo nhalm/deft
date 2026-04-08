@@ -10,6 +10,8 @@ defmodule DeftWeb.ChatLive do
 
   require Logger
 
+  alias Deft.Config
+  alias Deft.Session.Supervisor, as: SessionSupervisor
   alias Deft.Session.Worker
   alias Deft.Skills.Registry, as: SkillsRegistry
   alias Phoenix.HTML
@@ -24,10 +26,63 @@ defmodule DeftWeb.ChatLive do
     # Get session_id from URL params (e.g., /?session=abc123)
     session_id = params["session"]
 
-    # Redirect to session picker if no session_id provided
-    # (direct visit to /, session picker q key, /quit redirect)
     if is_nil(session_id) do
-      {:ok, push_navigate(socket, to: "/sessions")}
+      # Auto-create a new session and load it
+      new_session_id = generate_session_id()
+      working_dir = File.cwd!()
+      config = Config.load(%{}, working_dir)
+
+      # Build agent config from loaded config
+      agent_config = %{
+        model: config.model,
+        provider: Deft.Provider.Anthropic,
+        working_dir: working_dir,
+        turn_limit: config.turn_limit,
+        tool_timeout: config.tool_timeout,
+        bash_timeout: config.bash_timeout,
+        max_turns: config.turn_limit,
+        tools: [
+          Deft.Tools.Read,
+          Deft.Tools.Write,
+          Deft.Tools.Edit,
+          Deft.Tools.Bash,
+          Deft.Tools.Grep,
+          Deft.Tools.Find,
+          Deft.Tools.Ls,
+          Deft.Tools.UseSkill,
+          Deft.Tools.IssueCreate
+        ],
+        om_enabled: config.om_enabled,
+        om_message_token_threshold: config.om_message_token_threshold,
+        om_observation_token_threshold: config.om_observation_token_threshold,
+        om_buffer_interval: config.om_buffer_interval,
+        om_buffer_tail_retention: config.om_buffer_tail_retention,
+        om_hard_threshold_multiplier: config.om_hard_threshold_multiplier
+      }
+
+      # Create the session metadata entry
+      _ = create_session(new_session_id, working_dir, config)
+
+      # Start the session process
+      {:ok, _worker_pid} =
+        SessionSupervisor.start_session(
+          session_id: new_session_id,
+          config: agent_config,
+          messages: [],
+          project_dir: working_dir
+        )
+
+      # Subscribe to events if connected
+      if connected?(socket) do
+        subscribe_to_session(new_session_id)
+      end
+
+      # Initialize all assigns
+      socket = initialize_socket_assigns(socket, new_session_id)
+
+      # Update URL to include session parameter (on next render cycle)
+      # This will not trigger a remount since we use push_patch
+      {:ok, push_patch(socket, to: "/?session=#{new_session_id}")}
     else
       if connected?(socket) do
         subscribe_to_session(session_id)
@@ -811,6 +866,20 @@ defmodule DeftWeb.ChatLive do
       {:ok, path} -> Path.basename(path)
       _ -> "unknown"
     end
+  end
+
+  defp generate_session_id do
+    # Generate a random 8-byte hex string as session ID
+    "sess_" <> (:crypto.strong_rand_bytes(8) |> Base.encode16(case: :lower))
+  end
+
+  defp create_session(session_id, working_dir, config) do
+    alias Deft.Session.Entry.SessionStart
+    alias Deft.Session.Store
+
+    config_map = Map.from_struct(config)
+    session_start = SessionStart.new(session_id, working_dir, config.model, config_map)
+    Store.append(session_id, session_start, working_dir)
   end
 
   defp mode_indicator(:normal), do: "Normal"
