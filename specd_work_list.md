@@ -19,7 +19,6 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## web-ui v0.6
 
-- Replace header buttons: remove the three emoji-only `<button>` tags in `.header-right`. Replace with an `<a href="/sessions" target="_blank" class="header-button">Sessions</a>` link and a `<button class="header-button" phx-click="show_help">Help</button>`
 - Add `.session-item.selected` CSS in `app.css`: distinct background color (e.g., `var(--bg-tertiary)` or `rgba(255,255,255,0.08)`) so keyboard selection is visible
 - Add `phx-click="select_session"` with `phx-value-index` to each `.session-item` div in SessionsLive, with a `handle_event("select_session", ...)` that opens the session in a new tab via a JS hook or `push_event`
 - Change SessionsLive Enter handler: replace `push_navigate(socket, to: "/?session=...")` with `push_event(socket, "open_session", %{url: "/?session=..."})` and add a JS hook that calls `window.open(url, "_blank")` (blocked: Add phx-click select_session)
