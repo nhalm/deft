@@ -29,11 +29,11 @@ Work through each spec sequentially. For each spec:
 
 Launch a research agent (model: Sonnet) to audit the spec against code. The agent:
 
-1. Reads the full spec
+1. Reads the spec body (Overview, Specification, Notes sections — **skip the Changelog**)
 2. Reads the code that implements it
-3. Reports raw findings: broken behavior, missing features, incorrect data handling
+3. Reports findings: broken behavior, missing features, incorrect data handling. **Zero findings is a valid and expected outcome.**
 
-The agent applies the "what counts as a finding" bar above. It does NOT write or modify any files.
+The agent applies the "what counts as a finding" bar above and the Audit Discipline guidelines in AGENTS.md. It does NOT write or modify any files.
 
 ### Step 2: Validate
 

@@ -10,6 +10,21 @@
 - **Spec index:** `specs/README.md` lists all specifications organized by phase. Only specs with status "Ready" should be implemented.
 - **Changelogs are immutable.** When creating new changelog entries, old entries never change.
 
+## Audit Discipline
+
+**Zero findings is a valid and expected outcome.** An audit that confirms correctness is successful — do not manufacture findings to justify the work.
+
+**The bar for a finding is: will this cause a bug in production?** Not "could this theoretically be a problem under unlikely conditions" — will it actually break?
+
+Before reporting a finding:
+- **Read the actual code, not just the spec.** Findings based on spec text alone are unreliable. The code is the ground truth — if the code is correct, there is no finding.
+- **Ignore spec changelogs during audits.** Changelogs are historical records of past changes. The spec body (Overview, Specification, Notes) defines current requirements. Auditing against changelog entries produces phantom findings about already-resolved issues.
+- **Check if it's actually reachable.** Trace the code path. If it requires multiple unlikely conditions to trigger, and existing safety nets (timeouts, cost ceilings, human abort) bound the impact, it's not a finding.
+- **Check if the spec section is prescriptive.** "Notes", "Resolved questions", and "Design decisions" sections are commentary, not requirements. Don't flag unimplemented commentary.
+- **Check if behavior is handled by LLM choice.** If the spec describes behavior that the LLM naturally produces via its tool set and prompt (e.g., choosing not to orchestrate for simple tasks), the absence of a dedicated code path is not a gap.
+- **Check if idle processes are actually harmful.** An empty supervisor under `one_for_one` that gets cleaned up when its parent stops is not a leak. A process consuming no resources is not worth a finding.
+- **Don't flag missing safety nets when other safety nets exist.** A missing timeout is low-priority when cost ceilings and human abort are available.
+
 ## Loop System
 
 The autonomous loop is defined in `loop.sh`. Commands live in `.claude/commands/`:
