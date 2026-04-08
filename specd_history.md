@@ -1,4 +1,5 @@
 # History
+- **web-ui v0.6 (2026-04-08):** Add `.session-item.selected` CSS in `app.css`: distinct background color (e.g., `var(--bg-tertiary)` or `rgba(255,255,255,0.08)`) so keyboard selection is visible
 - **web-ui v0.6 (2026-04-08):** Replace header buttons: remove the three emoji-only `<button>` tags in `.header-right`. Replace with an `<a href="/sessions" target="_blank" class="header-button">Sessions</a>` link and a `<button class="header-button" phx-click="show_help">Help</button>`
 - **web-ui v0.6 (2026-04-08):** Fix `.header-button` CSS: set `font-size: 13px`, `padding: 6px 12px`, `color: var(--text-secondary)`, visible border, hover state. Remove the settings button (no settings page exists)
 - **web-ui v0.6 (2026-04-08):** ChatLive `mount/3`: after creating the session, update the browser URL to `/?session=<id>` via `push_patch` so page refresh reconnects to the same session

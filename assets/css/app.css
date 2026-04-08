@@ -517,6 +517,115 @@ body {
 }
 
 /* ============================================
+   Session Picker
+   ============================================ */
+.sessions-picker {
+  min-height: 100vh;
+  background-color: var(--bg-primary);
+  padding: 24px;
+}
+
+.sessions-picker .header {
+  margin-bottom: 24px;
+}
+
+.sessions-picker .header h1 {
+  font-size: 24px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.sessions-picker .help-text {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.sessions-list {
+  max-width: 800px;
+}
+
+.session-item {
+  padding: 12px 16px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: var(--bg-secondary);
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.session-item:hover {
+  background-color: var(--bg-tertiary);
+}
+
+.session-item.selected {
+  background-color: var(--bg-tertiary);
+  border-color: var(--accent-primary);
+}
+
+.session-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.session-id {
+  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+  font-size: 13px;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.session-date {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.session-details {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.working-dir {
+  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+}
+
+.message-count {
+  color: var(--text-muted);
+}
+
+.last-prompt {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-style: italic;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color);
+}
+
+.empty-state {
+  padding: 40px 16px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.empty-state p {
+  margin-bottom: 8px;
+}
+
+.empty-state code {
+  padding: 2px 6px;
+  background-color: var(--bg-tertiary);
+  border-radius: 3px;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+/* ============================================
    Responsive Breakpoints
    ============================================ */
 
