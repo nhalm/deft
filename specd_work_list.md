@@ -16,3 +16,7 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
+
+## web-ui v0.6
+
+- Foreman does not dispatch `{:job_status, session_id}` registry events — ChatLive subscribes to this key and has a handler, but nothing in `lib/deft/job/foreman.ex` ever sends `{:job_status, statuses}` messages, so the agent roster sidebar never populates during orchestration
