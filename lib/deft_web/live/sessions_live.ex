@@ -38,7 +38,11 @@ defmodule DeftWeb.SessionsLive do
 
       <div class="sessions-list">
         <%= for {session, index} <- Enum.with_index(@sessions) do %>
-          <div class={"session-item #{if index == @selected_index, do: "selected", else: ""}"}>
+          <div
+            class={"session-item #{if index == @selected_index, do: "selected", else: ""}"}
+            phx-click="select_session"
+            phx-value-session-id={session.session_id}
+          >
             <div class="session-header">
               <span class="session-id"><%= session.session_id %></span>
               <span class="session-date"><%= format_datetime(session.last_message_at) %></span>
@@ -107,6 +111,11 @@ defmodule DeftWeb.SessionsLive do
   def handle_event("keydown", _params, socket) do
     # Ignore other keys
     {:noreply, socket}
+  end
+
+  def handle_event("select_session", %{"session-id" => session_id}, socket) do
+    # Open session in new tab via JS hook
+    {:noreply, push_event(socket, "open_session", %{url: "/?session=#{session_id}"})}
   end
 
   # Private helpers
