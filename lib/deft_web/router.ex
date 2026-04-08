@@ -17,10 +17,20 @@ defmodule DeftWeb.Router do
     plug(:put_secure_browser_headers)
   end
 
+  pipeline :api do
+    plug(:accepts, ["json"])
+  end
+
   scope "/", DeftWeb do
     pipe_through(:browser)
 
     live("/", ChatLive)
     live("/sessions", SessionsLive)
+  end
+
+  scope "/api", DeftWeb do
+    pipe_through(:api)
+
+    get("/tool_detail/:session_id/:tool_call_id", ToolDetailController, :show)
   end
 end

@@ -180,6 +180,64 @@ const StreamingMarkdown = {
   }
 }
 
+function escapeHtml(text) {
+  if (!text) return ''
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+// Tool detail — fetches from /api/tool_detail on first click, then toggles
+window.toggleToolDetail = function(toolId) {
+  const el = document.getElementById(toolId)
+  if (!el) return
+
+  const details = document.getElementById(toolId + '-details')
+  if (!details) return
+
+  // If already loaded, just toggle
+  if (details.dataset.loaded) {
+    el.classList.toggle('expanded')
+    details.classList.toggle('hidden')
+    return
+  }
+
+  const sessionId = el.dataset.sessionId
+  const toolCallId = el.dataset.toolCallId
+
+  if (!sessionId || !toolCallId) {
+    details.innerHTML = '<p class="tool-detail-label">No details available.</p>'
+    details.dataset.loaded = 'true'
+    details.classList.remove('hidden')
+    el.classList.add('expanded')
+    return
+  }
+
+  // Show loading state
+  details.innerHTML = '<p class="tool-detail-label">Loading...</p>'
+  details.classList.remove('hidden')
+  el.classList.add('expanded')
+
+  fetch(`/api/tool_detail/${sessionId}/${toolCallId}`)
+    .then(r => r.json())
+    .then(data => {
+      let html = ''
+      if (data.input) {
+        html += `<div class="tool-detail-section"><div class="tool-detail-label">Input:</div><pre class="tool-detail-pre">${escapeHtml(data.input)}</pre></div>`
+      }
+      if (data.output) {
+        html += `<div class="tool-detail-section"><div class="tool-detail-label">Output:</div><pre class="tool-detail-pre">${escapeHtml(data.output)}</pre></div>`
+      }
+      if (!data.input && !data.output) {
+        html = '<p class="tool-detail-label">No details available.</p>'
+      }
+      details.innerHTML = html
+      details.dataset.loaded = 'true'
+    })
+    .catch(() => {
+      details.innerHTML = '<p class="tool-detail-label">Failed to load details.</p>'
+      details.dataset.loaded = 'true'
+    })
+}
+
 // OpenSession Hook
 // Opens a session in a new browser tab when the server pushes an "open_session" event
 const OpenSession = {

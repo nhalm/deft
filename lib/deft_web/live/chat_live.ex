@@ -211,10 +211,20 @@ defmodule DeftWeb.ChatLive do
     # Persist the completed tool to the conversation stream immediately
     socket = flush_tool(socket, completed_tool)
 
+    # Cache the tool details for lazy loading on click
+    tool_id = "tool-#{id}"
+
+    completed_tools =
+      Map.put(socket.assigns.completed_tools, tool_id, %{
+        input: completed_tool[:input],
+        output: output
+      })
+
     # Remove the tool from active_tools now that it's persisted
     active_tools = Map.delete(active_tools, id)
 
-    {:noreply, assign(socket, :active_tools, active_tools)}
+    {:noreply,
+     socket |> assign(:active_tools, active_tools) |> assign(:completed_tools, completed_tools)}
   end
 
   def handle_info({:agent_event, {:state_change, state}}, socket) do
@@ -354,6 +364,9 @@ defmodule DeftWeb.ChatLive do
   end
 
   defp initialize_socket_assigns(socket, session_id) do
+    # Load conversation history from JSONL store
+    history_items = load_conversation_history(session_id)
+
     socket
     |> assign_session_state(session_id)
     |> assign_message_state()
@@ -362,7 +375,108 @@ defmodule DeftWeb.ChatLive do
     |> assign_metrics_state()
     |> assign_job_state()
     |> assign_ui_state()
-    |> stream(:conversation, [])
+    |> stream(:conversation, history_items)
+  end
+
+  defp load_conversation_history(session_id) do
+    alias Deft.Session.Store
+
+    case Store.load(session_id) do
+      {:ok, entries} ->
+        entries
+        |> Enum.flat_map(&entry_to_stream_items/1)
+
+      {:error, _} ->
+        []
+    end
+  end
+
+  defp entry_to_stream_items(%Deft.Session.Entry.Message{role: :user, content: content}) do
+    text =
+      content
+      |> Enum.filter(fn block -> block["type"] == "text" || block[:type] == "text" end)
+      |> Enum.map(fn block -> block["text"] || block[:text] || "" end)
+      |> Enum.join("\n")
+
+    if text != "" do
+      [
+        %{
+          id: System.unique_integer([:positive, :monotonic]),
+          type: :user,
+          role: :user,
+          content: text
+        }
+      ]
+    else
+      []
+    end
+  end
+
+  defp entry_to_stream_items(%Deft.Session.Entry.Message{role: :assistant, content: content}) do
+    Enum.flat_map(content, &content_block_to_stream_item/1)
+  end
+
+  defp entry_to_stream_items(_entry), do: []
+
+  defp content_block_to_stream_item(block) do
+    case block_field(block, "type") do
+      "text" -> text_block_item(block_field(block, "text"))
+      "thinking" -> thinking_block_item(block_field(block, "text"))
+      "tool_use" -> tool_use_block_item(block)
+      _ -> []
+    end
+  end
+
+  defp block_field(block, key), do: block[key] || block[String.to_existing_atom(key)]
+
+  defp text_block_item(nil), do: []
+  defp text_block_item(""), do: []
+
+  defp text_block_item(text) do
+    [
+      %{
+        id: System.unique_integer([:positive, :monotonic]),
+        type: :text,
+        role: :assistant,
+        content: text
+      }
+    ]
+  end
+
+  defp thinking_block_item(nil), do: []
+  defp thinking_block_item(""), do: []
+
+  defp thinking_block_item(text) do
+    [
+      %{
+        id: System.unique_integer([:positive, :monotonic]),
+        type: :thinking,
+        role: :assistant,
+        content: text
+      }
+    ]
+  end
+
+  defp tool_use_block_item(block) do
+    name = block_field(block, "name") || "unknown"
+    args = block_field(block, "args") || %{}
+    tool_id = block_field(block, "id")
+
+    [
+      %{
+        id: System.unique_integer([:positive, :monotonic]),
+        type: :tool,
+        role: :assistant,
+        tool_call_id: tool_id,
+        tool: %{
+          id: tool_id,
+          name: name,
+          key_arg: extract_key_arg(name, args),
+          status: :success,
+          duration: nil
+        }
+      }
+    ]
   end
 
   defp assign_session_state(socket, session_id) do
@@ -389,6 +503,8 @@ defmodule DeftWeb.ChatLive do
   defp assign_tool_state(socket) do
     socket
     |> assign(:active_tools, %{})
+    |> assign(:completed_tools, %{})
+    |> assign(:tool_details_cache, %{})
     |> assign(:tools_expanded, %{})
     |> assign(:thinking_blocks_expanded, %{})
   end
@@ -472,11 +588,14 @@ defmodule DeftWeb.ChatLive do
   end
 
   defp flush_tool(socket, tool) do
+    compact_tool = Map.drop(tool, [:input, :output])
+
     message = %{
       id: System.unique_integer([:positive, :monotonic]),
       type: :tool,
       role: :assistant,
-      tool: tool
+      tool: compact_tool,
+      tool_call_id: tool[:id]
     }
 
     stream_insert(socket, :conversation, message)
@@ -484,7 +603,6 @@ defmodule DeftWeb.ChatLive do
 
   @impl true
   def terminate(_reason, socket) do
-    # Log session disconnection
     session_id = socket.assigns.session_id
     id_prefix = String.slice(session_id, 0, 8)
     Logger.info("[Chat:#{id_prefix}] Session disconnected")
@@ -545,16 +663,6 @@ defmodule DeftWeb.ChatLive do
     current_state = Map.get(socket.assigns.thinking_blocks_expanded, id, true)
     new_expanded_state = Map.put(socket.assigns.thinking_blocks_expanded, id, not current_state)
     {:noreply, assign(socket, :thinking_blocks_expanded, new_expanded_state)}
-  end
-
-  @impl true
-  def handle_event("toggle_tool", %{"id" => id}, socket) do
-    id_prefix = String.slice(socket.assigns.session_id, 0, 8)
-    Logger.debug("[Chat:#{id_prefix}] Event: toggle_tool")
-
-    current_state = Map.get(socket.assigns.tools_expanded, id, false)
-    new_expanded_state = Map.put(socket.assigns.tools_expanded, id, not current_state)
-    {:noreply, assign(socket, :tools_expanded, new_expanded_state)}
   end
 
   @impl true
@@ -917,9 +1025,18 @@ defmodule DeftWeb.ChatLive do
   defp mode_indicator(:insert), do: "Insert"
   defp mode_indicator(:command), do: "Command"
 
+  defp activity_label(:thinking), do: "Thinking..."
+  defp activity_label(:executing), do: "Working..."
+  defp activity_label(:waiting), do: "Waiting..."
+  defp activity_label(:researching), do: "Researching..."
+  defp activity_label(:implementing), do: "Implementing..."
+  defp activity_label(:verifying), do: "Verifying..."
+  defp activity_label(state), do: "#{state}..."
+
   attr(:item, :map, required: true)
   attr(:thinking_expanded, :map, default: %{})
   attr(:tools_expanded, :map, default: %{})
+  attr(:session_id, :string, default: nil)
 
   defp render_conversation_item(assigns) do
     type = Map.get(assigns.item, :type)
@@ -947,9 +1064,8 @@ defmodule DeftWeb.ChatLive do
           key_arg={Map.get(@tool, :key_arg)}
           status={Map.get(@tool, :status, :running)}
           duration={Map.get(@tool, :duration)}
-          input={Map.get(@tool, :input)}
-          output={Map.get(@tool, :output)}
-          expanded={Map.get(@tools_expanded, "tool-#{@item.id}", false)}
+          session_id={@session_id}
+          tool_call_id={to_string(@item[:tool_call_id] || @tool[:id] || "")}
         />
       <% :text -> %>
         <%= render_markdown(@content) %>

@@ -6,10 +6,7 @@
       <span class="repo-name"><%= @repo_name %></span>
     </div>
     <div class="header-center">
-      <span class="agent-identity"><%= @agent_identity %></span>
-      <span class={"state-indicator state-#{@agent_state}"}>
-        ◉ <%= @agent_state %>
-      </span>
+      <span class={"state-indicator state-#{@agent_state}"}>◉</span>
     </div>
     <div class="header-right">
       <a href="/sessions" target="_blank" class="header-button">Sessions</a>
@@ -21,12 +18,19 @@
       <div phx-update="stream" id="conversation" phx-hook="SyntaxHighlight">
         <%= for {id, item} <- @streams.conversation do %>
           <div id={id} class="conversation-item">
-            <.render_conversation_item item={item} thinking_expanded={@thinking_blocks_expanded} tools_expanded={@tools_expanded} />
+            <.render_conversation_item item={item} thinking_expanded={@thinking_blocks_expanded} tools_expanded={@tools_expanded} session_id={@session_id} />
           </div>
         <% end %>
       </div>
 
       <div id="streaming-content">
+        <%= if @agent_state != :idle do %>
+          <div class="activity-indicator">
+            <span class="activity-spinner"></span>
+            <span class="activity-label"><%= activity_label(@agent_state) %></span>
+          </div>
+        <% end %>
+
         <%= if @streaming_thinking != "" do %>
           <.thinking
             id="streaming-thinking"
@@ -46,9 +50,6 @@
             key_arg={tool.key_arg}
             status={tool.status}
             duration={tool.duration}
-            input={tool.input}
-            output={tool.output}
-            expanded={Map.get(@tools_expanded, "tool-#{tool_id}", false)}
           />
         <% end %>
 
