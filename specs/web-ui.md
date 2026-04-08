@@ -2,11 +2,17 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.5 |
-| Status | Implemented |
-| Last Updated | 2026-03-25 |
+| Version | 0.6 |
+| Status | Ready |
+| Last Updated | 2026-04-08 |
 
 ## Changelog
+
+### v0.6 (2026-04-08)
+- Startup auto-creates a new session and loads it immediately
+- Header buttons use text labels, minimum 13px, adequate padding
+- Sessions button opens `/sessions` in a new browser tab
+- Session picker: visible selection highlight, mouse click support, both Enter and click open in new tab
 
 ### v0.5 (2026-03-25)
 - Incremental content flushing: thinking, text, and tool blocks flush to the conversation stream as they complete, not batched on idle
@@ -105,6 +111,15 @@ live "/sessions", DeftWeb.SessionsLive  # session picker
 
 The primary interface. A single LiveView that handles conversation, streaming, tools, thinking, and the agent roster.
 
+#### 2.0 Startup — Auto-create Session
+
+When ChatLive mounts without a `?session=` param (i.e., user navigated to `/`), it creates a new session and loads it. Flow:
+
+1. Generate a session ID
+2. Create the session via `Deft.Session.Supervisor.start_session/1`
+3. Update the URL to `/?session=<id>` (via `push_patch`) so refresh works
+4. Subscribe to agent events and initialize the chat
+
 #### 2.1 Layout
 
 ```
@@ -183,7 +198,14 @@ Shows:
 - App name (`Deft`) + repo name (basename of working_dir)
 - Agent identity: `Solo` or `Foreman`
 - Agent state with colored indicator
-- Quick-access buttons: settings, session picker, help
+- Quick-access buttons with text labels:
+
+| Button | Label | Action |
+|--------|-------|--------|
+| Sessions | `Sessions` | Opens `/sessions` in a new browser tab (`target="_blank"`) |
+| Help | `Help` | Shows help overlay |
+
+Buttons use the `.header-button` CSS class with readable font size (minimum 13px), visible border, and adequate padding (at least `6px 12px`). Each button has a text label.
 
 ### 4. Input Area
 
@@ -262,7 +284,18 @@ Key events are handled server-side via `phx-keydown` on the body element with `p
 
 Lists available sessions. Shows session ID, working directory, last activity, message count, first line of last prompt. Sorted most-recent-first.
 
-Keyboard navigation: `j`/`k` to move, Enter to select, `q` to go back.
+#### 7.1 Selection
+
+The currently selected session must have a **visible highlight** — distinct background color (e.g., `var(--bg-tertiary)`) so the user can see which item is focused.
+
+#### 7.2 Navigation
+
+- **Keyboard:** `j`/`k` to move selection, Enter to open, `q` to go back
+- **Mouse:** clicking a session item selects and opens it
+
+#### 7.3 Opening Sessions
+
+Both Enter and mouse click open the selected session in a new browser tab. Use `window.open("/?session=<id>", "_blank")` via a JS hook or `<a>` tag with `target="_blank"`. The session picker page stays open so the user can open multiple past sessions.
 
 ### 8. Slash Commands
 
