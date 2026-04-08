@@ -72,17 +72,8 @@ defmodule DeftWeb.ChatLive do
           project_dir: working_dir
         )
 
-      # Subscribe to events if connected
-      if connected?(socket) do
-        subscribe_to_session(new_session_id)
-      end
-
-      # Initialize all assigns
-      socket = initialize_socket_assigns(socket, new_session_id)
-
-      # Update URL to include session parameter (on next render cycle)
-      # This will not trigger a remount since we use push_patch
-      {:ok, push_patch(socket, to: "/?session=#{new_session_id}")}
+      # Redirect to the new session URL — mount will re-run with the session param
+      {:ok, redirect(socket, to: "/?session=#{new_session_id}")}
     else
       if connected?(socket) do
         subscribe_to_session(session_id)
@@ -105,7 +96,27 @@ defmodule DeftWeb.ChatLive do
     socket = maybe_flush_thinking(socket, socket.assigns.streaming_thinking)
     socket = assign(socket, :streaming_thinking, "")
 
-    {:noreply, assign(socket, :streaming_text, socket.assigns.streaming_text <> delta)}
+    new_text = socket.assigns.streaming_text <> delta
+
+    # Render markdown server-side, push as HTML to client-side hook
+    html =
+      try do
+        case Earmark.as_html(new_text, smartypants: false) do
+          {:ok, html, _} -> html
+          {:error, html, _} -> html
+        end
+      rescue
+        _ ->
+          escaped = new_text |> String.replace("&", "&amp;") |> String.replace("<", "&lt;")
+          "<pre>" <> escaped <> "</pre>"
+      end
+
+    socket =
+      socket
+      |> assign(:streaming_text, new_text)
+      |> push_event("streaming_markdown", %{html: html})
+
+    {:noreply, socket}
   end
 
   def handle_info({:agent_event, {:thinking_delta, delta}}, socket) do
@@ -322,6 +333,11 @@ defmodule DeftWeb.ChatLive do
   def handle_info(:shutdown_server, socket) do
     # Actually stop the server and exit
     System.stop(0)
+    {:noreply, socket}
+  end
+
+  def handle_info(msg, socket) do
+    Logger.warning("[Chat] Unhandled message: #{inspect(msg)}")
     {:noreply, socket}
   end
 

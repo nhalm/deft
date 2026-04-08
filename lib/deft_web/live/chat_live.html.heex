@@ -35,11 +35,9 @@
           />
         <% end %>
 
-        <%= if @streaming_text != "" do %>
-          <div class="streaming-text" id="streaming-text-block">
-            <%= @streaming_text %><span class="cursor">▊</span>
-          </div>
-        <% end %>
+        <div class={"streaming-text conversation-item #{if @streaming_text == "", do: "hidden"}"} id="streaming-text-block" phx-hook="StreamingMarkdown">
+          <div class="streaming-markdown-content"></div><span class="cursor">▊</span>
+        </div>
 
         <%= for {tool_id, tool} <- @active_tools do %>
           <.tool_call

@@ -167,6 +167,19 @@ const SyntaxHighlight = {
   }
 }
 
+// StreamingMarkdown Hook
+// Renders markdown to HTML client-side during streaming to avoid LiveView DOM patching issues
+const StreamingMarkdown = {
+  mounted() {
+    this.contentEl = this.el.querySelector('.streaming-markdown-content')
+    this.handleEvent("streaming_markdown", ({ html }) => {
+      if (this.contentEl) {
+        this.contentEl.innerHTML = html
+      }
+    })
+  }
+}
+
 // OpenSession Hook
 // Opens a session in a new browser tab when the server pushes an "open_session" event
 const OpenSession = {
@@ -190,6 +203,7 @@ document.addEventListener("DOMContentLoaded", () => {
       InputFocus,
       TextareaInput,
       SyntaxHighlight,
+      StreamingMarkdown,
       OpenSession
     },
     metadata: {
