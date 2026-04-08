@@ -1804,15 +1804,19 @@ defmodule Deft.Job.Foreman do
     {:keep_state, data}
   end
 
+  defp terminate_lead_supervisor(_lead_id, nil, _data), do: :ok
+
   defp terminate_lead_supervisor(lead_id, supervisor_pid, data) do
     lead_supervisor = LeadSupervisor.via_tuple(data.session_id)
 
     case DynamicSupervisor.terminate_child(lead_supervisor, supervisor_pid) do
       :ok ->
-        Logger.info("#{log_prefix(data)} Aborted Lead #{lead_id}")
+        Logger.info("#{log_prefix(data)} Terminated Lead #{lead_id} supervisor subtree")
 
       {:error, :not_found} ->
-        Logger.warning("#{log_prefix(data)} Lead #{lead_id} supervisor not found during abort")
+        Logger.warning(
+          "#{log_prefix(data)} Lead #{lead_id} supervisor not found during termination"
+        )
     end
   end
 
@@ -1863,11 +1867,16 @@ defmodule Deft.Job.Foreman do
         # Lead already removed from map — cleanup already done by do_handle_lead_crash
         data
 
-      _lead_info ->
-        # Lead still in map — this is a non-crash failure, clean up worktree and monitor
+      lead_info ->
+        # Lead still in map — this is a non-crash failure, terminate supervisor subtree,
+        # clean up worktree and monitor
         Logger.debug(
-          "#{log_prefix(data)} Cleaning up worktree and monitor for failed Lead #{lead_id}"
+          "#{log_prefix(data)} Cleaning up supervisor, worktree and monitor for failed Lead #{lead_id}"
         )
+
+        # Stop Lead supervisor subtree via DynamicSupervisor
+        # This cascades shutdown to Lead, LeadAgent, ToolRunner, and RunnerSupervisor
+        terminate_lead_supervisor(lead_id, lead_info.supervisor_pid, data)
 
         GitJob.cleanup_lead_worktree(
           lead_id: lead_id,
@@ -2209,16 +2218,21 @@ defmodule Deft.Job.Foreman do
   end
 
   defp do_handle_lead_crash(lead_id, _state, data) do
-    # Get deliverable_id before removing the lead
+    # Extract deliverable_id and supervisor_pid before removing the lead
     deliverable_id = extract_deliverable_id(data.leads, lead_id)
-
-    # Clean up the crashed Lead's worktree
-    Logger.debug("#{log_prefix(data)} Cleaning up worktree for crashed Lead #{lead_id}")
-    GitJob.cleanup_lead_worktree(lead_id: lead_id, working_dir: data.working_dir)
-    Logger.info("#{log_prefix(data)} Cleaned up worktree for crashed Lead #{lead_id}")
+    supervisor_pid = get_in(data, [:leads, lead_id, :supervisor_pid])
 
     # Clean up monitor
     cleanup_lead_monitor(data.lead_monitors, lead_id)
+
+    # Stop Lead supervisor subtree — cascades shutdown to LeadAgent, ToolRunner, RunnerSupervisor.
+    # This must happen BEFORE worktree cleanup to stop Runners that may still be writing.
+    terminate_lead_supervisor(lead_id, supervisor_pid, data)
+
+    # Clean up the crashed Lead's worktree after supervisor is stopped
+    Logger.debug("#{log_prefix(data)} Cleaning up worktree for crashed Lead #{lead_id}")
+    GitJob.cleanup_lead_worktree(lead_id: lead_id, working_dir: data.working_dir)
+    Logger.info("#{log_prefix(data)} Cleaned up worktree for crashed Lead #{lead_id}")
 
     # Remove from tracking
     updated_data =
