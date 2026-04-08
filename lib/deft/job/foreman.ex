@@ -251,6 +251,7 @@ defmodule Deft.Job.Foreman do
   @impl :gen_statem
   def handle_event(:enter, _old_state, :asking, data) do
     Logger.info("#{log_prefix(data)} Foreman entering :asking phase")
+    broadcast_job_status(:asking, data)
 
     # Subscribe to ForemanAgent events to receive text responses
     if data.foreman_agent_pid do
@@ -278,6 +279,7 @@ defmodule Deft.Job.Foreman do
 
   def handle_event(:enter, _old_state, :planning, data) do
     Logger.info("#{log_prefix(data)} Foreman entering :planning phase")
+    broadcast_job_status(:planning, data)
 
     # In planning, ForemanAgent analyzes the request and calls request_research tool
     # For now, this is a stub until ForemanAgent and tools are implemented
@@ -291,6 +293,7 @@ defmodule Deft.Job.Foreman do
 
   def handle_event(:enter, _old_state, :researching, data) do
     Logger.info("#{log_prefix(data)} Foreman entering :researching phase")
+    broadcast_job_status(:researching, data)
 
     research_tasks = Map.get(data, :research_tasks, [])
 
@@ -320,6 +323,8 @@ defmodule Deft.Job.Foreman do
       "#{log_prefix(data)} Foreman entering :decomposing phase - waiting for plan approval"
     )
 
+    broadcast_job_status(:decomposing, data)
+
     # Present plan to user, wait for approval
     # For now, stub implementation
 
@@ -344,18 +349,21 @@ defmodule Deft.Job.Foreman do
 
   def handle_event(:enter, _old_state, :executing, data) do
     Logger.info("#{log_prefix(data)} Foreman entering :executing phase")
+    broadcast_job_status(:executing, data)
     # Leads will be spawned based on the approved plan
     :keep_state_and_data
   end
 
   def handle_event(:enter, _old_state, :verifying, data) do
     Logger.info("#{log_prefix(data)} Foreman entering :verifying phase")
+    broadcast_job_status(:verifying, data)
     # Spawn verification Runner
     :keep_state_and_data
   end
 
   def handle_event(:enter, _old_state, :complete, data) do
     Logger.info("#{log_prefix(data)} Foreman entering :complete phase")
+    broadcast_job_status(:complete, data)
 
     # Calculate job duration and get total cost
     duration_ms = System.monotonic_time(:millisecond) - data.job_start_time
@@ -814,7 +822,10 @@ defmodule Deft.Job.Foreman do
     updated_data = route_lead_message_to_agent(type, content, metadata, state, updated_data)
 
     # Handle Lead completion - remove from tracking and check for transition to verifying
-    handle_lead_completion(type, metadata, state, updated_data)
+    result = handle_lead_completion(type, metadata, state, updated_data)
+
+    # Broadcast job status after handling Lead message
+    broadcast_and_return(result, state)
   end
 
   # Handle flush timer for buffered Lead messages
@@ -1707,9 +1718,14 @@ defmodule Deft.Job.Foreman do
       lead_id = "lead-#{:erlang.unique_integer([:positive])}"
 
       case do_spawn_lead(lead_id, deliverable_with_context, updated_data) do
-        {:ok, updated_data} -> {:keep_state, updated_data}
+        {:ok, updated_data} ->
+          # Broadcast updated status with new Lead
+          broadcast_job_status(:executing, updated_data)
+          {:keep_state, updated_data}
+
         # On spawn failure, still keep the cleared outcome so ForemanAgent can retry
-        :error -> {:keep_state, updated_data}
+        :error ->
+          {:keep_state, updated_data}
       end
     end
   end
@@ -2877,4 +2893,102 @@ defmodule Deft.Job.Foreman do
       Deft.Agent.prompt(data.foreman_agent_pid, catchup_text)
     end
   end
+
+  # Job status broadcasting for web UI agent roster
+
+  # Helper to broadcast job status and return the result
+  defp broadcast_and_return({:next_state, new_state, data}, _current_state) do
+    broadcast_job_status(new_state, data)
+    {:next_state, new_state, data}
+  end
+
+  defp broadcast_and_return({:keep_state, data}, current_state) do
+    broadcast_job_status(current_state, data)
+    {:keep_state, data}
+  end
+
+  # Broadcasts job status via Registry for web UI consumption.
+  defp broadcast_job_status(state, data) do
+    agent_statuses = build_agent_statuses(state, data)
+    job_status_key = {:job_status, data.session_id}
+
+    Registry.dispatch(Deft.Registry, job_status_key, fn entries ->
+      for {pid, _} <- entries do
+        send(pid, {:job_status, agent_statuses})
+      end
+    end)
+
+    :ok
+  end
+
+  # Builds the agent_statuses list for broadcasting to the web UI.
+  # Returns a list of `%{id: String.t(), type: atom(), state: atom(), label: String.t()}`.
+  defp build_agent_statuses(job_phase, data) when is_atom(job_phase) do
+    # Foreman status
+    foreman_state = map_job_phase_to_state(job_phase)
+
+    foreman_status = %{
+      id: "foreman",
+      type: :foreman,
+      state: foreman_state,
+      label: "Foreman"
+    }
+
+    # Lead statuses
+    lead_statuses =
+      data.leads
+      |> Enum.map(fn {lead_id, lead_info} ->
+        %{
+          id: lead_id,
+          type: :lead,
+          state: Map.get(lead_info, :agent_state, :implementing),
+          label: "Lead #{lead_id}"
+        }
+      end)
+      |> Enum.sort_by(& &1.id)
+
+    # Runner status (aggregate count)
+    runner_count = count_active_runners(data)
+
+    runner_statuses =
+      if runner_count > 0 do
+        runner_state = infer_runner_state(job_phase)
+
+        [
+          %{
+            id: "runners",
+            type: :runner,
+            state: runner_state,
+            label: if(runner_count == 1, do: "Runner", else: "Runners (#{runner_count})")
+          }
+        ]
+      else
+        []
+      end
+
+    [foreman_status | lead_statuses] ++ runner_statuses
+  end
+
+  # Maps Foreman job_phase to display state for the web UI.
+  defp map_job_phase_to_state(:asking), do: :asking
+  defp map_job_phase_to_state(:planning), do: :planning
+  defp map_job_phase_to_state(:researching), do: :researching
+  defp map_job_phase_to_state(:decomposing), do: :planning
+  defp map_job_phase_to_state(:executing), do: :executing
+  defp map_job_phase_to_state(:verifying), do: :verifying
+  defp map_job_phase_to_state(:complete), do: :complete
+
+  # Counts active Runners across all task collections.
+  defp count_active_runners(data) do
+    research_count = length(Map.get(data, :research_tasks, []))
+    merge_count = map_size(Map.get(data, :merge_resolution_tasks, %{}))
+    test_count = map_size(Map.get(data, :post_merge_test_tasks, %{}))
+    research_count + merge_count + test_count
+  end
+
+  # Infers Runner state based on job phase.
+  defp infer_runner_state(:researching), do: :researching
+  defp infer_runner_state(:verifying), do: :testing
+  defp infer_runner_state(:executing), do: :implementing
+  defp infer_runner_state(_), do: :implementing
 end
