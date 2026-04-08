@@ -17,7 +17,3 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## web-ui v0.6
-
-- Update `handle_info({:job_status, statuses}, socket)` in ChatLive to set `agent_identity` to `"Foreman"` when job_status events arrive — currently hardcoded to `"Solo"` and never changed, so the header always shows "Solo" even during orchestration
-

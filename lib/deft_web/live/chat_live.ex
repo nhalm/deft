@@ -270,6 +270,7 @@ defmodule DeftWeb.ChatLive do
       |> assign(:job_active, true)
       |> assign(:roster_visible, true)
       |> assign(:job_started_at, job_started_at)
+      |> assign(:agent_identity, "Foreman")
 
     {:noreply, socket}
   end
