@@ -409,6 +409,7 @@ defmodule DeftWeb.ChatLive do
     |> assign(:zoom, false)
     |> assign(:active_pane, :left)
     |> assign(:last_ctrl_c, nil)
+    |> assign(:help_visible, false)
   end
 
   # Private helpers for flushing content to conversation stream
@@ -591,6 +592,19 @@ defmodule DeftWeb.ChatLive do
     }
 
     {:noreply, stream_insert(socket, :conversation, message)}
+  end
+
+  def handle_event("show_help", _params, socket) do
+    id_prefix = String.slice(socket.assigns.session_id, 0, 8)
+    Logger.debug("[Chat:#{id_prefix}] Event: show_help")
+
+    # Toggle help visibility
+    {:noreply, assign(socket, :help_visible, not socket.assigns.help_visible)}
+  end
+
+  def handle_event("prevent_close", _params, socket) do
+    # Prevent click propagation from help content to overlay
+    {:noreply, socket}
   end
 
   # Private helpers

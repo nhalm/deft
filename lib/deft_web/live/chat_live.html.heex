@@ -108,4 +108,85 @@
       state={@agent_state}
     />
   <% end %>
+
+  <%= if @help_visible do %>
+    <div class="help-overlay" phx-click="show_help">
+      <div class="help-content" phx-click="prevent_close">
+        <div class="help-header">
+          <h2>Help</h2>
+          <button class="close-button" phx-click="show_help">×</button>
+        </div>
+        <div class="help-body">
+          <h3>Available Commands</h3>
+          <dl>
+            <dt>/help</dt>
+            <dd>Show this help screen</dd>
+
+            <dt>/model &lt;name&gt;</dt>
+            <dd>Switch the LLM model (e.g., /model claude-3-opus)</dd>
+
+            <dt>/clear</dt>
+            <dd>Clear the conversation display</dd>
+
+            <dt>/compact</dt>
+            <dd>Force message compaction</dd>
+
+            <dt>/observations</dt>
+            <dd>Show observational memory observations</dd>
+
+            <dt>/forget &lt;text&gt;</dt>
+            <dd>Mark an observation for removal</dd>
+
+            <dt>/correct &lt;old&gt; -&gt; &lt;new&gt;</dt>
+            <dd>Mark an observation for correction</dd>
+
+            <dt>/cost</dt>
+            <dd>Show detailed cost breakdown</dd>
+
+            <dt>/status</dt>
+            <dd>Show orchestration job status</dd>
+
+            <dt>/inspect &lt;lead&gt;</dt>
+            <dd>Show a Lead agent's site log entries</dd>
+
+            <dt>/plan</dt>
+            <dd>Re-display the approved plan</dd>
+
+            <dt>/quit</dt>
+            <dd>Stop the server and exit</dd>
+          </dl>
+
+          <h3>Keyboard Shortcuts</h3>
+          <dl>
+            <dt>Esc</dt>
+            <dd>Switch to Normal mode</dd>
+
+            <dt>i</dt>
+            <dd>Switch to Insert mode (when in Normal)</dd>
+
+            <dt>j / k</dt>
+            <dd>Scroll down / up (when in Normal)</dd>
+
+            <dt>G</dt>
+            <dd>Scroll to bottom (when in Normal)</dd>
+
+            <dt>gg</dt>
+            <dd>Scroll to top (when in Normal)</dd>
+
+            <dt>Ctrl+u / Ctrl+d</dt>
+            <dd>Half-page scroll up / down</dd>
+
+            <dt>Ctrl+b %</dt>
+            <dd>Toggle agent roster panel</dd>
+
+            <dt>Ctrl+c</dt>
+            <dd>Abort agent operation</dd>
+
+            <dt>Ctrl+c Ctrl+c</dt>
+            <dd>Force abort</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+  <% end %>
 </div>

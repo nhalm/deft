@@ -1,4 +1,5 @@
 # History
+- **web-ui v0.6 (2026-04-08):** Add `handle_event("show_help", _params, socket)` clause in ChatLive — currently clicking the Help button crashes the LiveView with an unhandled event error
 - **web-ui v0.6 (2026-04-08):** Attach `phx-hook="OpenSession"` to a DOM element in the SessionsLive template so `push_event(socket, "open_session", ...)` is received by the JS hook — currently Enter and click both silently fail to open sessions in a new tab
 - **web-ui v0.6 (2026-04-08):** Add JS hook `OpenSession` in `app.js` that listens for `open_session` push events and calls `window.open(url, "_blank")`
 - **web-ui v0.6 (2026-04-08):** Change SessionsLive Enter handler: replace `push_navigate(socket, to: "/?session=...")` with `push_event(socket, "open_session", %{url: "/?session=..."})` and add a JS hook that calls `window.open(url, "_blank")`

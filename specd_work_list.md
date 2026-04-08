@@ -16,8 +16,3 @@ HOW IT WORKS:
 
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
-
-## web-ui v0.6
-
-- Add `handle_event("show_help", _params, socket)` clause in ChatLive — currently clicking the Help button crashes the LiveView with an unhandled event error
-
