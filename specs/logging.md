@@ -2,11 +2,14 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.6 |
-| Status | Implemented |
-| Last Updated | 2026-03-30 |
+| Version | 0.7 |
+| Status | Ready |
+| Last Updated | 2026-04-09 |
 
 ## Changelog
+
+### v0.7 (2026-04-09)
+- Remove per-event debug logging from Agent and Chat layers: SSE events received, event broadcasts, and agent events received for rendering. These fire per-token during streaming and provide no diagnostic value beyond info-level turn/stream summaries.
 
 ### v0.6 (2026-03-30)
 - Remove "Session saved" from Infrastructure logging requirements — Session persistence happens continuously via append with no discrete "save" event worth logging at info level; "Session resumed" already covers the meaningful lifecycle event
@@ -104,8 +107,6 @@ The agent logs its message lifecycle:
 - Abort requested (current state)
 
 **Debug level:**
-- Individual SSE events received (event type)
-- Event broadcasts (event type)
 - State transitions (old → new state)
 - Queued prompt processing (queue depth)
 
@@ -163,7 +164,6 @@ The agent logs its message lifecycle:
 - Session connected/disconnected
 
 **Debug level:**
-- Agent events received for rendering (event type)
 - Discrete UI events: toggle_thinking, toggle_tool (event name only)
 
 **Not logged (any level):**
