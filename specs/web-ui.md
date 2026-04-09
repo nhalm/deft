@@ -3,7 +3,7 @@
 | | |
 |--------|----------------------------------------------|
 | Version | 0.8 |
-| Status | Ready |
+| Status | Implemented |
 | Last Updated | 2026-04-09 |
 
 ## Changelog
