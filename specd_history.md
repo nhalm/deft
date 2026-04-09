@@ -1,4 +1,5 @@
 # History
+- **issues v0.6 (2026-04-09):** Fix `ensure_issues_started` in `lib/deft/tools/issue_create.ex` to pass `file_path: Path.join([context.working_dir, ".deft", "issues.jsonl"])` to `Issues.start_link/1` so tests using a temp working_dir don't write to the real issues file
 - **logging v0.7 (2026-04-09):** Remove all per-event `Logger.debug` calls in `lib/deft_web/live/chat_live.ex`: "Agent event received" (9 lines) — delete the Logger.debug lines, keep the event handlers
 - **logging v0.7 (2026-04-09):** Remove all per-event `Logger.debug` calls in `lib/deft/agent.ex`: "SSE event received" (14 lines) and "Broadcasting event" (1 line) — delete the Logger.debug lines, keep the surrounding event-handling logic
 - **web-ui v0.8 (2026-04-09):** Remove browser auto-open from `start_web_ui/0` and `start_web_ui/1` in `lib/deft/cli.ex` — delete the `System.cmd("open", ...)` / `System.cmd("xdg-open", ...)` blocks and the surrounding try/rescue; keep the URL print lines

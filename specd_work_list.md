@@ -19,5 +19,4 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## issues v0.6
 
-- Fix `ensure_issues_started` in `lib/deft/tools/issue_create.ex` to pass `file_path: Path.join([context.working_dir, ".deft", "issues.jsonl"])` to `Issues.start_link/1` so tests using a temp working_dir don't write to the real issues file
-- Remove all "Test auto-start" junk entries from `.deft/issues.jsonl` (blocked: Fix `ensure_issues_started`...)
+- Remove all "Test auto-start" junk entries from `.deft/issues.jsonl`

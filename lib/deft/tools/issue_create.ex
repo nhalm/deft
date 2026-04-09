@@ -178,8 +178,12 @@ defmodule Deft.Tools.IssueCreate do
         # Not running, start it
         # Load config to get compaction_days setting
         config = Config.load(%{}, working_dir)
+        file_path = Path.join([working_dir, ".deft", "issues.jsonl"])
 
-        case Issues.start_link(compaction_days: config.issues_compaction_days) do
+        case Issues.start_link(
+               file_path: file_path,
+               compaction_days: config.issues_compaction_days
+             ) do
           {:ok, _pid} ->
             Logger.debug("Started Issues GenServer from issue_create tool")
             :ok
