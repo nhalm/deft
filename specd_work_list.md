@@ -19,5 +19,4 @@ POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /sp
 
 ## logging v0.7
 
-- Remove all per-event `Logger.debug` calls in `lib/deft/agent.ex`: "SSE event received" (14 lines) and "Broadcasting event" (1 line) — delete the Logger.debug lines, keep the surrounding event-handling logic
 - Remove all per-event `Logger.debug` calls in `lib/deft_web/live/chat_live.ex`: "Agent event received" (9 lines) — delete the Logger.debug lines, keep the event handlers

@@ -333,32 +333,26 @@ defmodule Deft.Agent do
 
   # Split handle_event(:calling) into pattern-matched function heads
   def handle_event(:info, {:provider_event, %TextDelta{delta: delta}}, :calling, data) do
-    Logger.debug("#{log_prefix(data.session_id)} SSE event received: TextDelta")
     handle_calling_text_delta(delta, data)
   end
 
   def handle_event(:info, {:provider_event, %ThinkingDelta{delta: delta}}, :calling, data) do
-    Logger.debug("#{log_prefix(data.session_id)} SSE event received: ThinkingDelta")
     handle_calling_thinking_delta(delta, data)
   end
 
   def handle_event(:info, {:provider_event, %ToolCallStart{id: id, name: name}}, :calling, data) do
-    Logger.debug("#{log_prefix(data.session_id)} SSE event received: ToolCallStart")
     handle_calling_tool_start(id, name, data)
   end
 
   def handle_event(:info, {:provider_event, %Error{} = error_event}, :calling, data) do
-    Logger.debug("#{log_prefix(data.session_id)} SSE event received: Error")
     handle_calling_error(error_event, data)
   end
 
   def handle_event(:info, {:provider_event, %Usage{} = usage_event}, :calling, data) do
-    Logger.debug("#{log_prefix(data.session_id)} SSE event received: Usage")
     handle_usage(usage_event, data)
   end
 
   def handle_event(:info, {:provider_event, %Done{}}, :calling, data) do
-    Logger.debug("#{log_prefix(data.session_id)} SSE event received: Done")
     handle_calling_done(data)
   end
 
@@ -449,42 +443,34 @@ defmodule Deft.Agent do
   end
 
   def handle_event(:info, {:provider_event, %TextDelta{} = event}, :streaming, data) do
-    Logger.debug("#{log_prefix(data.session_id)} SSE event received: TextDelta")
     handle_text_delta(event, data)
   end
 
   def handle_event(:info, {:provider_event, %ThinkingDelta{} = event}, :streaming, data) do
-    Logger.debug("#{log_prefix(data.session_id)} SSE event received: ThinkingDelta")
     handle_thinking_delta(event, data)
   end
 
   def handle_event(:info, {:provider_event, %ToolCallStart{} = event}, :streaming, data) do
-    Logger.debug("#{log_prefix(data.session_id)} SSE event received: ToolCallStart")
     handle_tool_call_start(event, data)
   end
 
   def handle_event(:info, {:provider_event, %ToolCallDelta{} = event}, :streaming, data) do
-    Logger.debug("#{log_prefix(data.session_id)} SSE event received: ToolCallDelta")
     handle_tool_call_delta(event, data)
   end
 
   def handle_event(:info, {:provider_event, %ToolCallDone{} = event}, :streaming, data) do
-    Logger.debug("#{log_prefix(data.session_id)} SSE event received: ToolCallDone")
     handle_tool_call_done(event, data)
   end
 
   def handle_event(:info, {:provider_event, %Usage{} = event}, :streaming, data) do
-    Logger.debug("#{log_prefix(data.session_id)} SSE event received: Usage")
     handle_usage(event, data)
   end
 
   def handle_event(:info, {:provider_event, %Done{}}, :streaming, data) do
-    Logger.debug("#{log_prefix(data.session_id)} SSE event received: Done")
     handle_stream_done(data)
   end
 
   def handle_event(:info, {:provider_event, %Error{} = event}, :streaming, data) do
-    Logger.debug("#{log_prefix(data.session_id)} SSE event received: Error")
     handle_stream_error(event, data)
   end
 
@@ -892,9 +878,6 @@ defmodule Deft.Agent do
   defp broadcast_event(session_id, event) do
     # Broadcast event via Registry for TUI and other consumers
     # Registry key is {:session, session_id}
-    event_type = elem(event, 0)
-    Logger.debug("#{log_prefix(session_id)} Broadcasting event: #{event_type}")
-
     Registry.dispatch(Deft.Registry, {:session, session_id}, fn entries ->
       for {pid, _} <- entries do
         send(pid, {:agent_event, event})

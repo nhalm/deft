@@ -1,4 +1,5 @@
 # History
+- **logging v0.7 (2026-04-09):** Remove all per-event `Logger.debug` calls in `lib/deft/agent.ex`: "SSE event received" (14 lines) and "Broadcasting event" (1 line) — delete the Logger.debug lines, keep the surrounding event-handling logic
 - **web-ui v0.8 (2026-04-09):** Remove browser auto-open from `start_web_ui/0` and `start_web_ui/1` in `lib/deft/cli.ex` — delete the `System.cmd("open", ...)` / `System.cmd("xdg-open", ...)` blocks and the surrounding try/rescue; keep the URL print lines
 - **web-ui v0.7 (2026-04-08):** Bind endpoint to all interfaces, MFA origin checking via `CHECK_ORIGIN` env var on both sockets
 - **web-ui v0.7 (2026-04-08):** Tool details lazy-loaded via HTTP GET `/api/tool_detail/:session/:tool_call_id` instead of inline expand
