@@ -2,11 +2,14 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.7 |
-| Status | Implemented |
-| Last Updated | 2026-04-08 |
+| Version | 0.8 |
+| Status | Ready |
+| Last Updated | 2026-04-09 |
 
 ## Changelog
+
+### v0.8 (2026-04-09)
+- Remove auto-open browser on startup; print the URL to stdout only
 
 ### v0.7 (2026-04-08)
 - Network access: endpoint binds to all interfaces (`0.0.0.0`), configurable origin checking via `CHECK_ORIGIN` env var with MFA callback on both sockets
@@ -327,7 +330,7 @@ Recognized by leading `/` in input or via `:` in command mode. Same command set 
 
 See [sessions.md](sessions.md) §5 for the full application runtime architecture, CLI dispatcher, and distribution model.
 
-The web UI is the default mode — `deft` with no args opens the browser. The endpoint always starts (even during `deft work`) so the web UI is available for monitoring running jobs.
+The web UI is the default mode — `deft` with no args starts the server and prints the URL to stdout. It does NOT auto-open a browser window. The endpoint always starts (even during `deft work`) so the web UI is available for monitoring running jobs.
 
 #### 9.1 Shutdown
 

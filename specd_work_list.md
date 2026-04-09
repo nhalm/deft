@@ -17,4 +17,7 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
+## web-ui v0.8
+
+- Remove browser auto-open from `start_web_ui/0` and `start_web_ui/1` in `lib/deft/cli.ex` — delete the `System.cmd("open", ...)` / `System.cmd("xdg-open", ...)` blocks and the surrounding try/rescue; keep the URL print lines
 
