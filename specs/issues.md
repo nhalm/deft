@@ -9,7 +9,7 @@
 ## Changelog
 
 ### v0.6 (2026-04-09)
-- Tool-initiated GenServer start must resolve the file path from the tool context's working directory, not from `File.cwd!()` or `git rev-parse`. This prevents tools running in test or worktree contexts from writing to the wrong issues file.
+- Test isolation: the auto-start test for `IssueCreate` must start the GenServer with `:file_path` pointing to its temp directory, not the real `.deft/issues.jsonl`
 
 ### v0.5 (2026-03-19)
 - Clarified: `handle_job_result` must have an explicit clause for `{:error, :aborted}` that returns to the work loop instead of calling `exit/1`
@@ -170,7 +170,7 @@ Deft.Issues (GenServer — owns .deft/issues.jsonl)
 ```
 
 - Started by `Deft.Application` if `.deft/issues.jsonl` exists or on first `deft issue create`
-- When a tool starts the GenServer (not `Deft.Application`), it must pass `:file_path` resolved from the tool context's `working_dir`, not rely on `resolve_file_path()` which uses `File.cwd!()`
+- When a tool starts the GenServer (not `Deft.Application`), it must pass `:file_path` resolved from the tool context's `working_dir`
 - Holds all issues in memory (list of structs)
 - Writes serialize through the GenServer (atomic file rewrite)
 - Reads are direct from GenServer state (no ETS needed — issue count is small)
