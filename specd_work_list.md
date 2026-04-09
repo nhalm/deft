@@ -17,3 +17,7 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
+## issues v0.6
+
+- Fix SIGINT handlers to return cost in abort tuple: `handle_job_result({:error, :sigint_shutdown}, ...)` (cli.ex:2308) and `handle_job_result({:error, :sigint_timeout}, ...)` (cli.ex:2331) return `{:error, :aborted}` (2-tuple) but the work loop (cli.ex:1988) only matches `{:error, :aborted, job_cost}` (3-tuple); the 2-tuple falls through to `handle_job_failure` which calls `exit({:shutdown, 1})` instead of stopping the loop gracefully
+
