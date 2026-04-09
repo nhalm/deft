@@ -85,7 +85,7 @@ Decision reasoning is logged in [specd_decisions.jsonl](../specd_decisions.jsonl
 |------|---------|--------|-------------|
 | [filesystem](filesystem.md) | v0.4 | Implemented | Deft.Store GenServer — ETS+DETS for cache and site log, cache_read tool, per-tool spilling thresholds |
 | [skills](skills.md) | v0.4 | Implemented | Skills (agent-selected YAML) and commands (markdown prompts), three-level cascade |
-| [issues](issues.md) | v0.6 | Ready | Persistent issue tracker — JSONL+git, interactive creation, approve-every-plan `deft work` loop |
+| [issues](issues.md) | v0.6 | Implemented | Persistent issue tracker — JSONL+git, interactive creation, approve-every-plan `deft work` loop |
 
 ## Operations
 
