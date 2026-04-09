@@ -1,4 +1,5 @@
 # History
+- **issues v0.6 (2026-04-09):** Fix SIGINT handlers to return cost in abort tuple: `handle_job_result({:error, :sigint_shutdown}, ...)` (cli.ex:2308) and `handle_job_result({:error, :sigint_timeout}, ...)` (cli.ex:2331) return `{:error, :aborted}` (2-tuple) but the work loop (cli.ex:1988) only matches `{:error, :aborted, job_cost}` (3-tuple); the 2-tuple falls through to `handle_job_failure` which calls `exit({:shutdown, 1})` instead of stopping the loop gracefully
 - **issues v0.6 (2026-04-09):** Remove all "Test auto-start" junk entries from `.deft/issues.jsonl`
 - **issues v0.6 (2026-04-09):** Fix `ensure_issues_started` in `lib/deft/tools/issue_create.ex` to pass `file_path: Path.join([context.working_dir, ".deft", "issues.jsonl"])` to `Issues.start_link/1` so tests using a temp working_dir don't write to the real issues file
 - **logging v0.7 (2026-04-09):** Remove all per-event `Logger.debug` calls in `lib/deft_web/live/chat_live.ex`: "Agent event received" (9 lines) — delete the Logger.debug lines, keep the event handlers

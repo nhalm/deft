@@ -2288,7 +2288,7 @@ defmodule Deft.CLI do
     end
   end
 
-  defp handle_job_result({:error, :sigint_shutdown}, issue, _job_id, _cost) do
+  defp handle_job_result({:error, :sigint_shutdown}, issue, _job_id, cost) do
     # SIGINT received and Foreman shut down gracefully
     # Rollback the issue status to :open
     IO.puts("\nJob aborted by user (Ctrl+C).")
@@ -2305,10 +2305,10 @@ defmodule Deft.CLI do
     end
 
     # Return aborted error to stop the work loop
-    {:error, :aborted}
+    {:error, :aborted, cost}
   end
 
-  defp handle_job_result({:error, :sigint_timeout}, issue, _job_id, _cost) do
+  defp handle_job_result({:error, :sigint_timeout}, issue, _job_id, cost) do
     # SIGINT received but Foreman did not shut down within 5 seconds
     IO.puts(:stderr, "\nJob aborted by user (Ctrl+C), but shutdown timed out.")
 
@@ -2328,7 +2328,7 @@ defmodule Deft.CLI do
     end
 
     # Return aborted error to stop the work loop
-    {:error, :aborted}
+    {:error, :aborted, cost}
   end
 
   defp handle_job_result({:error, :aborted}, issue, _job_id, cost) do
