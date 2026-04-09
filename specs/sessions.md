@@ -181,7 +181,7 @@ Deft.Application.start/2
       ├── Deft.Skills.Registry
       ├── Deft.Session.Supervisor
       ├── Phoenix.PubSub (name: Deft.PubSub)
-      ├── DeftWeb.Endpoint (Bandit on localhost:<port>)
+      ├── DeftWeb.Endpoint (Bandit on 0.0.0.0:<port>)
       └── (optional) Deft.Issues
 
 After the supervision tree starts, Deft.CLI.main/1 dispatches based on argv.

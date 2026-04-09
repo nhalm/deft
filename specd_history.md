@@ -1,4 +1,10 @@
 # History
+- **web-ui v0.7 (2026-04-08):** Bind endpoint to all interfaces, MFA origin checking via `CHECK_ORIGIN` env var on both sockets
+- **web-ui v0.7 (2026-04-08):** Tool details lazy-loaded via HTTP GET `/api/tool_detail/:session/:tool_call_id` instead of inline expand
+- **web-ui v0.7 (2026-04-08):** Streaming text rendered via `StreamingMarkdown` JS hook with server-side Earmark to avoid DOM patching issues
+- **web-ui v0.7 (2026-04-08):** Inline activity indicator (Thinking/Working/etc.) at bottom of conversation
+- **web-ui v0.7 (2026-04-08):** Header simplified to colored state dot only, removed identity and state text labels
+- **web-ui v0.7 (2026-04-08):** Session resume loads full conversation history from JSONL on mount
 - **web-ui v0.6 (2026-04-08):** Update `handle_info({:job_status, statuses}, socket)` in ChatLive to set `agent_identity` to `"Foreman"` when job_status events arrive — currently hardcoded to `"Solo"` and never changed, so the header always shows "Solo" even during orchestration
 - **web-ui v0.6 (2026-04-08):** Foreman does not dispatch `{:job_status, session_id}` registry events — ChatLive subscribes to this key and has a handler, but nothing in `lib/deft/job/foreman.ex` ever sends `{:job_status, statuses}` messages, so the agent roster sidebar never populates during orchestration
 - **web-ui v0.6 (2026-04-08):** Add `handle_event("show_help", _params, socket)` clause in ChatLive — currently clicking the Help button crashes the LiveView with an unhandled event error

@@ -2,11 +2,19 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.6 |
+| Version | 0.7 |
 | Status | Implemented |
 | Last Updated | 2026-04-08 |
 
 ## Changelog
+
+### v0.7 (2026-04-08)
+- Network access: endpoint binds to all interfaces (`0.0.0.0`), configurable origin checking via `CHECK_ORIGIN` env var with MFA callback on both sockets
+- Tool details lazy-loaded via `GET /api/tool_detail/:session/:tool_call_id` instead of inline
+- Streaming text rendered via `StreamingMarkdown` JS hook with server-side Earmark, bypassing LiveView DOM patching
+- Inline activity indicator (Thinking/Working/Waiting/etc.) at bottom of conversation
+- Header simplified to colored state dot only, removed agent identity and state text labels
+- Session resume loads full conversation history from JSONL on mount
 
 ### v0.6 (2026-04-08)
 - Startup auto-creates a new session and loads it immediately
@@ -60,8 +68,7 @@ The Web UI is Deft's primary user interface. Built on Phoenix LiveView, it provi
 - Agent loop logic (see [harness.md](harness.md))
 - Slash command implementations (each spec owns its commands; Web UI just dispatches)
 - Non-interactive mode (`deft -p`) — uses stdio, no web server (see [sessions.md](sessions.md))
-- Authentication — localhost only, single user (future: multi-user, auth)
-- Remote access / tunneling (future)
+- Authentication (future: multi-user, auth)
 
 **Dependencies:**
 - [standards.md](standards.md) — coding standards
@@ -78,7 +85,7 @@ The Web UI is Deft's primary user interface. Built on Phoenix LiveView, it provi
 ```
 Browser (LiveView client JS)
     ↕ WebSocket
-Phoenix Endpoint (localhost:4000)
+Phoenix Endpoint (0.0.0.0:4000)
     ↕ PubSub
 Deft.Agent (gen_statem)
 ```
@@ -98,13 +105,14 @@ Deft.Supervisor
 └── DeftWeb.Endpoint (Phoenix.Endpoint)
 ```
 
-The endpoint serves on `localhost:4000` (configurable). No Ecto, no database — Deft already has its own persistence (JSONL sessions, DETS store).
+The endpoint binds to all interfaces on port 4000 (configurable via `PORT` env var). Origin checking is controlled by `CHECK_ORIGIN` env var — unset allows all origins, set to a comma-separated list of allowed origins (e.g. `//localhost,//192.168.10.13`). No Ecto, no database — Deft already has its own persistence (JSONL sessions, DETS store).
 
 #### 1.2 Router
 
 ```elixir
 live "/", DeftWeb.ChatLive        # main chat interface
 live "/sessions", DeftWeb.SessionsLive  # session picker
+get "/api/tool_detail/:session/:tool_call_id", DeftWeb.ToolDetailController, :show
 ```
 
 ### 2. Chat View (`DeftWeb.ChatLive`)
@@ -119,6 +127,8 @@ When ChatLive mounts without a `?session=` param (i.e., user navigated to `/`), 
 2. Create the session via `Deft.Session.Supervisor.start_session/1`
 3. Update the URL to `/?session=<id>` (via `push_patch`) so refresh works
 4. Subscribe to agent events and initialize the chat
+
+When mounting with a `?session=<id>` param, ChatLive loads the full conversation history from the session JSONL and renders it into the stream. Resumed sessions show all past messages, thinking blocks, and tool calls.
 
 #### 2.1 Layout
 
@@ -159,9 +169,11 @@ Implemented with CSS Grid. The roster panel is a collapsible sidebar — hidden 
 
 LiveView pushes text deltas to the browser as they arrive. The conversation area auto-scrolls to the bottom during streaming. User can scroll up to freeze auto-scroll; scrolling back to bottom re-enables it.
 
-Streaming renders via a `phx-update="stream"` container for efficient DOM updates — LiveView only sends the new content, not the full conversation.
+Completed content blocks render via a `phx-update="stream"` container. The currently-streaming text block uses a `StreamingMarkdown` JS hook — the server renders markdown via Earmark and pushes pre-rendered HTML to the hook via `push_event`. This avoids LiveView DOM patching destroying the conversation stream during rapid updates.
 
 **Content blocks persist incrementally.** Each content block (thinking, text, tool) becomes a permanent part of the conversation as soon as it completes — not batched at the end of the turn. During a multi-step turn the user sees a growing sequence of completed blocks above, with only the currently-streaming block at the bottom. Nothing disappears.
+
+**Activity indicator.** While the agent is active, an inline indicator appears at the bottom of the conversation with a state-specific label: Thinking, Working, Waiting, Researching, Implementing, or Verifying. Hidden when idle.
 
 #### 2.4 Thinking Display
 
@@ -175,11 +187,7 @@ Multiple thinking blocks per turn (between tool calls) each render at their posi
 
 #### 2.5 Tool Execution Display
 
-Each tool call shows:
-- Tool name and key argument
-- Animated spinner while running (CSS animation, no JS needed)
-- ✓/✗ icon and duration on completion
-- Expandable: click to see full tool input/output
+Each tool call renders as a compact card showing tool name, key argument, status icon (✓/✗), and duration. Tool input/output is lazy-loaded on click via `GET /api/tool_detail/:session/:tool_call_id` — the server reads details from the session JSONL. Client-side JS toggles the detail panel open/closed.
 
 Completed tools persist in the conversation immediately — they don't wait for the turn to end.
 
@@ -196,8 +204,7 @@ Hidden in solo mode. Uses CSS transitions for show/hide.
 
 Shows:
 - App name (`Deft`) + repo name (basename of working_dir)
-- Agent identity: `Solo` or `Foreman`
-- Agent state with colored indicator
+- Colored state dot (`◉`) — color reflects agent state
 - Quick-access buttons with text labels:
 
 | Button | Label | Action |
@@ -443,7 +450,7 @@ Full flow tests: mount LiveView, simulate user input, send agent events, verify 
 - `config/config.exs` — base Phoenix config, `adapter: Bandit.PhoenixAdapter`, LiveView signing salt
 - `config/dev.exs` — `debug_errors: true`, `code_reloader: true`, live-reload patterns
 - `config/prod.exs` — `server: true` (critical — without this the release won't start HTTP), Bandit adapter
-- `config/runtime.exs` — `PORT` env var, `SECRET_KEY_BASE` (generate if not set), `ANTHROPIC_API_KEY`
+- `config/runtime.exs` — `PORT` env var, `SECRET_KEY_BASE` (generate if not set), `ANTHROPIC_API_KEY`, `CHECK_ORIGIN`
 - `config/test.exs` — `server: false`, port 4002
 
 ### 13. Migration
@@ -487,7 +494,7 @@ Files to keep:
 - **Bandit over Cowboy.** Pure Elixir HTTP server, lighter weight, better defaults for a local dev tool.
 - **No Tailwind initially.** Plain CSS keeps deps minimal. Can add Tailwind later if the styling gets complex.
 - **Browser open on startup.** Minimal friction — `deft` just works. Print the URL as fallback for headless/SSH environments.
-- **No auth.** Localhost only, single user. Auth is a future concern for remote access.
+- **No auth.** Single user. Auth is a future concern for multi-user access.
 - **Mix release over escript.** Escript doesn't support `priv/` directory (needed for static assets), signal handling is broken, and hot-reload doesn't work. Mix release is the standard Phoenix distribution path. Burrito wraps the release into a single binary for the "just run `./deft`" experience.
 - **Non-interactive as Mix task.** `mix deft.prompt` replaces `deft -p`. In the release, `./deft eval` provides the same capability. Keeps the CLI entry point simple.
 
