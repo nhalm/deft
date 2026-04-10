@@ -2,11 +2,8 @@
 
 cd "$(dirname "$0")"
 
-# Signal to command templates that we're in an automated loop
-export SPECD_LOOP=1
-
 # Defaults
-MAX_CYCLES=10
+MAX_CYCLES=5
 CYCLE=0
 AUDIT_MODE="ready"  # ready | full | skip
 MODEL_IMPLEMENT="claude-sonnet-4-5-20250929"
@@ -63,6 +60,18 @@ while [ $CYCLE -lt $MAX_CYCLES ]; do
     TASK_NUM=0
 
     echo "=== Cycle ${CYCLE}/${MAX_CYCLES} ==="
+
+    # Step 0: Check if specd_review.md has unresolved items
+    if [ -s specd_review.md ] && grep -q '[^[:space:]]' specd_review.md; then
+        # Check if there's actual content beyond the header
+        CONTENT=$(sed '/^#/d; /^---$/d; /^$/d; /^<!--/,/-->/d' specd_review.md)
+        if [ -n "$CONTENT" ]; then
+            echo "=== specd_review.md has unresolved findings ==="
+            echo "Review the findings, delete any you disagree with, then run the loop again."
+            echo "Remaining items will become work items on the next run."
+            exit 0
+        fi
+    fi
 
     # Step 1: Review intake — process specd_review.md into specd_work_list.md
     echo "=== Review intake ==="

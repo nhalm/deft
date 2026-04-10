@@ -29,9 +29,9 @@ Work through each Ready spec sequentially. For each spec:
 
 Launch a research agent (model: Sonnet) to audit the spec against code. The agent:
 
-1. Reads the spec body (Overview, Specification, Notes sections — **skip the Changelog**)
+1. Reads the spec body (Overview, Specification sections)
 2. Reads the code that implements it
-3. Reports findings: broken behavior, missing features, incorrect data handling. **Zero findings is a valid and expected outcome.**
+3. Reports findings: broken behavior, missing features, incorrect data handling. **Zero findings is a valid outcome.**
 
 The agent applies the "what counts as a finding" bar above and the Audit Discipline guidelines in AGENTS.md. It does NOT write or modify any files.
 
@@ -40,7 +40,7 @@ The agent applies the "what counts as a finding" bar above and the Audit Discipl
 When the agent returns findings, **you validate each one yourself**:
 
 1. Read the actual code for each finding — confirm or reject the claim against the source
-2. Cross-check against specd_work_list.md and specd_history.md to avoid duplicates (grep for the spec name in specd_history.md — never read it in full)
+2. Cross-check against specd_work_list.md to avoid duplicates
 3. For each finding, answer: "Is the code actually broken or producing wrong results?" If no, reject the finding.
 4. Categorize each confirmed finding:
    - **Code is broken / produces wrong results** → specd_work_list.md item
@@ -67,8 +67,7 @@ When the spec needs to prescribe genuinely new or changed behavior (NOT document
 
 1. Update the spec body with the corrected content
 2. Bump the version (minor increment: v0.9 → v0.10)
-3. Add a changelog entry with human-readable summary
-4. Add corresponding work items to specd_work_list.md under the new version
+3. Add corresponding work items to specd_work_list.md under the new version
 
 ### specd_review.md
 
@@ -91,22 +90,9 @@ After processing each spec:
 - **Ready spec with NO findings** → Update status to "Implemented" in both the spec file and specs/README.md
 - **Ready spec with findings** → Status stays Ready (findings are in specd_work_list.md)
 
-## Decision Logging
-
-Log every audit judgment to `specd_decisions.jsonl` — prepend each as a single JSON line (newest first). Use `"source": "audit"` and `"decision_by": "claude"`.
-
-Decisions to log:
-- Confirming or rejecting a research agent's finding (and why)
-- Choosing to update a spec vs filing a work item vs sending to review
-- Marking a spec as Implemented (no findings)
-- Any spec version bump (what changed and why)
-
 ## Committing
 
-After writing findings for each spec, commit all changed files together in a single commit. This includes spec files, `specs/README.md`, `specd_work_list.md`, `specd_review.md`, and `specd_decisions.jsonl`.
-
-- If the environment variable `SPECD_LOOP` is set, commit automatically.
-- Otherwise, present a summary of changes and ask the user for confirmation before committing.
+After writing findings for each spec, commit all changed spec files and `specs/README.md` together in a single commit. Do not commit `specd_work_list.md` or `specd_review.md`.
 
 ## Output
 

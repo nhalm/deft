@@ -2,9 +2,8 @@
 
 - Study AGENTS.md for guidelines.
 - Study specs/README.md to understand existing specs and their statuses. Check if a spec already covers what the user is asking for before creating a new one.
-- Do NOT read specd_history.md in full — it can be very large. Grep for the spec name to find relevant entries and avoid duplicating completed work.
 - We are going to work on modifying and creating new specs.
-- We do **not** write code unless explicitly asked to do so. We only modify *.md files, specd_work_list.md, and specd_decisions.jsonl.
+- We do **not** write code unless explicitly asked to do so. We only modify *.md files and specd_work_list.md.
 - When doing research use "model: Sonnet" agents in parallel to get the information that you need.
 
 ## Workflow
@@ -60,17 +59,6 @@ Write:
 4. **Review existing work items** for this spec version. Remove items that are no longer relevant after the spec change, update items whose scope changed, and unblock items whose dependencies were resolved. Do not leave stale items in the list.
 
 This checkpoint applies both when writing a new spec and when refining an existing one. Every spec edit should trigger a re-evaluation of the work list.
-
-## Decision Logging
-
-Log every significant decision to `specd_decisions.jsonl` — scoping choices, trade-offs, things explicitly excluded, and why. Prepend each entry as a single JSON line (newest first). Use `"source": "plan"` and `"decision_by": "claude"` for your decisions, or the human's name from `git config user.name` when the human makes the call.
-
-Decisions include:
-- Choosing to create a new spec vs extending an existing one
-- Scoping something in or out
-- Picking one approach over another
-- Deferring something to a later phase
-
 
 ## Spec-vs-Code Analysis
 

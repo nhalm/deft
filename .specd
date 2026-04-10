@@ -1,20 +1,21 @@
 {
   "version": "0.1.0",
   "checksums": {
-    "loop.sh": "486f1a7075cdc815cb849b3ecf975456b808ac5bc82f8018e470c35d147ab7c5",
-    ".claude/commands/specd/implement.md": "63a5ff9dd526bf74c34758994b20b968d0e961273b88ccd2af9ec912aac7650f",
-    ".claude/commands/specd/audit.md": "e428219a3618f57d1732e4286f60d16c5fc5eea3e42de8ca1389ab62b87680a1",
-    ".claude/commands/specd/full-audit.md": "cb1dca6b3b02bb6a17c0379efd315794c1970594b5e826d71cef6f74e44b6f64",
-    ".claude/commands/specd/review-intake.md": "e49a31ecf95b80874171c4f8bfb774d4ebad14086a77985482bf4133d9f6af27",
-    ".claude/commands/specd/setup.md": "8c1031140210d0685c4b51cce09a678570a79749d89392f3112bca21c3263325",
-    ".claude/commands/specd/plan.md": "8a14a441bb5a37899efbe0aae9b3bdd7e89d134def699dff39c182d964ab5632",
+    "loop.sh": "b64e0d95d1a2cedbdb7a94479053669fba68223c3c28827fe6112bb2da32eab5",
+    ".claude/commands/specd/implement.md": "4e367f63ba4708ae6f32099d726536c668e91282e004f1c5c946de32a46c7162",
+    ".claude/commands/specd/audit.md": "9bc346bc8bf44321e9aec6c984431f760208723ddc16db3546150086f5073441",
+    ".claude/commands/specd/full-audit.md": "c931b15439c6ae59d28e72d262dc13f3f419f3a012d3312e75b0f0f6a6702769",
+    ".claude/commands/specd/review-intake.md": "a6046215a38f9cf8b19dc063d729a5f3c88416c32bbe32b1562d258742ae408f",
+    ".claude/commands/specd/setup.md": "03d008797e59ce4687bd08c5f805e693fa78398e2eeee3f9754ba5d6a62b1ae0",
+    ".claude/commands/specd/plan.md": "f6d87b2fb3b525fd7612da035db77d2a3d5312ae22215bdcfd6d0ab6dfa50ada",
     "CLAUDE.md": "954ec5dad7eaf581ad4bfa090369b244ac0120b43722ef2efff5ba89fc52046f",
-    "AGENTS.md": "2f6615f523395257e1bf00d08b1b260223751dd59d054c53cf058d584d8d0955",
-    "specs/README.md": "47d1276096106ebaa1b6b38f808305cbf17ab73ee8266bf9dcfc3420540bc227",
+    "AGENTS.md": "62fecc2b738792bff89e8c973680601845b5356e59cdffc60fff20cbd9204bf6",
+    "specs/README.md": "6a0ad04724cc4844c22368ab30c74364a924431b9677bb13fad04ad1301eae51",
     "specs/example-spec.md": "37feec81d697c959fe93cc64c45ab6de0c459ef651092cf78bfb278ab72b6332",
     "specd_history.md": "0955cdd9219eb4bd273c488c1c14773983609a29087c8c6d3c07b34da59f04e1",
-    "specd_review.md": "4040b477394444b6ec88c862391e05f39e663168ef5fe34cf029f89a7fc1b22c",
+    "specd_review.md": "e290b03624ca66ebd6598d4b402ed0b78c2cbc12ef5f91b833ccd5995f623a3a",
     "specd_decisions.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "specd_work_list.md": "709b6bd271845d44a323e6d90834671ba0397336a7eb2cb81ccea75290038eef"
+    "specd_work_list.md": "b5a2c54bd6d58e6e8829862a91b2dd11afb57f75af61c2ffb587aa06908e3810",
+    "PROJECT.md": "74b3c30a6d92d42b48a03312f5b7fd1c09358dc9497f5675dd7345ca4b6617d8"
   }
 }

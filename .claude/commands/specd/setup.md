@@ -4,9 +4,9 @@ Study the codebase first — read existing code, build files, configs, package m
 
 Then work through each step interactively with the human. Ask questions, propose answers based on what you found, and get confirmation before writing.
 
-## Step 1: AGENTS.md — Build & Test
+## Step 1: PROJECT.md — Build & Test
 
-Read AGENTS.md. The Build & Test section has a placeholder comment.
+Read PROJECT.md. The Build & Test section has a placeholder comment.
 
 Based on what you found in the codebase, propose concrete build and test commands. Examples:
 - `make check`, `cargo test`, `go test ./...`, `npm test`, `pytest`
@@ -15,7 +15,7 @@ Based on what you found in the codebase, propose concrete build and test command
 
 Ask the human to confirm or adjust, then update the section.
 
-## Step 2: AGENTS.md — Conventions
+## Step 2: PROJECT.md — Conventions
 
 The Conventions section has a placeholder comment.
 
@@ -49,10 +49,6 @@ Ask the human what they want to build first. Help them write a spec following th
 - Add it to the phase table in `specs/README.md`
 
 If the project already has code, offer to audit what exists and propose specs that describe the current state (these would start as Implemented).
-
-## Note: Decision Log
-
-Your project includes `specd_decisions.jsonl` — the AI logs decisions here as it works (scoping choices, trade-offs, audit judgments). See AGENTS.md for format details.
 
 ## Step 5: Clean up
 
