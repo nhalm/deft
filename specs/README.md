@@ -66,13 +66,13 @@ Decision reasoning is logged in [specd_decisions.jsonl](../specd_decisions.jsonl
 | [harness](harness.md) | v0.4 | Implemented | Agent loop (gen_statem), message format, process architecture, standalone + sub-agent modes, optional RateLimiter integration |
 | [tools](tools.md) | v0.3 | Implemented | Tool behaviour, 7 built-in tools, orchestration tools, tool execution model |
 | [providers](providers.md) | v0.3 | Implemented | LLM provider behaviour, SSE streaming, Anthropic implementation |
-| [sessions](sessions/README.md) | v0.8 | Ready | Session persistence, context management, runtime, and branching |
+| [sessions](sessions/README.md) | v0.9 | Implemented | Session persistence, context management, runtime, and branching |
 | [sessions/persistence](sessions/persistence.md) | v0.8 | Implemented | JSONL storage format, entry types, storage paths, resume, listing, checkpoint entries |
 | [sessions/context](sessions/context.md) | v0.8 | Implemented | System prompt assembly, message list construction, token tracking, compaction, cost tracking |
 | [sessions/runtime](sessions/runtime.md) | v0.8 | Implemented | Configuration, CLI dispatcher, Phoenix application, distribution |
 | [sessions/branching](sessions/branching.md) | v0.1 | Draft | User-initiated session forking from checkpoints with git state restore |
 | [tui](tui.md) | v0.5 | Deprecated | Terminal UI — superseded by web-ui |
-| [web-ui](web-ui.md) | v0.9 | Ready | Phoenix LiveView web interface, vim/tmux keybindings, responsive, real-time streaming |
+| [web-ui](web-ui.md) | v0.9 | Implemented | Phoenix LiveView web interface, vim/tmux keybindings, responsive, real-time streaming |
 
 ## Core
 
@@ -80,9 +80,9 @@ Decision reasoning is logged in [specd_decisions.jsonl](../specd_decisions.jsonl
 |------|---------|--------|-------------|
 | [observational-memory](observational-memory.md) | v0.3 | Implemented | Observer/Reflector with sectioned observations, two-level compression |
 | [orchestration](orchestration/README.md) | v0.17 | Ready | Unified session/Foreman architecture — Foreman, Coordinator, Lead, Runners |
-| [orchestration/foreman](orchestration/foreman.md) | v0.17 | Ready | Foreman agent — session ownership, solo/orchestrated modes, job lifecycle |
-| [orchestration/coordinator](orchestration/coordinator.md) | v0.17 | Ready | Foreman.Coordinator — DAG, contract forwarding, coalescing, monitors, cleanup |
-| [orchestration/lead](orchestration/lead.md) | v0.17 | Ready | Lead + Lead.Coordinator — deliverable management, Runner steering, contracts |
+| [orchestration/foreman](orchestration/foreman.md) | v0.17 | Implemented | Foreman agent — session ownership, solo/orchestrated modes, job lifecycle |
+| [orchestration/coordinator](orchestration/coordinator.md) | v0.17 | Implemented | Foreman.Coordinator — DAG, contract forwarding, coalescing, monitors, cleanup |
+| [orchestration/lead](orchestration/lead.md) | v0.17 | Implemented | Lead + Lead.Coordinator — deliverable management, Runner steering, contracts |
 | [orchestration/runners](orchestration/runners.md) | v0.17 | Ready | Runner types, tool sets, inline loop |
 | [orchestration/protocol](orchestration/protocol.md) | v0.17 | Implemented | Coordination protocol, message types, site log write policy |
 | [rate-limiter](rate-limiter.md) | v0.3 | Implemented | Dual token-bucket rate limiting, priority queue, adaptive concurrency, cost tracking |
