@@ -79,7 +79,7 @@ Decision reasoning is logged in [specd_decisions.jsonl](../specd_decisions.jsonl
 | Spec | Version | Status | Description |
 |------|---------|--------|-------------|
 | [observational-memory](observational-memory.md) | v0.3 | Implemented | Observer/Reflector with sectioned observations, two-level compression |
-| [orchestration](orchestration/README.md) | v0.17 | Ready | Unified session/Foreman architecture — Foreman, Coordinator, Lead, Runners |
+| [orchestration](orchestration/README.md) | v0.17 | Implemented | Unified session/Foreman architecture — Foreman, Coordinator, Lead, Runners |
 | [orchestration/foreman](orchestration/foreman.md) | v0.17 | Implemented | Foreman agent — session ownership, solo/orchestrated modes, job lifecycle |
 | [orchestration/coordinator](orchestration/coordinator.md) | v0.17 | Implemented | Foreman.Coordinator — DAG, contract forwarding, coalescing, monitors, cleanup |
 | [orchestration/lead](orchestration/lead.md) | v0.17 | Implemented | Lead + Lead.Coordinator — deliverable management, Runner steering, contracts |
