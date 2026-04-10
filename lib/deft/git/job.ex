@@ -189,7 +189,7 @@ defmodule Deft.Git.Job do
     lead_id = Keyword.fetch!(opts, :lead_id)
     job_id = Keyword.fetch!(opts, :job_id)
     git = Keyword.get(opts, :git, Deft.Git)
-    working_dir = Keyword.get(opts, :working_dir, File.cwd!())
+    working_dir = Keyword.get_lazy(opts, :working_dir, &File.cwd!/0)
 
     job_branch = "deft/job-#{job_id}"
     lead_branch = "deft/lead-#{lead_id}"
@@ -231,7 +231,7 @@ defmodule Deft.Git.Job do
   def cleanup_lead_worktree(opts) do
     lead_id = Keyword.fetch!(opts, :lead_id)
     git = Keyword.get(opts, :git, Deft.Git)
-    working_dir = Keyword.get(opts, :working_dir, File.cwd!())
+    working_dir = Keyword.get_lazy(opts, :working_dir, &File.cwd!/0)
 
     worktree_path = Path.join([working_dir, ".deft-worktrees", "lead-#{lead_id}"])
     lead_branch = "deft/lead-#{lead_id}"
@@ -356,7 +356,7 @@ defmodule Deft.Git.Job do
     lead_id = Keyword.fetch!(opts, :lead_id)
     job_id = Keyword.fetch!(opts, :job_id)
     git = Keyword.get(opts, :git, Deft.Git)
-    working_dir = Keyword.get(opts, :working_dir, File.cwd!())
+    working_dir = Keyword.get_lazy(opts, :working_dir, &File.cwd!/0)
 
     lead_branch = "deft/lead-#{lead_id}"
     job_branch = "deft/job-#{job_id}"
@@ -505,7 +505,7 @@ defmodule Deft.Git.Job do
   def run_post_merge_tests(opts) do
     job_id = Keyword.fetch!(opts, :job_id)
     test_command = Keyword.fetch!(opts, :test_command)
-    working_dir = Keyword.get(opts, :working_dir, File.cwd!())
+    working_dir = Keyword.get_lazy(opts, :working_dir, &File.cwd!/0)
     timeout = Keyword.get(opts, :timeout, 300_000)
     git = Keyword.get(opts, :git, Deft.Git)
 
@@ -623,7 +623,7 @@ defmodule Deft.Git.Job do
           :ok | {:error, {:branch_list_failed, term()} | {:worktree_list_failed, term()}}
   def cleanup_orphans(opts \\ []) do
     git = Keyword.get(opts, :git, Deft.Git)
-    working_dir = Keyword.get(opts, :working_dir, File.cwd!())
+    working_dir = Keyword.get_lazy(opts, :working_dir, &File.cwd!/0)
     auto_approve = Keyword.get(opts, :auto_approve, false)
 
     with {:ok, orphaned_worktrees} <- find_orphaned_worktrees(git, working_dir),
@@ -899,7 +899,7 @@ defmodule Deft.Git.Job do
     original_branch = Keyword.fetch!(opts, :original_branch)
     squash = Keyword.get(opts, :squash, true)
     git = Keyword.get(opts, :git, Deft.Git)
-    working_dir = Keyword.get(opts, :working_dir, File.cwd!())
+    working_dir = Keyword.get_lazy(opts, :working_dir, &File.cwd!/0)
 
     job_branch = "deft/job-#{job_id}"
 
@@ -1037,7 +1037,7 @@ defmodule Deft.Git.Job do
     job_id = Keyword.fetch!(opts, :job_id)
     original_branch = Keyword.get(opts, :original_branch)
     git = Keyword.get(opts, :git, Deft.Git)
-    working_dir = Keyword.get(opts, :working_dir, File.cwd!())
+    working_dir = Keyword.get_lazy(opts, :working_dir, &File.cwd!/0)
     keep_failed_branches = Keyword.get(opts, :keep_failed_branches, false)
 
     job_branch = "deft/job-#{job_id}"
