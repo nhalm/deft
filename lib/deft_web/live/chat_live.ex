@@ -636,7 +636,7 @@ defmodule DeftWeb.ChatLive do
     Logger.debug("[Chat:#{id_prefix}] Event: continue_turn")
 
     # Call continue_turn with true to allow the agent to proceed
-    agent = Worker.agent_via_tuple(socket.assigns.session_id)
+    agent = Worker.foreman_agent_via_tuple(socket.assigns.session_id)
     Deft.Agent.continue_turn(agent, true)
 
     # Clear the turn limit reached state
@@ -663,7 +663,7 @@ defmodule DeftWeb.ChatLive do
     Logger.debug("[Chat:#{id_prefix}] Event: abort_turn")
 
     # Call continue_turn with false to decline continuing
-    agent = Worker.agent_via_tuple(socket.assigns.session_id)
+    agent = Worker.foreman_agent_via_tuple(socket.assigns.session_id)
     Deft.Agent.continue_turn(agent, false)
 
     # Clear the turn limit reached state
@@ -735,7 +735,7 @@ defmodule DeftWeb.ChatLive do
     if is_double_press do
       # Force abort (double Ctrl+c)
       # TODO: Implement force_abort when available in Agent module
-      agent = Worker.agent_via_tuple(socket.assigns.session_id)
+      agent = Worker.foreman_agent_via_tuple(socket.assigns.session_id)
       Deft.Agent.abort(agent)
 
       message = %{
@@ -750,7 +750,7 @@ defmodule DeftWeb.ChatLive do
       |> stream_insert(:conversation, message)
     else
       # First Ctrl+c - abort current operation
-      agent = Worker.agent_via_tuple(socket.assigns.session_id)
+      agent = Worker.foreman_agent_via_tuple(socket.assigns.session_id)
       Deft.Agent.abort(agent)
 
       message = %{
@@ -1084,7 +1084,7 @@ defmodule DeftWeb.ChatLive do
   end
 
   defp send_prompt_to_agent(socket, text) do
-    agent = Worker.agent_via_tuple(socket.assigns.session_id)
+    agent = Worker.foreman_agent_via_tuple(socket.assigns.session_id)
     Deft.Agent.prompt(agent, text)
     socket
   end
@@ -1183,7 +1183,7 @@ defmodule DeftWeb.ChatLive do
         # Load and inject the skill/command
         case SkillsRegistry.load_definition(command_name) do
           {:ok, definition} ->
-            agent = Worker.agent_via_tuple(socket.assigns.session_id)
+            agent = Worker.foreman_agent_via_tuple(socket.assigns.session_id)
             Deft.Agent.inject_skill(agent, definition, args)
             socket
 
