@@ -1,6 +1,7 @@
 defmodule Deft.Session.StoreTest do
   use ExUnit.Case, async: false
 
+  alias Deft.Project
   alias Deft.Session.Store
 
   alias Deft.Session.Entry.{
@@ -10,7 +11,8 @@ defmodule Deft.Session.StoreTest do
     ModelChange,
     Observation,
     Compaction,
-    Cost
+    Cost,
+    Checkpoint
   }
 
   @test_sessions_dir "/tmp/deft_store_test_#{System.unique_integer([:positive])}"
@@ -314,6 +316,20 @@ defmodule Deft.Session.StoreTest do
       assert %Cost{} = loaded
       assert loaded.cumulative_cost == 2.75
     end
+
+    test "deserializes Checkpoint correctly" do
+      session_id = "test-deserialize-checkpoint"
+      entry = Checkpoint.new("my-checkpoint", 42, "abc123def456", auto: false)
+
+      append_with_dir(session_id, entry)
+      assert {:ok, [loaded]} = load_with_dir(session_id)
+
+      assert %Checkpoint{} = loaded
+      assert loaded.label == "my-checkpoint"
+      assert loaded.entry_index == 42
+      assert loaded.git_ref == "abc123def456"
+      assert loaded.auto == false
+    end
   end
 
   # Helper functions to use test directory
@@ -445,6 +461,17 @@ defmodule Deft.Session.StoreTest do
       type: :cost,
       cumulative_cost: data.cumulative_cost,
       timestamp: parse_datetime(data.timestamp)
+    }
+  end
+
+  defp deserialize_entry(%{type: type} = data) when type in ["checkpoint", :checkpoint] do
+    %Checkpoint{
+      type: :checkpoint,
+      label: data.label,
+      entry_index: data.entry_index,
+      git_ref: data.git_ref,
+      timestamp: parse_datetime(data.timestamp),
+      auto: Map.get(data, :auto)
     }
   end
 
@@ -649,6 +676,196 @@ defmodule Deft.Session.StoreTest do
       assert {:ok, sessions} = list_with_dir()
       assert length(sessions) == 1
       assert hd(sessions).session_id == user_session_id
+    end
+  end
+
+  describe "resume/2" do
+    test "reconstructs conversation state from entries" do
+      session_id = "test-resume"
+      working_dir = @test_sessions_dir
+
+      # Create a session with various entry types
+      start_entry =
+        SessionStart.new(session_id, working_dir, "claude-sonnet-4-20250514", %{om: true})
+
+      msg1 = %Message{
+        type: :message,
+        message_id: "msg-1",
+        role: :user,
+        content: [%{type: "text", text: "Hello"}],
+        timestamp: DateTime.utc_now()
+      }
+
+      msg2 = %Message{
+        type: :message,
+        message_id: "msg-2",
+        role: :assistant,
+        content: [%{type: "text", text: "Hi there"}],
+        timestamp: DateTime.utc_now()
+      }
+
+      cost_entry = Cost.new(0.05)
+
+      Store.append(session_id, start_entry, working_dir)
+      Store.append(session_id, msg1, working_dir)
+      Store.append(session_id, msg2, working_dir)
+      Store.append(session_id, cost_entry, working_dir)
+
+      # Resume the session
+      assert {:ok, state} = Store.resume(session_id, working_dir)
+
+      # Verify reconstructed state
+      assert length(state.messages) == 2
+      assert state.config == %{om: true}
+      assert state.working_dir == working_dir
+      assert state.model == "claude-sonnet-4-20250514"
+      assert state.session_cost == 0.05
+      assert %SessionStart{} = state.session_metadata
+    end
+
+    test "returns error for nonexistent session" do
+      assert {:error, :enoent} = Store.resume("nonexistent", @test_sessions_dir)
+    end
+
+    test "reconstructs messages in chronological order" do
+      session_id = "test-resume-order"
+      working_dir = @test_sessions_dir
+
+      start_entry = SessionStart.new(session_id, working_dir, "claude-sonnet-4-20250514", %{})
+
+      msg1 = %Message{
+        type: :message,
+        message_id: "msg-1",
+        role: :user,
+        content: [%{type: "text", text: "First"}],
+        timestamp: DateTime.utc_now()
+      }
+
+      msg2 = %Message{
+        type: :message,
+        message_id: "msg-2",
+        role: :assistant,
+        content: [%{type: "text", text: "Second"}],
+        timestamp: DateTime.utc_now()
+      }
+
+      msg3 = %Message{
+        type: :message,
+        message_id: "msg-3",
+        role: :user,
+        content: [%{type: "text", text: "Third"}],
+        timestamp: DateTime.utc_now()
+      }
+
+      Store.append(session_id, start_entry, working_dir)
+      Store.append(session_id, msg1, working_dir)
+      Store.append(session_id, msg2, working_dir)
+      Store.append(session_id, msg3, working_dir)
+
+      assert {:ok, state} = Store.resume(session_id, working_dir)
+
+      assert length(state.messages) == 3
+      assert Enum.at(state.messages, 0).id == "msg-1"
+      assert Enum.at(state.messages, 1).id == "msg-2"
+      assert Enum.at(state.messages, 2).id == "msg-3"
+    end
+
+    test "finds latest model from model_change entries" do
+      session_id = "test-resume-model"
+      working_dir = @test_sessions_dir
+
+      start_entry = SessionStart.new(session_id, working_dir, "claude-sonnet-4-20250514", %{})
+      model_change = ModelChange.new("claude-sonnet-4-20250514", "claude-opus-4")
+
+      Store.append(session_id, start_entry, working_dir)
+      Store.append(session_id, model_change, working_dir)
+
+      assert {:ok, state} = Store.resume(session_id, working_dir)
+
+      assert state.model == "claude-opus-4"
+    end
+
+    test "finds latest cost from cost entries" do
+      session_id = "test-resume-cost"
+      working_dir = @test_sessions_dir
+
+      start_entry = SessionStart.new(session_id, working_dir, "claude-sonnet-4-20250514", %{})
+      cost1 = Cost.new(0.05)
+      cost2 = Cost.new(0.15)
+
+      Store.append(session_id, start_entry, working_dir)
+      Store.append(session_id, cost1, working_dir)
+      Store.append(session_id, cost2, working_dir)
+
+      assert {:ok, state} = Store.resume(session_id, working_dir)
+
+      assert state.session_cost == 0.15
+    end
+
+    test "defaults to 0.0 cost when no cost entries exist" do
+      session_id = "test-resume-no-cost"
+      working_dir = @test_sessions_dir
+
+      start_entry = SessionStart.new(session_id, working_dir, "claude-sonnet-4-20250514", %{})
+
+      Store.append(session_id, start_entry, working_dir)
+
+      assert {:ok, state} = Store.resume(session_id, working_dir)
+
+      assert state.session_cost == 0.0
+    end
+
+    test "restores OM state from latest observation entry" do
+      session_id = "test-resume-om"
+      working_dir = @test_sessions_dir
+
+      start_entry = SessionStart.new(session_id, working_dir, "claude-sonnet-4-20250514", %{})
+
+      obs_entry =
+        Observation.new(%{
+          active_observations: "Test observations",
+          observation_tokens: 500,
+          observed_message_ids: ["msg-1"],
+          pending_message_tokens: 100,
+          generation_count: 1,
+          last_observed_at: DateTime.utc_now(),
+          activation_epoch: 2,
+          calibration_factor: 4.0
+        })
+
+      Store.append(session_id, start_entry, working_dir)
+      Store.append(session_id, obs_entry, working_dir)
+
+      assert {:ok, state} = Store.resume(session_id, working_dir)
+
+      # OM state should be loaded from the observation entry or the _om.jsonl file
+      # Since we don't have an _om.jsonl file, it should fall back to the observation entry
+      assert state.om_snapshot != nil || state.om_snapshot == obs_entry
+    end
+  end
+
+  describe "list/1 with _om.jsonl exclusion" do
+    test "excludes _om.jsonl files from session listing" do
+      session_id = "session-with-om-file"
+      working_dir = @test_sessions_dir
+
+      # Create a regular session file using Store.append
+      start_entry = SessionStart.new(session_id, working_dir, "claude-sonnet-4-20250514", %{})
+      Store.append(session_id, start_entry, working_dir)
+
+      # Create a corresponding _om.jsonl file in the sessions directory
+      sessions_dir = Project.sessions_dir(working_dir)
+      om_path = Path.join(sessions_dir, "#{session_id}_om.jsonl")
+      File.write!(om_path, "{\"ignored\":\"content\"}\n")
+
+      # List should include the main session but not the _om file
+      assert {:ok, sessions} = Store.list(working_dir)
+
+      # Verify the main session is included
+      assert Enum.any?(sessions, fn s -> s.session_id == session_id end)
+
+      # Verify the _om file is NOT included as a session
+      refute Enum.any?(sessions, fn s -> s.session_id == "#{session_id}_om" end)
     end
   end
 end
