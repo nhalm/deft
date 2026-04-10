@@ -131,7 +131,7 @@ A Job runs as a supervised process tree:
 ```
 Deft.Job.Supervisor (one_for_one)
 ├── Deft.Store (GenServer — site log instance, ETS+DETS)
-├── Deft.Job.RateLimiter (GenServer — see rate-limiter.md)
+├── Deft.RateLimiter (GenServer — see rate-limiter.md)
 ├── Deft.Job.Foreman (gen_statem — orchestration only, no LLM loop)
 │   └── has NO agent loop — delegates to ForemanAgent
 ├── Deft.Job.ForemanAgent (Deft.Agent gen_statem — standard agent, has OM)
@@ -154,7 +154,7 @@ Key invariants:
 - Runners are Tasks spawned via `Task.Supervisor.async_nolink`. Simple inline loops. Leads must enforce Runner timeouts manually.
 - Lead gen_statem child specs use `restart: :temporary` — the Foreman handles Lead crash recovery explicitly.
 - The Foreman monitors all Leads and the ForemanAgent via `Process.monitor`. On ForemanAgent crash, the Foreman fails the job with cleanup. Leads monitor their Runners via Task refs. The DOWN handler must check exit reason: only unexpected reasons trigger crash recovery. `:normal` and `:shutdown` exits are not crashes.
-- All LLM calls flow through `Deft.Job.RateLimiter` (see [rate-limiter.md](rate-limiter.md)).
+- All LLM calls flow through `Deft.RateLimiter` (see [rate-limiter.md](rate-limiter.md)).
 - The Foreman looks up RateLimiter and Store by registered name on each use. It must NOT cache PIDs at init — sibling processes may restart under `one_for_one`, making cached PIDs stale. The same applies to ForemanAgent: the Foreman must use the ForemanAgent's registered name (via-tuple) for all `Deft.Agent.prompt/2` calls, not resolve to a raw PID. The monitor ref is separate from the communication path.
 - The Foreman must monitor Store and RateLimiter via `Process.monitor` at init. Since both use `restart: :temporary`, they are never restarted by the supervisor. On Store or RateLimiter crash (`:DOWN` message), the Foreman must fail the job with cleanup — these are unrecoverable infrastructure failures.
 - All Foreman↔Lead communication is via direct OTP messages between the Foreman and Lead orchestrator processes.

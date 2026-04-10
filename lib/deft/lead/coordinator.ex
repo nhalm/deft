@@ -46,7 +46,7 @@ defmodule Deft.Lead.Coordinator do
   - `:deliverable` — Required. Deliverable assignment (map with name, description, etc.).
   - `:foreman_pid` — Required. PID of the Foreman for messaging.
   - `:site_log_name` — Required. Registered name of Deft.Store site log instance.
-  - `:rate_limiter_pid` — Required. PID of Deft.Job.RateLimiter.
+  - `:rate_limiter_pid` — Required. PID of Deft.RateLimiter.
   - `:worktree_path` — Required. Path to Lead's git worktree.
   - `:working_dir` — Required. Project working directory for cache path resolution.
   - `:runner_supervisor` — Required. Name/PID of the Lead's Task.Supervisor for Runners.

@@ -118,7 +118,7 @@ Every session starts the same tree:
 ```
 Session.Worker (rest_for_one)
 ├── Deft.Store (site log — ETS+DETS)
-├── Deft.Job.RateLimiter
+├── Deft.RateLimiter
 ├── Deft.Agent.ToolRunner (Foreman's tool execution)
 ├── Deft.Foreman (Deft.Agent — LLM loop, OM, session JSONL)
 ├── Task.Supervisor (research/verification Runners)

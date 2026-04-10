@@ -2,7 +2,7 @@ defmodule Deft.Foreman.CoordinatorTest do
   use ExUnit.Case, async: false
 
   alias Deft.Foreman.Coordinator
-  alias Deft.Job.RateLimiter
+  alias Deft.RateLimiter
   alias Deft.Project
   alias Deft.Store
 

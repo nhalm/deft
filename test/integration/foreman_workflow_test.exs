@@ -2,7 +2,7 @@ defmodule Integration.ForemanWorkflowTest do
   use ExUnit.Case, async: false
   @moduletag :integration
 
-  alias Deft.Job.RateLimiter
+  alias Deft.RateLimiter
 
   setup do
     # Create temporary directory for test

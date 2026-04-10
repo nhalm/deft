@@ -4,7 +4,7 @@ defmodule Deft.Job.Supervisor do
 
   Supervision tree (one_for_one strategy with :temporary restart for all children):
   - Deft.Store (site log instance)
-  - Deft.Job.RateLimiter
+  - Deft.RateLimiter
   - Deft.Agent.ToolRunner (for Foreman's tool execution)
   - Deft.Foreman (standard Deft.Agent)
   - Task.Supervisor (RunnerSupervisor for Foreman's research/verification/merge-resolution Runners)
@@ -89,9 +89,9 @@ defmodule Deft.Job.Supervisor do
 
       # RateLimiter
       %{
-        id: Deft.Job.RateLimiter,
+        id: Deft.RateLimiter,
         start:
-          {Deft.Job.RateLimiter, :start_link,
+          {Deft.RateLimiter, :start_link,
            [
              [
                job_id: job_id,

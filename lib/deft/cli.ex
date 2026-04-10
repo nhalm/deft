@@ -32,7 +32,7 @@ defmodule Deft.CLI do
   alias Deft.Issue.ElicitationPrompt
   alias Deft.Issues
   alias Deft.Foreman.Coordinator
-  alias Deft.Job.RateLimiter
+  alias Deft.RateLimiter
   alias Deft.Session.Entry.SessionStart
   alias Deft.Session.Store
 

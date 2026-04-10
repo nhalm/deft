@@ -41,7 +41,7 @@ defmodule Deft.Job.Runner do
     Error
   }
 
-  alias Deft.Job.RateLimiter
+  alias Deft.RateLimiter
 
   require Logger
 

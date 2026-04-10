@@ -1,7 +1,7 @@
-defmodule Deft.Job.RateLimiterTest do
+defmodule Deft.RateLimiterTest do
   use ExUnit.Case, async: true
 
-  alias Deft.Job.RateLimiter
+  alias Deft.RateLimiter
 
   setup do
     # Start a fresh RateLimiter for each test with unique job_id

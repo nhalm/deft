@@ -1,4 +1,4 @@
-defmodule Deft.Job.RateLimiter do
+defmodule Deft.RateLimiter do
   @moduledoc """
   Rate limiter with dual token-bucket algorithm for LLM API calls.
 

@@ -29,7 +29,7 @@ defmodule Deft.Foreman.Coordinator do
   alias Deft.Git.Job, as: GitJob
   alias Deft.Foreman
   alias Deft.LeadSupervisor
-  alias Deft.Job.RateLimiter
+  alias Deft.RateLimiter
   alias Deft.Job.Runner
   alias Deft.Project
   alias Deft.Session.Store, as: SessionStore

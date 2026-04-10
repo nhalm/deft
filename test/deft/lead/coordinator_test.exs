@@ -2,7 +2,7 @@ defmodule Deft.Lead.CoordinatorTest do
   use ExUnit.Case, async: false
 
   alias Deft.Lead.Coordinator
-  alias Deft.Job.RateLimiter
+  alias Deft.RateLimiter
   alias Deft.Project
   alias Deft.Store
 

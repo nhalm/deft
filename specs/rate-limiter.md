@@ -19,7 +19,7 @@
 
 ## Overview
 
-`Deft.Job.RateLimiter` is a GenServer that all LLM calls in a job flow through. It enforces per-provider rate limits using a dual token-bucket algorithm, manages a priority queue to prevent starvation, handles 429 errors with adaptive backoff, scales Lead concurrency based on capacity signals, and tracks cost against a configurable ceiling.
+`Deft.RateLimiter` is a GenServer that all LLM calls in a job flow through. It enforces per-provider rate limits using a dual token-bucket algorithm, manages a priority queue to prevent starvation, handles 429 errors with adaptive backoff, scales Lead concurrency based on capacity signals, and tracks cost against a configurable ceiling.
 
 **Scope:**
 - Dual token-bucket algorithm (RPM + TPM) per provider
