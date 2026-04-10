@@ -1,8 +1,8 @@
-defmodule Deft.Job.LeadAgent do
+defmodule Deft.Lead do
   @moduledoc """
-  LeadAgent is a standard `Deft.Agent` configured for the Lead orchestration role.
+  Lead is a standard `Deft.Agent` configured for the Lead orchestration role.
 
-  The LeadAgent:
+  The Lead:
   - Uses a Lead-specific system prompt
   - Has OM (Observational Memory) enabled
   - Has read-only tools (Read, Grep, Find, Ls) plus Lead-specific orchestration tools
@@ -10,7 +10,7 @@ defmodule Deft.Job.LeadAgent do
 
   ## Orchestration Tools
 
-  The LeadAgent has access to these orchestration-specific tools:
+  The Lead has access to these orchestration-specific tools:
 
   - `spawn_runner` — Start a Runner to execute a task
   - `publish_contract` — Publish an interface contract for dependent Leads
@@ -21,10 +21,10 @@ defmodule Deft.Job.LeadAgent do
   """
 
   alias Deft.Agent
-  alias Deft.Job.LeadAgent.Tools
+  alias Deft.Lead.Tools
 
   @doc """
-  Starts the LeadAgent as a standard Deft.Agent.
+  Starts the Lead as a standard Deft.Agent.
 
   ## Options
 
@@ -88,7 +88,7 @@ defmodule Deft.Job.LeadAgent do
   """
   def build_system_prompt(working_dir, worktree_path, deliverable) do
     """
-    You are the LeadAgent — an AI reasoning component working with a Lead orchestrator to manage a single deliverable in a complex coding job.
+    You are the Lead — an AI reasoning component working with a Lead orchestrator to manage a single deliverable in a complex coding job.
 
     ## Your Role
 

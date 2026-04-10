@@ -1,10 +1,10 @@
-defmodule Deft.Job.LeadAgentTest do
+defmodule Deft.LeadTest do
   use ExUnit.Case, async: true
 
-  alias Deft.Job.LeadAgent
+  alias Deft.Lead
 
   describe "start_link/1" do
-    test "starts a LeadAgent with required options" do
+    test "starts a Lead with required options" do
       session_id = "test-job-123-lead-a"
       parent_pid = self()
       working_dir = "/tmp/test-repo"
@@ -29,14 +29,14 @@ defmodule Deft.Job.LeadAgentTest do
         deliverable: deliverable
       ]
 
-      {:ok, pid} = LeadAgent.start_link(opts)
+      {:ok, pid} = Lead.start_link(opts)
       assert Process.alive?(pid)
 
       # Cleanup
       Process.exit(pid, :normal)
     end
 
-    test "LeadAgent has OM enabled" do
+    test "Lead has OM enabled" do
       session_id = "test-job-124-lead-b"
       parent_pid = self()
       working_dir = "/tmp/test-repo"
@@ -61,7 +61,7 @@ defmodule Deft.Job.LeadAgentTest do
         deliverable: deliverable
       ]
 
-      {:ok, pid} = LeadAgent.start_link(opts)
+      {:ok, pid} = Lead.start_link(opts)
 
       # Get the agent's state to verify OM is enabled
       # :sys.get_state returns {state_name, data} for gen_statem
@@ -72,7 +72,7 @@ defmodule Deft.Job.LeadAgentTest do
       Process.exit(pid, :normal)
     end
 
-    test "LeadAgent has Lead-specific tools" do
+    test "Lead has Lead-specific tools" do
       session_id = "test-job-125-lead-c"
       parent_pid = self()
       working_dir = "/tmp/test-repo"
@@ -97,7 +97,7 @@ defmodule Deft.Job.LeadAgentTest do
         deliverable: deliverable
       ]
 
-      {:ok, pid} = LeadAgent.start_link(opts)
+      {:ok, pid} = Lead.start_link(opts)
 
       # Get the agent's state to verify tools are configured
       # :sys.get_state returns {state_name, data} for gen_statem
@@ -107,10 +107,10 @@ defmodule Deft.Job.LeadAgentTest do
       # Verify Lead-specific tools are present
       tool_modules = Enum.map(tools, & &1)
 
-      assert Deft.Job.LeadAgent.Tools.SpawnRunner in tool_modules
-      assert Deft.Job.LeadAgent.Tools.PublishContract in tool_modules
-      assert Deft.Job.LeadAgent.Tools.ReportStatus in tool_modules
-      assert Deft.Job.LeadAgent.Tools.RequestHelp in tool_modules
+      assert Deft.Lead.Tools.SpawnRunner in tool_modules
+      assert Deft.Lead.Tools.PublishContract in tool_modules
+      assert Deft.Lead.Tools.ReportStatus in tool_modules
+      assert Deft.Lead.Tools.RequestHelp in tool_modules
 
       # Cleanup
       Process.exit(pid, :normal)
@@ -127,7 +127,7 @@ defmodule Deft.Job.LeadAgentTest do
         description: "Implement the REST API"
       }
 
-      prompt = LeadAgent.build_system_prompt(working_dir, worktree_path, deliverable)
+      prompt = Lead.build_system_prompt(working_dir, worktree_path, deliverable)
 
       assert prompt =~ "API Module"
       assert prompt =~ "Implement the REST API"
@@ -139,7 +139,7 @@ defmodule Deft.Job.LeadAgentTest do
       worktree_path = "/tmp/test-repo/deft/lead-a"
       deliverable = %{name: "Test", description: "Test deliverable"}
 
-      prompt = LeadAgent.build_system_prompt(working_dir, worktree_path, deliverable)
+      prompt = Lead.build_system_prompt(working_dir, worktree_path, deliverable)
 
       assert prompt =~ "spawn_runner"
       assert prompt =~ "publish_contract"

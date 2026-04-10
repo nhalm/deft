@@ -1,4 +1,4 @@
-defmodule Deft.Job.LeadAgent.Tools.SpawnRunner do
+defmodule Deft.Lead.Tools.SpawnRunner do
   @moduledoc """
   Tool for spawning a Runner task.
 

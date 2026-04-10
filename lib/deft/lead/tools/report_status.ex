@@ -1,4 +1,4 @@
-defmodule Deft.Job.LeadAgent.Tools.ReportStatus do
+defmodule Deft.Lead.Tools.ReportStatus do
   @moduledoc """
   Tool for reporting status to the Foreman.
 

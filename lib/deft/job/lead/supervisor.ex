@@ -1,15 +1,15 @@
 defmodule Deft.Job.Lead.Supervisor do
   @moduledoc """
-  Per-Lead supervisor that manages a Lead gen_statem, its LeadAgent, and RunnerSupervisor.
+  Per-Lead supervisor that manages a Lead gen_statem, its Lead agent, and RunnerSupervisor.
 
-  This one_for_one supervisor ensures that the Lead orchestrator, its LeadAgent,
+  This one_for_one supervisor ensures that the Lead orchestrator, its Lead agent,
   and both supervisors are properly supervised as siblings.
 
   Process tree per Lead:
   ```
   Deft.Job.Lead.Supervisor (one_for_one)
-  ├── Deft.Agent.ToolRunner (for LeadAgent's tool execution)
-  ├── Deft.Job.LeadAgent (standard Deft.Agent)
+  ├── Deft.Agent.ToolRunner (for Lead's tool execution)
+  ├── Deft.Lead (standard Deft.Agent)
   ├── Deft.Job.RunnerSupervisor (Task.Supervisor)
   └── Deft.Job.Lead (gen_statem)
   ```
@@ -45,40 +45,40 @@ defmodule Deft.Job.Lead.Supervisor do
     worktree_path = Keyword.fetch!(opts, :worktree_path)
     deliverable = Keyword.fetch!(opts, :deliverable)
 
-    # LeadAgent session_id (session_id is the job_id)
+    # Lead agent session_id (session_id is the job_id)
     lead_agent_session_id = "#{session_id}-lead-#{lead_id}"
 
-    # LeadAgent ToolRunner name (must use {:tool_runner, session_id} format)
+    # Lead agent ToolRunner name (must use {:tool_runner, session_id} format)
     lead_agent_tool_runner_name =
       {:via, Registry, {Deft.ProcessRegistry, {:tool_runner, lead_agent_session_id}}}
 
-    # LeadAgent name
-    lead_agent_name = {:via, Registry, {Deft.ProcessRegistry, {:lead_agent, lead_id}}}
+    # Lead agent name
+    lead_agent_name = {:via, Registry, {Deft.ProcessRegistry, {:lead, lead_id}}}
 
-    # Lead name
-    lead_name = {:via, Registry, {Deft.ProcessRegistry, {:lead, lead_id}}}
+    # Lead coordinator name
+    lead_coordinator_name = {:via, Registry, {Deft.ProcessRegistry, {:lead_coordinator, lead_id}}}
 
     # RunnerSupervisor name for this Lead
     runner_supervisor_name =
       {:via, Registry, {Deft.ProcessRegistry, {:runner_supervisor, lead_id}}}
 
     children = [
-      # ToolRunner for LeadAgent's tool execution
+      # ToolRunner for Lead's tool execution
       %{
         id: :lead_agent_tool_runner,
         start: {Deft.Agent.ToolRunner, :start_link, [[name: lead_agent_tool_runner_name]]},
         type: :supervisor
       },
-      # LeadAgent (standard Deft.Agent)
+      # Lead (standard Deft.Agent)
       %{
         id: :lead_agent,
         start:
-          {Deft.Job.LeadAgent, :start_link,
+          {Deft.Lead, :start_link,
            [
              [
                session_id: lead_agent_session_id,
                config: config,
-               parent_pid: lead_name,
+               parent_pid: lead_coordinator_name,
                rate_limiter: rate_limiter_pid,
                working_dir: working_dir,
                worktree_path: worktree_path,
@@ -104,7 +104,7 @@ defmodule Deft.Job.Lead.Supervisor do
              opts
              |> Keyword.put(:runner_supervisor, runner_supervisor_name)
              |> Keyword.put(:lead_agent_pid, lead_agent_name)
-             |> Keyword.put(:name, lead_name)
+             |> Keyword.put(:name, lead_coordinator_name)
            ]},
         restart: :temporary
       }

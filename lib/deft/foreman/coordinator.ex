@@ -1808,7 +1808,7 @@ defmodule Deft.Foreman.Coordinator do
     cleanup_lead_monitor(data.lead_monitors, lead_id)
 
     # Stop Lead supervisor subtree via DynamicSupervisor
-    # This cascades shutdown to Lead, LeadAgent, ToolRunner, and RunnerSupervisor
+    # This cascades shutdown to Lead, Lead, ToolRunner, and RunnerSupervisor
     terminate_lead_supervisor(lead_id, supervisor_pid, data)
 
     # Clean up the Lead's worktree AFTER termination
@@ -1891,7 +1891,7 @@ defmodule Deft.Foreman.Coordinator do
         )
 
         # Stop Lead supervisor subtree via DynamicSupervisor
-        # This cascades shutdown to Lead, LeadAgent, ToolRunner, and RunnerSupervisor
+        # This cascades shutdown to Lead, Lead, ToolRunner, and RunnerSupervisor
         terminate_lead_supervisor(lead_id, lead_info.supervisor_pid, data)
 
         GitJob.cleanup_lead_worktree(
@@ -2241,7 +2241,7 @@ defmodule Deft.Foreman.Coordinator do
     # Clean up monitor
     cleanup_lead_monitor(data.lead_monitors, lead_id)
 
-    # Stop Lead supervisor subtree — cascades shutdown to LeadAgent, ToolRunner, RunnerSupervisor.
+    # Stop Lead supervisor subtree — cascades shutdown to Lead, ToolRunner, RunnerSupervisor.
     # This must happen BEFORE worktree cleanup to stop Runners that may still be writing.
     terminate_lead_supervisor(lead_id, supervisor_pid, data)
 

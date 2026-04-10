@@ -1,4 +1,4 @@
-defmodule Deft.Job.LeadAgent.Tools.PublishContract do
+defmodule Deft.Lead.Tools.PublishContract do
   @moduledoc """
   Tool for publishing an interface contract.
 

@@ -1,4 +1,4 @@
-defmodule Deft.Job.LeadAgent.Tools.RequestHelp do
+defmodule Deft.Lead.Tools.RequestHelp do
   @moduledoc """
   Tool for escalating blockers to the Foreman.
 

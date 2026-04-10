@@ -1,8 +1,8 @@
-defmodule Deft.Job.LeadAgent.Tools do
+defmodule Deft.Lead.Tools do
   @moduledoc """
-  Namespace for LeadAgent orchestration tools.
+  Namespace for Lead orchestration tools.
 
-  These tools allow the LeadAgent to communicate with its Lead orchestrator
+  These tools allow the Lead to communicate with its Lead orchestrator
   by sending `{:agent_action, action, payload}` messages.
   """
 
@@ -14,7 +14,7 @@ defmodule Deft.Job.LeadAgent.Tools do
   }
 
   @doc """
-  Returns the list of all LeadAgent orchestration tools.
+  Returns the list of all Lead orchestration tools.
   """
   def all do
     [

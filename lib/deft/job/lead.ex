@@ -4,19 +4,19 @@ defmodule Deft.Job.Lead do
 
   The v0.7 redesign splits the Lead into two processes:
   - Lead (this module): Pure orchestration gen_statem managing deliverable lifecycle
-  - LeadAgent: Standard Deft.Agent that does LLM reasoning
+  - Lead: Standard Deft.Agent that does LLM reasoning
 
   ## Lead Phase States
 
-  - `:planning` — Sends deliverable assignment to LeadAgent, which decomposes into tasks
-  - `:executing` — Spawns Runners on request, collects results, sends to LeadAgent
+  - `:planning` — Sends deliverable assignment to Lead, which decomposes into tasks
+  - `:executing` — Spawns Runners on request, collects results, sends to Lead
   - `:verifying` — Spawns testing Runner
   - `:complete` — Sends `:complete` to Foreman
 
   ## Communication
 
-  **Lead → LeadAgent:** Via `Deft.Agent.prompt/2`
-  **LeadAgent → Lead:** Via orchestration tools that send `{:agent_action, action, payload}` messages
+  **Lead → Lead:** Via `Deft.Agent.prompt/2`
+  **Lead → Lead:** Via orchestration tools that send `{:agent_action, action, payload}` messages
   **Foreman → Lead:** Via `{:foreman_steering, content}` messages
   **Lead → Foreman:** Via `{:lead_message, type, content, metadata}` messages
 
@@ -50,7 +50,7 @@ defmodule Deft.Job.Lead do
   - `:worktree_path` — Required. Path to Lead's git worktree.
   - `:working_dir` — Required. Project working directory for cache path resolution.
   - `:runner_supervisor` — Required. Name/PID of the Lead's Task.Supervisor for Runners.
-  - `:lead_agent_pid` — Optional. PID of the LeadAgent (will be set by supervisor).
+  - `:lead_agent_pid` — Optional. PID of the Lead (will be set by supervisor).
   - `:name` — Optional. Name for the gen_statem process.
   """
   def start_link(opts) do
@@ -91,7 +91,7 @@ defmodule Deft.Job.Lead do
   end
 
   @doc """
-  Sets the LeadAgent PID after the agent is started by the supervisor.
+  Sets the Lead PID after the agent is started by the supervisor.
   """
   def set_lead_agent(lead, agent_pid) do
     :gen_statem.cast(lead, {:set_lead_agent, agent_pid})
@@ -183,7 +183,7 @@ defmodule Deft.Job.Lead do
   def handle_event(:enter, _old_state, :planning, data) do
     Logger.info("[Lead:#{data.lead_id}] Entering :planning phase")
 
-    # Send deliverable assignment + site log context to LeadAgent
+    # Send deliverable assignment + site log context to Lead
     if data.lead_agent_pid do
       # Read research findings and contracts from site log
       site_log_context = read_site_log_context(data)
@@ -196,7 +196,7 @@ defmodule Deft.Job.Lead do
 
   def handle_event(:enter, _old_state, :executing, data) do
     Logger.info("[Lead:#{data.lead_id}] Entering :executing phase")
-    # Runners will be spawned based on LeadAgent requests
+    # Runners will be spawned based on Lead requests
     :keep_state_and_data
   end
 
@@ -220,18 +220,18 @@ defmodule Deft.Job.Lead do
     end
   end
 
-  # Set LeadAgent PID
+  # Set Lead PID
   def handle_event(:cast, {:set_lead_agent, agent_pid}, _state, data) do
-    Logger.debug("[Lead:#{data.lead_id}] LeadAgent PID set: #{inspect(agent_pid)}")
+    Logger.debug("[Lead:#{data.lead_id}] Lead PID set: #{inspect(agent_pid)}")
     data = Map.put(data, :lead_agent_pid, agent_pid)
     {:keep_state, data}
   end
 
-  # Handle agent actions from LeadAgent orchestration tools
+  # Handle agent actions from Lead orchestration tools
 
   def handle_event(:info, {:agent_action, :spawn_runner, type, instructions}, state, data)
       when state in [:planning, :executing] do
-    Logger.info("[Lead:#{data.lead_id}] LeadAgent requested spawning #{type} Runner")
+    Logger.info("[Lead:#{data.lead_id}] Lead requested spawning #{type} Runner")
 
     # Build Runner context and options
     context = build_runner_context(data)
@@ -280,7 +280,7 @@ defmodule Deft.Job.Lead do
 
   def handle_event(:info, {:agent_action, :publish_contract, content}, state, data)
       when state in [:planning, :executing] do
-    Logger.info("[Lead:#{data.lead_id}] LeadAgent publishing contract")
+    Logger.info("[Lead:#{data.lead_id}] Lead publishing contract")
 
     send_to_foreman(data, :contract, content, %{
       lead_id: data.lead_id,
@@ -292,7 +292,7 @@ defmodule Deft.Job.Lead do
 
   def handle_event(:info, {:agent_action, :report, report_type, content}, state, data)
       when state in [:planning, :executing] do
-    Logger.info("[Lead:#{data.lead_id}] LeadAgent reporting: #{report_type}")
+    Logger.info("[Lead:#{data.lead_id}] Lead reporting: #{report_type}")
 
     send_to_foreman(data, report_type, content, %{
       lead_id: data.lead_id,
@@ -304,7 +304,7 @@ defmodule Deft.Job.Lead do
 
   def handle_event(:info, {:agent_action, :blocker, description}, state, data)
       when state in [:planning, :executing] do
-    Logger.warning("[Lead:#{data.lead_id}] LeadAgent blocked: #{description}")
+    Logger.warning("[Lead:#{data.lead_id}] Lead blocked: #{description}")
 
     send_to_foreman(data, :blocker, description, %{
       lead_id: data.lead_id,
@@ -342,7 +342,7 @@ defmodule Deft.Job.Lead do
           task_description: runner_info.task_description
         })
 
-        # Notify LeadAgent so it can adjust approach
+        # Notify Lead so it can adjust approach
         if data.lead_agent_pid do
           timeout_prompt = """
           **RUNNER TIMEOUT**
@@ -395,7 +395,7 @@ defmodule Deft.Job.Lead do
           |> Map.put(:runner_tasks, remaining_tasks)
           |> Map.put(:runner_results, runner_results)
 
-        # Send results to LeadAgent
+        # Send results to Lead
         if data.lead_agent_pid do
           context = build_runner_result_context(data, runner_info.runner_type, result)
           Deft.Agent.prompt(data.lead_agent_pid, context)
@@ -436,7 +436,7 @@ defmodule Deft.Job.Lead do
           }
         )
 
-        # Send failure to LeadAgent for recovery
+        # Send failure to Lead for recovery
         if data.lead_agent_pid do
           failure_prompt = """
           **RUNNER FAILURE**
@@ -472,7 +472,7 @@ defmodule Deft.Job.Lead do
       when state in [:planning, :executing] do
     Logger.info("[Lead:#{data.lead_id}] Received steering from Foreman")
 
-    # Inject steering into LeadAgent as a prompt with current context
+    # Inject steering into Lead as a prompt with current context
     if data.lead_agent_pid do
       # Build current progress context
       completed_count = length(data.runner_results)
@@ -519,7 +519,7 @@ defmodule Deft.Job.Lead do
       when state in [:planning, :executing] do
     Logger.info("[Lead:#{data.lead_id}] Received dependency contract from Foreman")
 
-    # Forward contract to LeadAgent as a prompt with context
+    # Forward contract to Lead as a prompt with context
     if data.lead_agent_pid do
       contract_prompt = """
       **DEPENDENCY CONTRACT AVAILABLE**
@@ -617,7 +617,7 @@ defmodule Deft.Job.Lead do
 
   defp build_planning_context(data, site_log_context) do
     """
-    You are the LeadAgent managing the following deliverable:
+    You are the Lead managing the following deliverable:
 
     **Deliverable:** #{data.deliverable[:name]}
     **Description:** #{data.deliverable[:description] || "No description provided"}
@@ -822,7 +822,7 @@ defmodule Deft.Job.Lead do
         {:next_state, :complete, data}
 
       {:error, _reason} ->
-        # Tests failed, transition back to executing so LeadAgent can remediate
+        # Tests failed, transition back to executing so Lead can remediate
         Logger.info(
           "[Lead:#{data.lead_id}] Testing failed, transitioning back to :executing for remediation"
         )
