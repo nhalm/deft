@@ -3,8 +3,9 @@
 | | |
 |--------|----------------------------------------------|
 | Version | 0.16 |
-| Status | Implemented |
-| Last Updated | 2026-04-07 |
+| Status | Deprecated |
+| Last Updated | 2026-04-10 |
+| Superseded By | [orchestration/README.md](orchestration/README.md) |
 
 ## Changelog
 

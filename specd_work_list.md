@@ -17,7 +17,32 @@ HOW IT WORKS:
 POPULATED BY: /specd:plan command (during spec phase), /specd:audit command, /specd:review-intake command, and humans.
 -->
 
-## web-ui v0.9
+## orchestration v0.17 — unified session/Foreman + rename
 
-- Add "New" button to header in `chat_live.ex` template, before the Sessions button, using `.header-button` class. On click, handle a `"new_session"` event that calls `Deft.Session.create/1`, then navigates the current window to `/?session=<new_id>` via `push_navigate`
+- Rename `Deft.Job.ForemanAgent` → `Deft.Foreman` across codebase — module name, references in other modules, process registry keys, supervisor child specs, tests
+- Rename `Deft.Job.Foreman` (gen_statem) → `Deft.Foreman.Coordinator` across codebase — module name, references, registry keys, supervisor child specs, tests
+- Rename `Deft.Job.LeadAgent` → `Deft.Lead` across codebase — module name, references, registry keys, tests
+- Rename `Deft.Job.Lead` (gen_statem) → `Deft.Lead.Coordinator` across codebase — module name, references, registry keys, tests
+- Rename `Deft.Job.LeadSupervisor` → `Deft.LeadSupervisor` (no longer job-scoped) (blocked: Rename `Deft.Job.Lead` → `Deft.Lead.Coordinator`)
+- Rename `Deft.Job.RateLimiter` → `Deft.RateLimiter` (no longer job-scoped) (blocked: Rename `Deft.Job.Foreman` → `Deft.Foreman.Coordinator`)
+- Merge `Deft.Job.Supervisor` children into `Deft.Session.Worker` — Store (site log), RateLimiter, Foreman ToolRunner, Foreman, Task.Supervisor (Runners), OM.Supervisor, Foreman.Coordinator, and LeadSupervisor all start under Session.Worker (blocked: Rename `Deft.Job.ForemanAgent` → `Deft.Foreman`, Rename `Deft.Job.Foreman` → `Deft.Foreman.Coordinator`)
+- Remove `Deft.Job.Supervisor` module — all its children now live in Session.Worker (blocked: Merge `Deft.Job.Supervisor` children into `Deft.Session.Worker`)
+- Update `Deft.CLI` `deft work` path — start a session via `Session.Supervisor.start_session/1` and send the issue as the first prompt to the Foreman, instead of starting a standalone `Job.Supervisor` (blocked: Merge `Deft.Job.Supervisor` children into `Deft.Session.Worker`)
+- Update `Deft.CLI` `deft -p` path — start a session and send the prompt to the Foreman (blocked: Merge `Deft.Job.Supervisor` children into `Deft.Session.Worker`)
+- Update web UI `chat_live.ex` new-session path — start Session.Worker which now includes the Foreman subtree, instead of starting a plain `Deft.Agent` (blocked: Merge `Deft.Job.Supervisor` children into `Deft.Session.Worker`)
+- Update Foreman.Coordinator to reference Foreman by registered name (not `ForemanAgent`) for all `Deft.Agent.prompt/2` calls (blocked: Rename `Deft.Job.ForemanAgent` → `Deft.Foreman`)
+- Update Lead.Coordinator to reference Lead by registered name (not `LeadAgent`) for all `Deft.Agent.prompt/2` calls (blocked: Rename `Deft.Job.LeadAgent` → `Deft.Lead`)
+
+## sessions/branching v0.1
+
+- Add `checkpoint` entry type to `Deft.Session.Entry` — struct with `label`, `entry_index` (current line number in session JSONL), `git_ref` (current HEAD SHA), `timestamp`, and optional `auto` flag. Add serialization/deserialization support in `Store`
+- Add `/checkpoint <label>` command handler — validate label uniqueness within session, check for uncommitted changes (warn but don't block), write checkpoint entry to session
+- Add `/checkpoint list` command handler — read session JSONL, filter for `type: "checkpoint"` entries, display label, timestamp, and auto/manual indicator
+- Auto-generate checkpoint label from timestamp (`cp-YYYYMMDD-HHMMSS`) when `/checkpoint` is called with no label argument
+- Add automatic `session-start` checkpoint — after writing the `session_start` entry, immediately write a checkpoint with label `session-start` and `auto: true`
+- Add automatic pre-compaction checkpoint — before compaction summarizes and removes messages, write a checkpoint with label `pre-compaction-<N>` and `auto: true` (blocked: Add `checkpoint` entry type to `Deft.Session.Entry`)
+- Add `Deft.Session.Branch` module — given a source session, checkpoint label, and new session ID: restore conversation history and OM state up to the checkpoint's `entry_index` into a new session, rewriting `session_start` with new ID and `parent_session_id`/`branch_checkpoint`/`branch_entry_index` (blocked: Add `checkpoint` entry type to `Deft.Session.Entry`)
+- Add git branch creation on session branch — after restoring session state, create and switch to `deft/branch-<session_id_short>` from the checkpoint's `git_ref` (blocked: Add `Deft.Session.Branch` module)
+- Add `/branch <label>` command handler — validate checkpoint exists, call `Deft.Session.Branch`, then navigate web UI to the new session. When called with no args, list checkpoints and prompt for selection (blocked: Add `Deft.Session.Branch` module)
+- Add parent/child indicators to session picker in web UI — read `parent_session_id` from `session_start` entries, show branch icon on parents with children, show "branched from <parent> at <checkpoint>" on child sessions (blocked: Add `/branch <label>` command handler)
 

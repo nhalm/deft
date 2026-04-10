@@ -3,8 +3,9 @@
 | | |
 |--------|----------------------------------------------|
 | Version | 0.7 |
-| Status | Implemented |
-| Last Updated | 2026-03-29 |
+| Status | Deprecated |
+| Last Updated | 2026-04-10 |
+| Superseded By | [sessions/README.md](sessions/README.md) |
 
 ## Changelog
 
