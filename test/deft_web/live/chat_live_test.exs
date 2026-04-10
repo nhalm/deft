@@ -396,4 +396,160 @@ defmodule DeftWeb.ChatLiveTest do
       assert html =~ ~r/class="vim-mode-indicator/
     end
   end
+
+  describe "session auto-creation" do
+    test "mounts without session param and redirects to new session", %{conn: conn} do
+      # Mount without session param — should auto-create and redirect
+      {:error, {:redirect, redirect_info}} = live(conn, "/")
+
+      # Should redirect to a URL with session param
+      assert redirect_info.to =~ ~r/\?session=/
+    end
+  end
+
+  describe "incremental content flushing" do
+    test "thinking is flushed to stream when text_delta starts", %{
+      conn: conn,
+      session_id: session_id
+    } do
+      {:ok, view, _html} = live(conn, "/?session=#{session_id}")
+
+      # Send thinking delta
+      send(view.pid, {:agent_event, {:thinking_delta, "analyzing code..."}})
+      assert get_assign(view, :streaming_thinking) == "analyzing code..."
+
+      # Send text delta — should flush the thinking first
+      send(view.pid, {:agent_event, {:text_delta, "Here is the result"}})
+
+      # Thinking buffer should be cleared
+      assert get_assign(view, :streaming_thinking) == ""
+
+      # Text should now be streaming
+      assert get_assign(view, :streaming_text) == "Here is the result"
+    end
+
+    test "text is flushed to stream when thinking_delta starts", %{
+      conn: conn,
+      session_id: session_id
+    } do
+      {:ok, view, _html} = live(conn, "/?session=#{session_id}")
+
+      # Send text delta
+      send(view.pid, {:agent_event, {:text_delta, "Some text"}})
+      assert get_assign(view, :streaming_text) == "Some text"
+
+      # Send thinking delta — should flush the text first
+      send(view.pid, {:agent_event, {:thinking_delta, "thinking..."}})
+
+      # Text buffer should be cleared
+      assert get_assign(view, :streaming_text) == ""
+
+      # Thinking should now be streaming
+      assert get_assign(view, :streaming_thinking) == "thinking..."
+    end
+
+    test "tool_call_start flushes pending thinking", %{
+      conn: conn,
+      session_id: session_id
+    } do
+      {:ok, view, _html} = live(conn, "/?session=#{session_id}")
+
+      # Send only thinking (don't send text, which would flush thinking)
+      send(view.pid, {:agent_event, {:thinking_delta, "analyzing..."}})
+      assert get_assign(view, :streaming_thinking) == "analyzing..."
+
+      # Send tool_call_start — should flush thinking
+      send(view.pid, {:agent_event, {:tool_call_start, %{id: "tool_1", name: "read"}}})
+
+      # Thinking buffer should be cleared
+      assert get_assign(view, :streaming_thinking) == ""
+
+      # Tool should be active
+      assert Map.has_key?(get_assign(view, :active_tools), "tool_1")
+    end
+
+    test "tool_call_start flushes pending text", %{
+      conn: conn,
+      session_id: session_id
+    } do
+      {:ok, view, _html} = live(conn, "/?session=#{session_id}")
+
+      # Send only text (don't send thinking, which would flush text)
+      send(view.pid, {:agent_event, {:text_delta, "some text"}})
+      assert get_assign(view, :streaming_text) == "some text"
+
+      # Send tool_call_start — should flush text
+      send(view.pid, {:agent_event, {:tool_call_start, %{id: "tool_1", name: "read"}}})
+
+      # Text buffer should be cleared
+      assert get_assign(view, :streaming_text) == ""
+
+      # Tool should be active
+      assert Map.has_key?(get_assign(view, :active_tools), "tool_1")
+    end
+
+    test "state_change to idle flushes pending thinking", %{
+      conn: conn,
+      session_id: session_id
+    } do
+      {:ok, view, _html} = live(conn, "/?session=#{session_id}")
+
+      # Send only thinking
+      send(view.pid, {:agent_event, {:thinking_delta, "final thinking..."}})
+      assert get_assign(view, :streaming_thinking) == "final thinking..."
+
+      # Send state_change to idle — should flush thinking
+      send(view.pid, {:agent_event, {:state_change, :idle}})
+
+      # Thinking buffer should be cleared
+      assert get_assign(view, :streaming_thinking) == ""
+      assert get_assign(view, :agent_state) == :idle
+    end
+
+    test "state_change to idle flushes pending text", %{
+      conn: conn,
+      session_id: session_id
+    } do
+      {:ok, view, _html} = live(conn, "/?session=#{session_id}")
+
+      # Send only text
+      send(view.pid, {:agent_event, {:text_delta, "final text"}})
+      assert get_assign(view, :streaming_text) == "final text"
+
+      # Send state_change to idle — should flush text
+      send(view.pid, {:agent_event, {:state_change, :idle}})
+
+      # Text buffer should be cleared
+      assert get_assign(view, :streaming_text) == ""
+      assert get_assign(view, :agent_state) == :idle
+    end
+  end
+
+  describe "error events" do
+    test "error event displays in conversation stream", %{conn: conn, session_id: session_id} do
+      {:ok, view, _html} = live(conn, "/?session=#{session_id}")
+
+      send(view.pid, {:agent_event, {:error, "Something went wrong"}})
+
+      html = render(view)
+      assert html =~ "Error"
+      assert html =~ "Something went wrong"
+    end
+  end
+
+  describe "turn limit events" do
+    test "turn_limit_reached event displays prompt", %{conn: conn, session_id: session_id} do
+      {:ok, view, _html} = live(conn, "/?session=#{session_id}")
+
+      send(view.pid, {:agent_event, {:turn_limit_reached, 25, 25}})
+
+      assert get_assign(view, :turn_limit_reached) == true
+      assert get_assign(view, :turn_limit_count) == 25
+      assert get_assign(view, :turn_limit_max) == 25
+
+      html = render(view)
+      assert html =~ "Turn limit reached"
+      assert html =~ "25/25"
+    end
+  end
 end
