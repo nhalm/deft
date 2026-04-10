@@ -28,7 +28,7 @@ defmodule Deft.Foreman.Coordinator do
 
   alias Deft.Git.Job, as: GitJob
   alias Deft.Foreman
-  alias Deft.Job.LeadSupervisor
+  alias Deft.LeadSupervisor
   alias Deft.Job.RateLimiter
   alias Deft.Job.Runner
   alias Deft.Project

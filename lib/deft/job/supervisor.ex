@@ -9,7 +9,7 @@ defmodule Deft.Job.Supervisor do
   - Deft.Foreman (standard Deft.Agent)
   - Task.Supervisor (RunnerSupervisor for Foreman's research/verification/merge-resolution Runners)
   - Deft.Foreman.Coordinator
-  - Deft.Job.LeadSupervisor (DynamicSupervisor for Leads)
+  - Deft.LeadSupervisor (DynamicSupervisor for Leads)
 
   All children use :temporary restart strategy per orchestration spec section 1.
   The Foreman handles crash recovery explicitly for orchestrated processes.
@@ -161,8 +161,8 @@ defmodule Deft.Job.Supervisor do
 
       # LeadSupervisor
       %{
-        id: Deft.Job.LeadSupervisor,
-        start: {Deft.Job.LeadSupervisor, :start_link, [[job_id: job_id]]},
+        id: Deft.LeadSupervisor,
+        start: {Deft.LeadSupervisor, :start_link, [[job_id: job_id]]},
         restart: :temporary
       }
     ]

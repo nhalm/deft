@@ -1,4 +1,4 @@
-defmodule Deft.Job.LeadSupervisor do
+defmodule Deft.LeadSupervisor do
   @moduledoc """
   DynamicSupervisor for managing Lead processes within a job.
 
