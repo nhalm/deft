@@ -33,6 +33,10 @@ defmodule Deft.Session.Supervisor do
   - `:messages` — Optional. Initial conversation messages (default: []).
   - `:om_snapshot` — Optional. OM snapshot to restore from (for session resume).
   - `:project_dir` — Optional. Project directory to scan for skills/commands (default: `File.cwd!/0`).
+  - `:prompt` — Optional. Initial user prompt (for deft work).
+  - `:working_dir` — Optional. Working directory (defaults to File.cwd!()).
+  - `:resumed_plan` — Optional. Plan to resume from.
+  - `:cli_pid` — Optional. CLI process PID for plan approval messages.
   """
   def start_session(opts) do
     session_id = Keyword.fetch!(opts, :session_id)
@@ -41,6 +45,10 @@ defmodule Deft.Session.Supervisor do
     session_cost = Keyword.get(opts, :session_cost, 0.0)
     om_snapshot = Keyword.get(opts, :om_snapshot)
     project_dir = Keyword.get(opts, :project_dir, File.cwd!())
+    prompt = Keyword.get(opts, :prompt)
+    working_dir = Keyword.get(opts, :working_dir)
+    resumed_plan = Keyword.get(opts, :resumed_plan)
+    cli_pid = Keyword.get(opts, :cli_pid)
 
     # Re-scan project-level skills and commands
     # Built-in and global skills persist; project skills are refreshed each session
@@ -51,7 +59,11 @@ defmodule Deft.Session.Supervisor do
       config: config,
       messages: messages,
       session_cost: session_cost,
-      om_snapshot: om_snapshot
+      om_snapshot: om_snapshot,
+      prompt: prompt,
+      working_dir: working_dir,
+      resumed_plan: resumed_plan,
+      cli_pid: cli_pid
     ]
 
     child_spec = %{

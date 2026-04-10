@@ -2049,15 +2049,15 @@ defmodule Deft.CLI do
     # Set issue status to in_progress
     set_issue_in_progress(issue)
 
-    # Generate job ID
-    job_id = "job_" <> (:crypto.strong_rand_bytes(8) |> Base.encode16(case: :lower))
+    # Generate session ID
+    session_id = "session_" <> (:crypto.strong_rand_bytes(8) |> Base.encode16(case: :lower))
 
-    # Verify working tree is clean before starting the job
+    # Verify working tree is clean before starting the session
     # This is required by git-strategy spec section 1 - prompt user to stash if dirty
-    verify_clean_tree_or_abort(job_id, issue, flags[:auto_approve_all])
+    verify_clean_tree_or_abort(session_id, issue, flags[:auto_approve_all])
 
-    # Start the job supervisor and wait for completion
-    start_job_and_wait(job_id, issue, working_dir, config, flags)
+    # Start the session and wait for completion
+    start_job_and_wait(session_id, issue, working_dir, config, flags)
   end
 
   # Set issue status to in_progress
@@ -2072,15 +2072,15 @@ defmodule Deft.CLI do
     end
   end
 
-  # Verify working tree is clean or abort job creation
-  defp verify_clean_tree_or_abort(job_id, issue, auto_approve) do
-    case ensure_clean_working_tree(job_id, auto_approve) do
+  # Verify working tree is clean or abort session creation
+  defp verify_clean_tree_or_abort(session_id, issue, auto_approve) do
+    case ensure_clean_working_tree(session_id, auto_approve) do
       :ok ->
         :ok
 
       {:error, :dirty_working_tree} ->
         Issues.update(issue.id, %{status: :open})
-        IO.puts(:stderr, "Job creation cancelled - working tree has uncommitted changes")
+        IO.puts(:stderr, "Session creation cancelled - working tree has uncommitted changes")
         exit({:shutdown, 1})
 
       {:error, reason} ->
@@ -2090,8 +2090,8 @@ defmodule Deft.CLI do
     end
   end
 
-  # Start Job Supervisor and wait for completion
-  defp start_job_and_wait(job_id, issue, working_dir, config, flags) do
+  # Start session and wait for completion
+  defp start_job_and_wait(session_id, issue, working_dir, config, flags) do
     issue_prompt = build_issue_prompt(issue)
 
     agent_config = %{
@@ -2116,31 +2116,32 @@ defmodule Deft.CLI do
       job_research_runner_model: config.job_research_runner_model,
       job_max_duration: config.job_max_duration,
       job_test_command: config.job_test_command,
-      job_squash_on_complete: config.job_squash_on_complete
+      job_squash_on_complete: config.job_squash_on_complete,
+      job_initial_concurrency: config.job_initial_concurrency
     }
 
-    case Deft.Job.Supervisor.start_link(
-           job_id: job_id,
+    case Deft.Session.Supervisor.start_session(
+           session_id: session_id,
            config: agent_config,
            prompt: issue_prompt,
            working_dir: working_dir,
            cli_pid: self()
          ) do
-      {:ok, _job_supervisor_pid} ->
-        foreman_pid = get_foreman_pid(job_id)
+      {:ok, _session_supervisor_pid} ->
+        foreman_pid = get_foreman_pid(session_id)
         ref = Process.monitor(foreman_pid)
         result = wait_for_job_completion(foreman_pid, ref)
-        cost = get_job_cost(job_id)
+        cost = get_job_cost(session_id)
 
-        case handle_job_result(result, issue, job_id, cost) do
+        case handle_job_result(result, issue, session_id, cost) do
           :ok -> {:ok, cost}
           other -> other
         end
 
       {:error, reason} ->
-        cost = get_job_cost(job_id)
+        cost = get_job_cost(session_id)
         Issues.update(issue.id, %{status: :open})
-        IO.puts(:stderr, "Error: Failed to start Job Supervisor: #{inspect(reason)}")
+        IO.puts(:stderr, "Error: Failed to start session: #{inspect(reason)}")
         IO.puts("Job cost: $#{Float.round(cost, 2)}")
         exit({:shutdown, 1})
     end
