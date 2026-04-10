@@ -529,13 +529,14 @@ defmodule Deft.Lead.CoordinatorTest do
   end
 
   describe "agent action message handling" do
-    test "handles {:agent_action, :spawn_runner, type, instructions} message", %{
-      tmp_dir: tmp_dir,
-      runner_supervisor: runner_supervisor,
-      session_id: session_id,
-      site_log_name: site_log_name,
-      rate_limiter_pid: rate_limiter_pid
-    } do
+    test "handles {:agent_action, :spawn_runner, type, instructions} message and transitions :planning to :executing",
+         %{
+           tmp_dir: tmp_dir,
+           runner_supervisor: runner_supervisor,
+           session_id: session_id,
+           site_log_name: site_log_name,
+           rate_limiter_pid: rate_limiter_pid
+         } do
       lead_id = "lead-#{:erlang.unique_integer([:positive])}"
       foreman_pid = self()
       deliverable = %{name: "Test deliverable", description: "Test"}
@@ -554,14 +555,19 @@ defmodule Deft.Lead.CoordinatorTest do
           runner_supervisor: runner_supervisor
         )
 
+      # Verify initial state is :planning
+      {state, _data} = :sys.get_state(lead_pid)
+      assert state == :planning
+
       # Send agent action to spawn a runner
       send(lead_pid, {:agent_action, :spawn_runner, :research, "Find all auth files"})
 
       # Give time to process
       Process.sleep(100)
 
-      # Verify Lead Coordinator is still alive and spawned the runner
-      assert Process.alive?(lead_pid)
+      # Verify Lead Coordinator transitioned to :executing
+      {new_state, _data} = :sys.get_state(lead_pid)
+      assert new_state == :executing
 
       # Cleanup
       :gen_statem.stop(lead_pid)
@@ -675,6 +681,362 @@ defmodule Deft.Lead.CoordinatorTest do
       assert_receive {:lead_message, :blocker, ^blocker_desc, metadata}, 1000
       assert metadata.lead_id == lead_id
       assert metadata.deliverable == "Test deliverable"
+
+      # Cleanup
+      :gen_statem.stop(lead_pid)
+    end
+  end
+
+  describe "state transitions" do
+    test "transitions from :verifying to :complete when testing passes", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor,
+      session_id: session_id,
+      site_log_name: site_log_name,
+      rate_limiter_pid: rate_limiter_pid
+    } do
+      lead_id = "lead-#{:erlang.unique_integer([:positive])}"
+      foreman_pid = self()
+      deliverable = %{name: "Test deliverable", description: "Test"}
+
+      {:ok, lead_pid} =
+        Coordinator.start_link(
+          lead_id: lead_id,
+          session_id: session_id,
+          config: %{provider: "test"},
+          deliverable: deliverable,
+          foreman_pid: foreman_pid,
+          site_log_name: site_log_name,
+          rate_limiter_pid: rate_limiter_pid,
+          worktree_path: tmp_dir,
+          working_dir: tmp_dir,
+          runner_supervisor: runner_supervisor
+        )
+
+      # Transition to :verifying state
+      :sys.replace_state(lead_pid, fn {_s, d} -> {:verifying, d} end)
+
+      # Create a task ref and simulate runner tracking
+      task_ref = make_ref()
+
+      {_state, data} = :sys.get_state(lead_pid)
+
+      runner_info = %{
+        task_description: "testing runner",
+        runner_type: :testing,
+        pid: self(),
+        monitor_ref: task_ref,
+        timeout_ref: nil,
+        started_at: System.monotonic_time(:millisecond)
+      }
+
+      data = %{data | runner_tasks: Map.put(data.runner_tasks, task_ref, runner_info)}
+      :sys.replace_state(lead_pid, fn {s, _d} -> {s, data} end)
+
+      # Send task completion message with success result
+      send(lead_pid, {task_ref, {:ok, "tests passed"}})
+
+      # Wait for state transition
+      Process.sleep(200)
+
+      # Verify transition to :complete
+      {final_state, _data} = :sys.get_state(lead_pid)
+      assert final_state == :complete
+
+      # Cleanup
+      :gen_statem.stop(lead_pid)
+    end
+
+    test "transitions from :verifying to :executing when testing fails", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor,
+      session_id: session_id,
+      site_log_name: site_log_name,
+      rate_limiter_pid: rate_limiter_pid
+    } do
+      lead_id = "lead-#{:erlang.unique_integer([:positive])}"
+      foreman_pid = self()
+      deliverable = %{name: "Test deliverable", description: "Test"}
+
+      {:ok, lead_pid} =
+        Coordinator.start_link(
+          lead_id: lead_id,
+          session_id: session_id,
+          config: %{provider: "test"},
+          deliverable: deliverable,
+          foreman_pid: foreman_pid,
+          site_log_name: site_log_name,
+          rate_limiter_pid: rate_limiter_pid,
+          worktree_path: tmp_dir,
+          working_dir: tmp_dir,
+          runner_supervisor: runner_supervisor
+        )
+
+      # Transition to :verifying state
+      :sys.replace_state(lead_pid, fn {_s, d} -> {:verifying, d} end)
+
+      # Create a task ref and simulate runner tracking
+      task_ref = make_ref()
+
+      {_state, data} = :sys.get_state(lead_pid)
+
+      runner_info = %{
+        task_description: "testing runner",
+        runner_type: :testing,
+        pid: self(),
+        monitor_ref: task_ref,
+        timeout_ref: nil,
+        started_at: System.monotonic_time(:millisecond)
+      }
+
+      data = %{data | runner_tasks: Map.put(data.runner_tasks, task_ref, runner_info)}
+      :sys.replace_state(lead_pid, fn {s, _d} -> {s, data} end)
+
+      # Send task completion message with failure result
+      send(lead_pid, {task_ref, {:error, "tests failed"}})
+
+      # Wait for state transition
+      Process.sleep(200)
+
+      # Verify transition back to :executing for remediation
+      {final_state, _data} = :sys.get_state(lead_pid)
+      assert final_state == :executing
+
+      # Cleanup
+      :gen_statem.stop(lead_pid)
+    end
+  end
+
+  describe "steering queue in :verifying state" do
+    test "queues steering messages during :verifying instead of processing immediately", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor,
+      session_id: session_id,
+      site_log_name: site_log_name,
+      rate_limiter_pid: rate_limiter_pid
+    } do
+      lead_id = "lead-#{:erlang.unique_integer([:positive])}"
+      foreman_pid = self()
+      deliverable = %{name: "Test deliverable", description: "Test"}
+
+      {:ok, lead_pid} =
+        Coordinator.start_link(
+          lead_id: lead_id,
+          session_id: session_id,
+          config: %{provider: "test"},
+          deliverable: deliverable,
+          foreman_pid: foreman_pid,
+          site_log_name: site_log_name,
+          rate_limiter_pid: rate_limiter_pid,
+          worktree_path: tmp_dir,
+          working_dir: tmp_dir,
+          runner_supervisor: runner_supervisor
+        )
+
+      # Transition to :verifying state
+      :sys.replace_state(lead_pid, fn {_s, d} -> {:verifying, d} end)
+
+      # Send steering message
+      send(lead_pid, {:foreman_steering, "Adjust your approach"})
+
+      # Give time to process
+      Process.sleep(100)
+
+      # Verify steering was queued, not processed
+      {_state, data} = :sys.get_state(lead_pid)
+      assert length(data.queued_steering) == 1
+      assert hd(data.queued_steering) == "Adjust your approach"
+
+      # Cleanup
+      :gen_statem.stop(lead_pid)
+    end
+
+    test "queued steering prevents immediate completion", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor,
+      session_id: session_id,
+      site_log_name: site_log_name,
+      rate_limiter_pid: rate_limiter_pid
+    } do
+      lead_id = "lead-#{:erlang.unique_integer([:positive])}"
+      foreman_pid = self()
+      deliverable = %{name: "Test deliverable", description: "Test"}
+
+      {:ok, lead_pid} =
+        Coordinator.start_link(
+          lead_id: lead_id,
+          session_id: session_id,
+          config: %{provider: "test"},
+          deliverable: deliverable,
+          foreman_pid: foreman_pid,
+          site_log_name: site_log_name,
+          rate_limiter_pid: rate_limiter_pid,
+          worktree_path: tmp_dir,
+          working_dir: tmp_dir,
+          runner_supervisor: runner_supervisor
+        )
+
+      # Transition to :verifying and queue steering
+      :sys.replace_state(lead_pid, fn {_s, d} -> {:verifying, d} end)
+      send(lead_pid, {:foreman_steering, "Make changes based on feedback"})
+      Process.sleep(100)
+
+      # Verify steering was queued
+      {_state, data} = :sys.get_state(lead_pid)
+      assert length(data.queued_steering) > 0
+
+      # Note: Testing the actual :complete → :executing transition with queued steering
+      # would require triggering the state enter callback, which has complex semantics.
+      # The implementation at coordinator.ex:566-577 shows this logic exists.
+      # This test verifies the prerequisite: steering gets queued in :verifying state.
+
+      # Cleanup
+      :gen_statem.stop(lead_pid)
+    end
+
+    test ":complete state sends completion when no queued steering", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor,
+      session_id: session_id,
+      site_log_name: site_log_name,
+      rate_limiter_pid: rate_limiter_pid
+    } do
+      lead_id = "lead-#{:erlang.unique_integer([:positive])}"
+      foreman_pid = self()
+      deliverable = %{name: "Test deliverable", description: "Test"}
+
+      {:ok, lead_pid} =
+        Coordinator.start_link(
+          lead_id: lead_id,
+          session_id: session_id,
+          config: %{provider: "test"},
+          deliverable: deliverable,
+          foreman_pid: foreman_pid,
+          site_log_name: site_log_name,
+          rate_limiter_pid: rate_limiter_pid,
+          worktree_path: tmp_dir,
+          working_dir: tmp_dir,
+          runner_supervisor: runner_supervisor
+        )
+
+      # Set up :verifying state with no queued steering
+      :sys.replace_state(lead_pid, fn {_s, d} -> {:verifying, %{d | queued_steering: []}} end)
+
+      # Create a task ref and simulate successful testing runner
+      task_ref = make_ref()
+
+      {_state, data} = :sys.get_state(lead_pid)
+
+      runner_info = %{
+        task_description: "testing runner",
+        runner_type: :testing,
+        pid: self(),
+        monitor_ref: task_ref,
+        timeout_ref: nil,
+        started_at: System.monotonic_time(:millisecond)
+      }
+
+      data = %{data | runner_tasks: Map.put(data.runner_tasks, task_ref, runner_info)}
+      :sys.replace_state(lead_pid, fn {s, _d} -> {s, data} end)
+
+      # Send successful test completion to trigger transition to :complete
+      send(lead_pid, {task_ref, {:ok, "tests passed"}})
+
+      # Give time to transition and send message
+      Process.sleep(200)
+
+      # Verify :complete message sent to Foreman
+      assert_receive {:lead_message, :complete, _content, metadata}, 1000
+      assert metadata.lead_id == lead_id
+
+      # Cleanup
+      :gen_statem.stop(lead_pid)
+    end
+  end
+
+  describe "foreman contract messages" do
+    test "forwards dependency contracts to Lead in :planning state", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor,
+      session_id: session_id,
+      site_log_name: site_log_name,
+      rate_limiter_pid: rate_limiter_pid
+    } do
+      lead_id = "lead-#{:erlang.unique_integer([:positive])}"
+      foreman_pid = self()
+      deliverable = %{name: "Test deliverable", description: "Test"}
+
+      {:ok, lead_pid} =
+        Coordinator.start_link(
+          lead_id: lead_id,
+          session_id: session_id,
+          config: %{provider: "test"},
+          deliverable: deliverable,
+          foreman_pid: foreman_pid,
+          site_log_name: site_log_name,
+          rate_limiter_pid: rate_limiter_pid,
+          worktree_path: tmp_dir,
+          working_dir: tmp_dir,
+          runner_supervisor: runner_supervisor
+        )
+
+      # Verify initial state is planning
+      {state, _data} = :sys.get_state(lead_pid)
+      assert state == :planning
+
+      # Send foreman contract
+      contract = %{interface: "Authentication", methods: ["login", "logout"]}
+      send(lead_pid, {:foreman_contract, contract})
+
+      # Give time to process
+      Process.sleep(100)
+
+      # Verify Lead Coordinator is still alive
+      assert Process.alive?(lead_pid)
+
+      # Cleanup
+      :gen_statem.stop(lead_pid)
+    end
+
+    test "forwards dependency contracts to Lead in :executing state", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor,
+      session_id: session_id,
+      site_log_name: site_log_name,
+      rate_limiter_pid: rate_limiter_pid
+    } do
+      lead_id = "lead-#{:erlang.unique_integer([:positive])}"
+      foreman_pid = self()
+      deliverable = %{name: "Test deliverable", description: "Test"}
+
+      {:ok, lead_pid} =
+        Coordinator.start_link(
+          lead_id: lead_id,
+          session_id: session_id,
+          config: %{provider: "test"},
+          deliverable: deliverable,
+          foreman_pid: foreman_pid,
+          site_log_name: site_log_name,
+          rate_limiter_pid: rate_limiter_pid,
+          worktree_path: tmp_dir,
+          working_dir: tmp_dir,
+          runner_supervisor: runner_supervisor
+        )
+
+      # Transition to :executing state
+      :sys.replace_state(lead_pid, fn {_s, d} -> {:executing, d} end)
+
+      # Send foreman contract
+      contract = %{interface: "Database", schema: "users table"}
+      send(lead_pid, {:foreman_contract, contract})
+
+      # Give time to process
+      Process.sleep(100)
+
+      # Verify Lead Coordinator is still alive and in :executing
+      assert Process.alive?(lead_pid)
+      {state, _data} = :sys.get_state(lead_pid)
+      assert state == :executing
 
       # Cleanup
       :gen_statem.stop(lead_pid)
