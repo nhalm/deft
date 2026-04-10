@@ -42,5 +42,5 @@ if config_env() != :test do
 end
 
 config :deft, DeftWeb.Endpoint,
-  http: [port: port],
+  http: [port: port, ip: {0, 0, 0, 0}],
   secret_key_base: secret_key_base
