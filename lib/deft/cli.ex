@@ -1447,7 +1447,7 @@ defmodule Deft.CLI do
         project_dir: working_dir
       )
 
-    [{agent_pid, _}] = Registry.lookup(Deft.ProcessRegistry, {:agent, session_id})
+    [{agent_pid, _}] = Registry.lookup(Deft.ProcessRegistry, {:foreman, session_id})
     _ = Registry.register(Deft.Registry, {:session, session_id}, [])
     agent_pid
   end
@@ -1760,7 +1760,7 @@ defmodule Deft.CLI do
         project_dir: working_dir
       )
 
-    [{agent_pid, _}] = Registry.lookup(Deft.ProcessRegistry, {:agent, session_id})
+    [{agent_pid, _}] = Registry.lookup(Deft.ProcessRegistry, {:foreman, session_id})
     _ = Registry.register(Deft.Registry, {:session, session_id}, [])
 
     agent_pid
