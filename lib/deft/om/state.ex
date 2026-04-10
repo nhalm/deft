@@ -732,14 +732,19 @@ defmodule Deft.OM.State do
         merged_observations =
           Parse.merge_observations(state.active_observations, result.observations)
 
-        # Update observed_message_ids
-        new_observed_message_ids = state.observed_message_ids ++ result.message_ids
+        # Apply tail retention to determine which messages to observe vs keep in tail
+        # Per spec section 6.1: keep recent messages unobserved up to buffer_tail_retention
+        {tail_ids, observed_ids, tail_tokens, observed_tokens} =
+          apply_tail_retention(result.message_ids, state)
+
+        # Add only observed message_ids to observed_message_ids (tail messages stay unobserved)
+        new_observed_message_ids = state.observed_message_ids ++ observed_ids
 
         # Calculate new observation tokens
         new_observation_tokens = Tokens.estimate(merged_observations, state.calibration_factor)
 
-        # Decrement pending_message_tokens by the observed message tokens
-        new_pending = max(0, state.pending_message_tokens - result.message_tokens)
+        # Decrement pending_message_tokens by only the observed message tokens (not tail)
+        new_pending = max(0, state.pending_message_tokens - observed_tokens)
 
         # Update continuation hint if present
         new_continuation_hint =
@@ -748,6 +753,10 @@ defmodule Deft.OM.State do
           else
             state.continuation_hint
           end
+
+        Logger.debug(
+          "#{log_prefix(state.session_id)} Sync observer: #{length(tail_ids)} messages (#{tail_tokens} tokens) kept in tail, #{length(observed_ids)} messages (#{observed_tokens} tokens) observed"
+        )
 
         %{
           state
@@ -1155,6 +1164,86 @@ defmodule Deft.OM.State do
     current_chunks
   end
 
+  # Apply tail retention to determine which messages to observe vs keep in tail
+  # Per spec section 6.1 and v0.3 changelog: keep recent messages unobserved up to
+  # buffer_tail_retention fraction of threshold, skipping oversized messages
+  defp apply_tail_retention(message_ids, state) do
+    tail_budget = trunc(message_threshold(state.config) * state.config.om_buffer_tail_retention)
+    messages_map = Map.new(state.messages, fn msg -> {msg.id, msg} end)
+
+    {missing_ids, messages_with_tokens} =
+      separate_missing_and_found_messages(message_ids, messages_map, state)
+
+    sorted_messages = sort_messages_by_timestamp_desc(messages_with_tokens)
+    {tail_ids, tail_tokens} = build_tail_from_sorted_messages(sorted_messages, tail_budget)
+    {observed_ids, observed_tokens} = calculate_observed_from_tail(messages_with_tokens, tail_ids)
+
+    # Add missing IDs to observed (conservative - can't determine if they're in tail)
+    all_observed_ids = Enum.reverse(observed_ids) ++ missing_ids
+
+    {tail_ids, all_observed_ids, tail_tokens, observed_tokens}
+  end
+
+  # Separate message IDs into missing (not in state.messages) and found (with tokens calculated)
+  defp separate_missing_and_found_messages(message_ids, messages_map, state) do
+    message_ids
+    |> Enum.reduce({[], []}, fn id, {missing_acc, found_acc} ->
+      case Map.get(messages_map, id) do
+        nil ->
+          Logger.debug(
+            "#{log_prefix(state.session_id)} Message #{id} not found when applying tail retention, marking as observed"
+          )
+
+          {[id | missing_acc], found_acc}
+
+        msg ->
+          content_text = extract_message_text(msg)
+          tokens = Tokens.estimate(content_text, state.calibration_factor)
+          {missing_acc, [{id, msg, tokens} | found_acc]}
+      end
+    end)
+    |> then(fn {missing, found} -> {Enum.reverse(missing), Enum.reverse(found)} end)
+  end
+
+  # Sort messages by timestamp descending (most recent first)
+  defp sort_messages_by_timestamp_desc(messages_with_tokens) do
+    Enum.sort_by(
+      messages_with_tokens,
+      fn {_id, msg, _tokens} -> DateTime.to_unix(msg.timestamp, :microsecond) end,
+      :desc
+    )
+  end
+
+  # Build tail by adding messages from most recent, skipping oversized ones
+  # Per spec v0.3: "must skip oversized messages and continue, not halt"
+  defp build_tail_from_sorted_messages(sorted_messages, tail_budget) do
+    {tail_ids, tail_tokens, _budget_remaining} =
+      Enum.reduce(sorted_messages, {[], 0, tail_budget}, fn {id, _msg, tokens},
+                                                            {tail_acc, tail_tokens_acc,
+                                                             budget_remaining} ->
+        if tokens <= budget_remaining do
+          {[id | tail_acc], tail_tokens_acc + tokens, budget_remaining - tokens}
+        else
+          {tail_acc, tail_tokens_acc, budget_remaining}
+        end
+      end)
+
+    {Enum.reverse(tail_ids), tail_tokens}
+  end
+
+  # Calculate observed IDs and tokens (everything not in tail)
+  defp calculate_observed_from_tail(messages_with_tokens, tail_ids) do
+    tail_ids_set = MapSet.new(tail_ids)
+
+    Enum.reduce(messages_with_tokens, {[], 0}, fn {id, _msg, tokens}, {obs_acc, obs_tokens} ->
+      if id in tail_ids_set do
+        {obs_acc, obs_tokens}
+      else
+        {[id | obs_acc], obs_tokens + tokens}
+      end
+    end)
+  end
+
   # Merge buffered chunks into active observations and calculate updated values
   defp merge_buffered_chunks(current_chunks, state) do
     # Section-aware merge all current (non-stale) chunks into active_observations
@@ -1167,18 +1256,23 @@ defmodule Deft.OM.State do
     all_message_ids =
       Enum.flat_map(current_chunks, fn chunk -> chunk.message_ids end)
 
-    # Add chunk message_ids to observed_message_ids
-    new_observed_message_ids = state.observed_message_ids ++ all_message_ids
+    # Apply tail retention to determine which messages to observe vs keep in tail
+    # Per spec section 6.1: keep recent messages unobserved up to buffer_tail_retention
+    {tail_ids, observed_ids, tail_tokens, observed_tokens} =
+      apply_tail_retention(all_message_ids, state)
+
+    # Add only observed message_ids to observed_message_ids (tail messages stay unobserved)
+    new_observed_message_ids = state.observed_message_ids ++ observed_ids
 
     # Calculate tokens for merged observations
     new_observation_tokens = Tokens.estimate(merged_observations, state.calibration_factor)
 
-    # Calculate how many tokens were observed (to subtract from pending)
-    observed_tokens =
-      Enum.reduce(current_chunks, 0, fn chunk, acc -> acc + chunk.message_tokens end)
-
-    # Subtract observed tokens from pending
+    # Subtract only observed tokens from pending (tail tokens stay in pending)
     new_pending = max(0, state.pending_message_tokens - observed_tokens)
+
+    Logger.debug(
+      "#{log_prefix(state.session_id)} Tail retention: #{length(tail_ids)} messages (#{tail_tokens} tokens) kept in tail, #{length(observed_ids)} messages (#{observed_tokens} tokens) observed"
+    )
 
     %{
       observations: merged_observations,

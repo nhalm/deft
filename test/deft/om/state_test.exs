@@ -280,11 +280,19 @@ defmodule Deft.OM.StateTest do
     end
 
     test "subtracts observed tokens from pending", %{session_id: session_id} do
+      # Make msg1 larger than tail budget (6000 tokens) so it gets observed
+      msg1 = %Message{
+        id: "msg1",
+        role: :user,
+        content: [%Text{text: String.duplicate("x", 7000 * 4)}],
+        timestamp: DateTime.utc_now()
+      }
+
       chunk = %BufferedChunk{
         observations: "## Current State\n- Task",
         token_count: 50,
         message_ids: ["msg1"],
-        message_tokens: 5000,
+        message_tokens: 7000,
         epoch: 0
       }
 
@@ -292,7 +300,8 @@ defmodule Deft.OM.StateTest do
         %{
           state
           | buffered_chunks: [chunk],
-            pending_message_tokens: 32_000
+            pending_message_tokens: 32_000,
+            messages: [msg1]
         }
       end)
 
@@ -310,10 +319,279 @@ defmodule Deft.OM.StateTest do
 
       state = :sys.get_state(via_tuple(session_id))
 
-      # pending should be reduced by the chunk's message_tokens (5000)
-      # Original: 32000, subtract 5000 = 27000, plus small amount from "go" message
-      assert state.pending_message_tokens < 30_000
+      # pending should be reduced by the chunk's message_tokens (7000)
+      # Original: 32000, subtract 7000 = 25000, plus small amount from "go" message
+      assert state.pending_message_tokens < 26_000
+      assert state.pending_message_tokens > 24_000
+    end
+  end
+
+  describe "tail retention" do
+    test "keeps recent messages unobserved after activation when under tail budget", %{
+      session_id: session_id
+    } do
+      # Tail budget is 20% of 30,000 = 6,000 tokens
+      # Create a chunk with 5,000 message tokens (under budget)
+      msg1 = %Message{
+        id: "msg1",
+        role: :user,
+        content: [%Text{text: String.duplicate("x", 5000 * 4)}],
+        timestamp: DateTime.utc_now()
+      }
+
+      chunk = %BufferedChunk{
+        observations: "## Current State\n- Task: Reading files",
+        token_count: 100,
+        message_ids: ["msg1"],
+        message_tokens: 5000,
+        epoch: 0
+      }
+
+      :sys.replace_state(via_tuple(session_id), fn state ->
+        %{
+          state
+          | buffered_chunks: [chunk],
+            pending_message_tokens: 30_000,
+            messages: [msg1]
+        }
+      end)
+
+      messages = [
+        %Message{
+          id: "trigger",
+          role: :user,
+          content: [%Text{text: "go"}],
+          timestamp: DateTime.utc_now()
+        }
+      ]
+
+      State.messages_added(session_id, messages)
+      Process.sleep(50)
+
+      state = :sys.get_state(via_tuple(session_id))
+
+      # Observations should be merged
+      assert String.contains?(state.active_observations, "Reading files")
+
+      # msg1 should NOT be in observed_message_ids (kept in tail)
+      refute "msg1" in state.observed_message_ids
+
+      # pending_message_tokens should NOT be reduced by msg1's tokens
+      # (only reduced by the small "go" message)
       assert state.pending_message_tokens > 25_000
+    end
+
+    test "marks older messages as observed when tail budget exceeded", %{
+      session_id: session_id
+    } do
+      # Tail budget is 20% of 30,000 = 6,000 tokens
+      # Create messages: old (4000 tokens) and recent (3000 tokens)
+      # Total = 7000 tokens, exceeds 6000 budget
+      # Should keep only the most recent (3000) in tail
+      now = DateTime.utc_now()
+      old_time = DateTime.add(now, -60, :second)
+
+      msg_old = %Message{
+        id: "msg_old",
+        role: :user,
+        content: [%Text{text: String.duplicate("x", 4000 * 4)}],
+        timestamp: old_time
+      }
+
+      msg_recent = %Message{
+        id: "msg_recent",
+        role: :user,
+        content: [%Text{text: String.duplicate("x", 3000 * 4)}],
+        timestamp: now
+      }
+
+      chunk = %BufferedChunk{
+        observations: "## Session History\n- Old event\n- Recent event",
+        token_count: 100,
+        message_ids: ["msg_old", "msg_recent"],
+        message_tokens: 7000,
+        epoch: 0
+      }
+
+      :sys.replace_state(via_tuple(session_id), fn state ->
+        %{
+          state
+          | buffered_chunks: [chunk],
+            pending_message_tokens: 30_000,
+            messages: [msg_old, msg_recent]
+        }
+      end)
+
+      messages = [
+        %Message{
+          id: "trigger",
+          role: :user,
+          content: [%Text{text: "go"}],
+          timestamp: DateTime.utc_now()
+        }
+      ]
+
+      State.messages_added(session_id, messages)
+      Process.sleep(50)
+
+      state = :sys.get_state(via_tuple(session_id))
+
+      # Observations should be merged
+      assert String.contains?(state.active_observations, "Old event")
+
+      # msg_old should be observed (not in tail)
+      assert "msg_old" in state.observed_message_ids
+
+      # msg_recent should NOT be observed (kept in tail)
+      refute "msg_recent" in state.observed_message_ids
+
+      # pending should be reduced by msg_old's tokens (4000) but not msg_recent's
+      # Original: 30000, subtract 4000 = 26000, plus small "go" message
+      assert state.pending_message_tokens > 25_000
+      assert state.pending_message_tokens < 27_000
+    end
+
+    test "skips oversized messages when building tail and continues", %{
+      session_id: session_id
+    } do
+      # Tail budget is 20% of 30,000 = 6,000 tokens
+      # Create messages: old (2000), huge (15000), recent (2000)
+      # Should keep recent (2000) and old (2000) in tail, skip huge, observe none
+      now = DateTime.utc_now()
+
+      msg_old = %Message{
+        id: "msg_old",
+        role: :user,
+        content: [%Text{text: String.duplicate("x", 2000 * 4)}],
+        timestamp: DateTime.add(now, -120, :second)
+      }
+
+      msg_huge = %Message{
+        id: "msg_huge",
+        role: :user,
+        content: [%Text{text: String.duplicate("x", 15000 * 4)}],
+        timestamp: DateTime.add(now, -60, :second)
+      }
+
+      msg_recent = %Message{
+        id: "msg_recent",
+        role: :user,
+        content: [%Text{text: String.duplicate("x", 2000 * 4)}],
+        timestamp: now
+      }
+
+      chunk = %BufferedChunk{
+        observations: "## Session History\n- Events",
+        token_count: 100,
+        message_ids: ["msg_old", "msg_huge", "msg_recent"],
+        message_tokens: 19_000,
+        epoch: 0
+      }
+
+      :sys.replace_state(via_tuple(session_id), fn state ->
+        %{
+          state
+          | buffered_chunks: [chunk],
+            pending_message_tokens: 30_000,
+            messages: [msg_old, msg_huge, msg_recent]
+        }
+      end)
+
+      messages = [
+        %Message{
+          id: "trigger",
+          role: :user,
+          content: [%Text{text: "go"}],
+          timestamp: DateTime.utc_now()
+        }
+      ]
+
+      State.messages_added(session_id, messages)
+      Process.sleep(50)
+
+      state = :sys.get_state(via_tuple(session_id))
+
+      # msg_recent and msg_old should be in tail (unobserved) - total 4000 < 6000
+      refute "msg_recent" in state.observed_message_ids
+      refute "msg_old" in state.observed_message_ids
+
+      # msg_huge should be observed (too big for tail, so it gets observed)
+      assert "msg_huge" in state.observed_message_ids
+
+      # pending should be reduced by msg_huge's tokens (15000)
+      # Original: 30000, subtract 15000 = 15000, plus small "go" message
+      assert state.pending_message_tokens > 14_000
+      assert state.pending_message_tokens < 16_000
+    end
+
+    test "applies tail retention in sync observer path", %{session_id: session_id} do
+      # Tail budget is 20% of 30,000 = 6,000 tokens
+      msg_old = %Message{
+        id: "msg_old",
+        role: :user,
+        content: [%Text{text: String.duplicate("x", 10000 * 4)}],
+        timestamp: DateTime.add(DateTime.utc_now(), -60, :second)
+      }
+
+      msg_recent = %Message{
+        id: "msg_recent",
+        role: :user,
+        content: [%Text{text: String.duplicate("x", 3000 * 4)}],
+        timestamp: DateTime.utc_now()
+      }
+
+      ref = make_ref()
+      test_pid = self()
+
+      :sys.replace_state(via_tuple(session_id), fn state ->
+        %{
+          state
+          | messages: [msg_old, msg_recent],
+            pending_message_tokens: 36_000,
+            observer_ref: ref,
+            is_observing: true,
+            sync_from: {test_pid, make_ref()}
+        }
+      end)
+
+      pid = GenServer.whereis(via_tuple(session_id))
+
+      fake_observations = """
+      ## Current State
+      - (10:00) Processing messages
+
+      ## Session History
+      - (10:00) Old message
+      - (10:01) Recent message
+      """
+
+      result = %{
+        observations: fake_observations,
+        message_ids: ["msg_old", "msg_recent"],
+        message_tokens: 13_000,
+        current_task: nil,
+        continuation_hint: nil,
+        usage: nil
+      }
+
+      send(pid, {ref, result})
+      send(pid, {:DOWN, ref, :process, self(), :normal})
+      Process.sleep(100)
+
+      final_state = :sys.get_state(via_tuple(session_id))
+
+      # Observations should be merged
+      assert String.contains?(final_state.active_observations, "Processing messages")
+
+      # msg_old should be observed (10000 tokens, too big for 6000 budget)
+      assert "msg_old" in final_state.observed_message_ids
+
+      # msg_recent should be in tail (3000 < 6000 budget)
+      refute "msg_recent" in final_state.observed_message_ids
+
+      # pending should be reduced by msg_old only (10000 tokens)
+      assert final_state.pending_message_tokens < 36_000
+      assert final_state.pending_message_tokens > 20_000
     end
   end
 
@@ -322,17 +600,19 @@ defmodule Deft.OM.StateTest do
       session_id: session_id
     } do
       # Add messages to the state
+      # Make messages large enough to exceed tail budget (6,000 tokens each)
+      # so they get observed rather than kept in tail
       messages = [
         %Message{
           id: "msg1",
           role: :user,
-          content: [%Text{text: "Read the auth file"}],
-          timestamp: DateTime.utc_now()
+          content: [%Text{text: String.duplicate("x", 7000 * 4)}],
+          timestamp: DateTime.add(DateTime.utc_now(), -60, :second)
         },
         %Message{
           id: "msg2",
           role: :assistant,
-          content: [%Text{text: "I'll read the auth file"}],
+          content: [%Text{text: String.duplicate("x", 7000 * 4)}],
           timestamp: DateTime.utc_now()
         }
       ]
@@ -366,7 +646,7 @@ defmodule Deft.OM.StateTest do
       result = %{
         observations: fake_observations,
         message_ids: ["msg1", "msg2"],
-        message_tokens: 1000,
+        message_tokens: 14_000,
         current_task: nil,
         continuation_hint: nil,
         usage: nil
