@@ -1,7 +1,7 @@
-defmodule Deft.Job.LeadTest do
+defmodule Deft.Lead.CoordinatorTest do
   use ExUnit.Case, async: false
 
-  alias Deft.Job.Lead
+  alias Deft.Lead.Coordinator
   alias Deft.Job.RateLimiter
   alias Deft.Project
   alias Deft.Store
@@ -69,12 +69,12 @@ defmodule Deft.Job.LeadTest do
       site_log_name: site_log_name,
       rate_limiter_pid: rate_limiter_pid
     } do
-      # Start a minimal Lead
+      # Start a minimal Lead Coordinator
       lead_id = "lead-#{:erlang.unique_integer([:positive])}"
       foreman_pid = self()
 
       {:ok, lead_pid} =
-        Lead.start_link(
+        Coordinator.start_link(
           lead_id: lead_id,
           session_id: session_id,
           config: %{provider: "test"},
@@ -87,21 +87,21 @@ defmodule Deft.Job.LeadTest do
           runner_supervisor: runner_supervisor
         )
 
-      # Get the Lead's state
-      # Note: The Lead may already be calling the LLM in planning phase
+      # Get the Lead Coordinator's state
+      # Note: The Lead Coordinator may already be calling the LLM in planning phase
       {state, data} = :sys.get_state(lead_pid)
 
-      # Verify the Lead is in planning phase
+      # Verify the Lead Coordinator is in planning phase
       assert state == :planning
       assert data.runner_supervisor == runner_supervisor
       assert data.runner_tasks == %{}
 
-      # Spawn a runner directly using the Lead's spawn_runner function
+      # Spawn a runner directly using the Lead Coordinator's spawn_runner function
       # We'll simulate this by calling the internal function (normally this happens via state machine)
       context = %{test: "context"}
 
       {:ok, task_ref, monitor_ref, updated_data} =
-        Lead.spawn_runner(
+        Coordinator.spawn_runner(
           data,
           :research,
           "test task",
@@ -144,7 +144,7 @@ defmodule Deft.Job.LeadTest do
       foreman_pid = self()
 
       {:ok, lead_pid} =
-        Lead.start_link(
+        Coordinator.start_link(
           lead_id: lead_id,
           session_id: session_id,
           config: %{provider: "test"},
@@ -157,14 +157,14 @@ defmodule Deft.Job.LeadTest do
           runner_supervisor: runner_supervisor
         )
 
-      # Transition Lead to executing state to avoid LLM calls
+      # Transition Lead Coordinator to executing state to avoid LLM calls
       :sys.replace_state(lead_pid, fn {_s, d} -> {:executing, d} end)
 
       # Create a fake runner task ref (in real Task, task_ref and monitor_ref are the same)
       task_ref = make_ref()
       fake_pid = spawn(fn -> :ok end)
 
-      # Manually update the Lead's state to include this "runner"
+      # Manually update the Lead Coordinator's state to include this "runner"
       {_state, data} = :sys.get_state(lead_pid)
 
       runner_info = %{
@@ -179,13 +179,13 @@ defmodule Deft.Job.LeadTest do
       data = %{data | runner_tasks: Map.put(data.runner_tasks, task_ref, runner_info)}
       :sys.replace_state(lead_pid, fn {s, _d} -> {s, data} end)
 
-      # Send a fake DOWN message to the Lead to simulate a crash
+      # Send a fake DOWN message to the Lead Coordinator to simulate a crash
       send(lead_pid, {:DOWN, task_ref, :process, fake_pid, :killed})
 
-      # Give the Lead time to process the DOWN message
+      # Give the Lead Coordinator time to process the DOWN message
       Process.sleep(100)
 
-      # Verify the Lead is still alive after handling the crash
+      # Verify the Lead Coordinator is still alive after handling the crash
       assert Process.alive?(lead_pid)
 
       # Verify the runner was removed from tracking
@@ -209,7 +209,7 @@ defmodule Deft.Job.LeadTest do
       foreman_pid = self()
 
       {:ok, lead_pid} =
-        Lead.start_link(
+        Coordinator.start_link(
           lead_id: lead_id,
           session_id: session_id,
           config: %{provider: "test", job_runner_timeout: 100},
@@ -230,7 +230,7 @@ defmodule Deft.Job.LeadTest do
 
       monitor_ref = Process.monitor(task.pid)
 
-      # Manually update the Lead's state to include this runner with a short timeout
+      # Manually update the Lead Coordinator's state to include this runner with a short timeout
       {_state, data} = :sys.get_state(lead_pid)
 
       timeout_ref = Process.send_after(lead_pid, {:runner_timeout, task.ref}, 100)
@@ -250,7 +250,7 @@ defmodule Deft.Job.LeadTest do
       # Wait for the timeout message to be processed
       Process.sleep(200)
 
-      # Verify the Lead is still alive
+      # Verify the Lead Coordinator is still alive
       assert Process.alive?(lead_pid)
 
       # Cleanup the task
@@ -273,7 +273,7 @@ defmodule Deft.Job.LeadTest do
       foreman_pid = self()
 
       {:ok, lead_pid} =
-        Lead.start_link(
+        Coordinator.start_link(
           lead_id: lead_id,
           session_id: session_id,
           config: %{provider: "test"},
@@ -287,7 +287,7 @@ defmodule Deft.Job.LeadTest do
         )
 
       # Send a status message
-      Lead.send_lead_message(foreman_pid, :status, "Test status", %{})
+      Coordinator.send_lead_message(foreman_pid, :status, "Test status", %{})
 
       # Verify we received the correct message format
       assert_receive {:lead_message, :status, "Test status", %{}}, 1000
@@ -307,7 +307,7 @@ defmodule Deft.Job.LeadTest do
       foreman_pid = self()
 
       {:ok, lead_pid} =
-        Lead.start_link(
+        Coordinator.start_link(
           lead_id: lead_id,
           session_id: session_id,
           config: %{provider: "test"},
@@ -321,7 +321,7 @@ defmodule Deft.Job.LeadTest do
         )
 
       # Send a decision message
-      Lead.send_lead_message(foreman_pid, :decision, "Test decision", %{lead_id: lead_id})
+      Coordinator.send_lead_message(foreman_pid, :decision, "Test decision", %{lead_id: lead_id})
 
       # Verify we received the correct message format
       assert_receive {:lead_message, :decision, "Test decision", %{lead_id: ^lead_id}}, 1000
@@ -341,7 +341,7 @@ defmodule Deft.Job.LeadTest do
       foreman_pid = self()
 
       {:ok, lead_pid} =
-        Lead.start_link(
+        Coordinator.start_link(
           lead_id: lead_id,
           session_id: session_id,
           config: %{provider: "test"},
@@ -355,7 +355,7 @@ defmodule Deft.Job.LeadTest do
         )
 
       # Send a contract message
-      Lead.send_lead_message(foreman_pid, :contract, "Test contract", %{lead_id: lead_id})
+      Coordinator.send_lead_message(foreman_pid, :contract, "Test contract", %{lead_id: lead_id})
 
       # Verify we received the correct message format
       assert_receive {:lead_message, :contract, "Test contract", %{lead_id: ^lead_id}}, 1000
@@ -375,7 +375,7 @@ defmodule Deft.Job.LeadTest do
       foreman_pid = self()
 
       {:ok, lead_pid} =
-        Lead.start_link(
+        Coordinator.start_link(
           lead_id: lead_id,
           session_id: session_id,
           config: %{provider: "test"},
@@ -389,7 +389,7 @@ defmodule Deft.Job.LeadTest do
         )
 
       # Send a complete message
-      Lead.send_lead_message(
+      Coordinator.send_lead_message(
         foreman_pid,
         :complete,
         "Deliverable complete",
@@ -417,7 +417,7 @@ defmodule Deft.Job.LeadTest do
       foreman_pid = self()
 
       {:ok, lead_pid} =
-        Lead.start_link(
+        Coordinator.start_link(
           lead_id: lead_id,
           session_id: session_id,
           config: %{provider: "test"},
@@ -437,10 +437,10 @@ defmodule Deft.Job.LeadTest do
       # Send a foreman steering message
       send(lead_pid, {:foreman_steering, "Steering guidance from Foreman"})
 
-      # Give the Lead time to process the message
+      # Give the Lead Coordinator time to process the message
       Process.sleep(100)
 
-      # Verify the Lead is still alive and in a valid state
+      # Verify the Lead Coordinator is still alive and in a valid state
       assert Process.alive?(lead_pid)
       {_new_state, data} = :sys.get_state(lead_pid)
 
@@ -463,7 +463,7 @@ defmodule Deft.Job.LeadTest do
       foreman_pid = self()
 
       {:ok, lead_pid} =
-        Lead.start_link(
+        Coordinator.start_link(
           lead_id: lead_id,
           session_id: session_id,
           config: %{provider: "test"},
@@ -482,10 +482,10 @@ defmodule Deft.Job.LeadTest do
       # Send a foreman steering message
       send(lead_pid, {:foreman_steering, "Adjust your approach"})
 
-      # Give the Lead time to process the message
+      # Give the Lead Coordinator time to process the message
       Process.sleep(100)
 
-      # Verify the Lead is still alive
+      # Verify the Lead Coordinator is still alive
       assert Process.alive?(lead_pid)
 
       # Cleanup
@@ -494,7 +494,7 @@ defmodule Deft.Job.LeadTest do
   end
 
   describe "deliverable decomposition" do
-    test "Lead starts in planning phase with deliverable assignment", %{
+    test "Lead Coordinator starts in planning phase with deliverable assignment", %{
       tmp_dir: tmp_dir,
       runner_supervisor: runner_supervisor,
       session_id: session_id,
@@ -506,7 +506,7 @@ defmodule Deft.Job.LeadTest do
       deliverable = %{name: "Implement authentication module", description: "Add auth"}
 
       {:ok, lead_pid} =
-        Lead.start_link(
+        Coordinator.start_link(
           lead_id: lead_id,
           session_id: session_id,
           config: %{provider: "test"},
@@ -541,7 +541,7 @@ defmodule Deft.Job.LeadTest do
       deliverable = %{name: "Test deliverable", description: "Test"}
 
       {:ok, lead_pid} =
-        Lead.start_link(
+        Coordinator.start_link(
           lead_id: lead_id,
           session_id: session_id,
           config: %{provider: "test"},
@@ -560,7 +560,7 @@ defmodule Deft.Job.LeadTest do
       # Give time to process
       Process.sleep(100)
 
-      # Verify Lead is still alive and spawned the runner
+      # Verify Lead Coordinator is still alive and spawned the runner
       assert Process.alive?(lead_pid)
 
       # Cleanup
@@ -579,7 +579,7 @@ defmodule Deft.Job.LeadTest do
       deliverable = %{name: "Test deliverable", description: "Test"}
 
       {:ok, lead_pid} =
-        Lead.start_link(
+        Coordinator.start_link(
           lead_id: lead_id,
           session_id: session_id,
           config: %{provider: "test"},
@@ -617,7 +617,7 @@ defmodule Deft.Job.LeadTest do
       deliverable = %{name: "Test deliverable", description: "Test"}
 
       {:ok, lead_pid} =
-        Lead.start_link(
+        Coordinator.start_link(
           lead_id: lead_id,
           session_id: session_id,
           config: %{provider: "test"},
@@ -654,7 +654,7 @@ defmodule Deft.Job.LeadTest do
       deliverable = %{name: "Test deliverable", description: "Test"}
 
       {:ok, lead_pid} =
-        Lead.start_link(
+        Coordinator.start_link(
           lead_id: lead_id,
           session_id: session_id,
           config: %{provider: "test"},

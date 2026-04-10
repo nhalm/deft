@@ -1,6 +1,6 @@
 defmodule Deft.Job.Lead.Supervisor do
   @moduledoc """
-  Per-Lead supervisor that manages a Lead gen_statem, its Lead agent, and RunnerSupervisor.
+  Per-Lead supervisor that manages a Lead Coordinator gen_statem, its Lead agent, and RunnerSupervisor.
 
   This one_for_one supervisor ensures that the Lead orchestrator, its Lead agent,
   and both supervisors are properly supervised as siblings.
@@ -11,7 +11,7 @@ defmodule Deft.Job.Lead.Supervisor do
   ├── Deft.Agent.ToolRunner (for Lead's tool execution)
   ├── Deft.Lead (standard Deft.Agent)
   ├── Deft.Job.RunnerSupervisor (Task.Supervisor)
-  └── Deft.Job.Lead (gen_statem)
+  └── Deft.Lead.Coordinator (gen_statem)
   ```
 
   See orchestration spec section 1 for details.
@@ -95,11 +95,11 @@ defmodule Deft.Job.Lead.Supervisor do
         start: {Task.Supervisor, :start_link, [[name: runner_supervisor_name]]},
         type: :supervisor
       },
-      # Lead gen_statem
+      # Lead Coordinator gen_statem
       %{
         id: :lead,
         start:
-          {Deft.Job.Lead, :start_link,
+          {Deft.Lead.Coordinator, :start_link,
            [
              opts
              |> Keyword.put(:runner_supervisor, runner_supervisor_name)

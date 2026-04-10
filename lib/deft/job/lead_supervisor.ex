@@ -36,12 +36,12 @@ defmodule Deft.Job.LeadSupervisor do
   child process of the DynamicSupervisor), which must be passed to
   `DynamicSupervisor.terminate_child/2` to stop the Lead subtree.
 
-  The returned `lead_pid` is the Lead gen_statem PID, which is used for
+  The returned `lead_pid` is the Lead Coordinator gen_statem PID, which is used for
   monitoring and message passing.
 
   ## Options
 
-  - See `Deft.Job.Lead.start_link/1` for required options.
+  - See `Deft.Lead.Coordinator.start_link/1` for required options.
   """
   def start_lead(job_id, opts) do
     supervisor = via_tuple(job_id)

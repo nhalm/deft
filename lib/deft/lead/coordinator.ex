@@ -1,9 +1,9 @@
-defmodule Deft.Job.Lead do
+defmodule Deft.Lead.Coordinator do
   @moduledoc """
   Lead orchestrator — manages a single deliverable using a gen_statem with 4 pure orchestration states.
 
   The v0.7 redesign splits the Lead into two processes:
-  - Lead (this module): Pure orchestration gen_statem managing deliverable lifecycle
+  - Lead Coordinator (this module): Pure orchestration gen_statem managing deliverable lifecycle
   - Lead: Standard Deft.Agent that does LLM reasoning
 
   ## Lead Phase States
@@ -15,14 +15,14 @@ defmodule Deft.Job.Lead do
 
   ## Communication
 
-  **Lead → Lead:** Via `Deft.Agent.prompt/2`
-  **Lead → Lead:** Via orchestration tools that send `{:agent_action, action, payload}` messages
-  **Foreman → Lead:** Via `{:foreman_steering, content}` messages
-  **Lead → Foreman:** Via `{:lead_message, type, content, metadata}` messages
+  **Lead → Lead Coordinator:** Via `Deft.Agent.prompt/2`
+  **Lead → Lead Coordinator:** Via orchestration tools that send `{:agent_action, action, payload}` messages
+  **Foreman → Lead Coordinator:** Via `{:foreman_steering, content}` messages
+  **Lead Coordinator → Foreman:** Via `{:lead_message, type, content, metadata}` messages
 
   ## Runner Management
 
-  Runners are spawned via `Task.Supervisor.async_nolink`. The Lead monitors each Runner
+  Runners are spawned via `Task.Supervisor.async_nolink`. The Lead Coordinator monitors each Runner
   task via Task refs for completion.
   """
 
@@ -36,7 +36,7 @@ defmodule Deft.Job.Lead do
   # Client API
 
   @doc """
-  Starts the Lead gen_statem.
+  Starts the Lead Coordinator gen_statem.
 
   ## Options
 
@@ -98,7 +98,7 @@ defmodule Deft.Job.Lead do
   end
 
   @doc """
-  Sends Foreman steering to the Lead.
+  Sends Foreman steering to the Lead Coordinator.
   """
   def steer(lead, content) do
     send(lead, {:foreman_steering, content})
@@ -805,7 +805,7 @@ defmodule Deft.Job.Lead do
     Evaluate this output and decide on the next action:
     - If successful and this was an implementation Runner, spawn a testing Runner to verify compile checks and tests
     - If there are issues, spawn a corrective Runner with specific guidance
-    - If the deliverable is complete and verified, you can wait for the Lead to transition to verification phase
+    - If the deliverable is complete and verified, you can wait for the Lead Coordinator to transition to verification phase
     - If you need to publish an interface contract, use the `publish_contract` tool
     - Report progress to the Foreman using `report_status` with important decisions or artifacts
     """
