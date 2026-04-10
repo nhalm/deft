@@ -74,7 +74,8 @@ defmodule Deft.Session do
         session_id: session_id,
         config: agent_config,
         messages: [],
-        project_dir: working_dir
+        project_dir: working_dir,
+        working_dir: working_dir
       )
 
     session_id

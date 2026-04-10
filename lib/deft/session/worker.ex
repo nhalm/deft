@@ -31,7 +31,7 @@ defmodule Deft.Session.Worker do
   - `:messages` — Optional. Initial conversation messages (default: []).
   - `:om_snapshot` — Optional. OM snapshot to restore from (for session resume).
   - `:prompt` — Optional. Initial user prompt (for deft work).
-  - `:working_dir` — Optional. Working directory (defaults to File.cwd!()).
+  - `:working_dir` — Required. Working directory.
   - `:resumed_plan` — Optional. Plan to resume from.
   - `:cli_pid` — Optional. CLI process PID for plan approval messages.
   - `:session_cost` — Optional. Initial session cost (default: 0.0).
@@ -47,7 +47,7 @@ defmodule Deft.Session.Worker do
     config = Keyword.fetch!(opts, :config)
     messages = Keyword.get(opts, :messages, [])
     prompt = Keyword.get(opts, :prompt)
-    working_dir = Keyword.get(opts, :working_dir, File.cwd!())
+    working_dir = Keyword.fetch!(opts, :working_dir)
     resumed_plan = Keyword.get(opts, :resumed_plan)
     cli_pid = Keyword.get(opts, :cli_pid)
     om_snapshot = Keyword.get(opts, :om_snapshot)

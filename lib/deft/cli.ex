@@ -854,7 +854,8 @@ defmodule Deft.CLI do
         messages: initial_messages,
         session_cost: initial_session_cost,
         om_snapshot: om_snapshot,
-        project_dir: working_dir
+        project_dir: working_dir,
+        working_dir: working_dir
       )
 
     # Look up the Foreman agent PID from the registry
@@ -1444,7 +1445,8 @@ defmodule Deft.CLI do
         session_id: session_id,
         config: agent_config,
         messages: [system_message],
-        project_dir: working_dir
+        project_dir: working_dir,
+        working_dir: working_dir
       )
 
     [{agent_pid, _}] = Registry.lookup(Deft.ProcessRegistry, {:foreman, session_id})
@@ -1757,7 +1759,8 @@ defmodule Deft.CLI do
         session_id: session_id,
         config: agent_config,
         messages: [system_message],
-        project_dir: working_dir
+        project_dir: working_dir,
+        working_dir: working_dir
       )
 
     [{agent_pid, _}] = Registry.lookup(Deft.ProcessRegistry, {:foreman, session_id})
