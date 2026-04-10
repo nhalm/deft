@@ -1,8 +1,8 @@
-defmodule Deft.Job.ForemanAgent.Tools.AbortLead do
+defmodule Deft.Foreman.Tools.AbortLead do
   @moduledoc """
   Tool for aborting a Lead that is stuck or going in the wrong direction.
 
-  Sends `{:agent_action, :abort_lead, lead_id}` to the Foreman.
+  Sends `{:agent_action, :abort_lead, lead_id}` to the Foreman.Coordinator.
   """
 
   @behaviour Deft.Tool
@@ -48,6 +48,6 @@ defmodule Deft.Job.ForemanAgent.Tools.AbortLead do
   end
 
   def execute(_args, %Context{parent_pid: nil}) do
-    {:error, "abort_lead requires parent_pid (Foreman orchestrator)"}
+    {:error, "abort_lead requires parent_pid (Foreman.Coordinator orchestrator)"}
   end
 end

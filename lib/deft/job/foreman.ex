@@ -27,7 +27,7 @@ defmodule Deft.Job.Foreman do
   @behaviour :gen_statem
 
   alias Deft.Git.Job, as: GitJob
-  alias Deft.Job.ForemanAgent
+  alias Deft.Foreman
   alias Deft.Job.LeadSupervisor
   alias Deft.Job.RateLimiter
   alias Deft.Job.Runner
@@ -2111,8 +2111,8 @@ defmodule Deft.Job.Foreman do
     foreman_agent_name = build_foreman_agent_name(data)
     agent_opts = build_foreman_agent_opts(data, messages, foreman_agent_name)
 
-    # Start new ForemanAgent and handle result
-    case ForemanAgent.start_link(agent_opts) do
+    # Start new Foreman agent and handle result
+    case Foreman.start_link(agent_opts) do
       {:ok, _agent_pid} ->
         handle_foreman_agent_restart_success(foreman_agent_name, data)
 

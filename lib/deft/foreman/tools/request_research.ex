@@ -1,8 +1,8 @@
-defmodule Deft.Job.ForemanAgent.Tools.RequestResearch do
+defmodule Deft.Foreman.Tools.RequestResearch do
   @moduledoc """
   Tool for requesting research on specific topics.
 
-  Sends `{:agent_action, :research, topics}` to the Foreman.
+  Sends `{:agent_action, :research, topics}` to the Foreman.Coordinator.
   """
 
   @behaviour Deft.Tool
@@ -17,7 +17,7 @@ defmodule Deft.Job.ForemanAgent.Tools.RequestResearch do
   def description do
     "Request research on specific topics. Each topic should describe what to explore " <>
       "(e.g., 'authentication patterns', 'database schema', 'API endpoints'). " <>
-      "The Foreman will spawn research Runners to investigate."
+      "The Foreman.Coordinator will spawn research Runners to investigate."
   end
 
   @impl Deft.Tool
@@ -45,7 +45,7 @@ defmodule Deft.Job.ForemanAgent.Tools.RequestResearch do
   end
 
   def execute(_args, %Context{parent_pid: nil}) do
-    {:error, "request_research requires parent_pid (Foreman orchestrator)"}
+    {:error, "request_research requires parent_pid (Foreman.Coordinator orchestrator)"}
   end
 
   def execute(_args, _context) do

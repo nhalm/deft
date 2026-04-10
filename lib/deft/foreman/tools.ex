@@ -1,8 +1,8 @@
-defmodule Deft.Job.ForemanAgent.Tools do
+defmodule Deft.Foreman.Tools do
   @moduledoc """
-  Namespace for ForemanAgent orchestration tools.
+  Namespace for Foreman orchestration tools.
 
-  These tools allow the ForemanAgent to communicate with the Foreman orchestrator
+  These tools allow the Foreman to communicate with the Foreman.Coordinator orchestrator
   by sending `{:agent_action, action, payload}` messages.
   """
 
@@ -18,7 +18,7 @@ defmodule Deft.Job.ForemanAgent.Tools do
   }
 
   @doc """
-  Returns the list of all ForemanAgent orchestration tools.
+  Returns the list of all Foreman orchestration tools.
   """
   def all do
     [

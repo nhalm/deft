@@ -1,8 +1,8 @@
-defmodule Deft.Job.ForemanAgent.Tools.SpawnLead do
+defmodule Deft.Foreman.Tools.SpawnLead do
   @moduledoc """
   Tool for spawning a Lead to work on a deliverable.
 
-  Sends `{:agent_action, :spawn_lead, deliverable}` to the Foreman.
+  Sends `{:agent_action, :spawn_lead, deliverable}` to the Foreman.Coordinator.
   """
 
   @behaviour Deft.Tool
@@ -53,6 +53,6 @@ defmodule Deft.Job.ForemanAgent.Tools.SpawnLead do
   end
 
   def execute(_args, %Context{parent_pid: nil}) do
-    {:error, "spawn_lead requires parent_pid (Foreman orchestrator)"}
+    {:error, "spawn_lead requires parent_pid (Foreman.Coordinator orchestrator)"}
   end
 end

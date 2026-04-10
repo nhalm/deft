@@ -1,8 +1,8 @@
-defmodule Deft.Job.ForemanAgent.Tools.SubmitPlan do
+defmodule Deft.Foreman.Tools.SubmitPlan do
   @moduledoc """
   Tool for submitting a work decomposition plan.
 
-  Sends `{:agent_action, :plan, plan_data}` to the Foreman.
+  Sends `{:agent_action, :plan, plan_data}` to the Foreman.Coordinator.
 
   The plan should include:
   - Deliverables (typically 1-3, rarely >5)
@@ -105,6 +105,6 @@ defmodule Deft.Job.ForemanAgent.Tools.SubmitPlan do
   end
 
   def execute(_args, %Context{parent_pid: nil}) do
-    {:error, "submit_plan requires parent_pid (Foreman orchestrator)"}
+    {:error, "submit_plan requires parent_pid (Foreman.Coordinator orchestrator)"}
   end
 end

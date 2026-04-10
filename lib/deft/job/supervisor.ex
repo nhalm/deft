@@ -5,8 +5,8 @@ defmodule Deft.Job.Supervisor do
   Supervision tree (one_for_one strategy with :temporary restart for all children):
   - Deft.Store (site log instance)
   - Deft.Job.RateLimiter
-  - Deft.Agent.ToolRunner (for ForemanAgent's tool execution)
-  - Deft.Job.ForemanAgent (standard Deft.Agent)
+  - Deft.Agent.ToolRunner (for Foreman's tool execution)
+  - Deft.Foreman (standard Deft.Agent)
   - Task.Supervisor (RunnerSupervisor for Foreman's research/verification/merge-resolution Runners)
   - Deft.Job.Foreman
   - Deft.Job.LeadSupervisor (DynamicSupervisor for Leads)
@@ -56,14 +56,14 @@ defmodule Deft.Job.Supervisor do
     # Build via_tuple for Foreman
     foreman_name = {:via, Registry, {Deft.ProcessRegistry, {:foreman, job_id}}}
 
-    # ForemanAgent session_id
-    foreman_agent_session_id = "#{job_id}-foreman"
+    # Foreman session_id
+    foreman_session_id = "#{job_id}-foreman"
 
-    # Build via_tuple for ForemanAgent's ToolRunner (must use {:tool_runner, session_id} format)
-    foreman_agent_tool_runner_name =
-      {:via, Registry, {Deft.ProcessRegistry, {:tool_runner, foreman_agent_session_id}}}
+    # Build via_tuple for Foreman's ToolRunner (must use {:tool_runner, session_id} format)
+    foreman_tool_runner_name =
+      {:via, Registry, {Deft.ProcessRegistry, {:tool_runner, foreman_session_id}}}
 
-    # Build via_tuple for ForemanAgent
+    # Build via_tuple for Foreman agent
     foreman_agent_name = {:via, Registry, {Deft.ProcessRegistry, {:foreman_agent, job_id}}}
 
     # Build via_tuple for Foreman's RunnerSupervisor
@@ -104,21 +104,21 @@ defmodule Deft.Job.Supervisor do
         restart: :temporary
       },
 
-      # ToolRunner for ForemanAgent's tool execution
+      # ToolRunner for Foreman's tool execution
       %{
-        id: :foreman_agent_tool_runner,
-        start: {Deft.Agent.ToolRunner, :start_link, [[name: foreman_agent_tool_runner_name]]},
+        id: :foreman_tool_runner,
+        start: {Deft.Agent.ToolRunner, :start_link, [[name: foreman_tool_runner_name]]},
         type: :supervisor
       },
 
-      # ForemanAgent (standard Deft.Agent)
+      # Foreman (standard Deft.Agent)
       %{
-        id: Deft.Job.ForemanAgent,
+        id: Deft.Foreman,
         start:
-          {Deft.Job.ForemanAgent, :start_link,
+          {Deft.Foreman, :start_link,
            [
              [
-               session_id: foreman_agent_session_id,
+               session_id: foreman_session_id,
                config: config,
                parent_pid: foreman_name,
                rate_limiter: rate_limiter_name,

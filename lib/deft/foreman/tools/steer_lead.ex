@@ -1,8 +1,8 @@
-defmodule Deft.Job.ForemanAgent.Tools.SteerLead do
+defmodule Deft.Foreman.Tools.SteerLead do
   @moduledoc """
   Tool for sending course corrections to a Lead.
 
-  Sends `{:agent_action, :steer_lead, lead_id, content}` to the Foreman.
+  Sends `{:agent_action, :steer_lead, lead_id, content}` to the Foreman.Coordinator.
   """
 
   @behaviour Deft.Tool
@@ -48,6 +48,6 @@ defmodule Deft.Job.ForemanAgent.Tools.SteerLead do
   end
 
   def execute(_args, %Context{parent_pid: nil}) do
-    {:error, "steer_lead requires parent_pid (Foreman orchestrator)"}
+    {:error, "steer_lead requires parent_pid (Foreman.Coordinator orchestrator)"}
   end
 end

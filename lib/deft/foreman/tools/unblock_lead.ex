@@ -1,8 +1,8 @@
-defmodule Deft.Job.ForemanAgent.Tools.UnblockLead do
+defmodule Deft.Foreman.Tools.UnblockLead do
   @moduledoc """
   Tool for unblocking a dependent Lead by providing a contract.
 
-  Sends `{:agent_action, :unblock_lead, lead_id, contract}` to the Foreman.
+  Sends `{:agent_action, :unblock_lead, lead_id, contract}` to the Foreman.Coordinator.
   """
 
   @behaviour Deft.Tool
@@ -48,6 +48,6 @@ defmodule Deft.Job.ForemanAgent.Tools.UnblockLead do
   end
 
   def execute(_args, %Context{parent_pid: nil}) do
-    {:error, "unblock_lead requires parent_pid (Foreman orchestrator)"}
+    {:error, "unblock_lead requires parent_pid (Foreman.Coordinator orchestrator)"}
   end
 end

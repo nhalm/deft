@@ -1,8 +1,8 @@
-defmodule Deft.Job.ForemanAgent.Tools.ReadyToPlan do
+defmodule Deft.Foreman.Tools.ReadyToPlan do
   @moduledoc """
   Tool for signaling that the asking phase is complete and the agent is ready to plan.
 
-  Sends `{:agent_action, :ready_to_plan}` to the Foreman.
+  Sends `{:agent_action, :ready_to_plan}` to the Foreman.Coordinator.
   """
 
   @behaviour Deft.Tool
@@ -36,6 +36,6 @@ defmodule Deft.Job.ForemanAgent.Tools.ReadyToPlan do
   end
 
   def execute(_args, %Context{parent_pid: nil}) do
-    {:error, "ready_to_plan requires parent_pid (Foreman orchestrator)"}
+    {:error, "ready_to_plan requires parent_pid (Foreman.Coordinator orchestrator)"}
   end
 end

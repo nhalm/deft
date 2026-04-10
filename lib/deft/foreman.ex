@@ -1,15 +1,15 @@
-defmodule Deft.Job.ForemanAgent do
+defmodule Deft.Foreman do
   @moduledoc """
-  ForemanAgent is a standard `Deft.Agent` configured for the Foreman orchestration role.
+  Foreman is a standard `Deft.Agent` configured for the Foreman orchestration role.
 
-  The ForemanAgent:
+  The Foreman:
   - Uses a Foreman-specific system prompt
   - Has OM (Observational Memory) enabled
-  - Has orchestration tools that communicate with the Foreman via messages
+  - Has orchestration tools that communicate with the Foreman.Coordinator via messages
 
   ## Orchestration Tools
 
-  The ForemanAgent has access to these orchestration-specific tools:
+  The Foreman has access to these orchestration-specific tools:
 
   - `ready_to_plan` — Signal that Q&A is complete, transition to `:planning`
   - `request_research` — Fan out research to Runners
@@ -20,20 +20,20 @@ defmodule Deft.Job.ForemanAgent do
   - `abort_lead` — Stop a Lead
   - `fail_deliverable` — Mark a Lead's deliverable as failed (after crash or unrecoverable blocker)
 
-  Each tool sends a message to the Foreman process: `{:agent_action, action, payload}`
+  Each tool sends a message to the Foreman.Coordinator process: `{:agent_action, action, payload}`
   """
 
   alias Deft.Agent
-  alias Deft.Job.ForemanAgent.Tools
+  alias Deft.Foreman.Tools
 
   @doc """
-  Starts the ForemanAgent as a standard Deft.Agent.
+  Starts the Foreman as a standard Deft.Agent.
 
   ## Options
 
   - `:session_id` — Required. Job identifier.
   - `:config` — Required. Configuration map.
-  - `:parent_pid` — Required. PID of the Foreman orchestrator.
+  - `:parent_pid` — Required. PID of the Foreman.Coordinator orchestrator.
   - `:rate_limiter` — Optional. PID of RateLimiter GenServer for orchestrated jobs.
   - `:working_dir` — Required. Working directory for the project.
   - `:messages` — Optional. Initial conversation messages (default: []).
@@ -87,13 +87,13 @@ defmodule Deft.Job.ForemanAgent do
   """
   def build_system_prompt(working_dir) do
     """
-    You are the ForemanAgent — an AI reasoning component working with a Foreman orchestrator to coordinate complex coding jobs.
+    You are the Foreman — an AI reasoning component working with a Foreman.Coordinator orchestrator to coordinate complex coding jobs.
 
     ## Your Role
 
     You analyze user requests, ask clarifying questions, plan work decomposition, and steer execution. You do NOT execute code directly — you orchestrate Leads (specialized agents) and Runners (task executors) to do the work.
 
-    The Foreman handles all process management, lifecycle, and coordination. You handle all reasoning and decision-making.
+    The Foreman.Coordinator handles all process management, lifecycle, and coordination. You handle all reasoning and decision-making.
 
     ## Job Phases
 
@@ -126,7 +126,7 @@ defmodule Deft.Job.ForemanAgent do
 
     ## Orchestration Tools
 
-    Use these tools to communicate with the Foreman:
+    Use these tools to communicate with the Foreman.Coordinator:
 
     - **ready_to_plan**: Signal that asking phase is complete
     - **request_research**: Request research on specific topics
@@ -177,7 +177,7 @@ defmodule Deft.Job.ForemanAgent do
 
   # Add Foreman orchestration tools and full tool set to the config
   defp add_foreman_tools(config) do
-    # Orchestration tools for communicating with the Foreman
+    # Orchestration tools for communicating with the Foreman.Coordinator
     orchestration_tools = [
       Tools.ReadyToPlan,
       Tools.RequestResearch,

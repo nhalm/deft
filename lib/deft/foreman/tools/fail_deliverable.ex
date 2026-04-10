@@ -1,12 +1,12 @@
-defmodule Deft.Job.ForemanAgent.Tools.FailDeliverable do
+defmodule Deft.Foreman.Tools.FailDeliverable do
   @moduledoc """
   Tool for marking a Lead's deliverable as failed after a crash or unrecoverable blocker.
 
-  This is used when the ForemanAgent decides not to retry a failed Lead.
+  This is used when the Foreman decides not to retry a failed Lead.
   The Lead is removed from tracking and marked as failed, allowing the job to
   proceed with other deliverables or complete if all deliverables are accounted for.
 
-  Sends `{:agent_action, :fail_deliverable, lead_id}` to the Foreman.
+  Sends `{:agent_action, :fail_deliverable, lead_id}` to the Foreman.Coordinator.
   """
 
   @behaviour Deft.Tool
@@ -53,6 +53,6 @@ defmodule Deft.Job.ForemanAgent.Tools.FailDeliverable do
   end
 
   def execute(_args, %Context{parent_pid: nil}) do
-    {:error, "fail_deliverable requires parent_pid (Foreman orchestrator)"}
+    {:error, "fail_deliverable requires parent_pid (Foreman.Coordinator orchestrator)"}
   end
 end
