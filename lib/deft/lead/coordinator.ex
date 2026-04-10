@@ -50,7 +50,7 @@ defmodule Deft.Lead.Coordinator do
   - `:worktree_path` — Required. Path to Lead's git worktree.
   - `:working_dir` — Required. Project working directory for cache path resolution.
   - `:runner_supervisor` — Required. Name/PID of the Lead's Task.Supervisor for Runners.
-  - `:lead_agent_pid` — Optional. PID of the Lead (will be set by supervisor).
+  - `:lead_agent_pid` — Optional. Via-tuple or PID of the Lead (will be set by supervisor).
   - `:name` — Optional. Name for the gen_statem process.
   """
   def start_link(opts) do
@@ -91,10 +91,12 @@ defmodule Deft.Lead.Coordinator do
   end
 
   @doc """
-  Sets the Lead PID after the agent is started by the supervisor.
+  Sets the Lead agent after the agent is started by the supervisor.
+
+  Accepts either a via-tuple (production) or raw PID (tests).
   """
-  def set_lead_agent(lead, agent_pid) do
-    :gen_statem.cast(lead, {:set_lead_agent, agent_pid})
+  def set_lead_agent(lead, agent_name_or_pid) do
+    :gen_statem.cast(lead, {:set_lead_agent, agent_name_or_pid})
   end
 
   @doc """
@@ -220,10 +222,10 @@ defmodule Deft.Lead.Coordinator do
     end
   end
 
-  # Set Lead PID
-  def handle_event(:cast, {:set_lead_agent, agent_pid}, _state, data) do
-    Logger.debug("[Lead:#{data.lead_id}] Lead PID set: #{inspect(agent_pid)}")
-    data = Map.put(data, :lead_agent_pid, agent_pid)
+  # Set Lead agent (via-tuple or PID)
+  def handle_event(:cast, {:set_lead_agent, agent_name_or_pid}, _state, data) do
+    Logger.debug("[Lead:#{data.lead_id}] Lead agent set: #{inspect(agent_name_or_pid)}")
+    data = Map.put(data, :lead_agent_pid, agent_name_or_pid)
     {:keep_state, data}
   end
 
