@@ -11,6 +11,7 @@ defmodule DeftWeb.ChatLive do
   require Logger
 
   alias Deft.Config
+  alias Deft.Session
   alias Deft.Session.Supervisor, as: SessionSupervisor
   alias Deft.Session.Worker
   alias Deft.Skills.Registry, as: SkillsRegistry
@@ -681,6 +682,15 @@ defmodule DeftWeb.ChatLive do
     }
 
     {:noreply, stream_insert(socket, :conversation, message)}
+  end
+
+  def handle_event("new_session", _params, socket) do
+    id_prefix = String.slice(socket.assigns.session_id, 0, 8)
+    Logger.debug("[Chat:#{id_prefix}] Event: new_session")
+
+    # Create a new session and navigate to it
+    new_session_id = Session.create()
+    {:noreply, push_navigate(socket, to: "/?session=#{new_session_id}")}
   end
 
   def handle_event("show_help", _params, socket) do
