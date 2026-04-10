@@ -13,7 +13,8 @@ defmodule Deft.Session.Entry do
     ModelChange,
     Observation,
     Compaction,
-    Cost
+    Cost,
+    Checkpoint
   }
 
   @type t ::
@@ -24,6 +25,7 @@ defmodule Deft.Session.Entry do
           | Observation.t()
           | Compaction.t()
           | Cost.t()
+          | Checkpoint.t()
 end
 
 defmodule Deft.Session.Entry.SessionStart do
@@ -344,6 +346,59 @@ defmodule Deft.Session.Entry.Cost do
       type: :cost,
       cumulative_cost: cumulative_cost,
       timestamp: DateTime.utc_now()
+    }
+  end
+end
+
+defmodule Deft.Session.Entry.Checkpoint do
+  @moduledoc """
+  Checkpoint entry.
+
+  Records a named snapshot of session state at a specific point in the conversation.
+  Used for session branching — users can create a new session from a checkpoint
+  to try a different approach.
+
+  See sessions/branching.md spec for details.
+  """
+
+  @derive Jason.Encoder
+  @type t :: %__MODULE__{
+          type: :checkpoint,
+          label: String.t(),
+          entry_index: non_neg_integer(),
+          git_ref: String.t(),
+          timestamp: DateTime.t(),
+          auto: boolean() | nil
+        }
+
+  @enforce_keys [:type, :label, :entry_index, :git_ref, :timestamp]
+  defstruct [:type, :label, :entry_index, :git_ref, :timestamp, :auto]
+
+  @doc """
+  Creates a new Checkpoint entry.
+
+  ## Parameters
+  - `label` - Human-readable name, must be unique within the session
+  - `entry_index` - The JSONL line number immediately before this checkpoint (the branch point)
+  - `git_ref` - The HEAD commit SHA at checkpoint time
+  - `auto` - Optional flag indicating this is an automatic checkpoint (default: nil)
+
+  ## Examples
+
+      iex> Checkpoint.new("before-refactor", 47, "a1b2c3d4")
+      %Checkpoint{label: "before-refactor", entry_index: 47, git_ref: "a1b2c3d4", auto: nil}
+
+      iex> Checkpoint.new("session-start", 0, "a1b2c3d4", auto: true)
+      %Checkpoint{label: "session-start", entry_index: 0, git_ref: "a1b2c3d4", auto: true}
+  """
+  def new(label, entry_index, git_ref, opts \\ []) do
+    %__MODULE__{
+      type: :checkpoint,
+      label: label,
+      entry_index: entry_index,
+      git_ref: git_ref,
+      timestamp: DateTime.utc_now(),
+      auto: Keyword.get(opts, :auto)
     }
   end
 end

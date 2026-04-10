@@ -600,6 +600,17 @@ defmodule Deft.Session.Store do
     }
   end
 
+  defp deserialize_entry(%{type: type} = data) when type in ["checkpoint", :checkpoint] do
+    %Entry.Checkpoint{
+      type: :checkpoint,
+      label: data.label,
+      entry_index: data.entry_index,
+      git_ref: data.git_ref,
+      timestamp: parse_datetime(data.timestamp),
+      auto: Map.get(data, :auto)
+    }
+  end
+
   defp deserialize_entry(_unknown), do: nil
 
   defp parse_datetime(dt) when is_binary(dt) do
