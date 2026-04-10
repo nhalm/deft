@@ -789,4 +789,152 @@ defmodule Deft.AgentTest do
       assert state_data.parent_pid == parent_pid
     end
   end
+
+  describe "rate limiter integration" do
+    # Mock RateLimiter GenServer for testing
+    defmodule MockRateLimiter do
+      use GenServer
+
+      def start_link(test_pid) do
+        GenServer.start_link(__MODULE__, test_pid)
+      end
+
+      @impl true
+      def init(test_pid) do
+        {:ok, %{test_pid: test_pid}}
+      end
+
+      @impl true
+      def handle_call({:request, provider, estimated_tokens, priority}, _from, state) do
+        # Notify test process that request was called
+        send(state.test_pid, {:rate_limiter_request, provider, estimated_tokens, priority})
+        # Always approve the request
+        {:reply, {:ok, estimated_tokens}, state}
+      end
+
+      @impl true
+      def handle_cast({:reconcile, provider, estimated_tokens, actual_usage}, state) do
+        # Notify test process that reconcile was called
+        send(state.test_pid, {:rate_limiter_reconcile, provider, estimated_tokens, actual_usage})
+        {:noreply, state}
+      end
+    end
+
+    test "calls RateLimiter.request before provider stream and reconcile after usage" do
+      # Create a temporary directory for test sessions
+      tmp_dir = System.tmp_dir!() |> Path.join("deft-test-#{:rand.uniform(1_000_000)}")
+      File.mkdir_p!(tmp_dir)
+
+      session_id = "rate_limiter_test_#{:rand.uniform(10000)}"
+
+      # Start mock rate limiter
+      {:ok, rate_limiter_pid} = MockRateLimiter.start_link(self())
+
+      # Start ScriptedProvider with a simple response
+      {:ok, provider_pid} =
+        ScriptedProvider.start_link(
+          responses: [
+            %{
+              text: "Response text",
+              usage: %{input: 100, output: 50}
+            }
+          ]
+        )
+
+      # Start agent with rate_limiter option
+      {:ok, agent} =
+        Agent.start_link(
+          session_id: session_id,
+          config: %{
+            provider: ScriptedProvider,
+            provider_pid: provider_pid,
+            model: "test-model",
+            working_dir: tmp_dir
+          },
+          rate_limiter: rate_limiter_pid
+        )
+
+      on_exit(fn ->
+        if Process.alive?(agent), do: GenServer.stop(agent, :normal)
+        if Process.alive?(rate_limiter_pid), do: GenServer.stop(rate_limiter_pid, :normal)
+        File.rm_rf(tmp_dir)
+      end)
+
+      # Subscribe to agent events
+      Registry.register(Deft.Registry, {:session, session_id}, [])
+
+      # Send a prompt to trigger the agent loop
+      Deft.Agent.prompt(agent, "Test prompt")
+
+      # Verify that RateLimiter.request was called before provider stream
+      assert_receive {:rate_limiter_request, ScriptedProvider, estimated_tokens, 1}, 1000
+      assert estimated_tokens > 0
+
+      # Wait for the agent to complete the turn
+      assert_receive {:agent_event, {:state_change, :idle}}, 2000
+
+      # Verify that RateLimiter.reconcile was called with actual usage
+      assert_receive {:rate_limiter_reconcile, ScriptedProvider, _estimated_tokens, actual_usage},
+                     1000
+
+      assert actual_usage.input == 100
+      assert actual_usage.output == 50
+
+      # Verify the agent has the rate_limiter set in its state data
+      {_state_name, state_data} = :sys.get_state(agent)
+      assert state_data.rate_limiter == rate_limiter_pid
+    end
+
+    test "standalone agent without rate_limiter operates normally" do
+      # Create a temporary directory for test sessions
+      tmp_dir = System.tmp_dir!() |> Path.join("deft-test-#{:rand.uniform(1_000_000)}")
+      File.mkdir_p!(tmp_dir)
+
+      session_id = "standalone_test_#{:rand.uniform(10000)}"
+
+      # Start ScriptedProvider with a simple response
+      {:ok, provider_pid} =
+        ScriptedProvider.start_link(
+          responses: [
+            %{
+              text: "Response text",
+              usage: %{input: 100, output: 50}
+            }
+          ]
+        )
+
+      # Start agent without rate_limiter option (standalone mode)
+      {:ok, agent} =
+        Agent.start_link(
+          session_id: session_id,
+          config: %{
+            provider: ScriptedProvider,
+            provider_pid: provider_pid,
+            model: "test-model",
+            working_dir: tmp_dir
+          }
+          # No rate_limiter option
+        )
+
+      on_exit(fn ->
+        if Process.alive?(agent), do: GenServer.stop(agent, :normal)
+        File.rm_rf(tmp_dir)
+      end)
+
+      # Subscribe to agent events
+      Registry.register(Deft.Registry, {:session, session_id}, [])
+
+      # Send a prompt to trigger the agent loop
+      Deft.Agent.prompt(agent, "Test prompt")
+
+      # Verify agent completes normally without rate limiter
+      assert_receive {:agent_event, {:state_change, :calling}}, 1000
+      assert_receive {:agent_event, {:state_change, :streaming}}, 1000
+      assert_receive {:agent_event, {:state_change, :idle}}, 2000
+
+      # Verify the agent has nil rate_limiter in its state data
+      {_state_name, state_data} = :sys.get_state(agent)
+      assert state_data.rate_limiter == nil
+    end
+  end
 end
