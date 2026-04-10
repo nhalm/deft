@@ -952,6 +952,73 @@ defmodule Deft.Lead.CoordinatorTest do
       # Cleanup
       :gen_statem.stop(lead_pid)
     end
+
+    test ":complete state re-enters :executing when queued steering exists", %{
+      tmp_dir: tmp_dir,
+      runner_supervisor: runner_supervisor,
+      session_id: session_id,
+      site_log_name: site_log_name,
+      rate_limiter_pid: rate_limiter_pid
+    } do
+      lead_id = "lead-#{:erlang.unique_integer([:positive])}"
+      foreman_pid = self()
+      deliverable = %{name: "Test deliverable", description: "Test"}
+
+      {:ok, lead_pid} =
+        Coordinator.start_link(
+          lead_id: lead_id,
+          session_id: session_id,
+          config: %{provider: "test"},
+          deliverable: deliverable,
+          foreman_pid: foreman_pid,
+          site_log_name: site_log_name,
+          rate_limiter_pid: rate_limiter_pid,
+          worktree_path: tmp_dir,
+          working_dir: tmp_dir,
+          runner_supervisor: runner_supervisor
+        )
+
+      # Set up :verifying state WITH queued steering
+      :sys.replace_state(lead_pid, fn {_s, d} ->
+        {:verifying, %{d | queued_steering: ["Make changes based on feedback"]}}
+      end)
+
+      # Create a task ref and simulate successful testing runner
+      task_ref = make_ref()
+
+      {_state, data} = :sys.get_state(lead_pid)
+
+      runner_info = %{
+        task_description: "testing runner",
+        runner_type: :testing,
+        pid: self(),
+        monitor_ref: task_ref,
+        timeout_ref: nil,
+        started_at: System.monotonic_time(:millisecond)
+      }
+
+      data = %{data | runner_tasks: Map.put(data.runner_tasks, task_ref, runner_info)}
+      :sys.replace_state(lead_pid, fn {s, _d} -> {s, data} end)
+
+      # Send successful test completion to trigger transition to :complete
+      send(lead_pid, {task_ref, {:ok, "tests passed"}})
+
+      # Give time to transition through :complete and into :executing
+      Process.sleep(300)
+
+      # Verify final state is :executing (re-entered due to queued steering)
+      {final_state, final_data} = :sys.get_state(lead_pid)
+      assert final_state == :executing
+
+      # Verify queued steering was cleared
+      assert final_data.queued_steering == []
+
+      # Verify NO :complete message was sent to Foreman (should only send when no queued steering)
+      refute_receive {:lead_message, :complete, _, _}, 500
+
+      # Cleanup
+      :gen_statem.stop(lead_pid)
+    end
   end
 
   describe "foreman contract messages" do

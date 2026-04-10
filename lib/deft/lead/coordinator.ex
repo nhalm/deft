@@ -222,6 +222,15 @@ defmodule Deft.Lead.Coordinator do
     end
   end
 
+  # Handle state_timeout to apply queued steering and transition to :executing
+  def handle_event(:state_timeout, :apply_queued_steering, :complete, data) do
+    Logger.debug(
+      "[Lead:#{data.lead_id}] Transitioning from :complete to :executing due to queued steering"
+    )
+
+    {:next_state, :executing, data}
+  end
+
   # Set Lead agent (via-tuple or PID)
   def handle_event(:cast, {:set_lead_agent, agent_name_or_pid}, _state, data) do
     Logger.debug("[Lead:#{data.lead_id}] Lead agent set: #{inspect(agent_name_or_pid)}")
@@ -571,9 +580,10 @@ defmodule Deft.Lead.Coordinator do
 
     apply_queued_steering_to_agent(data, queued_items)
 
-    # Clear queued steering and re-enter executing without notifying Foreman
+    # Clear queued steering and schedule transition to :executing without notifying Foreman
+    # Use state_timeout with 0 to trigger the transition immediately after the enter callback completes
     data = Map.put(data, :queued_steering, [])
-    {:next_state, :executing, data}
+    {:keep_state, data, [{:state_timeout, 0, :apply_queued_steering}]}
   end
 
   defp apply_queued_steering_to_agent(data, queued_items) do
