@@ -31,7 +31,7 @@ defmodule Deft.CLI do
   alias Deft.Git.Job, as: GitJob
   alias Deft.Issue.ElicitationPrompt
   alias Deft.Issues
-  alias Deft.Job.Foreman
+  alias Deft.Foreman.Coordinator
   alias Deft.Job.RateLimiter
   alias Deft.Session.Entry.SessionStart
   alias Deft.Session.Store
@@ -2213,7 +2213,7 @@ defmodule Deft.CLI do
   # Handle SIGINT graceful shutdown
   defp handle_sigint_shutdown(foreman_pid, ref) do
     IO.puts("\nReceived Ctrl+C. Sending shutdown to Foreman...")
-    Foreman.abort(foreman_pid)
+    Coordinator.abort(foreman_pid)
 
     receive do
       {:DOWN, ^ref, :process, ^foreman_pid, _reason} ->
@@ -2268,11 +2268,11 @@ defmodule Deft.CLI do
     case IO.gets("") |> String.trim() |> String.downcase() do
       "y" ->
         IO.puts("Plan approved. Execution will begin...")
-        Foreman.approve_plan(foreman_pid)
+        Coordinator.approve_plan(foreman_pid)
 
       "n" ->
         IO.puts("Plan rejected. Foreman will revise...")
-        Foreman.reject_plan(foreman_pid)
+        Coordinator.reject_plan(foreman_pid)
 
       _ ->
         IO.puts("Invalid choice. Please enter 'y' or 'n'.")

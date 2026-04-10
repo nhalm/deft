@@ -1,9 +1,9 @@
-defmodule Deft.Job.Foreman do
+defmodule Deft.Foreman.Coordinator do
   @moduledoc """
-  Foreman orchestrates job execution using a gen_statem with 7 pure orchestration states.
+  Foreman.Coordinator orchestrates job execution using a gen_statem with 7 pure orchestration states.
 
   The v0.7 redesign splits the Foreman into two processes:
-  - Foreman (this module): Pure orchestration gen_statem managing job lifecycle
+  - Foreman.Coordinator (this module): Pure orchestration gen_statem managing job lifecycle
   - ForemanAgent: Standard Deft.Agent that does LLM reasoning
 
   ## Job Phase States
@@ -18,10 +18,10 @@ defmodule Deft.Job.Foreman do
 
   ## Communication
 
-  **Foreman → ForemanAgent:** Via `Deft.Agent.prompt/2`
-  **ForemanAgent → Foreman:** Via orchestration tools that send `{:agent_action, action, payload}` messages
-  **Leads → Foreman:** Via `{:lead_message, type, content, metadata}` messages
-  **User → Foreman:** Via `{:prompt, text}` casts
+  **Foreman.Coordinator → ForemanAgent:** Via `Deft.Agent.prompt/2`
+  **ForemanAgent → Foreman.Coordinator:** Via orchestration tools that send `{:agent_action, action, payload}` messages
+  **Leads → Foreman.Coordinator:** Via `{:lead_message, type, content, metadata}` messages
+  **User → Foreman.Coordinator:** Via `{:prompt, text}` casts
   """
 
   @behaviour :gen_statem
@@ -40,7 +40,7 @@ defmodule Deft.Job.Foreman do
   # Client API
 
   @doc """
-  Starts the Foreman gen_statem.
+  Starts the Foreman.Coordinator gen_statem.
 
   ## Options
 

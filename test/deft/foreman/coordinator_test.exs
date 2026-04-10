@@ -1,7 +1,7 @@
-defmodule Deft.Job.ForemanTest do
+defmodule Deft.Foreman.CoordinatorTest do
   use ExUnit.Case, async: false
 
-  alias Deft.Job.Foreman
+  alias Deft.Foreman.Coordinator
   alias Deft.Job.RateLimiter
   alias Deft.Project
   alias Deft.Store
@@ -102,7 +102,7 @@ defmodule Deft.Job.ForemanTest do
         setup_foreman_test(session_id, tmp_dir, runner_supervisor: runner_supervisor)
 
       # Start Foreman - it should look up the site log
-      {:ok, foreman_pid} = Foreman.start_link(foreman_opts)
+      {:ok, foreman_pid} = Coordinator.start_link(foreman_opts)
 
       # Get the Foreman's state to verify it's running
       {_state, data} = :sys.get_state(foreman_pid)
@@ -130,7 +130,7 @@ defmodule Deft.Job.ForemanTest do
       {_rate_limiter_pid, _site_log_pid, foreman_opts} =
         setup_foreman_test(session_id, tmp_dir, runner_supervisor: runner_supervisor)
 
-      {:ok, foreman_pid} = Foreman.start_link(foreman_opts)
+      {:ok, foreman_pid} = Coordinator.start_link(foreman_opts)
 
       {_state, data} = :sys.get_state(foreman_pid)
 
@@ -169,7 +169,7 @@ defmodule Deft.Job.ForemanTest do
       {_rate_limiter_pid, _site_log_pid, foreman_opts} =
         setup_foreman_test(session_id, tmp_dir, runner_supervisor: runner_supervisor)
 
-      {:ok, foreman_pid} = Foreman.start_link(foreman_opts)
+      {:ok, foreman_pid} = Coordinator.start_link(foreman_opts)
 
       {_state, data} = :sys.get_state(foreman_pid)
       tid = Store.tid(site_log_name(data.session_id))
@@ -197,7 +197,7 @@ defmodule Deft.Job.ForemanTest do
       site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
-        Foreman.start_link(
+        Coordinator.start_link(
           session_id: session_id,
           config: %{},
           prompt: "test prompt",
@@ -236,7 +236,7 @@ defmodule Deft.Job.ForemanTest do
       site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
-        Foreman.start_link(
+        Coordinator.start_link(
           session_id: session_id,
           config: %{},
           prompt: "test prompt",
@@ -272,7 +272,7 @@ defmodule Deft.Job.ForemanTest do
       site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
-        Foreman.start_link(
+        Coordinator.start_link(
           session_id: session_id,
           config: %{},
           prompt: "test prompt",
@@ -308,7 +308,7 @@ defmodule Deft.Job.ForemanTest do
       site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
-        Foreman.start_link(
+        Coordinator.start_link(
           session_id: session_id,
           config: %{},
           prompt: "test prompt",
@@ -357,7 +357,7 @@ defmodule Deft.Job.ForemanTest do
       site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
-        Foreman.start_link(
+        Coordinator.start_link(
           session_id: session_id,
           config: %{},
           prompt: "test prompt",
@@ -393,7 +393,7 @@ defmodule Deft.Job.ForemanTest do
       site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
-        Foreman.start_link(
+        Coordinator.start_link(
           session_id: session_id,
           config: %{},
           prompt: "test prompt",
@@ -431,7 +431,7 @@ defmodule Deft.Job.ForemanTest do
       {_rate_limiter_pid, _site_log_pid, foreman_opts} =
         setup_foreman_test(session_id, tmp_dir, runner_supervisor: runner_supervisor)
 
-      {:ok, foreman_pid} = Foreman.start_link(foreman_opts)
+      {:ok, foreman_pid} = Coordinator.start_link(foreman_opts)
 
       {_state, data} = :sys.get_state(foreman_pid)
       tid = Store.tid(site_log_name(data.session_id))
@@ -464,7 +464,7 @@ defmodule Deft.Job.ForemanTest do
       mock_agent_pid = spawn(fn -> mock_agent_loop([]) end)
 
       foreman_opts = Keyword.put(foreman_opts, :foreman_agent_pid, mock_agent_pid)
-      {:ok, foreman_pid} = Foreman.start_link(foreman_opts)
+      {:ok, foreman_pid} = Coordinator.start_link(foreman_opts)
 
       # Send /correct command
       :gen_statem.cast(foreman_pid, {:prompt, "/correct Use a different approach"})
@@ -498,7 +498,7 @@ defmodule Deft.Job.ForemanTest do
       {_rate_limiter_pid, _site_log_pid, foreman_opts} =
         setup_foreman_test(session_id, tmp_dir, runner_supervisor: runner_supervisor)
 
-      {:ok, foreman_pid} = Foreman.start_link(foreman_opts)
+      {:ok, foreman_pid} = Coordinator.start_link(foreman_opts)
 
       {_state, data} = :sys.get_state(foreman_pid)
       tid = Store.tid(site_log_name(data.session_id))
@@ -538,7 +538,7 @@ defmodule Deft.Job.ForemanTest do
       })
 
       {:ok, foreman_pid} =
-        Foreman.start_link(
+        Coordinator.start_link(
           session_id: session_id,
           config: %{},
           prompt: "test prompt",
@@ -603,7 +603,7 @@ defmodule Deft.Job.ForemanTest do
       })
 
       {:ok, foreman_pid} =
-        Foreman.start_link(
+        Coordinator.start_link(
           session_id: session_id,
           config: %{},
           prompt: "test prompt",
@@ -664,7 +664,7 @@ defmodule Deft.Job.ForemanTest do
       Process.unlink(site_log_pid)
 
       {:ok, foreman_pid} =
-        Foreman.start_link(
+        Coordinator.start_link(
           session_id: session_id,
           config: %{},
           prompt: "test prompt",
@@ -712,7 +712,7 @@ defmodule Deft.Job.ForemanTest do
       Process.unlink(rate_limiter_pid)
 
       {:ok, foreman_pid} =
-        Foreman.start_link(
+        Coordinator.start_link(
           session_id: session_id,
           config: %{},
           prompt: "test prompt",
@@ -771,7 +771,7 @@ defmodule Deft.Job.ForemanTest do
           }
         )
 
-      {:ok, foreman_pid} = Foreman.start_link(foreman_opts)
+      {:ok, foreman_pid} = Coordinator.start_link(foreman_opts)
 
       # Wait for initialization
       Process.sleep(100)
@@ -795,7 +795,7 @@ defmodule Deft.Job.ForemanTest do
       site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
-        Foreman.start_link(
+        Coordinator.start_link(
           session_id: session_id,
           config: %{
             provider: "anthropic",
@@ -832,7 +832,7 @@ defmodule Deft.Job.ForemanTest do
       site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
-        Foreman.start_link(
+        Coordinator.start_link(
           session_id: session_id,
           config: %{
             provider: "anthropic",
@@ -881,7 +881,7 @@ defmodule Deft.Job.ForemanTest do
       site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
-        Foreman.start_link(
+        Coordinator.start_link(
           session_id: session_id,
           config: %{
             provider: "anthropic",
@@ -936,7 +936,7 @@ defmodule Deft.Job.ForemanTest do
       site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
-        Foreman.start_link(
+        Coordinator.start_link(
           session_id: session_id,
           config: %{},
           prompt: "test prompt",
@@ -974,7 +974,7 @@ defmodule Deft.Job.ForemanTest do
       site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
-        Foreman.start_link(
+        Coordinator.start_link(
           session_id: session_id,
           config: %{auto_approve_all: false},
           prompt: "build a REST API",
@@ -1027,7 +1027,7 @@ defmodule Deft.Job.ForemanTest do
       site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
-        Foreman.start_link(
+        Coordinator.start_link(
           session_id: session_id,
           config: %{auto_approve_all: true},
           prompt: "build a REST API",
@@ -1064,7 +1064,7 @@ defmodule Deft.Job.ForemanTest do
       # Trigger the enter callback by sending a no-op event
       # Actually, replace_state doesn't trigger enter callbacks.
       # Instead, use approve_plan which is the normal flow.
-      Foreman.approve_plan(foreman_pid)
+      Coordinator.approve_plan(foreman_pid)
 
       Process.sleep(100)
 
@@ -1087,7 +1087,7 @@ defmodule Deft.Job.ForemanTest do
       site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
-        Foreman.start_link(
+        Coordinator.start_link(
           session_id: session_id,
           config: %{auto_approve_all: false},
           prompt: "build a REST API",
@@ -1105,7 +1105,7 @@ defmodule Deft.Job.ForemanTest do
       end)
 
       # Send approve_plan
-      Foreman.approve_plan(foreman_pid)
+      Coordinator.approve_plan(foreman_pid)
 
       # Wait for processing
       Process.sleep(100)
@@ -1128,7 +1128,7 @@ defmodule Deft.Job.ForemanTest do
       site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
-        Foreman.start_link(
+        Coordinator.start_link(
           session_id: session_id,
           config: %{auto_approve_all: false, provider_module: Deft.ProviderMock},
           prompt: "build a REST API",
@@ -1146,7 +1146,7 @@ defmodule Deft.Job.ForemanTest do
       end)
 
       # Send reject_plan
-      Foreman.reject_plan(foreman_pid)
+      Coordinator.reject_plan(foreman_pid)
 
       # Wait for processing
       Process.sleep(100)
@@ -1171,7 +1171,7 @@ defmodule Deft.Job.ForemanTest do
       site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
-        Foreman.start_link(
+        Coordinator.start_link(
           session_id: session_id,
           config: %{},
           prompt: "test prompt",
@@ -1222,7 +1222,7 @@ defmodule Deft.Job.ForemanTest do
       site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
-        Foreman.start_link(
+        Coordinator.start_link(
           session_id: session_id,
           config: %{},
           prompt: "test prompt",
@@ -1274,7 +1274,7 @@ defmodule Deft.Job.ForemanTest do
       site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
-        Foreman.start_link(
+        Coordinator.start_link(
           session_id: session_id,
           config: %{},
           prompt: "test prompt",
@@ -1315,7 +1315,7 @@ defmodule Deft.Job.ForemanTest do
 
       # Start Foreman in :executing phase
       {:ok, foreman_pid} =
-        Foreman.start_link(
+        Coordinator.start_link(
           session_id: session_id,
           config: %{auto_approve_all: true},
           prompt: "test prompt",
@@ -1329,7 +1329,7 @@ defmodule Deft.Job.ForemanTest do
       mock_agent_pid = spawn(fn -> mock_agent_loop([]) end)
 
       # Set the mock agent as the ForemanAgent
-      Foreman.set_foreman_agent(foreman_pid, mock_agent_pid)
+      Coordinator.set_foreman_agent(foreman_pid, mock_agent_pid)
 
       # Transition to :executing state
       :sys.replace_state(foreman_pid, fn {_state, data} ->
@@ -1380,7 +1380,7 @@ defmodule Deft.Job.ForemanTest do
       site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
-        Foreman.start_link(
+        Coordinator.start_link(
           session_id: session_id,
           config: %{auto_approve_all: true},
           prompt: "test prompt",
@@ -1391,7 +1391,7 @@ defmodule Deft.Job.ForemanTest do
         )
 
       mock_agent_pid = spawn(fn -> mock_agent_loop([]) end)
-      Foreman.set_foreman_agent(foreman_pid, mock_agent_pid)
+      Coordinator.set_foreman_agent(foreman_pid, mock_agent_pid)
 
       :sys.replace_state(foreman_pid, fn {_state, data} ->
         {:executing, data}
@@ -1451,7 +1451,7 @@ defmodule Deft.Job.ForemanTest do
       site_log_pid = start_site_log(session_id, tmp_dir)
 
       {:ok, foreman_pid} =
-        Foreman.start_link(
+        Coordinator.start_link(
           session_id: session_id,
           config: %{auto_approve_all: true, job_lead_message_debounce_ms: 5000},
           prompt: "test prompt",
@@ -1463,7 +1463,7 @@ defmodule Deft.Job.ForemanTest do
 
       # Create a mock ForemanAgent
       mock_agent_pid = spawn(fn -> mock_agent_loop([]) end)
-      Foreman.set_foreman_agent(foreman_pid, mock_agent_pid)
+      Coordinator.set_foreman_agent(foreman_pid, mock_agent_pid)
 
       # Transition to :executing state
       :sys.replace_state(foreman_pid, fn {_state, data} ->
@@ -1568,7 +1568,7 @@ defmodule Deft.Job.ForemanTest do
       mock_agent_pid = spawn(fn -> mock_agent_loop([]) end)
 
       foreman_opts = Keyword.put(foreman_opts, :foreman_agent_pid, mock_agent_pid)
-      {:ok, foreman_pid} = Foreman.start_link(foreman_opts)
+      {:ok, foreman_pid} = Coordinator.start_link(foreman_opts)
 
       # Wait for init
       Process.sleep(50)
@@ -1631,7 +1631,7 @@ defmodule Deft.Job.ForemanTest do
 
       mock_agent_pid = spawn(fn -> mock_agent_loop([]) end)
       foreman_opts = Keyword.put(foreman_opts, :foreman_agent_pid, mock_agent_pid)
-      {:ok, foreman_pid} = Foreman.start_link(foreman_opts)
+      {:ok, foreman_pid} = Coordinator.start_link(foreman_opts)
 
       Process.sleep(50)
 
@@ -1677,7 +1677,7 @@ defmodule Deft.Job.ForemanTest do
 
       mock_agent_pid = spawn(fn -> mock_agent_loop([]) end)
       foreman_opts = Keyword.put(foreman_opts, :foreman_agent_pid, mock_agent_pid)
-      {:ok, foreman_pid} = Foreman.start_link(foreman_opts)
+      {:ok, foreman_pid} = Coordinator.start_link(foreman_opts)
 
       Process.sleep(50)
 
@@ -1723,7 +1723,7 @@ defmodule Deft.Job.ForemanTest do
 
       mock_agent_pid = spawn(fn -> mock_agent_loop([]) end)
       foreman_opts = Keyword.put(foreman_opts, :foreman_agent_pid, mock_agent_pid)
-      {:ok, foreman_pid} = Foreman.start_link(foreman_opts)
+      {:ok, foreman_pid} = Coordinator.start_link(foreman_opts)
 
       Process.sleep(50)
 

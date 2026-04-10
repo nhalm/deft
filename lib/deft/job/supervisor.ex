@@ -8,7 +8,7 @@ defmodule Deft.Job.Supervisor do
   - Deft.Agent.ToolRunner (for Foreman's tool execution)
   - Deft.Foreman (standard Deft.Agent)
   - Task.Supervisor (RunnerSupervisor for Foreman's research/verification/merge-resolution Runners)
-  - Deft.Job.Foreman
+  - Deft.Foreman.Coordinator
   - Deft.Job.LeadSupervisor (DynamicSupervisor for Leads)
 
   All children use :temporary restart strategy per orchestration spec section 1.
@@ -137,11 +137,11 @@ defmodule Deft.Job.Supervisor do
         type: :supervisor
       },
 
-      # Foreman
+      # Foreman.Coordinator
       %{
-        id: Deft.Job.Foreman,
+        id: Deft.Foreman.Coordinator,
         start:
-          {Deft.Job.Foreman, :start_link,
+          {Deft.Foreman.Coordinator, :start_link,
            [
              [
                session_id: job_id,
