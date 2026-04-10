@@ -556,7 +556,7 @@ defmodule Deft.Foreman.CoordinatorTest do
         pid: self(),
         monitor_ref: monitor_ref,
         worktree_path: worktree_path,
-        deliverable: "test deliverable"
+        deliverable: %{name: "Test deliverable"}
       }
 
       leads = Map.put(data.leads, lead_id, lead_info)
@@ -621,7 +621,7 @@ defmodule Deft.Foreman.CoordinatorTest do
         pid: self(),
         monitor_ref: monitor_ref,
         worktree_path: worktree_path,
-        deliverable: "test deliverable"
+        deliverable: %{name: "Test deliverable"}
       }
 
       leads = Map.put(data.leads, lead_id, lead_info)
