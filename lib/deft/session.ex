@@ -60,7 +60,10 @@ defmodule Deft.Session do
       om_observation_token_threshold: config.om_observation_token_threshold,
       om_buffer_interval: config.om_buffer_interval,
       om_buffer_tail_retention: config.om_buffer_tail_retention,
-      om_hard_threshold_multiplier: config.om_hard_threshold_multiplier
+      om_hard_threshold_multiplier: config.om_hard_threshold_multiplier,
+      work_cost_ceiling: config.work_cost_ceiling,
+      job_initial_concurrency: config.job_initial_concurrency,
+      job_max_leads: config.job_max_leads
     }
 
     # Create the session metadata entry
