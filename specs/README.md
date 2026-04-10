@@ -83,7 +83,7 @@ Decision reasoning is logged in [specd_decisions.jsonl](../specd_decisions.jsonl
 | [orchestration/foreman](orchestration/foreman.md) | v0.17 | Implemented | Foreman agent — session ownership, solo/orchestrated modes, job lifecycle |
 | [orchestration/coordinator](orchestration/coordinator.md) | v0.17 | Implemented | Foreman.Coordinator — DAG, contract forwarding, coalescing, monitors, cleanup |
 | [orchestration/lead](orchestration/lead.md) | v0.17 | Implemented | Lead + Lead.Coordinator — deliverable management, Runner steering, contracts |
-| [orchestration/runners](orchestration/runners.md) | v0.17 | Ready | Runner types, tool sets, inline loop |
+| [orchestration/runners](orchestration/runners.md) | v0.17 | Implemented | Runner types, tool sets, inline loop |
 | [orchestration/protocol](orchestration/protocol.md) | v0.17 | Implemented | Coordination protocol, message types, site log write policy |
 | [rate-limiter](rate-limiter.md) | v0.3 | Implemented | Dual token-bucket rate limiting, priority queue, adaptive concurrency, cost tracking |
 | [git-strategy](git-strategy.md) | v0.2 | Implemented | Git worktree strategy, merge protocol, conflict resolution, orphan cleanup |

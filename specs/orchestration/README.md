@@ -150,7 +150,7 @@ For simple tasks, the LeadSupervisor stays empty. The Foreman handles everything
 | [foreman](foreman.md) | v0.17 | Implemented | Foreman agent — session ownership, solo/orchestrated modes, job lifecycle, user interaction |
 | [coordinator](coordinator.md) | v0.17 | Implemented | Foreman.Coordinator — DAG management, contract forwarding, message coalescing, monitors, crash handling, cleanup |
 | [lead](lead.md) | v0.17 | Implemented | Lead + Lead.Coordinator — deliverable management, Runner steering, contracts, reporting |
-| [runners](runners.md) | v0.17 | Ready | Runner types, tool sets, inline loop, context from Lead |
+| [runners](runners.md) | v0.17 | Implemented | Runner types, tool sets, inline loop, context from Lead |
 | [protocol](protocol.md) | v0.17 | Implemented | Coordination protocol, message types, site log write policy |
 
 ## Notes
