@@ -854,8 +854,8 @@ defmodule Deft.CLI do
         project_dir: working_dir
       )
 
-    # Look up the Agent PID from the registry
-    [{agent_pid, _}] = Registry.lookup(Deft.ProcessRegistry, {:agent, session_id})
+    # Look up the Foreman agent PID from the registry
+    [{agent_pid, _}] = Registry.lookup(Deft.ProcessRegistry, {:foreman_agent, session_id})
     agent_pid
   end
 
