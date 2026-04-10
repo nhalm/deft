@@ -263,7 +263,9 @@ defmodule Deft.Foreman.Coordinator do
           Logger.debug("#{log_prefix(data)} Foreman already subscribed to ForemanAgent events")
       end
 
-      Deft.Agent.prompt(data.foreman_agent_pid, data.prompt)
+      if data.prompt do
+        Deft.Agent.prompt(data.foreman_agent_pid, data.prompt)
+      end
     else
       Logger.warning("#{log_prefix(data)} ForemanAgent not yet available, will prompt when set")
     end
