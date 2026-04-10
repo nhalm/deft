@@ -402,7 +402,7 @@ defmodule Deft.StoreTest do
       Store.cleanup(pid)
     end
 
-    test "logs error for DETS corruption", %{tmp_dir: tmp_dir} do
+    test "logs warning for DETS corruption", %{tmp_dir: tmp_dir} do
       dets_path = Path.join(tmp_dir, "corrupt_sitelog.dets")
 
       # Create corrupted file
@@ -422,11 +422,11 @@ defmodule Deft.StoreTest do
           Store.cleanup(pid)
         end)
 
-      assert log =~ "[error]"
+      assert log =~ "[warning]"
       assert log =~ "DETS corruption"
     end
 
-    test "logs error for cache DETS corruption", %{tmp_dir: tmp_dir} do
+    test "cache DETS corruption is silent", %{tmp_dir: tmp_dir} do
       dets_path = Path.join(tmp_dir, "corrupt_cache.dets")
 
       # Create corrupted file
@@ -446,8 +446,8 @@ defmodule Deft.StoreTest do
           Store.cleanup(pid)
         end)
 
-      assert log =~ "[error]"
-      assert log =~ "DETS corruption"
+      # Cache corruption should be silent (no warning/error about corruption)
+      refute log =~ "DETS corruption"
     end
 
     test "does not use periodic flush timer", %{tmp_dir: tmp_dir} do
@@ -564,12 +564,91 @@ defmodule Deft.StoreTest do
 
       # Should not crash
     end
+
+    test "load task crash does not kill GenServer", %{tmp_dir: tmp_dir} do
+      dets_path = Path.join(tmp_dir, "cache.dets")
+
+      # Create a DETS file with valid structure
+      {:ok, dets} = :dets.open_file(String.to_charlist(dets_path), type: :set)
+      :dets.insert(dets, {"key-1", %{value: "value-1", metadata: %{}}})
+      # Keep DETS open to cause read conflicts
+
+      capture_log(fn ->
+        {:ok, pid} =
+          Store.start_link(
+            name: {:cache, "session-14", "lead-14"},
+            type: :cache,
+            dets_path: dets_path
+          )
+
+        # Wait for load task to fail
+        Process.sleep(300)
+
+        # GenServer should still be alive
+        assert Process.alive?(pid)
+
+        # Should still accept writes
+        Store.write(pid, "key-2", "value-2")
+        tid = Store.tid(pid)
+        assert {:ok, %{value: "value-2"}} = Store.read(tid, "key-2")
+
+        :dets.close(dets)
+        Store.cleanup(pid)
+      end)
+    end
+  end
+
+  describe "ETS protection" do
+    test "other processes can read but not write to ETS table", %{tmp_dir: tmp_dir} do
+      dets_path = Path.join(tmp_dir, "cache.dets")
+
+      {:ok, pid} =
+        Store.start_link(
+          name: {:cache, "session-15", "lead-15"},
+          type: :cache,
+          dets_path: dets_path
+        )
+
+      tid = Store.tid(pid)
+
+      # Write from owner process
+      Store.write(pid, "key-1", "value-1")
+
+      # Verify write succeeded
+      assert {:ok, %{value: "value-1"}} = Store.read(tid, "key-1")
+
+      # Try to read from another process - should succeed
+      task =
+        Task.async(fn ->
+          Store.read(tid, "key-1")
+        end)
+
+      assert {:ok, %{value: "value-1"}} = Task.await(task)
+
+      # Try to write from another process - should fail with ArgumentError
+      task2 =
+        Task.async(fn ->
+          try do
+            :ets.insert(tid, {"key-2", %{value: "value-2", metadata: %{}}})
+            :ok
+          rescue
+            ArgumentError -> :error
+          end
+        end)
+
+      assert :error = Task.await(task2)
+
+      # Verify key-2 was not inserted
+      assert :miss = Store.read(tid, "key-2")
+
+      Store.cleanup(pid)
+    end
   end
 
   describe "registry integration" do
     test "can be looked up by name", %{tmp_dir: tmp_dir} do
       dets_path = Path.join(tmp_dir, "cache.dets")
-      name = {:cache, "session-14", "lead-14"}
+      name = {:cache, "session-16", "lead-16"}
 
       {:ok, pid} =
         Store.start_link(

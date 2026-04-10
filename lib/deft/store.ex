@@ -181,7 +181,8 @@ defmodule Deft.Store do
     # Start async load task (monitored but not linked to GenServer)
     # Task collects entries and sends them to GenServer for insertion.
     # GenServer is ready immediately; reads return :miss for not-yet-loaded entries.
-    # Create ref first, spawn unlinked, then monitor - avoids Task.async link race
+    # Note: Spec v0.4 requires unlinked task to prevent load crash from killing GenServer.
+    # Task.async/1 is linked, so we manually spawn+monitor to get unlinked behavior.
     ref = make_ref()
     parent = self()
 
@@ -191,7 +192,7 @@ defmodule Deft.Store do
         send(parent, {ref, result})
       end)
 
-    monitor_ref = Process.monitor(pid)
+    _monitor_ref = Process.monitor(pid)
 
     load_task = %Task{
       ref: ref,
@@ -208,7 +209,6 @@ defmodule Deft.Store do
       owner_name: owner_name,
       write_buffer: [],
       load_task: load_task,
-      monitor_ref: monitor_ref,
       closed: false,
       flush_timer: schedule_flush_timer(type)
     }
@@ -269,19 +269,29 @@ defmodule Deft.Store do
     Enum.each(entries, fn entry -> :ets.insert(state.tid, entry) end)
 
     # Demonitor and discard the DOWN message
-    if state.monitor_ref, do: Process.demonitor(state.monitor_ref, [:flush])
-    {:noreply, %{state | load_task: nil, monitor_ref: nil}}
+    Process.demonitor(ref, [:flush])
+    {:noreply, %{state | load_task: nil}}
   end
 
   @impl true
-  def handle_info(
-        {:DOWN, monitor_ref, :process, _pid, reason},
-        %{monitor_ref: monitor_ref} = state
-      )
-      when not is_nil(monitor_ref) do
+  def handle_info({:DOWN, ref, :process, _pid, reason}, %{load_task: %Task{ref: ref}} = state) do
     # Task failed - log warning, ETS stays partially populated
     Logger.warning("[Store] DETS load task failed: #{inspect(reason)}")
-    {:noreply, %{state | load_task: nil, monitor_ref: nil}}
+    {:noreply, %{state | load_task: nil}}
+  end
+
+  @impl true
+  def handle_info({:DOWN, _ref, :process, _pid, _reason}, %{load_task: nil} = state) do
+    # DOWN message for already-completed load task (race condition)
+    # Can happen if task completes and we demonitor, but DOWN message already in mailbox
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info({:DOWN, _ref, :process, _pid, _reason}, state) do
+    # DOWN message that doesn't match current load_task (race condition during cleanup)
+    # Can happen during shutdown/cleanup when Task.shutdown creates additional monitors
+    {:noreply, state}
   end
 
   @impl true
@@ -309,7 +319,7 @@ defmodule Deft.Store do
 
   # Private Functions
 
-  defp open_dets_file(path, _type) do
+  defp open_dets_file(path, type) do
     case :dets.open_file(String.to_charlist(path), type: :set) do
       {:ok, dets_file} ->
         Logger.debug("[Store] DETS file opened: #{path}")
@@ -317,7 +327,12 @@ defmodule Deft.Store do
 
       {:error, reason} ->
         # Fall back to creating a new empty DETS file
-        Logger.error("[Store] DETS corruption at #{path}, creating new file: #{inspect(reason)}")
+        # Log warning for sitelog corruption, silent for cache (ephemeral data)
+        if type == :sitelog do
+          Logger.warning(
+            "[Store] DETS corruption at #{path}, creating new file: #{inspect(reason)}"
+          )
+        end
 
         # Delete corrupted file if it exists
         _ = File.rm(path)
