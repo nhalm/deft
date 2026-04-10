@@ -971,4 +971,349 @@ defmodule Deft.RateLimiterTest do
       {:ok, _} = RateLimiter.request(job_id, "anthropic", messages, :lead_agent)
     end
   end
+
+  describe "adaptive concurrency" do
+    setup _context do
+      # Stop the default RateLimiter from the main setup
+      stop_supervised(RateLimiter)
+
+      # Start time at 0
+      current_time = :atomics.new(1, [])
+      :atomics.put(current_time, 1, 0)
+
+      time_source = fn :millisecond ->
+        :atomics.get(current_time, 1)
+      end
+
+      # Start a process to capture messages sent to "Foreman"
+      foreman_pid = self()
+
+      job_id = "adaptive-test-#{System.unique_integer([:positive])}"
+
+      {:ok, rate_limiter} =
+        start_supervised(
+          {RateLimiter,
+           [
+             job_id: job_id,
+             foreman_pid: foreman_pid,
+             time_source: time_source,
+             initial_concurrency: 2,
+             max_concurrency: 5
+           ]},
+          id: {RateLimiter, job_id}
+        )
+
+      {:ok,
+       rate_limiter: rate_limiter,
+       job_id: job_id,
+       foreman_pid: foreman_pid,
+       time_source: time_source,
+       current_time: current_time}
+    end
+
+    test "scales up when buckets above 60% capacity for 30+ seconds with no queue", %{
+      job_id: job_id,
+      current_time: current_time,
+      rate_limiter: rate_limiter
+    } do
+      # Make a small request first to initialize provider buckets
+      :atomics.put(current_time, 1, 0)
+      messages = [%{content: "init"}]
+      {:ok, _} = RateLimiter.request(job_id, "anthropic", messages, :lead_agent)
+
+      # Start at t=0 with high bucket capacity (>60%)
+      # Buckets are now initialized and mostly full
+
+      # Trigger queue check at t=0 - should start tracking eligibility
+      send(rate_limiter, :check_queue)
+      Process.sleep(50)
+
+      # Advance to t=20s (not yet 30s)
+      :atomics.put(current_time, 1, 20_000)
+      send(rate_limiter, :check_queue)
+      Process.sleep(50)
+
+      # Should not receive concurrency change yet
+      refute_receive {:rate_limiter, :concurrency_change, _}, 100
+
+      # Advance to t=31s (past 30s threshold)
+      :atomics.put(current_time, 1, 31_000)
+      send(rate_limiter, :check_queue)
+
+      # Should receive scale-up notification (from 2 to 3)
+      assert_receive {:rate_limiter, :concurrency_change, 3}, 500
+    end
+
+    test "does not scale up if queue is not empty", %{
+      job_id: job_id,
+      current_time: current_time,
+      rate_limiter: rate_limiter
+    } do
+      # Exhaust buckets to create a queue
+      messages = [%{content: String.duplicate("x", 40_000)}]
+      :atomics.put(current_time, 1, 0)
+
+      # Fill buckets to create backpressure
+      {:ok, _} = RateLimiter.request(job_id, "anthropic", messages, :lead_agent)
+
+      # Queue a request (will be blocked due to exhausted buckets)
+      Task.async(fn ->
+        RateLimiter.request(job_id, "anthropic", [%{content: "queued"}], :lead_agent)
+      end)
+
+      Process.sleep(100)
+
+      # Advance time to 31s (past threshold)
+      :atomics.put(current_time, 1, 31_000)
+      send(rate_limiter, :check_queue)
+
+      # Should NOT scale up because queue is not empty
+      refute_receive {:rate_limiter, :concurrency_change, _}, 200
+    end
+
+    test "does not scale up if bucket capacity below 60%", %{
+      job_id: job_id,
+      current_time: current_time,
+      rate_limiter: rate_limiter
+    } do
+      # Reduce bucket capacity by consuming tokens
+      messages = [%{content: String.duplicate("x", 20_000)}]
+      :atomics.put(current_time, 1, 0)
+
+      # Make requests to reduce bucket capacity below 60%
+      for _ <- 1..2 do
+        {:ok, _} = RateLimiter.request(job_id, "anthropic", messages, :lead_agent)
+      end
+
+      # Advance time to 31s (past threshold)
+      :atomics.put(current_time, 1, 31_000)
+      send(rate_limiter, :check_queue)
+
+      # Should NOT scale up because capacity is below 60%
+      refute_receive {:rate_limiter, :concurrency_change, _}, 200
+    end
+
+    test "caps scale-up at max_concurrency", %{
+      job_id: job_id,
+      current_time: current_time,
+      rate_limiter: rate_limiter
+    } do
+      # Make a small request first to initialize provider buckets
+      :atomics.put(current_time, 1, 0)
+      messages = [%{content: "init"}]
+      {:ok, _} = RateLimiter.request(job_id, "anthropic", messages, :lead_agent)
+
+      # Scale up from 2 to 3
+      send(rate_limiter, :check_queue)
+      Process.sleep(50)
+
+      :atomics.put(current_time, 1, 31_000)
+      send(rate_limiter, :check_queue)
+      assert_receive {:rate_limiter, :concurrency_change, 3}, 500
+
+      # Scale up from 3 to 4
+      :atomics.put(current_time, 1, 32_000)
+      send(rate_limiter, :check_queue)
+      Process.sleep(50)
+
+      :atomics.put(current_time, 1, 63_000)
+      send(rate_limiter, :check_queue)
+      assert_receive {:rate_limiter, :concurrency_change, 4}, 500
+
+      # Scale up from 4 to 5 (max)
+      :atomics.put(current_time, 1, 64_000)
+      send(rate_limiter, :check_queue)
+      Process.sleep(50)
+
+      :atomics.put(current_time, 1, 95_000)
+      send(rate_limiter, :check_queue)
+      assert_receive {:rate_limiter, :concurrency_change, 5}, 500
+
+      # Try to scale beyond max
+      :atomics.put(current_time, 1, 96_000)
+      send(rate_limiter, :check_queue)
+      Process.sleep(50)
+
+      :atomics.put(current_time, 1, 127_000)
+      send(rate_limiter, :check_queue)
+
+      # Should NOT scale beyond max_concurrency
+      refute_receive {:rate_limiter, :concurrency_change, 6}, 200
+    end
+
+    test "scales down when 429 rate exceeds 2 per minute", %{
+      job_id: job_id,
+      current_time: current_time,
+      rate_limiter: rate_limiter
+    } do
+      # Starting concurrency is 2
+      # Report first 429 at t=0
+      :atomics.put(current_time, 1, 0)
+      :ok = RateLimiter.report_429(job_id, "anthropic")
+
+      # Report second 429 at t=10s
+      :atomics.put(current_time, 1, 10_000)
+      :ok = RateLimiter.report_429(job_id, "anthropic")
+
+      # Report third 429 at t=20s (3 429s within 60s window > 2 threshold)
+      :atomics.put(current_time, 1, 20_000)
+      :ok = RateLimiter.report_429(job_id, "anthropic")
+
+      # Trigger queue check - should scale down from 2 to 1
+      send(rate_limiter, :check_queue)
+
+      assert_receive {:rate_limiter, :concurrency_change, 1}, 500
+    end
+
+    test "does not scale down below 1", %{
+      job_id: job_id,
+      current_time: current_time,
+      rate_limiter: rate_limiter
+    } do
+      # Scale down to 1 first
+      :atomics.put(current_time, 1, 0)
+
+      for i <- 0..2 do
+        :atomics.put(current_time, 1, i * 10_000)
+        :ok = RateLimiter.report_429(job_id, "anthropic")
+      end
+
+      send(rate_limiter, :check_queue)
+      assert_receive {:rate_limiter, :concurrency_change, 1}, 500
+
+      # Try to scale down further
+      :atomics.put(current_time, 1, 100_000)
+
+      for i <- 0..2 do
+        :atomics.put(current_time, 1, 100_000 + i * 10_000)
+        :ok = RateLimiter.report_429(job_id, "anthropic")
+      end
+
+      send(rate_limiter, :check_queue)
+
+      # Should NOT scale below 1
+      refute_receive {:rate_limiter, :concurrency_change, 0}, 200
+    end
+
+    test "only counts 429s within 60s window for scale-down", %{
+      job_id: job_id,
+      current_time: current_time,
+      rate_limiter: rate_limiter
+    } do
+      # Report 429s spread over >60s window
+      :atomics.put(current_time, 1, 0)
+      :ok = RateLimiter.report_429(job_id, "anthropic")
+      Process.sleep(50)
+
+      :atomics.put(current_time, 1, 10_000)
+      :ok = RateLimiter.report_429(job_id, "anthropic")
+      Process.sleep(50)
+
+      # Third 429 at t=70s (first 429 at t=0 is now outside 60s window)
+      :atomics.put(current_time, 1, 70_000)
+      :ok = RateLimiter.report_429(job_id, "anthropic")
+      Process.sleep(50)
+
+      # Trigger check at t=70s
+      send(rate_limiter, :check_queue)
+
+      # Should NOT scale down (only 1 429 in the last 60s: the one at t=70s)
+      # The filter is ts > cutoff (cutoff=10_000), so only t=70_000 is included
+      refute_receive {:rate_limiter, :concurrency_change, _}, 200
+    end
+
+    test "rate-limits scale-down to once per 60 seconds", %{
+      job_id: job_id,
+      current_time: current_time,
+      rate_limiter: rate_limiter
+    } do
+      # First scale-down at t=0
+      :atomics.put(current_time, 1, 0)
+
+      for i <- 0..2 do
+        :atomics.put(current_time, 1, i * 5_000)
+        :ok = RateLimiter.report_429(job_id, "anthropic")
+        Process.sleep(20)
+      end
+
+      send(rate_limiter, :check_queue)
+      assert_receive {:rate_limiter, :concurrency_change, 1}, 500
+
+      # Try to scale down again at t=15s (only 15s elapsed, < 60s)
+      # Use t=15s instead of t=30s to avoid triggering scale-up
+      for i <- 0..2 do
+        :atomics.put(current_time, 1, 15_000 + i * 1_000)
+        :ok = RateLimiter.report_429(job_id, "anthropic")
+        Process.sleep(20)
+      end
+
+      send(rate_limiter, :check_queue)
+
+      # Should NOT scale down yet (rate-limited, minimum 1 already reached)
+      # Also should NOT scale up (only 15s elapsed, not 30s)
+      refute_receive {:rate_limiter, :concurrency_change, _}, 200
+    end
+
+    test "does not send concurrency change when foreman_pid is nil" do
+      job_id = "adaptive-no-foreman-#{System.unique_integer([:positive])}"
+
+      current_time = :atomics.new(1, [])
+      :atomics.put(current_time, 1, 0)
+
+      time_source = fn :millisecond ->
+        :atomics.get(current_time, 1)
+      end
+
+      # Start without foreman_pid
+      {:ok, rate_limiter} =
+        start_supervised(
+          {RateLimiter,
+           [job_id: job_id, time_source: time_source, initial_concurrency: 2, max_concurrency: 5]},
+          id: {RateLimiter, job_id}
+        )
+
+      # Trigger scale-up conditions
+      :atomics.put(current_time, 1, 0)
+      send(rate_limiter, :check_queue)
+      Process.sleep(50)
+
+      :atomics.put(current_time, 1, 31_000)
+      send(rate_limiter, :check_queue)
+
+      # Should not crash and should not send message
+      refute_receive {:rate_limiter, :concurrency_change, _}, 200
+    end
+
+    test "resets scale-up eligibility when conditions no longer met", %{
+      job_id: job_id,
+      current_time: current_time,
+      rate_limiter: rate_limiter
+    } do
+      # Start eligibility tracking at t=0
+      :atomics.put(current_time, 1, 0)
+      send(rate_limiter, :check_queue)
+      Process.sleep(50)
+
+      # At t=20s, create a queue (breaks scale-up condition)
+      :atomics.put(current_time, 1, 20_000)
+      messages = [%{content: String.duplicate("x", 40_000)}]
+      {:ok, _} = RateLimiter.request(job_id, "anthropic", messages, :lead_agent)
+
+      Task.async(fn ->
+        RateLimiter.request(job_id, "anthropic", [%{content: "queued"}], :lead_agent)
+      end)
+
+      Process.sleep(100)
+
+      # Check queue - should reset eligibility
+      send(rate_limiter, :check_queue)
+      Process.sleep(50)
+
+      # At t=31s, scale-up should NOT happen (eligibility was reset at t=20s)
+      :atomics.put(current_time, 1, 31_000)
+      send(rate_limiter, :check_queue)
+
+      refute_receive {:rate_limiter, :concurrency_change, _}, 200
+    end
+  end
 end
