@@ -25,6 +25,7 @@ defmodule Deft.Job.Runner do
   - `:testing` — read + bash only (read, bash, grep, find, ls)
   - `:review` — read-only tools (read, grep, find, ls)
   - `:merge_resolution` — conflict resolution (read, write, edit, grep)
+  - `:verification` — validation tools (read, bash, grep, find, ls)
   """
 
   alias Deft.Message
@@ -45,7 +46,8 @@ defmodule Deft.Job.Runner do
 
   require Logger
 
-  @type runner_type :: :research | :implementation | :testing | :review | :merge_resolution
+  @type runner_type ::
+          :research | :implementation | :testing | :review | :merge_resolution | :verification
   @type result :: {:ok, String.t()} | {:error, String.t()}
 
   # Loop context struct to reduce parameter passing
@@ -94,7 +96,14 @@ defmodule Deft.Job.Runner do
     ],
     testing: [Deft.Tools.Read, Deft.Tools.Bash, Deft.Tools.Grep, Deft.Tools.Find, Deft.Tools.Ls],
     review: [Deft.Tools.Read, Deft.Tools.Grep, Deft.Tools.Find, Deft.Tools.Ls],
-    merge_resolution: [Deft.Tools.Read, Deft.Tools.Write, Deft.Tools.Edit, Deft.Tools.Grep]
+    merge_resolution: [Deft.Tools.Read, Deft.Tools.Write, Deft.Tools.Edit, Deft.Tools.Grep],
+    verification: [
+      Deft.Tools.Read,
+      Deft.Tools.Bash,
+      Deft.Tools.Grep,
+      Deft.Tools.Find,
+      Deft.Tools.Ls
+    ]
   }
 
   @doc """
