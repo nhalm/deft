@@ -855,7 +855,7 @@ defmodule Deft.CLI do
       )
 
     # Look up the Foreman agent PID from the registry
-    [{agent_pid, _}] = Registry.lookup(Deft.ProcessRegistry, {:foreman_agent, session_id})
+    [{agent_pid, _}] = Registry.lookup(Deft.ProcessRegistry, {:foreman, session_id})
     agent_pid
   end
 
@@ -2147,11 +2147,11 @@ defmodule Deft.CLI do
     end
   end
 
-  # Get Foreman PID from registry
+  # Get Foreman.Coordinator PID from registry
   defp get_foreman_pid(job_id) do
-    case Registry.lookup(Deft.ProcessRegistry, {:foreman, job_id}) do
+    case Registry.lookup(Deft.ProcessRegistry, {:foreman_coordinator, job_id}) do
       [{pid, _}] -> pid
-      [] -> raise "Foreman not found in registry for job #{job_id}"
+      [] -> raise "Foreman.Coordinator not found in registry for job #{job_id}"
     end
   end
 

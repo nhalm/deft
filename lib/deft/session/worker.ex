@@ -63,7 +63,9 @@ defmodule Deft.Session.Worker do
     # Build via_tuples for process registration
     rate_limiter_name = {:via, Registry, {Deft.ProcessRegistry, {:rate_limiter, session_id}}}
     foreman_name = {:via, Registry, {Deft.ProcessRegistry, {:foreman, session_id}}}
-    foreman_agent_name = {:via, Registry, {Deft.ProcessRegistry, {:foreman_agent, session_id}}}
+
+    foreman_coordinator_name =
+      {:via, Registry, {Deft.ProcessRegistry, {:foreman_coordinator, session_id}}}
 
     foreman_tool_runner_name =
       {:via, Registry, {Deft.ProcessRegistry, {:tool_runner, session_id}}}
@@ -111,7 +113,7 @@ defmodule Deft.Session.Worker do
            [
              [
                job_id: session_id,
-               foreman_pid: foreman_name,
+               foreman_pid: foreman_coordinator_name,
                cost_ceiling: config.work_cost_ceiling,
                initial_concurrency: config.job_initial_concurrency,
                max_concurrency: config.job_max_leads
@@ -136,11 +138,11 @@ defmodule Deft.Session.Worker do
              [
                session_id: session_id,
                config: config,
-               parent_pid: foreman_name,
+               parent_pid: foreman_coordinator_name,
                rate_limiter: rate_limiter_name,
                working_dir: working_dir,
                messages: messages,
-               name: foreman_agent_name
+               name: foreman_name
              ]
            ]},
         restart: :temporary
@@ -168,12 +170,12 @@ defmodule Deft.Session.Worker do
                config: config,
                prompt: prompt,
                rate_limiter_pid: rate_limiter_name,
-               foreman_agent_pid: foreman_agent_name,
+               foreman_agent_pid: foreman_name,
                runner_supervisor: runner_supervisor_name,
                working_dir: working_dir,
                resumed_plan: resumed_plan,
                cli_pid: cli_pid,
-               name: foreman_name
+               name: foreman_coordinator_name
              ]
            ]},
         restart: :temporary
@@ -235,7 +237,7 @@ defmodule Deft.Session.Worker do
   Returns the Registry via tuple for the Foreman agent process.
   """
   def foreman_agent_via_tuple(session_id) do
-    {:via, Registry, {Deft.ProcessRegistry, {:foreman_agent, session_id}}}
+    {:via, Registry, {Deft.ProcessRegistry, {:foreman, session_id}}}
   end
 
   @doc """
