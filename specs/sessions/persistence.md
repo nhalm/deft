@@ -43,9 +43,9 @@ There are two kinds of sessions, both using the same JSONL format:
 - Storage: `~/.deft/projects/<path-encoded-repo>/sessions/<session_id>.jsonl`
 - Listed in the web UI session picker. Resumable by the user.
 
-**Agent sessions** — internal LLM conversation history for orchestrated sub-agents (ForemanAgent, LeadAgents). These are not user-facing.
+**Agent sessions** — internal LLM conversation history for orchestrated sub-agents (Foreman, Leads). These are not user-facing.
 - Storage: `~/.deft/projects/<path-encoded-repo>/jobs/<job_id>/foreman_session.jsonl` and `lead_<id>_session.jsonl`
-- Not listed in the session picker. Not directly resumable — the orchestrator starts fresh agents on job resume (see [../orchestration.md](../orchestration.md)).
+- Not listed in the session picker. Not directly resumable — the Coordinator starts fresh agents on job resume (see [../orchestration/coordinator.md](../orchestration/coordinator.md)).
 - Same entry types, same format. The only difference is storage path and lifecycle.
 
 Sessions are scoped per-project. The project is identified by the git repository root (resolved to a real path, no symlinks). The path is encoded by replacing `/` with `-` (e.g., `/Users/nick/myapp` -> `-Users-nick-myapp`). See [../filesystem.md](../filesystem.md) for the full `~/.deft/projects/` layout.

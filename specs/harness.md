@@ -43,7 +43,7 @@ This is a focused spec. Tools, providers, sessions, TUI, and orchestration are s
 - Session persistence and config (see [sessions.md](sessions.md))
 - Terminal UI (see [tui.md](tui.md))
 - Observational memory (see [observational-memory.md](observational-memory.md))
-- Orchestration (see [orchestration.md](orchestration.md))
+- Orchestration (see [orchestration](orchestration/README.md))
 - Tool permission / approval system (future)
 
 **Dependencies:**
@@ -75,10 +75,10 @@ Deft.Application (Application)
 - The Agent may also be started with an optional `rate_limiter` option (pid of a `Deft.RateLimiter` GenServer). When provided, the Agent calls `RateLimiter.request/2` before provider calls and `RateLimiter.reconcile/4` after receiving the response.
 - The orchestrator process is responsible for sending prompts to the Agent via `Deft.Agent.prompt/2`
 - The Agent broadcasts events via Registry as usual — the orchestrator and web UI both subscribe
-- Multiple Agents can coexist in the same job (one ForemanAgent + N LeadAgents), each with their own ToolRunner and OM
-- The `rest_for_one` strategy applies within each Agent's sub-tree (Agent + ToolRunner + OM), not at the job level. If a sub-agent crashes, its orchestrator detects the crash via `Process.monitor` and handles recovery.
+- Multiple Agents can coexist in the same session (one Foreman + N Leads), each with their own ToolRunner and OM
+- The `rest_for_one` strategy applies within each Agent's sub-tree (Agent + ToolRunner + OM), not at the session level. If a sub-agent crashes, its Coordinator detects the crash via `Process.monitor` and handles recovery.
 
-See [orchestration.md](orchestration.md) for the job-level supervision tree.
+See [orchestration](orchestration/README.md) for the job-level supervision tree.
 
 Key invariants:
 - Each session is an isolated process subtree. A crash in one session does not affect others.
@@ -170,5 +170,5 @@ Updated after each LLM response from `:usage` events.
 - [sessions.md](sessions.md) — persistence, config, CLI
 - [tui.md](tui.md) — terminal UI
 - [observational-memory.md](observational-memory.md) — OM system
-- [orchestration.md](orchestration.md) — Foreman/Lead/Runner
+- [orchestration](orchestration/README.md) — Foreman/Lead/Runner
 - [standards.md](standards.md) — coding standards

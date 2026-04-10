@@ -82,7 +82,7 @@ The Web UI is Deft's primary user interface. Built on Phoenix LiveView, it provi
 - [sessions.md](sessions.md) — CLI entry point, session creation, resume flow
 - [observational-memory.md](observational-memory.md) — OM events for status display
 - [providers.md](providers.md) — `:thinking_delta` events for thinking display
-- [orchestration.md](orchestration.md) — Lead/Runner status for agent roster
+- [orchestration](orchestration/README.md) — Lead/Runner status for agent roster
 
 ## Specification
 

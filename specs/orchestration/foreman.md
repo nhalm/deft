@@ -81,7 +81,7 @@ The Foreman's behavior during orchestration follows these phases. The Foreman.Co
 | `:verifying` | (idle — waiting for verification Runner) |
 | `:complete` | Generates summary for user |
 
-**Auto-approve:** When `--auto-approve-all` is set, the asking phase is skipped — the Foreman works with whatever context the prompt provides. Plan approval is also skipped.
+**Auto-approve:** When `--auto-approve-all` is set, the asking phase is skipped — the Foreman works with whatever context the prompt provides. Plan approval is also skipped. For non-interactive mode (`deft -p "prompt"`), `--auto-approve-all` is required since no user is present to approve plans.
 
 ### 4. Tool Sets
 

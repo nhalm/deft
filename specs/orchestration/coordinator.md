@@ -34,6 +34,7 @@ The Foreman.Coordinator is a gen_statem that handles code-speed process manageme
 **Dependencies:**
 - [foreman.md](foreman.md) — the Foreman agent this Coordinator serves
 - [lead.md](lead.md) — Lead + Lead.Coordinator processes
+- [../sessions/persistence.md](../sessions/persistence.md) — session JSONL (used for Foreman crash recovery)
 - [../rate-limiter.md](../rate-limiter.md) — RateLimiter process
 - [../filesystem.md](../filesystem.md) — Deft.Store
 - [../git-strategy.md](../git-strategy.md) — worktree management
@@ -94,6 +95,10 @@ The buffer uses a **max-age flush** strategy. The Coordinator tracks `buffer_sta
 The flush timer handler must check the `foreman_restarting` flag. When true, the handler must be a no-op — leave the buffer intact for the restart catch-up prompt.
 
 `:contract` is low-priority because contract auto-unblocking already happened at code speed. The Foreman notification is informational.
+
+### 5.1 Cost Ceiling Gating
+
+When `cost_ceiling_reached` is true, the Coordinator stops forwarding low-priority Lead messages to the Foreman entirely. Messages are buffered in state. On spending approval, the Coordinator sends a single consolidated catch-up prompt with current state rather than draining stale queued prompts.
 
 ### 6. Contract Auto-Forwarding
 

@@ -54,7 +54,7 @@ ETS handles reads — concurrent, no process bottleneck. DETS handles persistenc
 
 **Dependencies:**
 - [sessions.md](sessions.md) — session lifecycle
-- [orchestration.md](orchestration.md) — Foreman/Lead/Runner process architecture, OTP coordination protocol
+- [orchestration](orchestration/README.md) — Foreman/Lead/Runner process architecture, OTP coordination protocol
 
 **Design principles:**
 - **ETS for reads, DETS for durability.** Fast concurrent reads from ETS. DETS is the write-behind persistence layer. The GenServer manages the sync.
@@ -399,6 +399,6 @@ end
 ## References
 
 - [sessions.md](sessions.md) — session lifecycle
-- [orchestration.md](orchestration.md) — Foreman/Lead/Runner architecture
+- [orchestration](orchestration/README.md) — Foreman/Lead/Runner architecture
 - [Erlang ETS documentation](https://www.erlang.org/doc/man/ets.html) — in-memory storage
 - [Erlang DETS documentation](https://www.erlang.org/doc/man/dets.html) — disk persistence

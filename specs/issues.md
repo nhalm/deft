@@ -62,7 +62,7 @@ The core loop: user creates issues → `deft work` picks the highest-priority un
 
 **Dependencies:**
 - [sessions.md](sessions.md) — CLI interface, config
-- [orchestration.md](orchestration.md) — Foreman integration for `deft work`
+- [orchestration](orchestration/README.md) — Foreman integration for `deft work`
 
 **Design principles:**
 - **The JSONL file is the database.** No binary storage, no daemon. One JSON object per line, fully diffable, git-mergeable.
@@ -347,7 +347,7 @@ Work mode inherits all `job.*` configuration from the orchestration spec. Plan a
 
 ## References
 
-- [orchestration.md](orchestration.md) — Foreman, job lifecycle
+- [orchestration](orchestration/README.md) — Foreman, job lifecycle
 - [sessions.md](sessions.md) — CLI interface
 - [Seeds](https://github.com/jayminwest/seeds) — JSONL+git issue tracker for AI agents (architectural inspiration)
 - [Beads](https://github.com/steveyegge/beads) — distributed graph issue tracker (concept inspiration)

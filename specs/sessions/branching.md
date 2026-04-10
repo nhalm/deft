@@ -147,7 +147,7 @@ Branched sessions appear in the normal session list. They are sorted by last act
 
 ### 5. Constraints
 
-- **User sessions only.** Branching is not supported for agent sessions (ForemanAgent, LeadAgent). Those sessions are internal and not user-facing.
+- **User sessions only.** Branching is not supported for agent sessions (Foreman, Lead). Those sessions are internal and not user-facing.
 - **Committed state only.** Checkpoints capture the HEAD commit SHA, not uncommitted changes. `/checkpoint` warns if there are uncommitted changes in the working directory.
 - **No concurrent branches.** Branching switches the user to the new session. The original session remains available for resume but is not active.
 - **Checkpoint labels are unique per session.** Attempting to create a checkpoint with a duplicate label returns an error.
@@ -173,4 +173,4 @@ Branched sessions appear in the normal session list. They are sorted by last act
 - [persistence.md](persistence.md) — JSONL format, checkpoint entry type
 - [context.md](context.md) — context reconstruction
 - [../git-strategy.md](../git-strategy.md) — git branch and worktree management
-- [../orchestration.md](../orchestration.md) — Foreman/Lead hierarchy (future: job branching)
+- [../orchestration/README.md](../orchestration/README.md) — Foreman/Lead hierarchy (future: job branching)

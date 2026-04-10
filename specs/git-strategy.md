@@ -28,11 +28,11 @@ Deft uses git worktrees to give each Lead an isolated copy of the codebase for p
 - Startup orphan cleanup
 
 **Out of scope:**
-- Orchestration logic (see [orchestration.md](orchestration.md))
+- Orchestration logic (see [orchestration](orchestration/README.md))
 - User's broader git workflow (rebasing, remote push, CI)
 
 **Dependencies:**
-- [orchestration.md](orchestration.md) — Foreman/Lead lifecycle, process architecture
+- [orchestration](orchestration/README.md) — Foreman/Lead lifecycle, process architecture
 
 **Design principles:**
 - **True isolation.** Each Lead has its own working tree. No file locking, no coordination on disk.
@@ -122,4 +122,4 @@ Cleanup steps:
 
 ## References
 
-- [orchestration.md](orchestration.md) — job lifecycle, Foreman/Lead/Runner hierarchy
+- [orchestration](orchestration/README.md) — job lifecycle, Foreman/Lead/Runner hierarchy

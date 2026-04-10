@@ -31,12 +31,12 @@
 
 **Out of scope:**
 - Provider API details (see [providers.md](providers.md))
-- Job lifecycle and process architecture (see [orchestration.md](orchestration.md))
+- Job lifecycle and process architecture (see [orchestration](orchestration/README.md))
 - Per-model pricing table maintenance
 
 **Dependencies:**
 - [providers.md](providers.md) — provider rate limits, API response format
-- [orchestration.md](orchestration.md) — process architecture, Foreman/Lead/Runner hierarchy
+- [orchestration](orchestration/README.md) — process architecture, Foreman/Lead/Runner hierarchy
 
 **Design principles:**
 - **Centralized control.** A single GenServer for all LLM calls in a job. No distributed rate limiting.
@@ -57,9 +57,9 @@ A call proceeds only when both buckets have sufficient capacity. If either is ex
 
 ### 2. Priority Queue
 
-**Priority order:** ForemanAgent > Runner > LeadAgent.
+**Priority order:** Foreman > Runner > Lead.
 
-**Rationale:** With the orchestrator+agent split (see [orchestration.md](orchestration.md)), only agents and Runners make LLM calls — the orchestrator processes (Foreman, Lead) do not. ForemanAgent makes coordination decisions (unblocking, steering) that unblock LeadAgents, so it gets highest priority. Runners are spawned by Leads and block their owning LeadAgent when the Lead waits for results — starving Runners starves Leads (priority inversion). LeadAgents get lowest priority so their own Runners finish first.
+**Rationale:** With the agent+coordinator split (see [orchestration/README.md](orchestration/README.md)), only agents and Runners make LLM calls — the Coordinator processes do not. The Foreman makes coordination decisions (unblocking, steering) that unblock Leads, so it gets highest priority. Runners are spawned by Leads and block the owning Lead when it waits for results — starving Runners starves Leads (priority inversion). Leads get lowest priority so their own Runners finish first.
 
 The Foreman has highest priority because its coordination decisions (unblocking, steering, conflict resolution) affect all Leads.
 
@@ -118,5 +118,5 @@ Provider-specific RPM/TPM limits are configured in [providers.md](providers.md).
 
 ## References
 
-- [orchestration.md](orchestration.md) — job lifecycle, process architecture
+- [orchestration](orchestration/README.md) — job lifecycle, process architecture
 - [providers.md](providers.md) — provider API details, rate limits

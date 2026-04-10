@@ -72,7 +72,7 @@ Pattern:
 
 The agent sees a normal tool result. The orchestrator receives the message in `handle_info`. This keeps agents standard — they don't know they're being orchestrated, they just have extra tools available.
 
-Orchestration tools are defined by the orchestration layer (see [orchestration.md](orchestration.md)), not in this spec. This spec only defines the mechanism (`parent_pid` in ToolContext).
+Orchestration tools are defined by the orchestration layer (see [orchestration](orchestration/README.md)), not in this spec. This spec only defines the mechanism (`parent_pid` in ToolContext).
 
 ### 2. Built-in Tools
 

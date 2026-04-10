@@ -50,7 +50,7 @@ Deft uses Elixir's built-in Logger for operational visibility across all layers.
 - [harness](harness.md) — Agent gen_statem
 - [providers](providers.md) — Provider modules
 - [web-ui](web-ui.md) — Phoenix LiveView interface
-- [orchestration](orchestration.md) — Foreman/Lead/Runner hierarchy
+- [orchestration](orchestration/README.md) — Foreman/Lead/Runner hierarchy
 
 **Design principles:**
 - **Only callers log.** Low-level functions return deterministic results (`{:ok, _}` / `{:error, _}`). They do not log. The caller has the context to decide whether a failure is expected, recoverable, or fatal — and logs accordingly. This applies to git operations, HTTP calls, file I/O, parsing, and any utility function.

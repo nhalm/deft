@@ -31,7 +31,7 @@ Component-specific deep-dive specs can be added later as `specs/testing/<compone
 **Dependencies:**
 - [README.md](README.md) — testing strategy, three-layer model, ScriptedProvider design
 - [../harness.md](../harness.md) — agent loop states and transitions
-- [../orchestration.md](../orchestration.md) — Foreman/Lead/Runner architecture
+- [../orchestration](../orchestration/README.md) — Foreman/Lead/Runner architecture
 - [../providers.md](../providers.md) — provider behaviour
 
 ## Specification
@@ -175,4 +175,4 @@ Missing integration tests:
 - [evals/foreman.md](evals/foreman.md) — Foreman eval test cases
 - [evals/lead.md](evals/lead.md) — Lead eval test cases
 - [../harness.md](../harness.md) — agent loop
-- [../orchestration.md](../orchestration.md) — Foreman/Lead/Runner
+- [../orchestration](../orchestration/README.md) — Foreman/Lead/Runner

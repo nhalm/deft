@@ -32,6 +32,7 @@ All Coordinator↔Coordinator communication happens via Erlang process messages.
 
 **Lead.Coordinator → Foreman.Coordinator:** `send(coordinator_pid, {:lead_message, type, content, metadata})`
 **Foreman.Coordinator → Lead.Coordinator:** `send(lead_coordinator_pid, {:coordinator_steering, content})`
+**Foreman.Coordinator → Lead.Coordinator (contract forwarding):** `send(lead_coordinator_pid, {:coordinator_contract, contract})`
 
 ### 2. Message Types
 
@@ -46,7 +47,8 @@ All Coordinator↔Coordinator communication happens via Erlang process messages.
 | `status` | Lead.Coordinator→Foreman.Coordinator | Progress update |
 | `blocker` | Lead.Coordinator→Foreman.Coordinator | Stuck, needs Foreman input |
 | `steering` | Foreman.Coordinator→Lead.Coordinator | Guidance |
-| `plan_amendment` | Lead.Coordinator→Foreman.Coordinator | Request for plan change |
+| `coordinator_contract` | Foreman.Coordinator→Lead.Coordinator | Auto-forwarded contract from another Lead (see [coordinator.md](coordinator.md) §6) |
+| `plan_amendment` | Lead.Coordinator→Foreman.Coordinator | Request for plan change — low-priority, coalesced |
 | `complete` | Lead.Coordinator→Foreman.Coordinator | Deliverable finished |
 | `error` | Any→Foreman.Coordinator | Something went wrong |
 | `cost` | RateLimiter→Foreman.Coordinator | Cost checkpoint (sent as `{:rate_limiter, :cost, amount}`) |
@@ -59,7 +61,7 @@ All Coordinator↔Coordinator communication happens via Erlang process messages.
 - `:blocker`, `:complete`, `:error`, `:critical_finding`
 
 **Low-priority (buffered and coalesced):**
-- `:status`, `:artifact`, `:decision`, `:finding`, `:contract`, `:contract_revision`
+- `:status`, `:artifact`, `:decision`, `:finding`, `:contract`, `:contract_revision`, `:plan_amendment`
 
 ### 4. Deft.Store Site Log
 

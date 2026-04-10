@@ -32,7 +32,7 @@ The goal is not 100% coverage — it's confidence in critical paths. Every test 
 **Dependencies:**
 - [evals/README.md](evals/README.md) — eval infrastructure, Tribunal, fixtures, pass rates
 - [../harness.md](../harness.md) — agent loop, gen_statem states
-- [../orchestration.md](../orchestration.md) — Foreman/Lead/Runner architecture
+- [../orchestration](../orchestration/README.md) — Foreman/Lead/Runner architecture
 - [../providers.md](../providers.md) — provider behaviour that ScriptedProvider implements
 - [../standards.md](../standards.md) — Elixir coding standards, Makefile, test tags
 
@@ -210,5 +210,5 @@ All tests are tagged for selective execution:
 - [evals/README.md](evals/README.md) — eval infrastructure
 - [../standards.md](../standards.md) — coding standards, test infrastructure
 - [../harness.md](../harness.md) — agent loop
-- [../orchestration.md](../orchestration.md) — Foreman/Lead/Runner
+- [../orchestration](../orchestration/README.md) — Foreman/Lead/Runner
 - [../providers.md](../providers.md) — provider behaviour
