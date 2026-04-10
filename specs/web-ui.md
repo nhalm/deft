@@ -2,11 +2,14 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.8 |
-| Status | Implemented |
-| Last Updated | 2026-04-09 |
+| Version | 0.9 |
+| Status | Ready |
+| Last Updated | 2026-04-10 |
 
 ## Changelog
+
+### v0.9 (2026-04-10)
+- New Session button in header: creates a new session via `Deft.Session.create/1` and navigates the current window to it
 
 ### v0.8 (2026-04-09)
 - Remove auto-open browser on startup; print the URL to stdout only
@@ -212,6 +215,7 @@ Shows:
 
 | Button | Label | Action |
 |--------|-------|--------|
+| New Session | `New` | Creates a new session and navigates the current window to `/?session=<new_id>` |
 | Sessions | `Sessions` | Opens `/sessions` in a new browser tab (`target="_blank"`) |
 | Help | `Help` | Shows help overlay |
 
