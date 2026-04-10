@@ -369,4 +369,325 @@ defmodule Integration.AgentTurnTest do
         :ok
     end
   end
+
+  describe "prompt queueing" do
+    test "queues prompts received while not idle", %{
+      session_id: session_id,
+      temp_dir: temp_dir,
+      tool_supervisor: tool_supervisor
+    } do
+      # Script two responses
+      {:ok, provider_pid} =
+        ScriptedProvider.start_link(
+          responses: [
+            %{
+              text: "First response",
+              tool_calls: [],
+              usage: %{input: 50, output: 20},
+              delay_ms: 200
+            },
+            %{
+              text: "Second response",
+              tool_calls: [],
+              usage: %{input: 50, output: 20}
+            }
+          ]
+        )
+
+      {:ok, agent} =
+        Agent.start_link(
+          session_id: session_id,
+          config: %{
+            provider: ScriptedProvider,
+            provider_pid: provider_pid,
+            working_dir: temp_dir,
+            tool_supervisor: tool_supervisor,
+            model: "test-model"
+          },
+          messages: []
+        )
+
+      Registry.register(Deft.Registry, {:session, session_id}, [])
+
+      # Send first prompt
+      Agent.prompt(agent, "First")
+      # Send second prompt while agent is busy (queued)
+      Process.sleep(10)
+      Agent.prompt(agent, "Second")
+
+      # Wait for both turns to complete
+      assert_receive {:agent_event, {:state_change, :calling}}, 1000
+      assert_receive {:agent_event, {:state_change, :streaming}}, 1000
+      # Second turn starts
+      assert_receive {:agent_event, {:state_change, :calling}}, 1000
+      assert_receive {:agent_event, {:state_change, :streaming}}, 1000
+
+      Process.sleep(100)
+
+      # Verify both prompts were processed
+      {_state, data} = :sys.get_state(agent)
+      assert length(data.messages) == 4
+      ScriptedProvider.assert_exhausted(provider_pid)
+    end
+  end
+
+  describe "abort functionality" do
+    test "abort cancels stream in :streaming state", %{
+      session_id: session_id,
+      temp_dir: temp_dir,
+      tool_supervisor: tool_supervisor
+    } do
+      {:ok, provider_pid} =
+        ScriptedProvider.start_link(
+          responses: [
+            %{
+              text: "Long response that will be aborted",
+              tool_calls: [],
+              usage: %{input: 50, output: 20},
+              delay_ms: 2000
+            }
+          ]
+        )
+
+      {:ok, agent} =
+        Agent.start_link(
+          session_id: session_id,
+          config: %{
+            provider: ScriptedProvider,
+            provider_pid: provider_pid,
+            working_dir: temp_dir,
+            tool_supervisor: tool_supervisor,
+            model: "test-model"
+          },
+          messages: []
+        )
+
+      Registry.register(Deft.Registry, {:session, session_id}, [])
+
+      Agent.prompt(agent, "Start")
+      assert_receive {:agent_event, {:state_change, :calling}}, 1000
+      assert_receive {:agent_event, {:state_change, :streaming}}, 3000
+
+      # Abort while streaming
+      Agent.abort(agent)
+      assert_receive {:agent_event, {:abort, _state}}, 1000
+
+      # Verify agent is back in idle
+      Process.sleep(100)
+      {current_state, _} = :sys.get_state(agent)
+      assert current_state == :idle
+    end
+
+    test "abort terminates tool tasks in :executing_tools state", %{
+      session_id: session_id,
+      temp_dir: temp_dir,
+      tool_supervisor: tool_supervisor
+    } do
+      {:ok, provider_pid} =
+        ScriptedProvider.start_link(
+          responses: [
+            %{
+              tool_calls: [
+                %{
+                  name: "bash",
+                  args: %{"command" => "sleep 10"}
+                }
+              ],
+              usage: %{input: 50, output: 20}
+            }
+          ]
+        )
+
+      {:ok, agent} =
+        Agent.start_link(
+          session_id: session_id,
+          config: %{
+            provider: ScriptedProvider,
+            provider_pid: provider_pid,
+            working_dir: temp_dir,
+            bash_timeout: 30_000,
+            tools: [Deft.Tools.Bash],
+            tool_supervisor: tool_supervisor,
+            model: "test-model"
+          },
+          messages: []
+        )
+
+      Registry.register(Deft.Registry, {:session, session_id}, [])
+
+      Agent.prompt(agent, "Run long command")
+      assert_receive {:agent_event, {:state_change, :executing_tools}}, 1000
+
+      # Abort while executing tools
+      Agent.abort(agent)
+      assert_receive {:agent_event, {:abort, :executing_tools}}, 1000
+
+      # Verify agent is back in idle quickly (not waiting for tool)
+      Process.sleep(100)
+      {current_state, data} = :sys.get_state(agent)
+      assert current_state == :idle
+      assert data.tool_tasks == []
+    end
+  end
+
+  describe "turn limit" do
+    test "pauses after max_turns and waits for continuation", %{
+      session_id: session_id,
+      temp_dir: temp_dir,
+      tool_supervisor: tool_supervisor
+    } do
+      # Create 4 responses: 3 with tool calls, 1 final
+      # This will trigger: turn 1 (tool) → 2 (tool) → 3 (tool) → limit reached
+      responses =
+        for _i <- 1..3 do
+          %{
+            tool_calls: [%{name: "bash", args: %{"command" => "echo test"}}],
+            usage: %{input: 50, output: 20}
+          }
+        end
+
+      {:ok, provider_pid} = ScriptedProvider.start_link(responses: responses)
+
+      {:ok, agent} =
+        Agent.start_link(
+          session_id: session_id,
+          config: %{
+            provider: ScriptedProvider,
+            provider_pid: provider_pid,
+            working_dir: temp_dir,
+            bash_timeout: 5000,
+            tools: [Deft.Tools.Bash],
+            tool_supervisor: tool_supervisor,
+            model: "test-model",
+            max_turns: 3
+          },
+          messages: []
+        )
+
+      Registry.register(Deft.Registry, {:session, session_id}, [])
+
+      Agent.prompt(agent, "Start loop")
+
+      # Wait for turn limit to be reached
+      assert_receive {:agent_event, {:turn_limit_reached, 4, 3}}, 5000
+
+      # Verify agent is still in executing_tools (waiting for user decision)
+      {current_state, data} = :sys.get_state(agent)
+      assert current_state == :executing_tools
+      assert data.turn_count == 4
+
+      # User declines to continue
+      Agent.continue_turn(agent, false)
+      assert_receive {:agent_event, {:turn_limit_declined}}, 1000
+
+      Process.sleep(50)
+      {current_state, _} = :sys.get_state(agent)
+      assert current_state == :idle
+    end
+  end
+
+  describe "token tracking" do
+    test "updates token counts from usage events", %{
+      session_id: session_id,
+      temp_dir: temp_dir,
+      tool_supervisor: tool_supervisor
+    } do
+      {:ok, provider_pid} =
+        ScriptedProvider.start_link(
+          responses: [
+            %{
+              text: "First",
+              tool_calls: [],
+              usage: %{input: 100, output: 50}
+            },
+            %{
+              text: "Second",
+              tool_calls: [],
+              usage: %{input: 150, output: 75}
+            }
+          ]
+        )
+
+      {:ok, agent} =
+        Agent.start_link(
+          session_id: session_id,
+          config: %{
+            provider: ScriptedProvider,
+            provider_pid: provider_pid,
+            working_dir: temp_dir,
+            tool_supervisor: tool_supervisor,
+            model: "test-model"
+          },
+          messages: []
+        )
+
+      Agent.prompt(agent, "First")
+      Process.sleep(100)
+
+      {_state, data} = :sys.get_state(agent)
+      assert data.total_input_tokens == 100
+      assert data.total_output_tokens == 50
+      assert data.current_context_tokens == 100
+
+      Agent.prompt(agent, "Second")
+      Process.sleep(100)
+
+      {_state, data} = :sys.get_state(agent)
+      assert data.total_input_tokens == 250
+      assert data.total_output_tokens == 125
+      assert data.current_context_tokens == 150
+    end
+  end
+
+  describe "rate limiter integration" do
+    test "calls RateLimiter.request before streaming and reconcile after usage", %{
+      session_id: session_id,
+      temp_dir: temp_dir,
+      tool_supervisor: tool_supervisor
+    } do
+      # Start a mock rate limiter
+      {:ok, rate_limiter} =
+        start_supervised({Deft.RateLimiter, job_id: session_id, max_concurrent: 5})
+
+      {:ok, provider_pid} =
+        ScriptedProvider.start_link(
+          responses: [
+            %{
+              text: "Response",
+              tool_calls: [],
+              usage: %{input: 100, output: 50}
+            }
+          ]
+        )
+
+      {:ok, agent} =
+        Agent.start_link(
+          session_id: session_id,
+          config: %{
+            provider: ScriptedProvider,
+            provider_pid: provider_pid,
+            working_dir: temp_dir,
+            tool_supervisor: tool_supervisor,
+            model: "test-model"
+          },
+          messages: [],
+          rate_limiter: rate_limiter
+        )
+
+      # Get initial state of rate limiter
+      initial_state = :sys.get_state(rate_limiter)
+
+      Agent.prompt(agent, "Test")
+      Process.sleep(200)
+
+      # Verify agent completed successfully
+      {current_state, _} = :sys.get_state(agent)
+      assert current_state == :idle
+
+      # Verify rate limiter was called (state should have changed)
+      final_state = :sys.get_state(rate_limiter)
+      # The reconcile call should have updated the state
+      refute initial_state == final_state
+    end
+  end
 end
