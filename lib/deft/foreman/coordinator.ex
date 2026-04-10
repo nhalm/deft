@@ -357,8 +357,27 @@ defmodule Deft.Foreman.Coordinator do
   def handle_event(:enter, _old_state, :verifying, data) do
     Logger.info("#{log_prefix(data)} Foreman entering :verifying phase")
     broadcast_job_status(:verifying, data)
+
     # Spawn verification Runner
-    :keep_state_and_data
+    verification_task =
+      Task.Supervisor.async_nolink(data.runner_supervisor, fn ->
+        run_verification_runner(data)
+      end)
+
+    # Store task and trigger collection via state_timeout
+    data = Map.put(data, :verification_task, verification_task)
+    {:keep_state, data, {:state_timeout, 0, :collect_verification}}
+  end
+
+  def handle_event(:state_timeout, :collect_verification, :verifying, data) do
+    runner_timeout = Map.get(data.config, :job_runner_timeout, 300_000)
+    verification_task = Map.get(data, :verification_task)
+
+    # Collect result directly in the Coordinator process (task owner)
+    collect_verification_result(verification_task, runner_timeout, data)
+
+    # Transition to :complete after verification
+    {:next_state, :complete, data}
   end
 
   def handle_event(:enter, _old_state, :complete, data) do
@@ -2341,6 +2360,71 @@ defmodule Deft.Foreman.Coordinator do
 
       {:error, reason} ->
         %{topic: topic, status: :error, error: reason}
+    end
+  end
+
+  defp run_verification_runner(data) do
+    runner_model = Map.get(data.config, :job_runner_model, "claude-sonnet-4")
+
+    runner_config = %{
+      model: runner_model,
+      provider: Deft.Provider.Anthropic,
+      temperature: 0.7
+    }
+
+    instructions = """
+    Run verification checks on the completed work:
+
+    1. Run the test suite to ensure all tests pass
+    2. Check for any linting or formatting errors
+    3. Review the changes for correctness and completeness
+
+    Report any issues found or confirm that verification passed.
+    """
+
+    context = """
+    Working directory: #{data.working_dir}
+    Job: #{data.session_id}
+    """
+
+    opts = %{
+      job_id: data.session_id,
+      config: runner_config,
+      worktree_path: data.working_dir
+    }
+
+    case Runner.run(:verification, instructions, context, opts) do
+      {:ok, output} ->
+        %{status: :success, report: output}
+
+      {:error, reason} ->
+        %{status: :error, error: reason}
+    end
+  end
+
+  defp collect_verification_result(task, timeout, data) do
+    result =
+      case Task.yield(task, timeout) do
+        {:ok, %{status: :success, report: report}} ->
+          Logger.info("#{log_prefix(data)} Verification passed")
+          "Verification complete. Results:\n\n#{report}"
+
+        {:ok, %{status: :error, error: error}} ->
+          Logger.warning("#{log_prefix(data)} Verification failed: #{error}")
+          "Verification failed with error:\n\n#{error}"
+
+        nil ->
+          _ = Task.shutdown(task, :brutal_kill)
+          Logger.warning("#{log_prefix(data)} Verification task timed out")
+          "Verification task exceeded time limit (#{timeout}ms)"
+
+        {:exit, reason} ->
+          Logger.error("#{log_prefix(data)} Verification task crashed: #{inspect(reason)}")
+          "Verification task crashed: #{inspect(reason)}"
+      end
+
+    if data.foreman_agent_pid do
+      Deft.Agent.prompt(data.foreman_agent_pid, result)
     end
   end
 
