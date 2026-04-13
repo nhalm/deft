@@ -13,6 +13,7 @@ defmodule DeftWeb.ChatLive do
   alias Deft.Config
   alias Deft.Git
   alias Deft.Session
+  alias Deft.Session.Branch
   alias Deft.Session.Entry.Checkpoint
   alias Deft.Session.Store
   alias Deft.Session.Supervisor, as: SessionSupervisor
@@ -1102,24 +1103,17 @@ defmodule DeftWeb.ChatLive do
     command = String.trim_leading(command, "/")
     args = if args == [], do: nil, else: List.first(args)
 
-    case command do
-      "help" ->
-        handle_help_command(socket)
-
-      "clear" ->
-        handle_clear_command(socket)
-
-      "quit" ->
-        handle_quit_command(socket)
-
-      "checkpoint" ->
-        handle_checkpoint_command(socket, args)
-
-      _ ->
-        # Dispatch to Skills Registry
-        dispatch_skill_or_command(socket, command, args)
-    end
+    dispatch_command(socket, command, args)
   end
+
+  defp dispatch_command(socket, "help", _args), do: handle_help_command(socket)
+  defp dispatch_command(socket, "clear", _args), do: handle_clear_command(socket)
+  defp dispatch_command(socket, "quit", _args), do: handle_quit_command(socket)
+  defp dispatch_command(socket, "checkpoint", args), do: handle_checkpoint_command(socket, args)
+  defp dispatch_command(socket, "branch", args), do: handle_branch_command(socket, args)
+
+  defp dispatch_command(socket, command, args),
+    do: dispatch_skill_or_command(socket, command, args)
 
   defp handle_help_command(socket) do
     # Display help message in conversation
@@ -1139,6 +1133,7 @@ defmodule DeftWeb.ChatLive do
     /compact - Force compaction
     /checkpoint [label] - Create a checkpoint (auto-generates label if not provided)
     /checkpoint list - List all checkpoints in the current session
+    /branch [label] - Create a new session from a checkpoint (lists checkpoints if no label provided)
 
     Keybindings:
     Esc - Switch to normal mode
@@ -1345,6 +1340,93 @@ defmodule DeftWeb.ChatLive do
   defp pad(num), do: to_string(num)
 
   defp checkpoint_label_exists?(entries, label) do
+    Enum.any?(entries, fn
+      %Checkpoint{label: ^label} -> true
+      _ -> false
+    end)
+  end
+
+  # Branch command handlers
+
+  defp handle_branch_command(socket, args) do
+    session_id = socket.assigns.session_id
+    working_dir = socket.assigns.working_dir
+
+    case String.trim(args || "") do
+      "" ->
+        # No label provided - list checkpoints and prompt for selection
+        list_checkpoints_for_branch(socket, session_id, working_dir)
+
+      label ->
+        # Label provided - create branch from that checkpoint
+        create_branch_from_checkpoint(socket, session_id, working_dir, label)
+    end
+  end
+
+  defp list_checkpoints_for_branch(socket, session_id, working_dir) do
+    case Store.load(session_id, working_dir) do
+      {:ok, entries} ->
+        checkpoints = extract_checkpoints(entries)
+
+        if Enum.empty?(checkpoints) do
+          show_error(socket, "No checkpoints found. Create one with /checkpoint first.")
+        else
+          formatted_checkpoints =
+            checkpoints
+            |> Enum.map(&format_checkpoint/1)
+            |> Enum.join("\n")
+
+          message = %{
+            id: System.unique_integer([:positive, :monotonic]),
+            type: :system,
+            role: :system,
+            content:
+              "Available checkpoints:\n#{formatted_checkpoints}\n\nUse /branch <label> to create a new session from a checkpoint."
+          }
+
+          stream_insert(socket, :conversation, message)
+        end
+
+      {:error, :enoent} ->
+        show_error(socket, "Session file not found. Cannot list checkpoints.")
+
+      {:error, reason} ->
+        show_error(socket, "Failed to load session: #{inspect(reason)}")
+    end
+  end
+
+  defp create_branch_from_checkpoint(socket, source_session_id, working_dir, checkpoint_label) do
+    # Validate checkpoint exists and create branch
+    with {:ok, entries} <- Store.load(source_session_id, working_dir),
+         :ok <- validate_checkpoint_exists(entries, checkpoint_label),
+         new_session_id <- generate_session_id(),
+         {:ok, ^new_session_id} <-
+           Branch.create(source_session_id, checkpoint_label, new_session_id, working_dir) do
+      # Navigate to the new session
+      socket
+      |> put_flash(:info, "✓ Created new session from checkpoint '#{checkpoint_label}'")
+      |> push_navigate(to: "/?session=#{new_session_id}")
+    else
+      {:error, :enoent} ->
+        show_error(socket, "Session file not found. Cannot create branch.")
+
+      {:error, :checkpoint_not_found} ->
+        show_error(socket, "Checkpoint '#{checkpoint_label}' not found.")
+
+      {:error, reason} ->
+        show_error(socket, "Failed to create branch: #{inspect(reason)}")
+    end
+  end
+
+  defp validate_checkpoint_exists(entries, label) do
+    if checkpoint_exists?(entries, label) do
+      :ok
+    else
+      {:error, :checkpoint_not_found}
+    end
+  end
+
+  defp checkpoint_exists?(entries, label) do
     Enum.any?(entries, fn
       %Checkpoint{label: ^label} -> true
       _ -> false
