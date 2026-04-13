@@ -1108,9 +1108,10 @@ defmodule Deft.Git.Job do
         # Find all Lead worktrees for this job
         job_worktrees = Enum.filter(worktrees, &is_job_lead_worktree?(&1, job_id))
 
-        # Remove each Lead worktree
+        # Remove each Lead worktree and delete its branch
         Enum.each(job_worktrees, fn worktree ->
           remove_worktree(git, worktree.path)
+          delete_lead_branch(git, worktree.branch)
         end)
 
       {_error_output, _exit_code} ->
@@ -1124,6 +1125,14 @@ defmodule Deft.Git.Job do
   end
 
   defp is_job_lead_worktree?(_, _job_id), do: false
+
+  # Delete a Lead branch forcefully
+  defp delete_lead_branch(git, branch) do
+    case git.cmd(["branch", "-D", branch]) do
+      {_output, 0} -> :ok
+      {_error_output, _exit_code} -> :ok
+    end
+  end
 
   # Delete the job branch forcefully (used during abort)
   defp delete_job_branch_force(git, job_branch, _job_id) do
