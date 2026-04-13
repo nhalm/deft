@@ -166,8 +166,10 @@ defmodule Deft.Git.JobTest do
       # Create a temporary directory for testing
       tmp_dir = System.tmp_dir!() |> Path.join("deft-test-#{:rand.uniform(1_000_000)}")
       File.mkdir_p!(tmp_dir)
+      original_dir = File.cwd!()
 
       on_exit(fn ->
+        File.cd!(original_dir)
         File.rm_rf(tmp_dir)
       end)
 
@@ -416,8 +418,10 @@ defmodule Deft.Git.JobTest do
       # Create a temporary directory for testing
       tmp_dir = System.tmp_dir!() |> Path.join("deft-test-#{:rand.uniform(1_000_000)}")
       File.mkdir_p!(tmp_dir)
+      original_dir = File.cwd!()
 
       on_exit(fn ->
+        File.cd!(original_dir)
         File.rm_rf(tmp_dir)
       end)
 
@@ -643,8 +647,10 @@ defmodule Deft.Git.JobTest do
     setup do
       tmp_dir = System.tmp_dir!() |> Path.join("deft-test-#{:rand.uniform(1_000_000)}")
       File.mkdir_p!(tmp_dir)
+      original_dir = File.cwd!()
 
       on_exit(fn ->
+        File.cd!(original_dir)
         File.rm_rf!(tmp_dir)
       end)
 
@@ -784,8 +790,10 @@ defmodule Deft.Git.JobTest do
     setup do
       tmp_dir = System.tmp_dir!() |> Path.join("deft-test-#{:rand.uniform(1_000_000)}")
       File.mkdir_p!(tmp_dir)
+      original_dir = File.cwd!()
 
       on_exit(fn ->
+        File.cd!(original_dir)
         File.rm_rf!(tmp_dir)
       end)
 
@@ -878,8 +886,10 @@ defmodule Deft.Git.JobTest do
     setup do
       tmp_dir = System.tmp_dir!() |> Path.join("deft-test-#{:rand.uniform(1_000_000)}")
       File.mkdir_p!(tmp_dir)
+      original_dir = File.cwd!()
 
       on_exit(fn ->
+        File.cd!(original_dir)
         File.rm_rf!(tmp_dir)
       end)
 
@@ -1069,8 +1079,10 @@ defmodule Deft.Git.JobTest do
     setup do
       tmp_dir = System.tmp_dir!() |> Path.join("deft-test-#{:rand.uniform(1_000_000)}")
       File.mkdir_p!(tmp_dir)
+      original_dir = File.cwd!()
 
       on_exit(fn ->
+        File.cd!(original_dir)
         File.rm_rf!(tmp_dir)
       end)
 
@@ -1210,8 +1222,10 @@ defmodule Deft.Git.JobTest do
     setup do
       tmp_dir = System.tmp_dir!() |> Path.join("deft-test-#{:rand.uniform(1_000_000)}")
       File.mkdir_p!(tmp_dir)
+      original_dir = File.cwd!()
 
       on_exit(fn ->
+        File.cd!(original_dir)
         File.rm_rf!(tmp_dir)
       end)
 
