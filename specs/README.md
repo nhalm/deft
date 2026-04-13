@@ -69,7 +69,7 @@ Decision reasoning is logged in [specd_decisions.jsonl](../specd_decisions.jsonl
 | [sessions](sessions/README.md) | v0.9 | Implemented | Session persistence, context management, runtime, and branching |
 | [sessions/persistence](sessions/persistence.md) | v0.8 | Implemented | JSONL storage format, entry types, storage paths, resume, listing, checkpoint entries |
 | [sessions/context](sessions/context.md) | v0.8 | Implemented | System prompt assembly, message list construction, token tracking, compaction, cost tracking |
-| [sessions/runtime](sessions/runtime.md) | v0.9 | Ready | Configuration, CLI dispatcher, Phoenix application, distribution |
+| [sessions/runtime](sessions/runtime.md) | v0.9 | Implemented | Configuration, CLI dispatcher, Phoenix application, distribution |
 | [sessions/branching](sessions/branching.md) | v0.1 | Implemented | User-initiated session forking from checkpoints with git state restore |
 | [tui](tui.md) | v0.5 | Deprecated | Terminal UI — superseded by web-ui |
 | [web-ui](web-ui.md) | v0.9 | Implemented | Phoenix LiveView web interface, vim/tmux keybindings, responsive, real-time streaming |
@@ -83,9 +83,9 @@ Decision reasoning is logged in [specd_decisions.jsonl](../specd_decisions.jsonl
 | [orchestration/foreman](orchestration/foreman.md) | v0.17 | Implemented | Foreman agent — session ownership, solo/orchestrated modes, job lifecycle |
 | [orchestration/coordinator](orchestration/coordinator.md) | v0.17 | Implemented | Foreman.Coordinator — DAG, contract forwarding, coalescing, monitors, cleanup |
 | [orchestration/lead](orchestration/lead.md) | v0.17 | Implemented | Lead + Lead.Coordinator — deliverable management, Runner steering, contracts |
-| [orchestration/runners](orchestration/runners.md) | v0.18 | Ready | Runner types, tool sets, inline loop |
+| [orchestration/runners](orchestration/runners.md) | v0.18 | Implemented | Runner types, tool sets, inline loop |
 | [orchestration/protocol](orchestration/protocol.md) | v0.17 | Implemented | Coordination protocol, message types, site log write policy |
-| [rate-limiter](rate-limiter.md) | v0.4 | Ready | Dual token-bucket rate limiting, priority queue, adaptive concurrency, cost tracking |
+| [rate-limiter](rate-limiter.md) | v0.4 | Implemented | Dual token-bucket rate limiting, priority queue, adaptive concurrency, cost tracking |
 | [git-strategy](git-strategy.md) | v0.3 | Ready | Git worktree strategy, merge protocol, conflict resolution, orphan cleanup |
 
 ## Infrastructure
