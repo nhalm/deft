@@ -70,7 +70,7 @@ Decision reasoning is logged in [specd_decisions.jsonl](../specd_decisions.jsonl
 | [sessions/persistence](sessions/persistence.md) | v0.8 | Implemented | JSONL storage format, entry types, storage paths, resume, listing, checkpoint entries |
 | [sessions/context](sessions/context.md) | v0.8 | Implemented | System prompt assembly, message list construction, token tracking, compaction, cost tracking |
 | [sessions/runtime](sessions/runtime.md) | v0.8 | Implemented | Configuration, CLI dispatcher, Phoenix application, distribution |
-| [sessions/branching](sessions/branching.md) | v0.1 | Draft | User-initiated session forking from checkpoints with git state restore |
+| [sessions/branching](sessions/branching.md) | v0.1 | Ready | User-initiated session forking from checkpoints with git state restore |
 | [tui](tui.md) | v0.5 | Deprecated | Terminal UI — superseded by web-ui |
 | [web-ui](web-ui.md) | v0.9 | Implemented | Phoenix LiveView web interface, vim/tmux keybindings, responsive, real-time streaming |
 
