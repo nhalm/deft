@@ -1138,6 +1138,7 @@ defmodule DeftWeb.ChatLive do
     /plan - Re-display approved plan
     /compact - Force compaction
     /checkpoint [label] - Create a checkpoint (auto-generates label if not provided)
+    /checkpoint list - List all checkpoints in the current session
 
     Keybindings:
     Esc - Switch to normal mode
@@ -1178,20 +1179,24 @@ defmodule DeftWeb.ChatLive do
   end
 
   defp handle_checkpoint_command(socket, args) do
-    label = parse_checkpoint_label(args)
     session_id = socket.assigns.session_id
     working_dir = socket.assigns.working_dir
 
+    case String.trim(args || "") do
+      "list" ->
+        list_checkpoints(socket, session_id, working_dir)
+
+      _ ->
+        handle_checkpoint_create(socket, session_id, working_dir, args)
+    end
+  end
+
+  defp handle_checkpoint_create(socket, session_id, working_dir, args) do
+    label = parse_checkpoint_label(args)
+
     case Store.load(session_id, working_dir) do
       {:ok, entries} ->
-        if checkpoint_label_exists?(entries, label) do
-          show_error(
-            socket,
-            "Checkpoint label '#{label}' already exists. Choose a different label."
-          )
-        else
-          create_checkpoint(socket, session_id, working_dir, label, entries)
-        end
+        validate_and_create_checkpoint(socket, session_id, working_dir, label, entries)
 
       {:error, :enoent} ->
         show_error(socket, "Session file not found. Cannot create checkpoint.")
@@ -1199,6 +1204,72 @@ defmodule DeftWeb.ChatLive do
       {:error, reason} ->
         show_error(socket, "Failed to load session: #{inspect(reason)}")
     end
+  end
+
+  defp validate_and_create_checkpoint(socket, session_id, working_dir, label, entries) do
+    if checkpoint_label_exists?(entries, label) do
+      show_error(
+        socket,
+        "Checkpoint label '#{label}' already exists. Choose a different label."
+      )
+    else
+      create_checkpoint(socket, session_id, working_dir, label, entries)
+    end
+  end
+
+  defp list_checkpoints(socket, session_id, working_dir) do
+    case Store.load(session_id, working_dir) do
+      {:ok, entries} ->
+        entries
+        |> extract_checkpoints()
+        |> display_checkpoints(socket)
+
+      {:error, :enoent} ->
+        show_error(socket, "Session file not found. Cannot list checkpoints.")
+
+      {:error, reason} ->
+        show_error(socket, "Failed to load session: #{inspect(reason)}")
+    end
+  end
+
+  defp extract_checkpoints(entries) do
+    Enum.filter(entries, fn
+      %Checkpoint{} -> true
+      _ -> false
+    end)
+  end
+
+  defp display_checkpoints([], socket) do
+    message = %{
+      id: System.unique_integer([:positive, :monotonic]),
+      type: :system,
+      role: :system,
+      content: "No checkpoints found in this session."
+    }
+
+    stream_insert(socket, :conversation, message)
+  end
+
+  defp display_checkpoints(checkpoints, socket) do
+    formatted_checkpoints =
+      checkpoints
+      |> Enum.map(&format_checkpoint/1)
+      |> Enum.join("\n")
+
+    message = %{
+      id: System.unique_integer([:positive, :monotonic]),
+      type: :system,
+      role: :system,
+      content: "Checkpoints:\n#{formatted_checkpoints}"
+    }
+
+    stream_insert(socket, :conversation, message)
+  end
+
+  defp format_checkpoint(%Checkpoint{label: label, timestamp: timestamp, auto: auto}) do
+    formatted_time = Calendar.strftime(timestamp, "%Y-%m-%d %H:%M:%S UTC")
+    indicator = if auto, do: "[auto]", else: "[manual]"
+    "  • #{label} - #{formatted_time} #{indicator}"
   end
 
   defp parse_checkpoint_label(args) do
