@@ -332,7 +332,7 @@ defmodule Deft.RateLimiter do
     foreman_pid = Keyword.get(opts, :foreman_pid)
     model = Keyword.get(opts, :model, "claude-sonnet-4-20250514")
     initial_concurrency = Keyword.get(opts, :initial_concurrency, 2)
-    max_concurrency = Keyword.get(opts, :max_concurrency, 10)
+    max_concurrency = Keyword.get(opts, :max_concurrency, 5)
     cost_ceiling = Keyword.get(opts, :cost_ceiling, 10.0)
     cost_warning = Keyword.get(opts, :cost_warning, 5.0)
 
