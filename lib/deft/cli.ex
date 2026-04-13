@@ -1899,6 +1899,14 @@ defmodule Deft.CLI do
     port = read_server_port()
     url = "http://localhost:#{port}"
 
+    # Auto-open browser based on OS
+    _ =
+      case :os.type() do
+        {:unix, :darwin} -> System.cmd("open", [url])
+        {:unix, :linux} -> System.cmd("xdg-open", [url])
+        _ -> :ok
+      end
+
     # Print URL first
     IO.puts("\nDeft running at #{url}")
     IO.puts("Press Ctrl+C to stop.\n")
