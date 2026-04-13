@@ -11,7 +11,10 @@ defmodule DeftWeb.ChatLive do
   require Logger
 
   alias Deft.Config
+  alias Deft.Git
   alias Deft.Session
+  alias Deft.Session.Entry.Checkpoint
+  alias Deft.Session.Store
   alias Deft.Session.Supervisor, as: SessionSupervisor
   alias Deft.Session.Worker
   alias Deft.Skills.Registry, as: SkillsRegistry
@@ -1109,6 +1112,9 @@ defmodule DeftWeb.ChatLive do
       "quit" ->
         handle_quit_command(socket)
 
+      "checkpoint" ->
+        handle_checkpoint_command(socket, args)
+
       _ ->
         # Dispatch to Skills Registry
         dispatch_skill_or_command(socket, command, args)
@@ -1131,6 +1137,7 @@ defmodule DeftWeb.ChatLive do
     /inspect <lead> - Show Lead's Site Log entries
     /plan - Re-display approved plan
     /compact - Force compaction
+    /checkpoint [label] - Create a checkpoint (auto-generates label if not provided)
 
     Keybindings:
     Esc - Switch to normal mode
@@ -1168,6 +1175,109 @@ defmodule DeftWeb.ChatLive do
     Process.send_after(self(), :shutdown_server, 500)
 
     stream_insert(socket, :conversation, message)
+  end
+
+  defp handle_checkpoint_command(socket, args) do
+    label = parse_checkpoint_label(args)
+    session_id = socket.assigns.session_id
+    working_dir = socket.assigns.working_dir
+
+    case Store.load(session_id, working_dir) do
+      {:ok, entries} ->
+        if checkpoint_label_exists?(entries, label) do
+          show_error(
+            socket,
+            "Checkpoint label '#{label}' already exists. Choose a different label."
+          )
+        else
+          create_checkpoint(socket, session_id, working_dir, label, entries)
+        end
+
+      {:error, :enoent} ->
+        show_error(socket, "Session file not found. Cannot create checkpoint.")
+
+      {:error, reason} ->
+        show_error(socket, "Failed to load session: #{inspect(reason)}")
+    end
+  end
+
+  defp parse_checkpoint_label(args) do
+    case args do
+      nil -> generate_checkpoint_label()
+      "" -> generate_checkpoint_label()
+      label -> String.trim(label)
+    end
+  end
+
+  defp create_checkpoint(socket, session_id, working_dir, label, entries) do
+    case Git.cmd(["rev-parse", "HEAD"]) do
+      {git_ref, 0} ->
+        git_ref = String.trim(git_ref)
+        warning = check_uncommitted_changes()
+        entry_index = length(entries)
+        checkpoint = Checkpoint.new(label, entry_index, git_ref)
+
+        case Store.append(session_id, checkpoint, working_dir) do
+          :ok ->
+            show_success(socket, label, entry_index, git_ref, warning)
+
+          {:error, reason} ->
+            show_error(socket, "Failed to create checkpoint: #{inspect(reason)}")
+        end
+
+      {error_output, _} ->
+        show_error(socket, "Failed to get git HEAD: #{String.trim(error_output)}")
+    end
+  end
+
+  defp check_uncommitted_changes do
+    {status_output, _} = Git.cmd(["status", "--porcelain"])
+
+    if String.trim(status_output) != "" do
+      "\n\n⚠️  Warning: You have uncommitted changes. Only committed state is captured by checkpoints."
+    else
+      ""
+    end
+  end
+
+  defp show_success(socket, label, entry_index, git_ref, warning) do
+    message = %{
+      id: System.unique_integer([:positive, :monotonic]),
+      type: :system,
+      role: :system,
+      content:
+        "✓ Checkpoint '#{label}' created at entry #{entry_index} (#{String.slice(git_ref, 0, 7)})#{warning}"
+    }
+
+    stream_insert(socket, :conversation, message)
+  end
+
+  defp show_error(socket, content) do
+    message = %{
+      id: System.unique_integer([:positive, :monotonic]),
+      type: :error,
+      role: :system,
+      content: content
+    }
+
+    stream_insert(socket, :conversation, message)
+  end
+
+  defp generate_checkpoint_label do
+    # Generate label in format: cp-YYYYMMDD-HHMMSS
+    now = DateTime.utc_now()
+
+    "cp-#{now.year}#{pad(now.month)}#{pad(now.day)}-#{pad(now.hour)}#{pad(now.minute)}#{pad(now.second)}"
+  end
+
+  defp pad(num) when num < 10, do: "0#{num}"
+  defp pad(num), do: to_string(num)
+
+  defp checkpoint_label_exists?(entries, label) do
+    Enum.any?(entries, fn
+      %Checkpoint{label: ^label} -> true
+      _ -> false
+    end)
   end
 
   defp dispatch_skill_or_command(socket, command_name, args) do
