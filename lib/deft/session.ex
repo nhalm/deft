@@ -10,7 +10,9 @@ defmodule Deft.Session do
   """
 
   alias Deft.Config
+  alias Deft.Git
   alias Deft.Session.Entry.SessionStart
+  alias Deft.Session.Entry.Checkpoint
   alias Deft.Session.Store
   alias Deft.Session.Supervisor, as: SessionSupervisor
 
@@ -71,6 +73,11 @@ defmodule Deft.Session do
     session_start = SessionStart.new(session_id, working_dir, config.model, config_map)
     _ = Store.append(session_id, session_start, working_dir)
 
+    # Create automatic session-start checkpoint (sessions/branching.md section 1.3)
+    git_ref = get_git_head()
+    session_start_checkpoint = Checkpoint.new("session-start", 0, git_ref, auto: true)
+    _ = Store.append(session_id, session_start_checkpoint, working_dir)
+
     # Start the session process
     {:ok, _worker_pid} =
       SessionSupervisor.start_session(
@@ -87,5 +94,17 @@ defmodule Deft.Session do
   defp generate_session_id do
     # Generate a random 8-byte hex string as session ID
     "sess_" <> (:crypto.strong_rand_bytes(8) |> Base.encode16(case: :lower))
+  end
+
+  defp get_git_head do
+    # Get the current HEAD commit SHA
+    case Git.cmd(["rev-parse", "HEAD"]) do
+      {output, 0} ->
+        String.trim(output)
+
+      {_output, _exit_code} ->
+        # If git command fails (e.g., not in a git repo), use empty string
+        ""
+    end
   end
 end
