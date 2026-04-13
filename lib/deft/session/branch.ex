@@ -6,10 +6,10 @@ defmodule Deft.Session.Branch do
   1. Create new session ID (done by caller)
   2. Copy session state (conversation history and OM state) up to checkpoint's entry_index
   3. Record branch metadata in the new session's session_start entry
-  4. Restore git state (handled separately)
+  4. Restore git state (create git branch from checkpoint's git_ref)
   5. Switch to new session (handled separately)
 
-  This module handles steps 2 and 3.
+  This module handles steps 2, 3, and 4.
   """
 
   alias Deft.{Project, Session}
@@ -76,7 +76,8 @@ defmodule Deft.Session.Branch do
          {:ok, branch_entries} <-
            build_branch_entries(entries, checkpoint, session_start, new_session_id),
          :ok <- write_branch_entries(new_session_id, branch_entries, working_dir),
-         :ok <- copy_om_snapshot(source_session_id, new_session_id, checkpoint, working_dir) do
+         :ok <- copy_om_snapshot(source_session_id, new_session_id, checkpoint, working_dir),
+         :ok <- create_git_branch(new_session_id, checkpoint, working_dir) do
       {:ok, new_session_id}
     end
   end
@@ -198,5 +199,32 @@ defmodule Deft.Session.Branch do
   defp om_snapshot_path(session_id, working_dir) do
     sessions_dir = Project.sessions_dir(working_dir)
     Path.join(sessions_dir, "#{session_id}_om.jsonl")
+  end
+
+  # Create a git branch from the checkpoint's git_ref
+  # Per spec section 2.2 step 4: create branch `deft/branch-<session_id_short>` from checkpoint's git_ref
+  defp create_git_branch(new_session_id, checkpoint, working_dir) do
+    # Extract the short session ID (part after "sess_")
+    session_id_short = String.replace_prefix(new_session_id, "sess_", "")
+    branch_name = "deft/branch-#{session_id_short}"
+    git_ref = checkpoint.git_ref
+
+    # Execute git checkout -b <branch_name> <git_ref> in the working directory
+    case System.cmd("git", ["checkout", "-b", branch_name, git_ref],
+           cd: working_dir,
+           stderr_to_stdout: true
+         ) do
+      {_output, 0} ->
+        :ok
+
+      {output, exit_code} ->
+        require Logger
+
+        Logger.error(
+          "[Session.Branch] Failed to create git branch #{branch_name} from #{git_ref}: exit_code=#{exit_code}, output=#{output}"
+        )
+
+        {:error, {:git_checkout_failed, exit_code, output}}
+    end
   end
 end

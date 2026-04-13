@@ -9,15 +9,30 @@ defmodule Deft.Session.BranchTest do
     tmp_dir = Path.join(System.tmp_dir!(), "deft_branch_test_#{:rand.uniform(1_000_000)}")
     File.mkdir_p!(tmp_dir)
 
+    # Initialize a git repository for testing git branch creation
+    System.cmd("git", ["init"], cd: tmp_dir, stderr_to_stdout: true)
+    System.cmd("git", ["config", "user.email", "test@example.com"], cd: tmp_dir)
+    System.cmd("git", ["config", "user.name", "Test User"], cd: tmp_dir)
+
+    # Create an initial commit so we have a valid git_ref
+    test_file = Path.join(tmp_dir, "test.txt")
+    File.write!(test_file, "initial content")
+    System.cmd("git", ["add", "test.txt"], cd: tmp_dir)
+    System.cmd("git", ["commit", "-m", "Initial commit"], cd: tmp_dir)
+
+    # Get the current commit SHA for use in tests
+    {git_ref, 0} = System.cmd("git", ["rev-parse", "HEAD"], cd: tmp_dir)
+    git_ref = String.trim(git_ref)
+
     on_exit(fn ->
       File.rm_rf!(tmp_dir)
     end)
 
-    {:ok, working_dir: tmp_dir}
+    {:ok, working_dir: tmp_dir, git_ref: git_ref}
   end
 
   describe "create/4" do
-    test "creates a new session from a checkpoint", %{working_dir: working_dir} do
+    test "creates a new session from a checkpoint", %{working_dir: working_dir, git_ref: git_ref} do
       # Create a source session
       source_session_id = "sess_source123"
       config = %{model: "claude-sonnet-4-20250514"}
@@ -48,7 +63,7 @@ defmodule Deft.Session.BranchTest do
       Store.append(source_session_id, msg2, working_dir)
 
       # Create a checkpoint after the first two messages (entry_index 2 = after msg2)
-      checkpoint = Checkpoint.new("test-checkpoint", 2, "abc123def456")
+      checkpoint = Checkpoint.new("test-checkpoint", 2, git_ref)
       Store.append(source_session_id, checkpoint, working_dir)
 
       # Add another message after the checkpoint
@@ -117,7 +132,7 @@ defmodule Deft.Session.BranchTest do
                Branch.create("sess_nonexistent", "some-checkpoint", "sess_new", working_dir)
     end
 
-    test "preserves config from original session", %{working_dir: working_dir} do
+    test "preserves config from original session", %{working_dir: working_dir, git_ref: git_ref} do
       # Create a source session with custom config
       source_session_id = "sess_config_test"
 
@@ -131,7 +146,7 @@ defmodule Deft.Session.BranchTest do
       Store.append(source_session_id, session_start, working_dir)
 
       # Create checkpoint
-      checkpoint = Checkpoint.new("config-checkpoint", 0, "abc123")
+      checkpoint = Checkpoint.new("config-checkpoint", 0, git_ref)
       Store.append(source_session_id, checkpoint, working_dir)
 
       # Branch
@@ -144,6 +159,44 @@ defmodule Deft.Session.BranchTest do
       {:ok, [branch_start | _]} = Store.load(new_session_id, working_dir)
       assert branch_start.config.custom_field == "custom_value"
       assert branch_start.config.nested.key == "value"
+    end
+
+    test "creates git branch from checkpoint's git_ref", %{
+      working_dir: working_dir,
+      git_ref: git_ref
+    } do
+      # Create a source session
+      source_session_id = "sess_git_test"
+      config = %{model: "claude-sonnet-4-20250514"}
+
+      session_start =
+        SessionStart.new(source_session_id, working_dir, "claude-sonnet-4-20250514", config)
+
+      Store.append(source_session_id, session_start, working_dir)
+
+      # Create a checkpoint with the git ref
+      checkpoint = Checkpoint.new("git-checkpoint", 0, git_ref)
+      Store.append(source_session_id, checkpoint, working_dir)
+
+      # Branch from the checkpoint
+      new_session_id = "sess_abc123def456"
+
+      assert {:ok, ^new_session_id} =
+               Branch.create(source_session_id, "git-checkpoint", new_session_id, working_dir)
+
+      # Verify that a git branch was created with the expected name
+      # Expected branch name: deft/branch-abc123def456 (session_id without "sess_" prefix)
+      expected_branch = "deft/branch-abc123def456"
+
+      # Check that the branch exists
+      {output, 0} = System.cmd("git", ["branch", "--list", expected_branch], cd: working_dir)
+      assert String.contains?(output, expected_branch)
+
+      # Verify the branch points to the correct commit
+      {branch_ref, 0} =
+        System.cmd("git", ["rev-parse", expected_branch], cd: working_dir, stderr_to_stdout: true)
+
+      assert String.trim(branch_ref) == git_ref
     end
   end
 end
