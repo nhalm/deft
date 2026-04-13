@@ -2006,18 +2006,56 @@ defmodule Deft.Foreman.Coordinator do
     deliverable_id = get_in(data, [:leads, lead_id, :deliverable, :id])
     Logger.info("#{log_prefix(data)} Lead completed: #{lead_id}, task: #{deliverable_name}")
 
-    # Clean up the Lead's worktree
-    Logger.debug("#{log_prefix(data)} Cleaning up worktree for completed Lead #{lead_id}")
+    # Attempt to merge the Lead's branch into the job branch
+    Logger.debug("#{log_prefix(data)} Merging Lead branch for #{lead_id} into job branch")
 
-    GitJob.cleanup_lead_worktree(
-      lead_id: lead_id,
-      working_dir: data.working_dir
-    )
+    merge_result =
+      GitJob.merge_lead_branch(
+        lead_id: lead_id,
+        job_id: data.session_id,
+        working_dir: data.working_dir
+      )
 
-    # Demonitor the Lead
-    cleanup_lead_monitor(data.lead_monitors, lead_id)
+    updated_data =
+      case merge_result do
+        {:ok, :merged} ->
+          Logger.info("#{log_prefix(data)} Lead #{lead_id} merged successfully")
 
-    updated_data = remove_completed_lead_from_tracking(lead_id, deliverable_id, data)
+          # Clean up the Lead's worktree after successful merge
+          GitJob.cleanup_lead_worktree(
+            lead_id: lead_id,
+            working_dir: data.working_dir
+          )
+
+          # Demonitor the Lead and remove from tracking
+          cleanup_lead_monitor(data.lead_monitors, lead_id)
+          remove_completed_lead_from_tracking(lead_id, deliverable_id, data)
+
+        {:ok, :conflict, conflicted_files, temp_dir} ->
+          Logger.warning(
+            "#{log_prefix(data)} Merge conflict detected for Lead #{lead_id}. Conflicted files: #{inspect(conflicted_files)}"
+          )
+
+          # Spawn a merge_resolution Runner to resolve the conflict
+          updated_data = spawn_merge_resolution_runner(lead_id, conflicted_files, temp_dir, data)
+
+          # Demonitor the Lead and remove from tracking (Runner will handle the merge)
+          cleanup_lead_monitor(data.lead_monitors, lead_id)
+          remove_completed_lead_from_tracking(lead_id, deliverable_id, updated_data)
+
+        {:error, reason} ->
+          Logger.error("#{log_prefix(data)} Failed to merge Lead #{lead_id}: #{inspect(reason)}")
+
+          # Clean up worktree on merge error
+          GitJob.cleanup_lead_worktree(
+            lead_id: lead_id,
+            working_dir: data.working_dir
+          )
+
+          # Demonitor the Lead and remove from tracking
+          cleanup_lead_monitor(data.lead_monitors, lead_id)
+          remove_completed_lead_from_tracking(lead_id, deliverable_id, data)
+      end
 
     # Check if all Leads are complete and transition to :verifying
     if state == :executing and all_leads_complete?(updated_data) do
@@ -2402,6 +2440,64 @@ defmodule Deft.Foreman.Coordinator do
       {:error, reason} ->
         %{status: :error, error: reason}
     end
+  end
+
+  defp spawn_merge_resolution_runner(lead_id, conflicted_files, temp_dir, data) do
+    runner_model = Map.get(data.config, :job_runner_model, "claude-sonnet-4")
+
+    runner_config = %{
+      model: runner_model,
+      provider: Deft.Provider.Anthropic,
+      temperature: 0.7
+    }
+
+    instructions = """
+    Resolve the merge conflict that occurred when merging Lead branch into the job branch.
+
+    Conflicted files: #{inspect(conflicted_files)}
+
+    Steps:
+    1. Read the conflicted files to understand both sides of the conflict
+    2. Resolve the conflicts by choosing the appropriate changes
+    3. Stage the resolved files using git add
+    4. Complete the merge using git commit
+
+    Report the resolution approach and confirm when complete.
+    """
+
+    context = """
+    Working directory (merge worktree): #{temp_dir}
+    Job: #{data.session_id}
+    Lead: #{lead_id}
+    """
+
+    opts = %{
+      job_id: data.session_id,
+      config: runner_config,
+      worktree_path: temp_dir
+    }
+
+    # Spawn the merge resolution Runner async
+    task =
+      Task.Supervisor.async_nolink(data.runner_supervisor, fn ->
+        case Runner.run(:merge_resolution, instructions, context, opts) do
+          {:ok, output} ->
+            Logger.info("Merge resolution complete for Lead #{lead_id}")
+            {:ok, lead_id, output}
+
+          {:error, reason} ->
+            Logger.error("Merge resolution failed for Lead #{lead_id}: #{inspect(reason)}")
+            {:error, lead_id, reason}
+        end
+      end)
+
+    Logger.info("#{log_prefix(data)} Spawned merge_resolution Runner for Lead #{lead_id}")
+
+    # Track the task in merge_resolution_tasks map
+    merge_resolution_tasks = Map.get(data, :merge_resolution_tasks, %{})
+    updated_tasks = Map.put(merge_resolution_tasks, lead_id, %{task: task, temp_dir: temp_dir})
+
+    Map.put(data, :merge_resolution_tasks, updated_tasks)
   end
 
   defp collect_verification_result(task, timeout, data) do
