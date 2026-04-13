@@ -49,8 +49,10 @@ defmodule Deft.Agent do
   alias Deft.Message.Text
   alias Deft.Agent.Context
   alias Deft.Agent.ToolRunner
+  alias Deft.Git
   alias Deft.Session.Worker
   alias Deft.Session.Entry
+  alias Deft.Session.Entry.Checkpoint
   alias Deft.Session.Entry.Compaction
   alias Deft.Session.Entry.Cost
   alias Deft.Session.Store
@@ -1826,7 +1828,52 @@ defmodule Deft.Agent do
     Enum.split_with(messages, fn msg -> msg.role == :system end)
   end
 
+  defp create_pre_compaction_checkpoint(data) do
+    # Create automatic checkpoint before compaction (sessions/branching.md section 1.3)
+    working_dir = Map.get(data.config, :working_dir, File.cwd!())
+
+    case Store.load(data.session_id, working_dir) do
+      {:ok, entries} ->
+        do_create_pre_compaction_checkpoint(data.session_id, entries, working_dir)
+
+      {:error, reason} ->
+        Logger.warning(
+          "#{log_prefix(data.session_id)} Failed to load session for pre-compaction checkpoint: #{inspect(reason)}"
+        )
+    end
+  end
+
+  defp do_create_pre_compaction_checkpoint(session_id, entries, working_dir) do
+    compaction_count = Enum.count(entries, fn entry -> entry.type == :compaction end)
+    entry_index = length(entries) - 1
+    git_ref = get_git_head_ref()
+    label = "pre-compaction-#{compaction_count + 1}"
+    checkpoint = Checkpoint.new(label, entry_index, git_ref, auto: true)
+
+    case Store.append(session_id, checkpoint, working_dir) do
+      :ok ->
+        Logger.debug(
+          "#{log_prefix(session_id)} Created automatic checkpoint '#{label}' at entry #{entry_index}"
+        )
+
+      {:error, reason} ->
+        Logger.warning(
+          "#{log_prefix(session_id)} Failed to create pre-compaction checkpoint: #{inspect(reason)}"
+        )
+    end
+  end
+
+  defp get_git_head_ref do
+    case Git.cmd(["rev-parse", "HEAD"]) do
+      {output, 0} -> String.trim(output)
+      {_output, _exit_code} -> ""
+    end
+  end
+
   defp spawn_compaction_task(data, to_remove, to_keep, system_messages) do
+    # Create automatic checkpoint before compaction (sessions/branching.md section 1.3)
+    create_pre_compaction_checkpoint(data)
+
     provider = Map.get(data.config, :provider)
     config = Map.put(data.config, :session_id, data.session_id)
     tool_runner = Worker.tool_runner_via_tuple(data.session_id)
