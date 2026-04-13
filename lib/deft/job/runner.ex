@@ -257,9 +257,11 @@ defmodule Deft.Job.Runner do
   defp call_provider(%LoopContext{} = ctx) do
     # For Runner, we'll use a simplified approach:
     # Start stream and collect all events inline
+    timeout = Map.get(ctx.config, :job_runner_timeout, 300_000)
+
     case ctx.provider.stream(ctx.messages, ctx.tools, ctx.config) do
       {:ok, stream_ref} ->
-        collect_stream_events(stream_ref, ctx.provider)
+        collect_stream_events(stream_ref, ctx.provider, timeout: timeout)
 
       {:error, reason} ->
         {:error, reason}
@@ -267,7 +269,7 @@ defmodule Deft.Job.Runner do
   end
 
   # Collect all stream events into a single assistant message
-  defp collect_stream_events(stream_ref, _provider, opts \\ []) do
+  defp collect_stream_events(stream_ref, _provider, opts) do
     timeout = Keyword.get(opts, :timeout, 300_000)
 
     current_message = %Message{
