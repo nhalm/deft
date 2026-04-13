@@ -86,7 +86,7 @@ Decision reasoning is logged in [specd_decisions.jsonl](../specd_decisions.jsonl
 | [orchestration/runners](orchestration/runners.md) | v0.18 | Ready | Runner types, tool sets, inline loop |
 | [orchestration/protocol](orchestration/protocol.md) | v0.17 | Implemented | Coordination protocol, message types, site log write policy |
 | [rate-limiter](rate-limiter.md) | v0.4 | Ready | Dual token-bucket rate limiting, priority queue, adaptive concurrency, cost tracking |
-| [git-strategy](git-strategy.md) | v0.2 | Implemented | Git worktree strategy, merge protocol, conflict resolution, orphan cleanup |
+| [git-strategy](git-strategy.md) | v0.3 | Ready | Git worktree strategy, merge protocol, conflict resolution, orphan cleanup |
 
 ## Infrastructure
 

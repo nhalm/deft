@@ -2,11 +2,14 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.2 |
-| Status | Implemented |
-| Last Updated | 2026-03-19 |
+| Version | 0.3 |
+| Status | Ready |
+| Last Updated | 2026-04-13 |
 
 ## Changelog
+
+### v0.3 (2026-04-13)
+- Clarified §5: `deft/lead-*` branches must be deleted during abort, not just their worktrees. Leaving them for §6 orphan cleanup violates the "Clean failure / No orphans" design principles.
 
 ### v0.2 (2026-03-19)
 - Clarified: stash must be popped/restored after job completion to return user's working state
@@ -86,8 +89,9 @@ After verification passes:
 
 If the job is aborted or fails:
 1. All Lead worktrees are cleaned up (`git worktree remove` for each)
-2. The job branch is deleted (configurable: `job.keep_failed_branches`)
-3. The original branch is untouched — no partial work leaks
+2. All Lead branches are deleted (`git branch -D deft/lead-<lead_id>` for each)
+3. The job branch is deleted (configurable: `job.keep_failed_branches`)
+4. The original branch is untouched — no partial work leaks
 
 ### 6. Startup Orphan Cleanup
 
