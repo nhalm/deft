@@ -1280,7 +1280,7 @@ defmodule DeftWeb.ChatLive do
       {git_ref, 0} ->
         git_ref = String.trim(git_ref)
         warning = check_uncommitted_changes()
-        entry_index = length(entries)
+        entry_index = length(entries) - 1
         checkpoint = Checkpoint.new(label, entry_index, git_ref)
 
         case Store.append(session_id, checkpoint, working_dir) do
