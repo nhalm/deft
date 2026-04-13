@@ -2,11 +2,14 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.17 |
-| Status | Implemented |
-| Last Updated | 2026-04-10 |
+| Version | 0.18 |
+| Status | Ready |
+| Last Updated | 2026-04-13 |
 
 ## Changelog
+
+### v0.18 (2026-04-13)
+- Audit demoted to Ready: Foreman.Coordinator has no spawn path for `:merge_resolution` Runners (§2), and `job.runner_timeout` (§4) is not threaded through to `collect_stream_events/3` — the timeout is hardcoded in source.
 
 ### v0.17 (2026-04-10)
 - Extracted from orchestration.md §6 into standalone sub-spec

@@ -2,11 +2,14 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.4 |
-| Status | Implemented |
-| Last Updated | 2026-03-19 |
+| Version | 0.5 |
+| Status | Ready |
+| Last Updated | 2026-04-13 |
 
 ## Changelog
+
+### v0.5 (2026-04-13)
+- Audit demoted to Ready: `test/eval/` directory tree prescribed in §1.2 is empty, breaking the `test.eval.check-structure` CI gate. Support modules `scoring.ex` and `judge_calibration.ex` are also missing from the test tree.
 
 ### v0.4 (2026-03-19)
 - Fixed: Compression quality threshold now 90% per detailed Reflector spec (not 80%)

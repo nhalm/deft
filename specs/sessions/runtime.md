@@ -2,11 +2,14 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.8 |
-| Status | Implemented |
-| Last Updated | 2026-04-10 |
+| Version | 0.9 |
+| Status | Ready |
+| Last Updated | 2026-04-13 |
 
 ## Changelog
+
+### v0.9 (2026-04-13)
+- Audit demoted to Ready: `ANTHROPIC_API_KEY` fail-fast (§1.2) is not enforced at startup, and `deft` with no args (§2.5) does not auto-open the browser via `System.cmd("open"/"xdg-open", ...)`.
 
 ### v0.8 (2026-04-10)
 - Extracted from sessions.md §2, §5-6 into standalone sub-spec

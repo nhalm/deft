@@ -2,11 +2,14 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.3 |
-| Status | Implemented |
-| Last Updated | 2026-03-29 |
+| Version | 0.4 |
+| Status | Ready |
+| Last Updated | 2026-04-13 |
 
 ## Changelog
+
+### v0.4 (2026-04-13)
+- Audit demoted to Ready: `max_concurrency` default in `Deft.RateLimiter.init/1` is `10`, but §7 `job.max_leads` default is `5`. Default-configured jobs exceed the spec upper bound.
 
 ### v0.3 (2026-03-29)
 - Clarified priority naming: callers are ForemanAgent/LeadAgent/Runner (orchestrators don't make LLM calls). No logic change.
