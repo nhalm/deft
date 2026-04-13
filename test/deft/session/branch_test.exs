@@ -198,5 +198,111 @@ defmodule Deft.Session.BranchTest do
 
       assert String.trim(branch_ref) == git_ref
     end
+
+    test "filters OM snapshot to branch point", %{working_dir: working_dir, git_ref: git_ref} do
+      # Create a source session
+      source_session_id = "sess_om_test"
+      config = %{model: "claude-sonnet-4-20250514"}
+
+      session_start =
+        SessionStart.new(source_session_id, working_dir, "claude-sonnet-4-20250514", config)
+
+      Store.append(source_session_id, session_start, working_dir)
+
+      # Add messages
+      msg1 = %Message{
+        type: :message,
+        message_id: "msg_before_1",
+        role: :user,
+        content: [%{type: "text", text: "First"}],
+        timestamp: DateTime.utc_now()
+      }
+
+      msg2 = %Message{
+        type: :message,
+        message_id: "msg_before_2",
+        role: :assistant,
+        content: [%{type: "text", text: "Second"}],
+        timestamp: DateTime.utc_now()
+      }
+
+      Store.append(source_session_id, msg1, working_dir)
+      Store.append(source_session_id, msg2, working_dir)
+
+      # Create a checkpoint after the first two messages (entry_index 2)
+      checkpoint = Checkpoint.new("om-checkpoint", 2, git_ref)
+      Store.append(source_session_id, checkpoint, working_dir)
+
+      # Add another message after the checkpoint
+      msg3 = %Message{
+        type: :message,
+        message_id: "msg_after_1",
+        role: :user,
+        content: [%{type: "text", text: "After checkpoint"}],
+        timestamp: DateTime.utc_now()
+      }
+
+      Store.append(source_session_id, msg3, working_dir)
+
+      # Create an OM snapshot with all three message IDs observed
+      alias Deft.Session.Entry.Observation
+      alias Deft.OM.State, as: OMState
+      alias Deft.Project
+
+      om_snapshot = %Observation{
+        type: :observation,
+        active_observations: "Some observations",
+        observation_tokens: 100,
+        observed_message_ids: ["msg_before_1", "msg_before_2", "msg_after_1"],
+        pending_message_tokens: 0,
+        generation_count: 1,
+        last_observed_at: DateTime.utc_now(),
+        activation_epoch: 0,
+        calibration_factor: 4.0,
+        timestamp: DateTime.utc_now()
+      }
+
+      # Write the OM snapshot to the source session using the correct path
+      sessions_dir = Project.sessions_dir(working_dir)
+      om_path = Path.join(sessions_dir, "#{source_session_id}_om.jsonl")
+
+      File.mkdir_p!(Path.dirname(om_path))
+      {:ok, json} = Jason.encode(om_snapshot)
+      File.write!(om_path, json <> "\n")
+
+      # Verify source OM file was created and can be loaded
+      assert File.exists?(om_path), "Source OM file should exist"
+
+      {:ok, loaded_snapshot} = OMState.load_latest_snapshot(source_session_id, working_dir)
+      assert loaded_snapshot != nil, "Should be able to load source OM snapshot"
+      assert length(loaded_snapshot.observed_message_ids) == 3
+
+      # Branch from the checkpoint
+      new_session_id = "sess_om_branch"
+
+      assert {:ok, ^new_session_id} =
+               Branch.create(source_session_id, "om-checkpoint", new_session_id, working_dir)
+
+      # Check if OM file exists for branched session
+      branch_om_path = Path.join(sessions_dir, "#{new_session_id}_om.jsonl")
+
+      assert File.exists?(branch_om_path),
+             "OM file should exist at #{branch_om_path}"
+
+      # Load the branched session's OM snapshot
+      {:ok, branch_om_snapshot} = OMState.load_latest_snapshot(new_session_id, working_dir)
+
+      # Verify that only messages before the checkpoint are in observed_message_ids
+      assert branch_om_snapshot != nil,
+             "OM snapshot should not be nil"
+
+      assert "msg_before_1" in branch_om_snapshot.observed_message_ids
+      assert "msg_before_2" in branch_om_snapshot.observed_message_ids
+      refute "msg_after_1" in branch_om_snapshot.observed_message_ids
+
+      # Verify that other fields are preserved
+      assert branch_om_snapshot.active_observations == "Some observations"
+      assert branch_om_snapshot.observation_tokens == 100
+    end
   end
 end

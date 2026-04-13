@@ -76,7 +76,8 @@ defmodule Deft.Session.Branch do
          {:ok, branch_entries} <-
            build_branch_entries(entries, checkpoint, session_start, new_session_id),
          :ok <- write_branch_entries(new_session_id, branch_entries, working_dir),
-         :ok <- copy_om_snapshot(source_session_id, new_session_id, checkpoint, working_dir),
+         :ok <-
+           copy_om_snapshot(source_session_id, new_session_id, entries, checkpoint, working_dir),
          :ok <- create_git_branch(new_session_id, checkpoint, working_dir) do
       {:ok, new_session_id}
     end
@@ -152,8 +153,23 @@ defmodule Deft.Session.Branch do
     end)
   end
 
+  # Extract message IDs from entries up to the specified entry_index
+  # Returns a MapSet of message IDs present in entries at or before entry_index
+  defp extract_message_ids_up_to(entries, entry_index) do
+    alias Deft.Session.Entry
+
+    entries
+    |> Enum.take(entry_index + 1)
+    |> Enum.flat_map(fn
+      %Entry.Message{message_id: msg_id} -> [msg_id]
+      %Entry.ToolResult{tool_call_id: call_id} -> ["tool_result_#{call_id}"]
+      _ -> []
+    end)
+    |> MapSet.new()
+  end
+
   # Copy OM snapshot from source session to new session, filtering by entry_index
-  defp copy_om_snapshot(source_session_id, new_session_id, _checkpoint, working_dir) do
+  defp copy_om_snapshot(source_session_id, new_session_id, entries, checkpoint, working_dir) do
     # Load the source session's OM snapshot
     case OMState.load_latest_snapshot(source_session_id, working_dir) do
       {:ok, nil} ->
@@ -162,10 +178,19 @@ defmodule Deft.Session.Branch do
 
       {:ok, snapshot} ->
         # Filter observed_message_ids to only include messages up to the branch point
-        # We need to match the observed messages against the entries we copied
-        # For now, we'll copy the snapshot as-is since the OM state at the checkpoint
-        # is what we want to restore
-        write_om_snapshot(new_session_id, snapshot, working_dir)
+        # Extract message IDs from entries up to the checkpoint's entry_index
+        message_ids_at_branch_point = extract_message_ids_up_to(entries, checkpoint.entry_index)
+
+        # Filter the snapshot to only include observed messages that exist in the branched history
+        filtered_snapshot = %{
+          snapshot
+          | observed_message_ids:
+              Enum.filter(snapshot.observed_message_ids, fn msg_id ->
+                MapSet.member?(message_ids_at_branch_point, msg_id)
+              end)
+        }
+
+        write_om_snapshot(new_session_id, filtered_snapshot, working_dir)
 
       {:error, _reason} ->
         # OM snapshot loading failed, but this is not critical - branching can succeed
