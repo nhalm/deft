@@ -61,19 +61,7 @@ while [ $CYCLE -lt $MAX_CYCLES ]; do
 
     echo "=== Cycle ${CYCLE}/${MAX_CYCLES} ==="
 
-    # Step 0: Check if specd_review.md has unresolved items
-    if [ -s specd_review.md ] && grep -q '[^[:space:]]' specd_review.md; then
-        # Check if there's actual content beyond the header
-        CONTENT=$(sed '/^#/d; /^---$/d; /^$/d; /^<!--/,/-->/d' specd_review.md)
-        if [ -n "$CONTENT" ]; then
-            echo "=== specd_review.md has unresolved findings ==="
-            echo "Review the findings, delete any you disagree with, then run the loop again."
-            echo "Remaining items will become work items on the next run."
-            exit 0
-        fi
-    fi
-
-    # Step 1: Review intake — process specd_review.md into specd_work_list.md
+    # Step 1: Review intake — process specd_review.md decisions into specd_work_list.md
     echo "=== Review intake ==="
     TIMESTAMP=$(date +%Y%m%d-%H%M%S)
     REVIEW_OUTPUT="/tmp/${PWD##*/}-review-${TIMESTAMP}.txt"
@@ -88,6 +76,13 @@ while [ $CYCLE -lt $MAX_CYCLES ]; do
 
     if check_fatal_error "$REVIEW_OUTPUT" "review intake"; then
         exit 1
+    fi
+
+    # Check if review-intake left undecided items behind
+    if [ -s specd_review.md ] && grep -q '^\*\*Finding:\*\*' specd_review.md; then
+        echo "=== specd_review.md still has undecided findings ==="
+        echo "Fill in the **Decision:** field for each remaining finding, then run the loop again."
+        exit 0
     fi
 
     # Step 2: Implement loop — work through specd_work_list.md one item at a time

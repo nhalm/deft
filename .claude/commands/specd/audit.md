@@ -79,9 +79,14 @@ For ambiguous findings where it's unclear whether code or spec is wrong:
 **Finding:** Description of the mismatch
 **Code:** What the code does (file path, line)
 **Spec:** What the spec says
-**Options:** What you think the options are to solve
+**Options:**
+- A: First option
+- B: Second option
 **Recommendation:** What you think should happen
+**Decision:**
 ```
+
+Letter the options so the human can respond with just a letter, a letter plus clarification, or freeform text. Always leave `**Decision:**` blank — the human fills it in.
 
 ### Spec status transitions
 
@@ -92,7 +97,9 @@ After processing each spec:
 
 ## Committing
 
-After writing findings for each spec, commit all changed spec files and `specs/README.md` together in a single commit. Do not commit `specd_work_list.md` or `specd_review.md`.
+After writing findings for each spec, commit all changed spec files and `specs/README.md` together in a single commit.
+
+**Do NOT commit `specd_work_list.md` or `specd_review.md`.** These are uncommitted working files — they must never be staged or included in any commit.
 
 ## Output
 
