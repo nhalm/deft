@@ -673,7 +673,9 @@ defmodule Deft.Session.Store do
           created_at: start.created_at,
           last_message_at: (last_message && last_message.timestamp) || start.created_at,
           message_count: length(messages),
-          last_user_prompt: last_user_prompt
+          last_user_prompt: last_user_prompt,
+          parent_session_id: start.parent_session_id,
+          branch_checkpoint: start.branch_checkpoint
         }
 
       nil ->

@@ -19,9 +19,17 @@ defmodule DeftWeb.SessionsLive do
         {:error, _} -> []
       end
 
+    # Build set of parent session IDs (sessions that have children)
+    parent_session_ids =
+      sessions
+      |> Enum.filter(& &1.parent_session_id)
+      |> Enum.map(& &1.parent_session_id)
+      |> MapSet.new()
+
     socket =
       socket
       |> assign(:sessions, sessions)
+      |> assign(:parent_session_ids, parent_session_ids)
       |> assign(:selected_index, 0)
 
     {:ok, socket}
@@ -44,9 +52,21 @@ defmodule DeftWeb.SessionsLive do
             phx-value-session-id={session.session_id}
           >
             <div class="session-header">
-              <span class="session-id"><%= session.session_id %></span>
+              <span class="session-id">
+                <%= if MapSet.member?(@parent_session_ids, session.session_id) do %>
+                  <span class="branch-icon" title="Has child branches">⎇</span>
+                <% end %>
+                <%= session.session_id %>
+              </span>
               <span class="session-date"><%= format_datetime(session.last_message_at) %></span>
             </div>
+            <%= if session.parent_session_id do %>
+              <div class="branch-info">
+                <span class="branch-label">
+                  ↳ branched from <%= session.parent_session_id %> at <%= session.branch_checkpoint %>
+                </span>
+              </div>
+            <% end %>
             <div class="session-details">
               <span class="working-dir"><%= session.working_dir %></span>
               <span class="message-count"><%= session.message_count %> messages</span>
