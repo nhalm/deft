@@ -533,7 +533,10 @@ defmodule Deft.Session.Store do
       created_at: parse_datetime(data.created_at),
       working_dir: data.working_dir,
       model: data.model,
-      config: data.config
+      config: data.config,
+      parent_session_id: Map.get(data, :parent_session_id),
+      branch_checkpoint: Map.get(data, :branch_checkpoint),
+      branch_entry_index: Map.get(data, :branch_entry_index)
     }
   end
 

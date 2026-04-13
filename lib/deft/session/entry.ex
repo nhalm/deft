@@ -34,6 +34,9 @@ defmodule Deft.Session.Entry.SessionStart do
 
   Written once at session creation. Contains the session ID, creation
   timestamp, working directory, initial model, and config snapshot.
+
+  For branched sessions, includes parent_session_id, branch_checkpoint,
+  and branch_entry_index to track lineage (see sessions/branching.md).
   """
 
   @derive Jason.Encoder
@@ -43,23 +46,44 @@ defmodule Deft.Session.Entry.SessionStart do
           created_at: DateTime.t(),
           working_dir: String.t(),
           model: String.t(),
-          config: map()
+          config: map(),
+          parent_session_id: Deft.Session.session_id() | nil,
+          branch_checkpoint: String.t() | nil,
+          branch_entry_index: non_neg_integer() | nil
         }
 
   @enforce_keys [:type, :session_id, :created_at, :working_dir, :model, :config]
-  defstruct [:type, :session_id, :created_at, :working_dir, :model, :config]
+  defstruct [
+    :type,
+    :session_id,
+    :created_at,
+    :working_dir,
+    :model,
+    :config,
+    :parent_session_id,
+    :branch_checkpoint,
+    :branch_entry_index
+  ]
 
   @doc """
   Creates a new SessionStart entry.
+
+  ## Options
+  - `:parent_session_id` - For branched sessions, the original session ID
+  - `:branch_checkpoint` - For branched sessions, the checkpoint label
+  - `:branch_entry_index` - For branched sessions, the entry_index of the checkpoint
   """
-  def new(session_id, working_dir, model, config) do
+  def new(session_id, working_dir, model, config, opts \\ []) do
     %__MODULE__{
       type: :session_start,
       session_id: session_id,
       created_at: DateTime.utc_now(),
       working_dir: working_dir,
       model: model,
-      config: config
+      config: config,
+      parent_session_id: Keyword.get(opts, :parent_session_id),
+      branch_checkpoint: Keyword.get(opts, :branch_checkpoint),
+      branch_entry_index: Keyword.get(opts, :branch_entry_index)
     }
   end
 end
