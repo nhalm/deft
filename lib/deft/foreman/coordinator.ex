@@ -410,8 +410,23 @@ defmodule Deft.Foreman.Coordinator do
 
     Logger.info("#{log_prefix(data)} Job complete (#{duration_sec}s, $#{Float.round(cost, 2)})")
 
-    # Squash-merge all work, report summary, cleanup
-    :keep_state_and_data
+    # Squash-merge all work, delete job branch, restore working state
+    squash = Map.get(data.config, :job_squash_on_complete, true)
+
+    case GitJob.complete_job(
+           job_id: data.session_id,
+           original_branch: data.original_branch,
+           squash: squash,
+           working_dir: data.working_dir
+         ) do
+      {:ok, :completed} ->
+        Logger.info("#{log_prefix(data)} Successfully merged and cleaned up job branch")
+        :keep_state_and_data
+
+      {:error, reason} ->
+        Logger.error("#{log_prefix(data)} Failed to complete job: #{inspect(reason)}")
+        {:stop, {:shutdown, {:job_completion_failed, reason}}, data}
+    end
   end
 
   # Set ForemanAgent PID
