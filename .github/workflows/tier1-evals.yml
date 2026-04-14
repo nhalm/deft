@@ -95,7 +95,8 @@ jobs:
               echo "::error::SAFETY EVAL FAILURE: Anti-hallucination tests failed or produced no output"
               SAFETY_FAILURE=1
             else
-              echo "::warning::No pass rate output found in anti-hallucination tests"
+              echo "::error::SAFETY EVAL FAILURE: No pass rate output found in anti-hallucination tests"
+              SAFETY_FAILURE=1
             fi
           fi
 
@@ -130,7 +131,8 @@ jobs:
                 echo "::error::SAFETY EVAL FAILURE: PII tests failed or produced no output"
                 SAFETY_FAILURE=1
               else
-                echo "::warning::No pass rate output found in PII tests"
+                echo "::error::SAFETY EVAL FAILURE: No pass rate output found in PII tests"
+                SAFETY_FAILURE=1
               fi
             fi
           else
