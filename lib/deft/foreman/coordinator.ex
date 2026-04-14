@@ -283,14 +283,31 @@ defmodule Deft.Foreman.Coordinator do
     Logger.info("#{log_prefix(data)} Foreman entering :planning phase")
     broadcast_job_status(:planning, data)
 
-    # In planning, ForemanAgent analyzes the request and calls request_research tool
-    # For now, this is a stub until ForemanAgent and tools are implemented
-    if data.foreman_agent_pid do
-      context = build_planning_context(data)
-      Deft.Agent.prompt(data.foreman_agent_pid, context)
-    end
+    # Create job branch on first entry to planning (job start)
+    auto_approve = Map.get(data.config, :auto_approve_all, false)
 
-    :keep_state_and_data
+    case GitJob.create_job_branch(job_id: data.session_id, auto_approve: auto_approve) do
+      {:ok, job_branch, original_branch} ->
+        Logger.info(
+          "#{log_prefix(data)} Created job branch: #{job_branch} (original: #{original_branch})"
+        )
+
+        updated_data =
+          Map.merge(data, %{job_branch: job_branch, original_branch: original_branch})
+
+        # In planning, ForemanAgent analyzes the request and calls request_research tool
+        # For now, this is a stub until ForemanAgent and tools are implemented
+        if updated_data.foreman_agent_pid do
+          context = build_planning_context(updated_data)
+          Deft.Agent.prompt(updated_data.foreman_agent_pid, context)
+        end
+
+        {:keep_state, updated_data}
+
+      {:error, reason} ->
+        Logger.error("#{log_prefix(data)} Failed to create job branch: #{inspect(reason)}")
+        {:stop, {:shutdown, {:git_error, reason}}, data}
+    end
   end
 
   def handle_event(:enter, _old_state, :researching, data) do

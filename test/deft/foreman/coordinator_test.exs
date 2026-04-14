@@ -25,12 +25,38 @@ defmodule Deft.Foreman.CoordinatorTest do
     # Start a Task.Supervisor for Foreman runners in tests
     {:ok, runner_supervisor} = Task.Supervisor.start_link()
 
+    # Configure git adapter to use mock for Coordinator tests
+    # (Coordinator tests don't need real git operations, just mocked success responses)
+    setup_git_mock()
+
     on_exit(fn ->
       File.cd!(original_cwd)
       File.rm_rf!(tmp_dir)
+      cleanup_git_mock()
     end)
 
     {:ok, tmp_dir: tmp_dir, runner_supervisor: runner_supervisor}
+  end
+
+  # Configure git mock for Coordinator tests
+  defp setup_git_mock do
+    Application.put_env(:deft, :git_adapter, Deft.GitMock)
+    # Set default response to success for any unmatched git command
+    Application.put_env(:deft, :git_mock_response, {"", 0})
+
+    Application.put_env(:deft, :git_mock_responses, %{
+      # rev-parse --abbrev-ref HEAD (get current branch)
+      ["rev-parse", "--abbrev-ref", "HEAD"] => {"main\n", 0},
+      # status --porcelain (check working tree clean)
+      ["status", "--porcelain"] => {"", 0}
+    })
+  end
+
+  # Clean up git mock configuration
+  defp cleanup_git_mock do
+    Application.delete_env(:deft, :git_adapter)
+    Application.delete_env(:deft, :git_mock_response)
+    Application.delete_env(:deft, :git_mock_responses)
   end
 
   # Start a RateLimiter registered under the given session_id so the Foreman
