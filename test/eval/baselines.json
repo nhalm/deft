@@ -1,1 +1,142 @@
-{}
+{
+  "observer.extraction": {
+    "baseline": null,
+    "soft_floor": null,
+    "history": []
+  },
+  "observer.priority": {
+    "baseline": null,
+    "soft_floor": null,
+    "history": []
+  },
+  "observer.section_routing": {
+    "baseline": null,
+    "soft_floor": null,
+    "history": []
+  },
+  "observer.anti_hallucination": {
+    "baseline": null,
+    "soft_floor": null,
+    "history": []
+  },
+  "observer.dedup": {
+    "baseline": null,
+    "soft_floor": null,
+    "history": []
+  },
+  "reflector.compression": {
+    "baseline": null,
+    "soft_floor": null,
+    "history": []
+  },
+  "reflector.preservation": {
+    "baseline": null,
+    "soft_floor": null,
+    "history": []
+  },
+  "actor.observation_usage": {
+    "baseline": null,
+    "soft_floor": null,
+    "history": []
+  },
+  "actor.continuation": {
+    "baseline": null,
+    "soft_floor": null,
+    "history": []
+  },
+  "actor.tool_selection": {
+    "baseline": null,
+    "soft_floor": null,
+    "history": []
+  },
+  "foreman.decomposition": {
+    "baseline": null,
+    "soft_floor": null,
+    "history": []
+  },
+  "foreman.dependency": {
+    "baseline": null,
+    "soft_floor": null,
+    "history": []
+  },
+  "foreman.contract": {
+    "baseline": null,
+    "soft_floor": null,
+    "history": []
+  },
+  "foreman.constraint_propagation": {
+    "baseline": null,
+    "soft_floor": null,
+    "history": []
+  },
+  "foreman.verification_accuracy": {
+    "baseline": null,
+    "soft_floor": null,
+    "history": []
+  },
+  "lead.task_planning": {
+    "baseline": null,
+    "soft_floor": null,
+    "history": []
+  },
+  "lead.steering": {
+    "baseline": null,
+    "soft_floor": null,
+    "history": []
+  },
+  "spilling.summary_quality": {
+    "baseline": null,
+    "soft_floor": null,
+    "history": []
+  },
+  "spilling.cache_retrieval": {
+    "baseline": null,
+    "soft_floor": null,
+    "history": []
+  },
+  "spilling.threshold_calibration": {
+    "baseline": null,
+    "soft_floor": null,
+    "history": []
+  },
+  "skills.suggestion": {
+    "baseline": null,
+    "soft_floor": null,
+    "history": []
+  },
+  "skills.invocation_fidelity": {
+    "baseline": null,
+    "soft_floor": null,
+    "history": []
+  },
+  "issues.elicitation_quality": {
+    "baseline": null,
+    "soft_floor": null,
+    "history": []
+  },
+  "issues.agent_created_quality": {
+    "baseline": null,
+    "soft_floor": null,
+    "history": []
+  },
+  "e2e.single_task": {
+    "baseline": null,
+    "soft_floor": null,
+    "history": []
+  },
+  "e2e.multi_agent": {
+    "baseline": null,
+    "soft_floor": null,
+    "history": []
+  },
+  "e2e.loop_safety": {
+    "baseline": null,
+    "soft_floor": null,
+    "history": []
+  },
+  "e2e.verification_circuit_breaker": {
+    "baseline": null,
+    "soft_floor": null,
+    "history": []
+  }
+}
