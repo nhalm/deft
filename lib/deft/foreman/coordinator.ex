@@ -399,6 +399,37 @@ defmodule Deft.Foreman.Coordinator do
     {:next_state, :complete, data}
   end
 
+  def handle_event(:state_timeout, :collect_merge_resolutions, :executing, data) do
+    merge_resolution_tasks = Map.get(data, :merge_resolution_tasks, %{})
+
+    if map_size(merge_resolution_tasks) == 0 do
+      :keep_state_and_data
+    else
+      runner_timeout = Map.get(data.config, :job_runner_timeout, 300_000)
+
+      updated_data =
+        collect_merge_resolution_results(merge_resolution_tasks, runner_timeout, data)
+
+      # If there are still pending merge_resolution tasks, schedule another collection
+      remaining_tasks = Map.get(updated_data, :merge_resolution_tasks, %{})
+
+      if map_size(remaining_tasks) > 0 do
+        {:keep_state, updated_data, {:state_timeout, 1000, :collect_merge_resolutions}}
+      else
+        # Check if all Leads are complete and transition to :verifying
+        if all_leads_complete?(updated_data) do
+          Logger.info(
+            "#{log_prefix(data)} All Leads complete after merge resolution, transitioning to :verifying"
+          )
+
+          {:next_state, :verifying, updated_data}
+        else
+          {:keep_state, updated_data}
+        end
+      end
+    end
+  end
+
   def handle_event(:enter, _old_state, :complete, data) do
     Logger.info("#{log_prefix(data)} Foreman entering :complete phase")
     broadcast_job_status(:complete, data)
@@ -2114,7 +2145,14 @@ defmodule Deft.Foreman.Coordinator do
       Logger.info("#{log_prefix(data)} All Leads complete, transitioning to :verifying")
       {:next_state, :verifying, updated_data}
     else
-      {:keep_state, updated_data}
+      # If there are pending merge_resolution tasks, trigger collection
+      merge_resolution_tasks = Map.get(updated_data, :merge_resolution_tasks, %{})
+
+      if map_size(merge_resolution_tasks) > 0 do
+        {:keep_state, updated_data, {:state_timeout, 1000, :collect_merge_resolutions}}
+      else
+        {:keep_state, updated_data}
+      end
     end
   end
 
@@ -2521,7 +2559,7 @@ defmodule Deft.Foreman.Coordinator do
     end
   end
 
-  defp spawn_merge_resolution_runner(lead_id, conflicted_files, temp_dir, data) do
+  defp spawn_merge_resolution_runner(lead_id, conflicted_files, temp_dir, data, retry_count \\ 0) do
     runner_model = Map.get(data.config, :job_runner_model, "claude-sonnet-4")
 
     runner_config = %{
@@ -2570,11 +2608,19 @@ defmodule Deft.Foreman.Coordinator do
         end
       end)
 
-    Logger.info("#{log_prefix(data)} Spawned merge_resolution Runner for Lead #{lead_id}")
+    Logger.info(
+      "#{log_prefix(data)} Spawned merge_resolution Runner for Lead #{lead_id} (attempt #{retry_count + 1})"
+    )
 
     # Track the task in merge_resolution_tasks map
     merge_resolution_tasks = Map.get(data, :merge_resolution_tasks, %{})
-    updated_tasks = Map.put(merge_resolution_tasks, lead_id, %{task: task, temp_dir: temp_dir})
+
+    updated_tasks =
+      Map.put(merge_resolution_tasks, lead_id, %{
+        task: task,
+        temp_dir: temp_dir,
+        retry_count: retry_count
+      })
 
     Map.put(data, :merge_resolution_tasks, updated_tasks)
   end
@@ -2670,6 +2716,178 @@ defmodule Deft.Foreman.Coordinator do
       end
     end)
     |> Enum.join("\n\n")
+  end
+
+  defp collect_merge_resolution_results(merge_resolution_tasks, _timeout, data) do
+    # Check each task with Task.yield (short timeout since we check periodically)
+    check_timeout = 100
+
+    {completed, pending} =
+      merge_resolution_tasks
+      |> Enum.reduce({[], %{}}, fn {lead_id, task_info}, {completed_acc, pending_acc} ->
+        case Task.yield(task_info.task, check_timeout) do
+          {:ok, {:ok, ^lead_id, _output}} ->
+            Logger.info(
+              "#{log_prefix(data)} Merge resolution succeeded for Lead #{lead_id}, re-attempting merge"
+            )
+
+            # Add to completed list for processing
+            {[{lead_id, :success, task_info} | completed_acc], pending_acc}
+
+          {:ok, {:error, ^lead_id, reason}} ->
+            Logger.error(
+              "#{log_prefix(data)} Merge resolution failed for Lead #{lead_id}: #{inspect(reason)}"
+            )
+
+            # Add to completed list for processing
+            {[{lead_id, {:error, reason}, task_info} | completed_acc], pending_acc}
+
+          nil ->
+            # Task still running, keep it in pending
+            {completed_acc, Map.put(pending_acc, lead_id, task_info)}
+
+          {:exit, reason} ->
+            Logger.error(
+              "#{log_prefix(data)} Merge resolution task crashed for Lead #{lead_id}: #{inspect(reason)}"
+            )
+
+            # Add to completed list for processing
+            {[{lead_id, {:error, reason}, task_info} | completed_acc], pending_acc}
+        end
+      end)
+
+    # Process completed tasks
+    updated_data =
+      Enum.reduce(completed, data, fn {lead_id, result, task_info}, acc_data ->
+        process_merge_resolution_result(lead_id, result, task_info, acc_data)
+      end)
+
+    # Update merge_resolution_tasks to only contain pending tasks
+    Map.put(updated_data, :merge_resolution_tasks, pending)
+  end
+
+  defp process_merge_resolution_result(lead_id, :success, task_info, data) do
+    # Re-attempt the merge now that conflicts are resolved
+    merge_result =
+      GitJob.merge_lead_branch(
+        lead_id: lead_id,
+        job_id: data.session_id,
+        working_dir: data.working_dir
+      )
+
+    case merge_result do
+      {:ok, :merged} ->
+        Logger.info(
+          "#{log_prefix(data)} Lead #{lead_id} merged successfully after conflict resolution"
+        )
+
+        # Run post-merge tests on the job branch
+        run_and_log_post_merge_tests(lead_id, data)
+
+        # Clean up the temp directory used for merge resolution
+        _ =
+          if File.exists?(task_info.temp_dir) do
+            File.rm_rf!(task_info.temp_dir)
+          end
+
+        # Clean up the Lead's worktree after successful merge
+        GitJob.cleanup_lead_worktree(
+          lead_id: lead_id,
+          working_dir: data.working_dir
+        )
+
+        data
+
+      {:ok, :conflict, conflicted_files, new_temp_dir} ->
+        # Still has conflicts - check retry count and either retry or escalate
+        retry_count = Map.get(task_info, :retry_count, 0)
+        max_retries = 3
+
+        if retry_count < max_retries do
+          Logger.warning(
+            "#{log_prefix(data)} Merge still has conflicts for Lead #{lead_id} (attempt #{retry_count + 1}/#{max_retries}), retrying resolution"
+          )
+
+          # Clean up old temp dir
+          _ =
+            if File.exists?(task_info.temp_dir) do
+              File.rm_rf!(task_info.temp_dir)
+            end
+
+          # Spawn another merge_resolution Runner with incremented retry count
+          spawn_merge_resolution_runner(
+            lead_id,
+            conflicted_files,
+            new_temp_dir,
+            data,
+            retry_count + 1
+          )
+        else
+          Logger.error(
+            "#{log_prefix(data)} Merge resolution exceeded max retries for Lead #{lead_id}, escalating to user"
+          )
+
+          # Clean up temp directories
+          _ =
+            if File.exists?(task_info.temp_dir) do
+              File.rm_rf!(task_info.temp_dir)
+            end
+
+          _ =
+            if File.exists?(new_temp_dir) do
+              File.rm_rf!(new_temp_dir)
+            end
+
+          # Clean up worktree
+          GitJob.cleanup_lead_worktree(
+            lead_id: lead_id,
+            working_dir: data.working_dir
+          )
+
+          # TODO: Notify user or ForemanAgent about merge failure requiring manual intervention
+          data
+        end
+
+      {:error, reason} ->
+        Logger.error(
+          "#{log_prefix(data)} Merge re-attempt failed for Lead #{lead_id}: #{inspect(reason)}"
+        )
+
+        # Clean up temp directory
+        _ =
+          if File.exists?(task_info.temp_dir) do
+            File.rm_rf!(task_info.temp_dir)
+          end
+
+        # Clean up worktree
+        GitJob.cleanup_lead_worktree(
+          lead_id: lead_id,
+          working_dir: data.working_dir
+        )
+
+        data
+    end
+  end
+
+  defp process_merge_resolution_result(lead_id, {:error, _reason}, task_info, data) do
+    Logger.error(
+      "#{log_prefix(data)} Abandoning merge for Lead #{lead_id} due to resolution failure"
+    )
+
+    # Clean up temp directory
+    _ =
+      if File.exists?(task_info.temp_dir) do
+        File.rm_rf!(task_info.temp_dir)
+      end
+
+    # Clean up worktree
+    GitJob.cleanup_lead_worktree(
+      lead_id: lead_id,
+      working_dir: data.working_dir
+    )
+
+    # TODO: Notify user or ForemanAgent about merge failure requiring manual intervention
+    data
   end
 
   defp present_plan_to_user(data, deliverables) do
