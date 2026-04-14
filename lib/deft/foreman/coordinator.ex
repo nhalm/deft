@@ -845,6 +845,23 @@ defmodule Deft.Foreman.Coordinator do
   # Abort
   def handle_event(:cast, :abort, _state, data) do
     Logger.info("#{log_prefix(data)} Job aborted")
+
+    # Clean up git worktrees and branches
+    keep_failed_branches = Map.get(data.config, :job_keep_failed_branches, false)
+
+    case GitJob.abort_job(
+           job_id: data.session_id,
+           original_branch: Map.get(data, :original_branch),
+           working_dir: data.working_dir,
+           keep_failed_branches: keep_failed_branches
+         ) do
+      :ok ->
+        Logger.debug("#{log_prefix(data)} Git cleanup completed")
+
+      {:error, reason} ->
+        Logger.error("#{log_prefix(data)} Git cleanup failed: #{inspect(reason)}")
+    end
+
     {:stop, :normal, data}
   end
 
