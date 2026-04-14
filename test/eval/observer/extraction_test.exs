@@ -5,6 +5,7 @@ defmodule Deft.Eval.Observer.ExtractionTest do
   @moduletag :expensive
 
   alias Deft.EvalHelpers
+  alias Deft.OM.Observer
 
   @moduledoc """
   Eval tests for Observer extraction accuracy.
@@ -16,21 +17,41 @@ defmodule Deft.Eval.Observer.ExtractionTest do
   describe "basic extraction" do
     @tag :integration
     test "extracts explicit technology choice" do
-      # Placeholder test that passes
-      # This is a minimal working test file to satisfy the CI gate.
-      # Future iterations will implement full eval with:
-      # - Real Observer.extract/3 call
-      # - Synthetic fixtures
-      # - LLM-as-judge assertions
-      # - Statistical pass rates (20 iterations, 85% threshold)
-      # See specs/testing/evals/observer.md for detailed requirements
+      config = EvalHelpers.test_config()
+      session_id = "test_observer_extraction"
 
       messages = [
         EvalHelpers.user_message("We use PostgreSQL for our database.")
       ]
 
-      # TODO: Implement real Observer extraction eval
-      assert length(messages) == 1
+      result = Observer.run(session_id, config, messages, "", 4.0)
+
+      assert is_binary(result.observations)
+      assert result.observations != ""
+      assert String.contains?(result.observations, "PostgreSQL")
+      assert is_list(result.message_ids)
+      assert length(result.message_ids) == 1
+    end
+
+    @tag :integration
+    test "returns structured result with required fields" do
+      config = EvalHelpers.test_config()
+      session_id = "test_observer_structure"
+
+      messages = [
+        EvalHelpers.user_message("I prefer vim keybindings in my editor.")
+      ]
+
+      result = Observer.run(session_id, config, messages, "", 4.0)
+
+      assert Map.has_key?(result, :observations)
+      assert Map.has_key?(result, :message_ids)
+      assert Map.has_key?(result, :message_tokens)
+      assert Map.has_key?(result, :current_task)
+      assert Map.has_key?(result, :continuation_hint)
+      assert is_binary(result.observations)
+      assert is_list(result.message_ids)
+      assert is_integer(result.message_tokens)
     end
   end
 end
