@@ -2070,6 +2070,9 @@ defmodule Deft.Foreman.Coordinator do
         {:ok, :merged} ->
           Logger.info("#{log_prefix(data)} Lead #{lead_id} merged successfully")
 
+          # Run post-merge tests on the job branch
+          run_and_log_post_merge_tests(lead_id, data)
+
           # Clean up the Lead's worktree after successful merge
           GitJob.cleanup_lead_worktree(
             lead_id: lead_id,
@@ -2112,6 +2115,33 @@ defmodule Deft.Foreman.Coordinator do
       {:next_state, :verifying, updated_data}
     else
       {:keep_state, updated_data}
+    end
+  end
+
+  # Run post-merge tests and log the result
+  defp run_and_log_post_merge_tests(lead_id, data) do
+    test_command = Map.get(data.config, :job_test_command, "mix test")
+
+    test_result =
+      GitJob.run_post_merge_tests(
+        job_id: data.session_id,
+        test_command: test_command,
+        working_dir: data.working_dir
+      )
+
+    case test_result do
+      {:ok, :passed} ->
+        Logger.info("#{log_prefix(data)} Post-merge tests passed for Lead #{lead_id}")
+
+      {:error, :test_failed, output} ->
+        Logger.warning(
+          "#{log_prefix(data)} Post-merge tests failed for Lead #{lead_id}: #{output}"
+        )
+
+      {:error, reason} ->
+        Logger.error(
+          "#{log_prefix(data)} Failed to run post-merge tests for Lead #{lead_id}: #{inspect(reason)}"
+        )
     end
   end
 
