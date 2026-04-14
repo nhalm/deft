@@ -68,11 +68,57 @@ defmodule Eval.Support.Scoring do
   Example output:
   "observer.extraction: 17/20 (85%) [CI: 62%-97%] PASS"
   """
-  def format_report(_category, _pass_count, _total, _threshold) do
-    # TODO: Implement report formatting
-    # - Compute pass rate and CI
-    # - Compare to threshold
-    # - Return formatted string
-    {:error, :not_implemented}
+  def format_report(category, pass_count, total, threshold) when total > 0 do
+    pass_rate = pass_count / total
+    {ci_lower, ci_upper} = wilson_score_interval(pass_count, total)
+
+    rate_pct = round(pass_rate * 100)
+    ci_low_pct = round(ci_lower * 100)
+    ci_high_pct = round(ci_upper * 100)
+
+    status = determine_status(pass_rate, threshold)
+    suffix = if status == "WARN", do: " ← investigate", else: ""
+
+    "#{category}: #{pass_count}/#{total} (#{rate_pct}%) [CI: #{ci_low_pct}%-#{ci_high_pct}%] #{status}#{suffix}"
+  end
+
+  @doc """
+  Calculates Wilson score confidence interval for a binomial proportion.
+
+  Uses 95% confidence level (z = 1.96). The Wilson score interval is more
+  accurate than the normal approximation for small sample sizes.
+  """
+  def wilson_score_interval(successes, n) when n > 0 do
+    p = successes / n
+    # 95% confidence level
+    z = 1.96
+    z_squared = z * z
+
+    denominator = 1 + z_squared / n
+    center = (p + z_squared / (2 * n)) / denominator
+
+    variance = p * (1 - p) / n + z_squared / (4 * n * n)
+    margin = z * :math.sqrt(variance) / denominator
+
+    lower = max(0.0, center - margin)
+    upper = min(1.0, center + margin)
+
+    {lower, upper}
+  end
+
+  @doc """
+  Determines PASS/FAIL/WARN status based on pass rate and threshold.
+
+  - PASS: rate >= threshold
+  - WARN: rate < threshold (needs investigation)
+  - FAIL: For hard assertions (100% threshold) only
+  """
+  def determine_status(rate, threshold) do
+    cond do
+      rate >= threshold -> "PASS"
+      # Hard assertions fail immediately
+      threshold >= 1.0 -> "FAIL"
+      true -> "WARN"
+    end
   end
 end
