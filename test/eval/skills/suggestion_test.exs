@@ -1,26 +1,8 @@
-defmodule Eval.Skills.SuggestionTest do
-  use ExUnit.Case, async: false
+defmodule Deft.Eval.Skills.SuggestionTest do
+  use ExUnit.Case, async: true
+
   @moduletag :eval
-  @moduletag :expensive
 
-  # Spec: specs/testing/evals/skills.md §2.1
-  # Validates that skill auto-selection suggests appropriate skills
-
-  @moduledoc """
-  Skill suggestion evaluation.
-  Tests that the agent correctly identifies when skills should be suggested.
-  """
-
-  # TODO: Implement skill suggestion tests
-  # - Appropriate skills should be suggested for relevant tasks
-  # - Skills should not be over-suggested for simple tasks
-  # - Skill selection should match task requirements
-  # - Pass rate: 80% over 20 iterations
-
-  @tag :skip
-  test "placeholder for skill suggestion" do
-    # Implement using Tribunal assertions
-    # See specs/testing/evals/skills.md §2.1
-    :ok
-  end
+  # TODO: Implement skill suggestion evals per evals spec §1.2
+  # Verify skill auto-selection suggests appropriate skills
 end
