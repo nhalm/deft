@@ -18,6 +18,36 @@ defmodule Integration.ForemanWorkflowTest do
 
     File.mkdir_p!(tmp_dir)
 
+    # Init a git repo so GitJob.create_job_branch/1 (wired into Coordinator
+    # on job start in c5d8957) can resolve HEAD and see a clean tree. The
+    # test body creates .deft/ artifacts at runtime — ignore those so the
+    # auto_approve_all dirty-tree check passes.
+    {_, 0} = System.cmd("git", ["init", "--quiet"], cd: tmp_dir)
+    File.write!(Path.join(tmp_dir, ".gitignore"), ".deft/\n")
+
+    {_, 0} =
+      System.cmd(
+        "git",
+        ["add", ".gitignore"],
+        cd: tmp_dir
+      )
+
+    {_, 0} =
+      System.cmd(
+        "git",
+        [
+          "-c",
+          "user.name=test",
+          "-c",
+          "user.email=test@example.com",
+          "commit",
+          "--quiet",
+          "-m",
+          "init"
+        ],
+        cd: tmp_dir
+      )
+
     # Set working directory
     original_cwd = File.cwd!()
     File.cd!(tmp_dir)
