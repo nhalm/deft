@@ -36,3 +36,6 @@ priv/plts/
 # specd lock files
 *.lock
 .deft-worktrees/
+
+specd_work_list.md
+specd_review.md

@@ -10,12 +10,12 @@
     ".claude/commands/specd/plan.md": "f6d87b2fb3b525fd7612da035db77d2a3d5312ae22215bdcfd6d0ab6dfa50ada",
     "CLAUDE.md": "954ec5dad7eaf581ad4bfa090369b244ac0120b43722ef2efff5ba89fc52046f",
     "AGENTS.md": "62fecc2b738792bff89e8c973680601845b5356e59cdffc60fff20cbd9204bf6",
-    "specs/README.md": "6f38ee3bd899bfb88f233c0a8895f6a74db3ad8b1e8e055143716a7a5e05194f",
+    "specs/README.md": "cabe46b2ecd1041fdf47521bbdb117fbbb435d8e58fd0c9b936499cbfbfaa64c",
     "specs/example-spec.md": "37feec81d697c959fe93cc64c45ab6de0c459ef651092cf78bfb278ab72b6332",
     "specd_history.md": "0955cdd9219eb4bd273c488c1c14773983609a29087c8c6d3c07b34da59f04e1",
-    "specd_review.md": "44a12751fa8507f4b0299315b00d4b4a5e2ee851208c95d0a1b3d43a91b0fa06",
+    "specd_review.md": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "specd_decisions.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "specd_work_list.md": "e408a42c020777de229156b0b26e2ab173e31b74fdf06b1f92c5ae5c1cad23bb",
+    "specd_work_list.md": "9153e53dc90b16f11ddd6a66bf6e2077e1e9df43570152739065144484ef39bc",
     "PROJECT.md": "74b3c30a6d92d42b48a03312f5b7fd1c09358dc9497f5675dd7345ca4b6617d8"
   }
 }
