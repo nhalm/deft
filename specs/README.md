@@ -63,7 +63,7 @@ Decision reasoning is logged in [specd_decisions.jsonl](../specd_decisions.jsonl
 | [testing](testing/README.md) | v0.1 | Implemented | Testing strategy — three layers (unit, integration, eval), ScriptedProvider, coverage expectations |
 | [unit-testing](testing/unit-testing.md) | v0.1 | Implemented | Unit testing philosophy, critical path coverage, ScriptedProvider integration scenarios |
 | [evals](testing/evals/README.md) | v0.5 | Implemented | AI eval infrastructure, methodology, and component eval definitions |
-| [harness](harness.md) | v0.5 | Ready | Agent loop (gen_statem), message format, process architecture, standalone + sub-agent modes, optional RateLimiter integration |
+| [harness](harness.md) | v0.5 | Implemented | Agent loop (gen_statem), message format, process architecture, standalone + sub-agent modes, optional RateLimiter integration |
 | [tools](tools.md) | v0.3 | Implemented | Tool behaviour, 7 built-in tools, orchestration tools, tool execution model |
 | [providers](providers.md) | v0.3 | Implemented | LLM provider behaviour, SSE streaming, Anthropic implementation |
 | [sessions](sessions/README.md) | v0.9 | Implemented | Session persistence, context management, runtime, and branching |
