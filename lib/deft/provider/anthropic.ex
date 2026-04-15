@@ -120,9 +120,12 @@ defmodule Deft.Provider.Anthropic do
         if status >= 200 and status < 300 do
           receive_chunks(state.caller, response.body.ref, "", %{}, state.session_id)
         else
+          body = drain_error_body(response.body.ref)
+
           send(
             state.caller,
-            {:provider_event, %Error{message: "HTTP request failed with status #{status}"}}
+            {:provider_event,
+             %Error{message: "HTTP request failed with status #{status}: #{body}"}}
           )
         end
 
@@ -131,6 +134,37 @@ defmodule Deft.Provider.Anthropic do
           state.caller,
           {:provider_event, %Error{message: "HTTP request failed: #{inspect(reason)}"}}
         )
+    end
+  end
+
+  # Drain the async body for a non-2xx response so the error message
+  # carries the server's actual error text. Bounded by size and deadline.
+  defp drain_error_body(req_stream) do
+    deadline = System.monotonic_time(:millisecond) + 5_000
+    drain_error_body(req_stream, "", deadline)
+  end
+
+  defp drain_error_body(req_stream, acc, deadline) when byte_size(acc) >= 4_096 do
+    _ = req_stream
+    _ = deadline
+    acc
+  end
+
+  defp drain_error_body(req_stream, acc, deadline) do
+    remaining = max(deadline - System.monotonic_time(:millisecond), 0)
+
+    receive do
+      {^req_stream, {:data, chunk}} ->
+        drain_error_body(req_stream, acc <> chunk, deadline)
+
+      {^req_stream, :done} ->
+        acc
+
+      {^req_stream, {:error, _reason}} ->
+        acc
+    after
+      remaining ->
+        if acc == "", do: "<no response body within 5s>", else: acc
     end
   end
 

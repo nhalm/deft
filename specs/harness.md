@@ -2,11 +2,14 @@
 
 | | |
 |--------|----------------------------------------------|
-| Version | 0.4 |
-| Status | Implemented |
-| Last Updated | 2026-03-30 |
+| Version | 0.5 |
+| Status | Ready |
+| Last Updated | 2026-04-15 |
 
 ## Changelog
+
+### v0.5 (2026-04-15)
+- Clarified §2 error recovery: retries apply to transient errors (5xx, network failures, 408, 429). Non-retryable client errors (other 4xx) surface immediately without retry. Prior wording implied all provider errors retried up to 3 times.
 
 ### v0.4 (2026-03-30)
 - Added optional `rate_limiter` config field to `Deft.Agent`. When provided, the Agent calls `RateLimiter.request/2` before sending to the provider and `RateLimiter.reconcile/4` after receiving the response, ensuring all LLM calls in orchestrated jobs flow through the centralized RateLimiter.
@@ -110,7 +113,7 @@ The agent is a `gen_statem` using `handle_event` callback mode (allows fallback 
 - **Prompt queueing.** If a prompt arrives while not `:idle`, it is queued. Delivered after the current turn completes.
 - **Abort.** User can abort at any time. In `:streaming`, cancel the stream via `cancel_stream/1`. In `:executing_tools`, terminate all in-flight tasks. Transition to `:idle`.
 - **Turn limit.** Configurable max consecutive LLM calls per prompt (default: 25). When reached, pause and ask "Continue?" If yes, reset counter. If no, return to `:idle`.
-- **Error recovery.** On provider error, retry with exponential backoff up to 3 times. If all fail, transition to `:idle` and surface error.
+- **Error recovery.** On a *retryable* provider error (5xx, network failure, HTTP 408 timeout, HTTP 429 rate limit), retry with exponential backoff up to 3 times. On a *non-retryable* client error (other 4xx), surface immediately without retrying — the request is deterministically wrong and a retry will fail the same way. If all retries fail, transition to `:idle` and surface error.
 - **Event broadcasting.** Agent broadcasts state transitions and content events via Registry for TUI consumption.
 
 ### 3. Message Format

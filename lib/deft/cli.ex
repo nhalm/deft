@@ -825,17 +825,9 @@ defmodule Deft.CLI do
       tool_timeout: config.tool_timeout,
       bash_timeout: config.bash_timeout,
       max_turns: config.turn_limit,
-      tools: [
-        Deft.Tools.Read,
-        Deft.Tools.Write,
-        Deft.Tools.Edit,
-        Deft.Tools.Bash,
-        Deft.Tools.Grep,
-        Deft.Tools.Find,
-        Deft.Tools.Ls,
-        Deft.Tools.UseSkill,
-        Deft.Tools.IssueCreate
-      ],
+      # Standard tools (Read/Write/Edit/Bash/Grep/Find/Ls) are added by
+      # Foreman.add_foreman_tools/1. Only list extras here.
+      tools: [Deft.Tools.UseSkill, Deft.Tools.IssueCreate],
       om_enabled: config.om_enabled,
       om_message_token_threshold: config.om_message_token_threshold,
       om_observation_token_threshold: config.om_observation_token_threshold,

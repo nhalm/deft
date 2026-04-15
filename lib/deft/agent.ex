@@ -889,54 +889,98 @@ defmodule Deft.Agent do
 
   defp handle_calling_error(error_payload, data) do
     max_retries = 3
+    error_message = Map.get(error_payload, :message, "Unknown error")
 
-    if data.retry_count < max_retries do
-      # Schedule retry with exponential backoff
-      retry_count = data.retry_count + 1
-      delay = data.retry_delay
+    # The stream process has already delivered its error and is exiting.
+    # Demonitor it so the imminent {:DOWN, _, _, _, :normal} doesn't get
+    # misinterpreted as a connection failure and abort the retry.
+    data = clear_stream_monitor(data)
 
-      error_message = Map.get(error_payload, :message, "Unknown error")
+    cond do
+      not retryable_error?(error_message) ->
+        Logger.error(
+          "#{log_prefix(data.session_id)} Provider failure (non-retryable): #{error_message}"
+        )
 
-      Logger.warning(
-        "#{log_prefix(data.session_id)} Stream error (retry #{retry_count}/#{max_retries}): #{error_message}"
-      )
+        broadcast_event(data.session_id, {:error, error_message})
 
-      # Send delayed message to self for retry
-      Process.send_after(self(), {:retry_stream}, delay)
+        new_data = %{
+          data
+          | stream_ref: nil,
+            stream_start_time: nil,
+            retry_count: 0,
+            retry_delay: 1000
+        }
 
-      new_data = %{
-        data
-        | retry_count: retry_count,
-          retry_delay: delay * 2
-      }
+        {:next_state, :idle, new_data}
 
-      broadcast_event(data.session_id, {:retry, retry_count, max_retries, delay})
-      {:keep_state, new_data}
-    else
-      # Max retries exceeded - transition to idle with error
-      error_message = Map.get(error_payload, :message, "Unknown error")
+      data.retry_count < max_retries ->
+        # Schedule retry with exponential backoff
+        retry_count = data.retry_count + 1
+        delay = data.retry_delay
 
-      Logger.error(
-        "#{log_prefix(data.session_id)} Provider failure after #{max_retries} retries: #{error_message}"
-      )
+        Logger.warning(
+          "#{log_prefix(data.session_id)} Stream error (retry #{retry_count}/#{max_retries}): #{error_message}"
+        )
 
-      broadcast_event(
-        data.session_id,
-        {:error, "Failed after #{max_retries} retries: #{error_message}"}
-      )
+        # Send delayed message to self for retry
+        Process.send_after(self(), {:retry_stream}, delay)
 
-      # Reset retry state and transition to idle
-      new_data = %{
-        data
-        | stream_ref: nil,
-          stream_start_time: nil,
-          retry_count: 0,
-          retry_delay: 1000
-      }
+        new_data = %{
+          data
+          | retry_count: retry_count,
+            retry_delay: delay * 2
+        }
 
-      {:next_state, :idle, new_data}
+        broadcast_event(data.session_id, {:retry, retry_count, max_retries, delay})
+        {:keep_state, new_data}
+
+      true ->
+        # Max retries exceeded - transition to idle with error
+        Logger.error(
+          "#{log_prefix(data.session_id)} Provider failure after #{max_retries} retries: #{error_message}"
+        )
+
+        broadcast_event(
+          data.session_id,
+          {:error, "Failed after #{max_retries} retries: #{error_message}"}
+        )
+
+        new_data = %{
+          data
+          | stream_ref: nil,
+            stream_start_time: nil,
+            retry_count: 0,
+            retry_delay: 1000
+        }
+
+        {:next_state, :idle, new_data}
     end
   end
+
+  # Demonitor the stream process and clear its ref so a subsequent
+  # {:DOWN, _, _, _, :normal} message is not treated as a crash.
+  defp clear_stream_monitor(%{stream_monitor_ref: nil} = data), do: data
+
+  defp clear_stream_monitor(%{stream_monitor_ref: ref} = data) do
+    Process.demonitor(ref, [:flush])
+    %{data | stream_monitor_ref: nil}
+  end
+
+  # 4xx HTTP errors (except 408 timeout and 429 rate limit) are deterministic
+  # client errors — retrying won't help. 5xx and network failures are retryable.
+  defp retryable_error?(message) when is_binary(message) do
+    case Regex.run(~r/HTTP request failed with status (\d{3})/, message) do
+      [_, status_str] ->
+        status = String.to_integer(status_str)
+        status not in 400..499 or status in [408, 429]
+
+      _ ->
+        true
+    end
+  end
+
+  defp retryable_error?(_), do: true
 
   defp handle_text_delta(%{delta: delta}, data) do
     new_message = append_text_delta(data.current_message, delta)
@@ -1109,44 +1153,48 @@ defmodule Deft.Agent do
         tool_call_buffers: %{}
     }
 
-    if reset_data.retry_count < max_retries do
-      # Schedule retry with exponential backoff
-      retry_count = reset_data.retry_count + 1
-      delay = reset_data.retry_delay
+    cond do
+      not retryable_error?(error_msg) ->
+        Logger.error(
+          "#{log_prefix(data.session_id)} Provider failure (non-retryable): #{error_msg}"
+        )
 
-      # Send delayed message to self for retry
-      Process.send_after(self(), {:retry_stream}, delay)
+        broadcast_event(data.session_id, {:error, error_msg})
 
-      new_data = %{
-        reset_data
-        | retry_count: retry_count,
-          retry_delay: delay * 2
-      }
+        new_data = %{reset_data | retry_count: 0, retry_delay: 1000}
+        {:next_state, :idle, new_data}
 
-      broadcast_event(data.session_id, {:retry, retry_count, max_retries, delay})
-      # Transition to :calling state so the retry handler can re-call the provider
-      {:next_state, :calling, new_data}
-    else
-      # Max retries exceeded - transition to idle with error
-      error_message = Map.get(error_payload, :message, "Unknown streaming error")
+      reset_data.retry_count < max_retries ->
+        # Schedule retry with exponential backoff
+        retry_count = reset_data.retry_count + 1
+        delay = reset_data.retry_delay
 
-      Logger.error(
-        "#{log_prefix(data.session_id)} Unrecoverable provider failure after #{max_retries} retries: #{error_message}"
-      )
+        # Send delayed message to self for retry
+        Process.send_after(self(), {:retry_stream}, delay)
 
-      broadcast_event(
-        data.session_id,
-        {:error, "Failed after #{max_retries} retries: #{error_message}"}
-      )
+        new_data = %{
+          reset_data
+          | retry_count: retry_count,
+            retry_delay: delay * 2
+        }
 
-      # Reset retry state and transition to idle
-      new_data = %{
-        reset_data
-        | retry_count: 0,
-          retry_delay: 1000
-      }
+        broadcast_event(data.session_id, {:retry, retry_count, max_retries, delay})
+        # Transition to :calling state so the retry handler can re-call the provider
+        {:next_state, :calling, new_data}
 
-      {:next_state, :idle, new_data}
+      true ->
+        # Max retries exceeded - transition to idle with error
+        Logger.error(
+          "#{log_prefix(data.session_id)} Unrecoverable provider failure after #{max_retries} retries: #{error_msg}"
+        )
+
+        broadcast_event(
+          data.session_id,
+          {:error, "Failed after #{max_retries} retries: #{error_msg}"}
+        )
+
+        new_data = %{reset_data | retry_count: 0, retry_delay: 1000}
+        {:next_state, :idle, new_data}
     end
   end
 
