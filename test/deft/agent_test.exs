@@ -549,19 +549,28 @@ defmodule Deft.AgentTest do
 
       @behaviour Deft.Provider
 
-      def start_link(error_count) do
-        GenServer.start_link(__MODULE__, error_count)
+      def start_link(opts \\ []) do
+        GenServer.start_link(__MODULE__, opts)
       end
 
       @impl GenServer
-      def init(error_count) do
-        {:ok, %{errors_remaining: error_count}}
+      def init(opts) when is_list(opts) do
+        error_count = Keyword.get(opts, :error_count, 0)
+        error_message = Keyword.get(opts, :error_message, "Provider error")
+        {:ok, %{errors_remaining: error_count, error_message: error_message}}
+      end
+
+      # Legacy init for backward compatibility
+      def init(error_count) when is_integer(error_count) do
+        {:ok, %{errors_remaining: error_count, error_message: "Provider error"}}
       end
 
       @impl GenServer
-      def handle_call(:get_and_decrement, _from, %{errors_remaining: count} = state) do
-        new_count = max(0, count - 1)
-        {:reply, count, %{state | errors_remaining: new_count}}
+      def handle_call(:get_and_decrement, _from, state) do
+        new_count = max(0, state.errors_remaining - 1)
+
+        {:reply, {state.errors_remaining, state.error_message},
+         %{state | errors_remaining: new_count}}
       end
 
       @impl Deft.Provider
@@ -570,13 +579,13 @@ defmodule Deft.AgentTest do
         counter_pid = Map.fetch!(config, :error_counter_pid)
 
         # Get current error count and decrement
-        errors_remaining = GenServer.call(counter_pid, :get_and_decrement)
+        {errors_remaining, error_message} = GenServer.call(counter_pid, :get_and_decrement)
 
         # Spawn a process that will emit an Error event or success
         stream_pid =
           spawn(fn ->
             if errors_remaining > 0 do
-              send(caller, {:provider_event, %Error{message: "Provider error"}})
+              send(caller, {:provider_event, %Error{message: error_message}})
               # Keep process alive until cancelled (agent will cancel on error)
               receive do
                 :never -> :ok
@@ -729,6 +738,121 @@ defmodule Deft.AgentTest do
       # Verify retry counters were reset
       assert state_data.retry_count == 0
       assert state_data.retry_delay == 1000
+    end
+
+    test "does not retry on non-retryable 4xx errors (400, 401, 403, 404)", %{
+      session_id: session_id,
+      temp_dir: temp_dir
+    } do
+      # Test that 4xx errors (except 408, 429) surface immediately without retry
+      for status <- [400, 401, 403, 404] do
+        test_session_id = "#{session_id}_#{status}"
+        error_message = "HTTP request failed with status #{status}"
+
+        # Start error counter that will return the 4xx error once
+        {:ok, counter_pid} =
+          ErrorProvider.start_link(error_count: 1, error_message: error_message)
+
+        # Start agent with ErrorProvider
+        {:ok, agent} =
+          Deft.Agent.start_link(
+            session_id: test_session_id,
+            config: %{
+              provider: ErrorProvider,
+              error_counter_pid: counter_pid,
+              working_dir: temp_dir,
+              model: "test-model"
+            },
+            messages: []
+          )
+
+        # Subscribe to agent events
+        Registry.register(Deft.Registry, {:session, test_session_id}, [])
+
+        # Send prompt
+        Deft.Agent.prompt(agent, "Hello")
+
+        # Wait for state change to calling
+        assert_receive {:agent_event, {:state_change, :calling}}, 1000
+
+        # Should NOT receive retry event - error should surface immediately
+        refute_receive {:agent_event, {:retry, _, _, _}}, 500
+
+        # Should receive error event immediately
+        assert_receive {:agent_event, {:error, ^error_message}}, 1000
+
+        # Give the agent time to transition
+        Process.sleep(50)
+
+        # Verify agent is back in idle state
+        {state_name, state_data} = :sys.get_state(agent)
+        assert state_name == :idle
+
+        # Verify retry counter was not incremented
+        assert state_data.retry_count == 0
+      end
+    end
+
+    test "retries on retryable errors (408, 429, 5xx, network failures)", %{
+      session_id: session_id,
+      temp_dir: temp_dir
+    } do
+      # Test that 408, 429, and 5xx errors trigger retries
+      test_cases = [
+        {408, "HTTP request failed with status 408"},
+        {429, "HTTP request failed with status 429"},
+        {500, "HTTP request failed with status 500"},
+        {503, "HTTP request failed with status 503"},
+        {nil, "Network connection failed"}
+      ]
+
+      for {status, error_message} <- test_cases do
+        status_suffix = if status, do: "#{status}", else: "network"
+        test_session_id = "#{session_id}_#{status_suffix}"
+
+        # Start error counter that will return error once then succeed
+        {:ok, counter_pid} =
+          ErrorProvider.start_link(error_count: 1, error_message: error_message)
+
+        # Start agent with ErrorProvider
+        {:ok, agent} =
+          Deft.Agent.start_link(
+            session_id: test_session_id,
+            config: %{
+              provider: ErrorProvider,
+              error_counter_pid: counter_pid,
+              working_dir: temp_dir,
+              model: "test-model"
+            },
+            messages: []
+          )
+
+        # Subscribe to agent events
+        Registry.register(Deft.Registry, {:session, test_session_id}, [])
+
+        # Send prompt
+        Deft.Agent.prompt(agent, "Hello")
+
+        # Wait for state change to calling
+        assert_receive {:agent_event, {:state_change, :calling}}, 1000
+
+        # Should receive retry event for retryable errors
+        assert_receive {:agent_event, {:retry, 1, 3, 1000}}, 2000
+
+        # Wait for the agent to succeed after retry
+        assert_receive {:agent_event, {:state_change, :streaming}}, 3000
+
+        # Give the agent time to complete
+        Process.sleep(500)
+
+        # Verify agent is back in idle state
+        {state_name, state_data} = :sys.get_state(agent)
+        assert state_name == :idle
+
+        # Verify retry counters were reset
+        assert state_data.retry_count == 0
+        assert state_data.retry_delay == 1000
+      end
     end
   end
 
