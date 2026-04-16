@@ -43,7 +43,7 @@ defmodule Deft.Foreman.Tools.SteerLead do
     lead_id = Map.get(args, "lead_id")
     content = Map.get(args, "content")
 
-    send(parent_pid, {:agent_action, :steer_lead, lead_id, content})
+    GenServer.cast(parent_pid, {:agent_action, :steer_lead, lead_id, content})
     {:ok, [%Text{text: "Sent steering to Lead '#{lead_id}'"}]}
   end
 

@@ -662,7 +662,7 @@ defmodule Deft.Foreman.Coordinator do
       lead ->
         if lead.pid do
           # Send contract to Lead
-          send(lead.pid, {:foreman_contract, contract})
+          GenServer.cast(lead.pid, {:foreman_contract, contract})
           Logger.info("#{log_prefix(data)} Sent contract to Lead #{lead_id}")
 
           # Remove from blocked_leads if present
@@ -689,7 +689,7 @@ defmodule Deft.Foreman.Coordinator do
       lead ->
         if lead.pid do
           # Send steering to Lead
-          send(lead.pid, {:foreman_steering, content})
+          GenServer.cast(lead.pid, {:foreman_steering, content})
           Logger.info("#{log_prefix(data)} Sent steering to Lead #{lead_id}")
           :keep_state_and_data
         else
@@ -1644,7 +1644,7 @@ defmodule Deft.Foreman.Coordinator do
       # Send contract to each blocked lead and update state
       Enum.reduce(matches, data, fn {blocked_lead_id, blocked_lead_pid}, acc_data ->
         # Send contract directly to the blocked lead
-        send(blocked_lead_pid, {:foreman_contract, contract})
+        GenServer.cast(blocked_lead_pid, {:foreman_contract, contract})
 
         blocked_lead = Map.get(acc_data.leads, blocked_lead_id)
         blocked_deliverable_name = Map.get(blocked_lead.deliverable, :name, blocked_lead_id)
@@ -1754,7 +1754,7 @@ defmodule Deft.Foreman.Coordinator do
       Please wait for Foreman guidance before continuing work on these files.
       """
 
-      send(lead.pid, {:foreman_steering, pause_message})
+      GenServer.cast(lead.pid, {:foreman_steering, pause_message})
     end
   end
 

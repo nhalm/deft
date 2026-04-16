@@ -43,7 +43,7 @@ defmodule Deft.Foreman.Tools.UnblockLead do
     lead_id = Map.get(args, "lead_id")
     contract = Map.get(args, "contract")
 
-    send(parent_pid, {:agent_action, :unblock_lead, lead_id, contract})
+    GenServer.cast(parent_pid, {:agent_action, :unblock_lead, lead_id, contract})
     {:ok, [%Text{text: "Unblocked Lead '#{lead_id}' with contract"}]}
   end
 

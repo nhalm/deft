@@ -43,7 +43,7 @@ defmodule Deft.Foreman.Tools.AbortLead do
     lead_id = Map.get(args, "lead_id")
     reason = Map.get(args, "reason", "No reason provided")
 
-    send(parent_pid, {:agent_action, :abort_lead, lead_id})
+    GenServer.cast(parent_pid, {:agent_action, :abort_lead, lead_id})
     {:ok, [%Text{text: "Aborted Lead '#{lead_id}'. Reason: #{reason}"}]}
   end
 

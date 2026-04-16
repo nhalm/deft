@@ -290,7 +290,7 @@ defmodule Deft.Lead.CoordinatorTest do
       Coordinator.send_lead_message(foreman_pid, :status, "Test status", %{})
 
       # Verify we received the correct message format
-      assert_receive {:lead_message, :status, "Test status", %{}}, 1000
+      assert_receive {:"$gen_cast", {:lead_message, :status, "Test status", %{}}}, 1000
 
       # Cleanup
       :gen_statem.stop(lead_pid)
@@ -324,7 +324,9 @@ defmodule Deft.Lead.CoordinatorTest do
       Coordinator.send_lead_message(foreman_pid, :decision, "Test decision", %{lead_id: lead_id})
 
       # Verify we received the correct message format
-      assert_receive {:lead_message, :decision, "Test decision", %{lead_id: ^lead_id}}, 1000
+      assert_receive {:"$gen_cast",
+                      {:lead_message, :decision, "Test decision", %{lead_id: ^lead_id}}},
+                     1000
 
       # Cleanup
       :gen_statem.stop(lead_pid)
@@ -358,7 +360,9 @@ defmodule Deft.Lead.CoordinatorTest do
       Coordinator.send_lead_message(foreman_pid, :contract, "Test contract", %{lead_id: lead_id})
 
       # Verify we received the correct message format
-      assert_receive {:lead_message, :contract, "Test contract", %{lead_id: ^lead_id}}, 1000
+      assert_receive {:"$gen_cast",
+                      {:lead_message, :contract, "Test contract", %{lead_id: ^lead_id}}},
+                     1000
 
       # Cleanup
       :gen_statem.stop(lead_pid)
@@ -397,7 +401,8 @@ defmodule Deft.Lead.CoordinatorTest do
       )
 
       # Verify we received the correct message format
-      assert_receive {:lead_message, :complete, "Deliverable complete", %{lead_id: ^lead_id}},
+      assert_receive {:"$gen_cast",
+                      {:lead_message, :complete, "Deliverable complete", %{lead_id: ^lead_id}}},
                      1000
 
       # Cleanup
@@ -435,7 +440,7 @@ defmodule Deft.Lead.CoordinatorTest do
       assert state == :planning
 
       # Send a foreman steering message
-      send(lead_pid, {:foreman_steering, "Steering guidance from Foreman"})
+      GenServer.cast(lead_pid, {:foreman_steering, "Steering guidance from Foreman"})
 
       # Give the Lead Coordinator time to process the message
       Process.sleep(100)
@@ -480,7 +485,7 @@ defmodule Deft.Lead.CoordinatorTest do
       :sys.replace_state(lead_pid, fn {_s, d} -> {:executing, d} end)
 
       # Send a foreman steering message
-      send(lead_pid, {:foreman_steering, "Adjust your approach"})
+      GenServer.cast(lead_pid, {:foreman_steering, "Adjust your approach"})
 
       # Give the Lead Coordinator time to process the message
       Process.sleep(100)
@@ -603,7 +608,7 @@ defmodule Deft.Lead.CoordinatorTest do
       send(lead_pid, {:agent_action, :publish_contract, contract_content})
 
       # Verify Foreman receives the contract message
-      assert_receive {:lead_message, :contract, ^contract_content, metadata}, 1000
+      assert_receive {:"$gen_cast", {:lead_message, :contract, ^contract_content, metadata}}, 1000
       assert metadata.lead_id == lead_id
       assert metadata.deliverable == "Test deliverable"
 
@@ -640,7 +645,7 @@ defmodule Deft.Lead.CoordinatorTest do
       send(lead_pid, {:agent_action, :report, :status, "Progress update"})
 
       # Verify Foreman receives the status message
-      assert_receive {:lead_message, :status, "Progress update", metadata}, 1000
+      assert_receive {:"$gen_cast", {:lead_message, :status, "Progress update", metadata}}, 1000
       assert metadata.lead_id == lead_id
       assert metadata.deliverable == "Test deliverable"
 
@@ -678,7 +683,7 @@ defmodule Deft.Lead.CoordinatorTest do
       send(lead_pid, {:agent_action, :blocker, blocker_desc})
 
       # Verify Foreman receives the blocker message
-      assert_receive {:lead_message, :blocker, ^blocker_desc, metadata}, 1000
+      assert_receive {:"$gen_cast", {:lead_message, :blocker, ^blocker_desc, metadata}}, 1000
       assert metadata.lead_id == lead_id
       assert metadata.deliverable == "Test deliverable"
 
@@ -837,7 +842,7 @@ defmodule Deft.Lead.CoordinatorTest do
       :sys.replace_state(lead_pid, fn {_s, d} -> {:verifying, d} end)
 
       # Send steering message
-      send(lead_pid, {:foreman_steering, "Adjust your approach"})
+      GenServer.cast(lead_pid, {:foreman_steering, "Adjust your approach"})
 
       # Give time to process
       Process.sleep(100)
@@ -878,7 +883,7 @@ defmodule Deft.Lead.CoordinatorTest do
 
       # Transition to :verifying and queue steering
       :sys.replace_state(lead_pid, fn {_s, d} -> {:verifying, d} end)
-      send(lead_pid, {:foreman_steering, "Make changes based on feedback"})
+      GenServer.cast(lead_pid, {:foreman_steering, "Make changes based on feedback"})
       Process.sleep(100)
 
       # Verify steering was queued
@@ -946,7 +951,7 @@ defmodule Deft.Lead.CoordinatorTest do
       Process.sleep(200)
 
       # Verify :complete message sent to Foreman
-      assert_receive {:lead_message, :complete, _content, metadata}, 1000
+      assert_receive {:"$gen_cast", {:lead_message, :complete, _content, metadata}}, 1000
       assert metadata.lead_id == lead_id
 
       # Cleanup
@@ -1014,7 +1019,7 @@ defmodule Deft.Lead.CoordinatorTest do
       assert final_data.queued_steering == []
 
       # Verify NO :complete message was sent to Foreman (should only send when no queued steering)
-      refute_receive {:lead_message, :complete, _, _}, 500
+      refute_receive {:"$gen_cast", {:lead_message, :complete, _, _}}, 500
 
       # Cleanup
       :gen_statem.stop(lead_pid)

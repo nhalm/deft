@@ -48,7 +48,7 @@ defmodule Deft.Foreman.Tools.SpawnLead do
       context: context
     }
 
-    send(parent_pid, {:agent_action, :spawn_lead, deliverable})
+    GenServer.cast(parent_pid, {:agent_action, :spawn_lead, deliverable})
     {:ok, [%Text{text: "Spawned Lead for deliverable '#{deliverable_id}'"}]}
   end
 

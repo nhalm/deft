@@ -612,7 +612,7 @@ defmodule Deft.RateLimiterTest do
       :ok = RateLimiter.reconcile(job_id, "anthropic", estimated, actual_usage)
 
       # Should not send message yet (under $0.50 threshold)
-      refute_receive {:rate_limiter, :cost, _}, 100
+      refute_receive {:"$gen_cast", {:rate_limiter, :cost, _}}, 100
     end
 
     test "sends cost message every $0.50 increment", %{job_id: job_id} do
@@ -629,7 +629,7 @@ defmodule Deft.RateLimiterTest do
       end
 
       # Should receive cost message since we crossed $0.50 threshold
-      assert_receive {:rate_limiter, :cost, cost}, 500
+      assert_receive {:"$gen_cast", {:rate_limiter, :cost, cost}}, 500
       assert cost >= 0.50
     end
 
@@ -642,7 +642,7 @@ defmodule Deft.RateLimiterTest do
       :ok = RateLimiter.reconcile(job_id, "anthropic", estimated, actual_usage)
 
       # Should not send message (under $0.50)
-      refute_receive {:rate_limiter, :cost, _}, 100
+      refute_receive {:"$gen_cast", {:rate_limiter, :cost, _}}, 100
 
       # Second request: another $0.30 (cumulative $0.60)
       {:ok, estimated} = RateLimiter.request(job_id, "anthropic", messages, :lead_agent)
@@ -650,7 +650,7 @@ defmodule Deft.RateLimiterTest do
       :ok = RateLimiter.reconcile(job_id, "anthropic", estimated, actual_usage)
 
       # Should send message now (crossed $0.50)
-      assert_receive {:rate_limiter, :cost, cost}, 500
+      assert_receive {:"$gen_cast", {:rate_limiter, :cost, cost}}, 500
       assert cost >= 0.50
     end
 
@@ -673,7 +673,7 @@ defmodule Deft.RateLimiterTest do
       :ok = RateLimiter.reconcile(job_id, "anthropic", estimated, actual_usage)
 
       # Should not crash, cost should be $0
-      refute_receive {:rate_limiter, :cost, _}, 100
+      refute_receive {:"$gen_cast", {:rate_limiter, :cost, _}}, 100
     end
 
     test "does not send messages when foreman_pid is nil" do
@@ -690,7 +690,7 @@ defmodule Deft.RateLimiterTest do
       :ok = RateLimiter.reconcile(job_id, "anthropic", estimated, actual_usage)
 
       # Should not crash and should not send message
-      refute_receive {:rate_limiter, :cost, _}, 100
+      refute_receive {:"$gen_cast", {:rate_limiter, :cost, _}}, 100
     end
   end
 
@@ -732,7 +732,7 @@ defmodule Deft.RateLimiterTest do
       :ok = RateLimiter.reconcile(job_id, "anthropic", estimated, actual_usage)
 
       # Should receive cost ceiling reached message
-      assert_receive {:rate_limiter, :cost_ceiling_reached, cost}, 500
+      assert_receive {:"$gen_cast", {:rate_limiter, :cost_ceiling_reached, cost}}, 500
       assert cost >= 1.0
     end
 
@@ -745,7 +745,7 @@ defmodule Deft.RateLimiterTest do
       :ok = RateLimiter.reconcile(job_id, "anthropic", estimated, actual_usage)
 
       # Wait for cost ceiling message
-      assert_receive {:rate_limiter, :cost_ceiling_reached, _}, 500
+      assert_receive {:"$gen_cast", {:rate_limiter, :cost_ceiling_reached, _}}, 500
 
       # New request should be queued (not immediately granted)
       # Start a new request - it should block
@@ -774,7 +774,7 @@ defmodule Deft.RateLimiterTest do
       actual_usage1 = %{input: 100_000, output: 100_000}
       :ok = RateLimiter.reconcile(job_id, "anthropic", estimated1, actual_usage1)
 
-      assert_receive {:rate_limiter, :cost_ceiling_reached, _}, 500
+      assert_receive {:"$gen_cast", {:rate_limiter, :cost_ceiling_reached, _}}, 500
 
       # Second request already got permission, so it can be reconciled
       actual_usage2 = %{input: 1000, output: 1000}
@@ -792,7 +792,7 @@ defmodule Deft.RateLimiterTest do
       actual_usage = %{input: 100_000, output: 100_000}
       :ok = RateLimiter.reconcile(job_id, "anthropic", estimated, actual_usage)
 
-      assert_receive {:rate_limiter, :cost_ceiling_reached, _}, 500
+      assert_receive {:"$gen_cast", {:rate_limiter, :cost_ceiling_reached, _}}, 500
 
       # Approve continued spending
       :ok = RateLimiter.approve_continued_spending(job_id)
@@ -809,7 +809,7 @@ defmodule Deft.RateLimiterTest do
       actual_usage = %{input: 100_000, output: 100_000}
       :ok = RateLimiter.reconcile(job_id, "anthropic", estimated, actual_usage)
 
-      assert_receive {:rate_limiter, :cost_ceiling_reached, _}, 500
+      assert_receive {:"$gen_cast", {:rate_limiter, :cost_ceiling_reached, _}}, 500
 
       # Queue a new request (will be blocked)
       task =
@@ -845,7 +845,7 @@ defmodule Deft.RateLimiterTest do
       :ok = RateLimiter.reconcile(job_id, "anthropic", estimated, actual_usage)
 
       # Should not crash and should not send message
-      refute_receive {:rate_limiter, :cost_ceiling_reached, _}, 100
+      refute_receive {:"$gen_cast", {:rate_limiter, :cost_ceiling_reached, _}}, 100
     end
 
     test "only triggers ceiling once", %{job_id: job_id} do
@@ -858,7 +858,7 @@ defmodule Deft.RateLimiterTest do
       :ok = RateLimiter.reconcile(job_id, "anthropic", estimated1, actual_usage1)
 
       # First should trigger ceiling
-      assert_receive {:rate_limiter, :cost_ceiling_reached, _}, 500
+      assert_receive {:"$gen_cast", {:rate_limiter, :cost_ceiling_reached, _}}, 500
 
       # Approve to continue
       :ok = RateLimiter.approve_continued_spending(job_id)
@@ -869,7 +869,7 @@ defmodule Deft.RateLimiterTest do
       :ok = RateLimiter.reconcile(job_id, "anthropic", estimated2, actual_usage2)
 
       # Should not trigger ceiling again (still under ceiling)
-      refute_receive {:rate_limiter, :cost_ceiling_reached, _}, 100
+      refute_receive {:"$gen_cast", {:rate_limiter, :cost_ceiling_reached, _}}, 100
     end
   end
 
@@ -911,7 +911,7 @@ defmodule Deft.RateLimiterTest do
       :ok = RateLimiter.reconcile(job_id, "anthropic", estimated, actual_usage)
 
       # Should receive cost warning message
-      assert_receive {:rate_limiter, :cost_warning, cost}, 500
+      assert_receive {:"$gen_cast", {:rate_limiter, :cost_warning, cost}}, 500
       assert cost >= 0.5
     end
 
@@ -924,7 +924,7 @@ defmodule Deft.RateLimiterTest do
       :ok = RateLimiter.reconcile(job_id, "anthropic", estimated1, actual_usage1)
 
       # First should trigger warning
-      assert_receive {:rate_limiter, :cost_warning, _}, 500
+      assert_receive {:"$gen_cast", {:rate_limiter, :cost_warning, _}}, 500
 
       # Make another request with additional cost
       {:ok, estimated2} = RateLimiter.request(job_id, "anthropic", messages, :lead_agent)
@@ -932,7 +932,7 @@ defmodule Deft.RateLimiterTest do
       :ok = RateLimiter.reconcile(job_id, "anthropic", estimated2, actual_usage2)
 
       # Should not trigger warning again
-      refute_receive {:rate_limiter, :cost_warning, _}, 100
+      refute_receive {:"$gen_cast", {:rate_limiter, :cost_warning, _}}, 100
     end
 
     test "does not send warning when foreman_pid is nil" do
@@ -953,7 +953,7 @@ defmodule Deft.RateLimiterTest do
       :ok = RateLimiter.reconcile(job_id, "anthropic", estimated, actual_usage)
 
       # Should not crash and should not send message
-      refute_receive {:rate_limiter, :cost_warning, _}, 100
+      refute_receive {:"$gen_cast", {:rate_limiter, :cost_warning, _}}, 100
     end
 
     test "does not block requests when warning is reached", %{job_id: job_id} do
@@ -965,7 +965,7 @@ defmodule Deft.RateLimiterTest do
       :ok = RateLimiter.reconcile(job_id, "anthropic", estimated, actual_usage)
 
       # Wait for warning message
-      assert_receive {:rate_limiter, :cost_warning, _}, 500
+      assert_receive {:"$gen_cast", {:rate_limiter, :cost_warning, _}}, 500
 
       # New requests should still succeed (warning doesn't block)
       {:ok, _} = RateLimiter.request(job_id, "anthropic", messages, :lead_agent)
@@ -1034,14 +1034,14 @@ defmodule Deft.RateLimiterTest do
       Process.sleep(50)
 
       # Should not receive concurrency change yet
-      refute_receive {:rate_limiter, :concurrency_change, _}, 100
+      refute_receive {:"$gen_cast", {:rate_limiter, :concurrency_change, _}}, 100
 
       # Advance to t=31s (past 30s threshold)
       :atomics.put(current_time, 1, 31_000)
       send(rate_limiter, :check_queue)
 
       # Should receive scale-up notification (from 2 to 3)
-      assert_receive {:rate_limiter, :concurrency_change, 3}, 500
+      assert_receive {:"$gen_cast", {:rate_limiter, :concurrency_change, 3}}, 500
     end
 
     test "does not scale up if queue is not empty", %{
@@ -1068,7 +1068,7 @@ defmodule Deft.RateLimiterTest do
       send(rate_limiter, :check_queue)
 
       # Should NOT scale up because queue is not empty
-      refute_receive {:rate_limiter, :concurrency_change, _}, 200
+      refute_receive {:"$gen_cast", {:rate_limiter, :concurrency_change, _}}, 200
     end
 
     test "does not scale up if bucket capacity below 60%", %{
@@ -1090,7 +1090,7 @@ defmodule Deft.RateLimiterTest do
       send(rate_limiter, :check_queue)
 
       # Should NOT scale up because capacity is below 60%
-      refute_receive {:rate_limiter, :concurrency_change, _}, 200
+      refute_receive {:"$gen_cast", {:rate_limiter, :concurrency_change, _}}, 200
     end
 
     test "caps scale-up at max_concurrency", %{
@@ -1109,7 +1109,7 @@ defmodule Deft.RateLimiterTest do
 
       :atomics.put(current_time, 1, 31_000)
       send(rate_limiter, :check_queue)
-      assert_receive {:rate_limiter, :concurrency_change, 3}, 500
+      assert_receive {:"$gen_cast", {:rate_limiter, :concurrency_change, 3}}, 500
 
       # Scale up from 3 to 4
       :atomics.put(current_time, 1, 32_000)
@@ -1118,7 +1118,7 @@ defmodule Deft.RateLimiterTest do
 
       :atomics.put(current_time, 1, 63_000)
       send(rate_limiter, :check_queue)
-      assert_receive {:rate_limiter, :concurrency_change, 4}, 500
+      assert_receive {:"$gen_cast", {:rate_limiter, :concurrency_change, 4}}, 500
 
       # Scale up from 4 to 5 (max)
       :atomics.put(current_time, 1, 64_000)
@@ -1127,7 +1127,7 @@ defmodule Deft.RateLimiterTest do
 
       :atomics.put(current_time, 1, 95_000)
       send(rate_limiter, :check_queue)
-      assert_receive {:rate_limiter, :concurrency_change, 5}, 500
+      assert_receive {:"$gen_cast", {:rate_limiter, :concurrency_change, 5}}, 500
 
       # Try to scale beyond max
       :atomics.put(current_time, 1, 96_000)
@@ -1138,7 +1138,7 @@ defmodule Deft.RateLimiterTest do
       send(rate_limiter, :check_queue)
 
       # Should NOT scale beyond max_concurrency
-      refute_receive {:rate_limiter, :concurrency_change, 6}, 200
+      refute_receive {:"$gen_cast", {:rate_limiter, :concurrency_change, 6}}, 200
     end
 
     test "scales down when 429 rate exceeds 2 per minute", %{
@@ -1162,7 +1162,7 @@ defmodule Deft.RateLimiterTest do
       # Trigger queue check - should scale down from 2 to 1
       send(rate_limiter, :check_queue)
 
-      assert_receive {:rate_limiter, :concurrency_change, 1}, 500
+      assert_receive {:"$gen_cast", {:rate_limiter, :concurrency_change, 1}}, 500
     end
 
     test "does not scale down below 1", %{
@@ -1179,7 +1179,7 @@ defmodule Deft.RateLimiterTest do
       end
 
       send(rate_limiter, :check_queue)
-      assert_receive {:rate_limiter, :concurrency_change, 1}, 500
+      assert_receive {:"$gen_cast", {:rate_limiter, :concurrency_change, 1}}, 500
 
       # Try to scale down further
       :atomics.put(current_time, 1, 100_000)
@@ -1192,7 +1192,7 @@ defmodule Deft.RateLimiterTest do
       send(rate_limiter, :check_queue)
 
       # Should NOT scale below 1
-      refute_receive {:rate_limiter, :concurrency_change, 0}, 200
+      refute_receive {:"$gen_cast", {:rate_limiter, :concurrency_change, 0}}, 200
     end
 
     test "only counts 429s within 60s window for scale-down", %{
@@ -1219,7 +1219,7 @@ defmodule Deft.RateLimiterTest do
 
       # Should NOT scale down (only 1 429 in the last 60s: the one at t=70s)
       # The filter is ts > cutoff (cutoff=10_000), so only t=70_000 is included
-      refute_receive {:rate_limiter, :concurrency_change, _}, 200
+      refute_receive {:"$gen_cast", {:rate_limiter, :concurrency_change, _}}, 200
     end
 
     test "rate-limits scale-down to once per 60 seconds", %{
@@ -1237,7 +1237,7 @@ defmodule Deft.RateLimiterTest do
       end
 
       send(rate_limiter, :check_queue)
-      assert_receive {:rate_limiter, :concurrency_change, 1}, 500
+      assert_receive {:"$gen_cast", {:rate_limiter, :concurrency_change, 1}}, 500
 
       # Try to scale down again at t=15s (only 15s elapsed, < 60s)
       # Use t=15s instead of t=30s to avoid triggering scale-up
@@ -1251,7 +1251,7 @@ defmodule Deft.RateLimiterTest do
 
       # Should NOT scale down yet (rate-limited, minimum 1 already reached)
       # Also should NOT scale up (only 15s elapsed, not 30s)
-      refute_receive {:rate_limiter, :concurrency_change, _}, 200
+      refute_receive {:"$gen_cast", {:rate_limiter, :concurrency_change, _}}, 200
     end
 
     test "does not send concurrency change when foreman_pid is nil" do
@@ -1281,7 +1281,7 @@ defmodule Deft.RateLimiterTest do
       send(rate_limiter, :check_queue)
 
       # Should not crash and should not send message
-      refute_receive {:rate_limiter, :concurrency_change, _}, 200
+      refute_receive {:"$gen_cast", {:rate_limiter, :concurrency_change, _}}, 200
     end
 
     test "resets scale-up eligibility when conditions no longer met", %{
@@ -1313,7 +1313,7 @@ defmodule Deft.RateLimiterTest do
       :atomics.put(current_time, 1, 31_000)
       send(rate_limiter, :check_queue)
 
-      refute_receive {:rate_limiter, :concurrency_change, _}, 200
+      refute_receive {:"$gen_cast", {:rate_limiter, :concurrency_change, _}}, 200
     end
   end
 end

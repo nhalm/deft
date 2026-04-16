@@ -7,6 +7,8 @@ defmodule Deft.Provider.Anthropic do
   normalization.
   """
 
+  require Logger
+
   @behaviour Deft.Provider
 
   alias Deft.Provider.Event.{
@@ -44,15 +46,16 @@ defmodule Deft.Provider.Anthropic do
     api_key = System.get_env("ANTHROPIC_API_KEY")
 
     if is_nil(api_key) or api_key == "" do
+      Logger.error("[Provider] ANTHROPIC_API_KEY not set")
       {:error, :missing_api_key}
     else
       caller = self()
       model = Map.get(config, :model, "claude-sonnet-4-20250514")
-      max_tokens = Map.get(config, :max_tokens, 8192)
-      temperature = Map.get(config, :temperature, 1.0)
-      thinking = Map.get(config, :thinking, false)
-      thinking_budget = Map.get(config, :thinking_budget, 4096)
-      session_id = Map.get(config, :session_id)
+      session_id = Map.get(config, :session_id, "unknown")
+
+      Logger.info(
+        "[Provider:#{String.slice(session_id, 0, 8)}] Starting stream with model: #{model}, tools count: #{length(tools)}"
+      )
 
       # Spawn a process to handle the streaming request
       # Use spawn instead of spawn_link so stream crashes don't kill the agent
@@ -62,14 +65,18 @@ defmodule Deft.Provider.Anthropic do
         messages: messages,
         tools: tools,
         model: model,
-        max_tokens: max_tokens,
-        temperature: temperature,
-        thinking: thinking,
-        thinking_budget: thinking_budget,
+        max_tokens: Map.get(config, :max_tokens, 8192),
+        temperature: Map.get(config, :temperature, 1.0),
+        thinking: Map.get(config, :thinking, false),
+        thinking_budget: Map.get(config, :thinking_budget, 4096),
         session_id: session_id
       }
 
       pid = spawn(fn -> stream_loop(stream_state) end)
+
+      Logger.debug(
+        "[Provider:#{String.slice(session_id, 0, 8)}] Stream process spawned: #{inspect(pid)}"
+      )
 
       {:ok, pid}
     end

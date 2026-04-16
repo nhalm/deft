@@ -103,7 +103,7 @@ defmodule Deft.Lead.Coordinator do
   Sends Foreman steering to the Lead Coordinator.
   """
   def steer(lead, content) do
-    send(lead, {:foreman_steering, content})
+    GenServer.cast(lead, {:foreman_steering, content})
   end
 
   @doc """
@@ -160,7 +160,7 @@ defmodule Deft.Lead.Coordinator do
   via the private send_to_foreman/4 helper.
   """
   def send_lead_message(foreman_pid, type, content, metadata) do
-    send(foreman_pid, {:lead_message, type, content, metadata})
+    GenServer.cast(foreman_pid, {:lead_message, type, content, metadata})
   end
 
   # gen_statem callbacks
@@ -479,7 +479,7 @@ defmodule Deft.Lead.Coordinator do
   end
 
   # Handle Foreman steering
-  def handle_event(:info, {:foreman_steering, content}, state, data)
+  def handle_event(:cast, {:foreman_steering, content}, state, data)
       when state in [:planning, :executing] do
     Logger.info("[Lead:#{data.lead_id}] Received steering from Foreman")
 
@@ -513,7 +513,7 @@ defmodule Deft.Lead.Coordinator do
   end
 
   # Handle Foreman steering in :verifying state - queue it instead of processing
-  def handle_event(:info, {:foreman_steering, content}, :verifying, data) do
+  def handle_event(:cast, {:foreman_steering, content}, :verifying, data) do
     Logger.info(
       "[Lead:#{data.lead_id}] Received steering from Foreman during :verifying, queuing"
     )
@@ -526,7 +526,7 @@ defmodule Deft.Lead.Coordinator do
   end
 
   # Handle Foreman contract (partial dependency unblocking)
-  def handle_event(:info, {:foreman_contract, contract}, state, data)
+  def handle_event(:cast, {:foreman_contract, contract}, state, data)
       when state in [:planning, :executing] do
     Logger.info("[Lead:#{data.lead_id}] Received dependency contract from Foreman")
 
@@ -906,6 +906,6 @@ defmodule Deft.Lead.Coordinator do
   end
 
   defp send_to_foreman(data, type, content, metadata) do
-    send(data.foreman_pid, {:lead_message, type, content, metadata})
+    GenServer.cast(data.foreman_pid, {:lead_message, type, content, metadata})
   end
 end

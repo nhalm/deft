@@ -38,7 +38,7 @@ defmodule Deft.Lead.Tools.RequestHelp do
   @impl Deft.Tool
   def execute(%{"description" => description}, %Context{parent_pid: parent_pid})
       when is_pid(parent_pid) or (is_tuple(parent_pid) and elem(parent_pid, 0) == :via) do
-    send(parent_pid, {:agent_action, :blocker, description})
+    GenServer.cast(parent_pid, {:agent_action, :blocker, description})
 
     {:ok, [%Text{text: "Help request sent to Foreman. Waiting for response."}]}
   end

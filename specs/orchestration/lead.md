@@ -72,7 +72,7 @@ Each Lead operates in its own git worktree. The Foreman.Coordinator creates it w
 
 ### 6. Reporting
 
-The Lead.Coordinator sends messages to the Foreman.Coordinator via `send(coordinator_pid, {:lead_message, type, content, metadata})`:
+The Lead.Coordinator sends messages to the Foreman.Coordinator via `GenServer.cast(coordinator_pid, {:lead_message, type, content, metadata})`:
 - `:status` — progress updates
 - `:decision` — implementation choices with rationale
 - `:artifact` — files created or modified

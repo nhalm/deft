@@ -39,7 +39,7 @@ defmodule Deft.Foreman.Tools.RequestResearch do
   def execute(%{"topics" => topics}, %Context{parent_pid: parent_pid})
       when (is_pid(parent_pid) or (is_tuple(parent_pid) and elem(parent_pid, 0) == :via)) and
              is_list(topics) do
-    send(parent_pid, {:agent_action, :research, topics})
+    GenServer.cast(parent_pid, {:agent_action, :research, topics})
     topic_list = Enum.map_join(topics, ", ", &"'#{&1}'")
     {:ok, [%Text{text: "Requested research on: #{topic_list}"}]}
   end

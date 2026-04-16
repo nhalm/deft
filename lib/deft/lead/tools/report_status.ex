@@ -65,7 +65,7 @@ defmodule Deft.Lead.Tools.ReportStatus do
       raise ArgumentError, "Invalid report_type: #{report_type}"
     end
 
-    send(parent_pid, {:agent_action, :report, type, content})
+    GenServer.cast(parent_pid, {:agent_action, :report, type, content})
 
     {:ok, [%Text{text: "Report sent to Foreman (type: #{report_type})."}]}
   end

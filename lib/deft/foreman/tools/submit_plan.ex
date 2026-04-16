@@ -91,7 +91,7 @@ defmodule Deft.Foreman.Tools.SubmitPlan do
       rationale: rationale
     }
 
-    send(parent_pid, {:agent_action, :plan, plan_data})
+    GenServer.cast(parent_pid, {:agent_action, :plan, plan_data})
 
     summary = """
     Submitted plan with #{length(deliverables)} deliverable(s) and #{length(dependencies)} dependency edge(s).

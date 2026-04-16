@@ -67,10 +67,10 @@ Orchestration tools are tools whose primary effect is sending a message to the a
 
 Pattern:
 1. Tool validates args
-2. Tool calls `send(context.parent_pid, {:agent_action, action, payload})`
+2. Tool calls `GenServer.cast(context.parent_pid, {:agent_action, action, payload})`
 3. Tool returns `{:ok, [Text.new("action requested")]}`
 
-The agent sees a normal tool result. The orchestrator receives the message in `handle_info`. This keeps agents standard — they don't know they're being orchestrated, they just have extra tools available.
+The agent sees a normal tool result. The orchestrator receives the message in `handle_event(:cast, ...)`. This keeps agents standard — they don't know they're being orchestrated, they just have extra tools available.
 
 Orchestration tools are defined by the orchestration layer (see [orchestration](orchestration/README.md)), not in this spec. This spec only defines the mechanism (`parent_pid` in ToolContext).
 

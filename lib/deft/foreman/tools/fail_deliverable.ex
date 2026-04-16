@@ -48,7 +48,7 @@ defmodule Deft.Foreman.Tools.FailDeliverable do
     lead_id = Map.get(args, "lead_id")
     reason = Map.get(args, "reason", "No reason provided")
 
-    send(parent_pid, {:agent_action, :fail_deliverable, lead_id})
+    GenServer.cast(parent_pid, {:agent_action, :fail_deliverable, lead_id})
     {:ok, [%Text{text: "Marked deliverable for Lead '#{lead_id}' as failed. Reason: #{reason}"}]}
   end
 

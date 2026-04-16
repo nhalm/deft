@@ -47,7 +47,7 @@ defmodule Deft.Lead.Tools.SpawnRunner do
     # Convert string to atom for runner type
     type = String.to_existing_atom(runner_type)
 
-    send(parent_pid, {:agent_action, :spawn_runner, type, instructions})
+    GenServer.cast(parent_pid, {:agent_action, :spawn_runner, type, instructions})
 
     {:ok,
      [

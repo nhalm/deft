@@ -1084,7 +1084,16 @@ defmodule DeftWeb.ChatLive do
   end
 
   defp send_prompt_to_agent(socket, text) do
-    agent = Worker.foreman_agent_via_tuple(socket.assigns.session_id)
+    session_id = socket.assigns.session_id
+    agent = Worker.foreman_agent_via_tuple(session_id)
+
+    # Check if agent exists
+    agent_pid = GenServer.whereis(agent)
+
+    Logger.debug(
+      "[Chat:#{String.slice(session_id, 0, 8)}] Agent lookup: #{inspect(agent)} -> #{inspect(agent_pid)}"
+    )
+
     Deft.Agent.prompt(agent, text)
     socket
   end

@@ -14,7 +14,10 @@ defmodule Deft.Application do
   @impl true
   def start(_type, _args) do
     load_dotenv()
-    verify_api_key()
+
+    # Note: ANTHROPIC_API_KEY validation is deferred to LLM-using commands
+    # (see Deft.CLI.verify_api_key/0). This allows non-LLM commands
+    # (--help, --version, config, issue list) to work without an API key.
 
     # Resolve issues file path using same logic as Deft.Issues.resolve_file_path/0
     issues_file_path =
@@ -64,13 +67,6 @@ defmodule Deft.Application do
     case Dotenvy.source([".env"]) do
       {:ok, vars} -> System.put_env(vars)
       {:error, _} -> :ok
-    end
-  end
-
-  defp verify_api_key do
-    unless System.get_env("ANTHROPIC_API_KEY") do
-      IO.puts(:stderr, "Error: ANTHROPIC_API_KEY environment variable not set")
-      exit({:shutdown, 1})
     end
   end
 end

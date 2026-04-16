@@ -57,9 +57,9 @@ The Foreman's orchestration tools send messages to the Coordinator:
 
 ```
 Foreman calls `submit_plan` tool
-  → tool implementation: send(coordinator_pid, {:agent_action, :plan, deliverables})
+  → tool implementation: GenServer.cast(coordinator_pid, {:agent_action, :plan, deliverables})
   → tool returns :ok to Foreman
-  → Coordinator receives message in handle_info, takes action
+  → Coordinator receives message in handle_event(:cast, ...), takes action
 ```
 
 ### 3. Coordinator → Foreman Communication

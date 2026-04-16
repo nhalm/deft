@@ -632,21 +632,21 @@ defmodule Deft.RateLimiter do
   defp report_cost_to_foreman(%{foreman_pid: nil}, _cost), do: :ok
 
   defp report_cost_to_foreman(%{foreman_pid: foreman_pid}, cost) do
-    send(foreman_pid, {:rate_limiter, :cost, cost})
+    GenServer.cast(foreman_pid, {:rate_limiter, :cost, cost})
     :ok
   end
 
   defp report_cost_ceiling_reached(%{foreman_pid: nil}, _cost), do: :ok
 
   defp report_cost_ceiling_reached(%{foreman_pid: foreman_pid}, cost) do
-    send(foreman_pid, {:rate_limiter, :cost_ceiling_reached, cost})
+    GenServer.cast(foreman_pid, {:rate_limiter, :cost_ceiling_reached, cost})
     :ok
   end
 
   defp report_cost_warning_to_foreman(%{foreman_pid: nil}, _cost), do: :ok
 
   defp report_cost_warning_to_foreman(%{foreman_pid: foreman_pid}, cost) do
-    send(foreman_pid, {:rate_limiter, :cost_warning, cost})
+    GenServer.cast(foreman_pid, {:rate_limiter, :cost_warning, cost})
     :ok
   end
 
@@ -1015,7 +1015,7 @@ defmodule Deft.RateLimiter do
   defp notify_concurrency_change(%{foreman_pid: nil}, _new_concurrency), do: :ok
 
   defp notify_concurrency_change(%{foreman_pid: foreman_pid}, new_concurrency) do
-    send(foreman_pid, {:rate_limiter, :concurrency_change, new_concurrency})
+    GenServer.cast(foreman_pid, {:rate_limiter, :concurrency_change, new_concurrency})
     :ok
   end
 end

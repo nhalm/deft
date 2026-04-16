@@ -21,8 +21,8 @@ secret_key_base =
   System.get_env("SECRET_KEY_BASE") ||
     :crypto.strong_rand_bytes(64) |> Base.encode64()
 
-# Note: ANTHROPIC_API_KEY validation is deferred to LLM-using commands (see Deft.CLI.verify_api_key/0)
-# This allows non-LLM commands (--help, --version, config, issue list) to work without an API key
+# ANTHROPIC_API_KEY is validated lazily by Deft.CLI.verify_api_key/0 when LLM commands run.
+# Non-LLM commands (--help, --version, config, issue list) work without an API key.
 
 # Read LOG_LEVEL from environment, default to "info"
 # Don't override test environment default (:warning in config/test.exs)

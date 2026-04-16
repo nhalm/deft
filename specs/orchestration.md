@@ -178,7 +178,7 @@ The Foreman communicates with its agent through two mechanisms:
 | `abort_lead` | `{:agent_action, :abort_lead, lead_id}` | Stop a Lead |
 | `fail_deliverable` | `{:agent_action, :fail_deliverable, lead_id}` | Mark a Lead's deliverable as failed (after crash or unrecoverable blocker). Lead is removed, marked as failed. Foreman's `all_leads_complete?` checks that every deliverable has a final outcome (completed or failed), not a lead count. |
 
-These tools are implemented as thin wrappers that `send(foreman_pid, message)` and return `:ok` to the agent. The Foreman receives these in `handle_info` and takes action.
+These tools are implemented as thin wrappers that `GenServer.cast(foreman_pid, message)` and return `:ok` to the agent. The Foreman receives these in `handle_event(:cast, ...)` and takes action.
 
 The Foreman also sends results back to the ForemanAgent when research completes, Leads report progress, or user input arrives — by calling `Deft.Agent.prompt/2` with the new information.
 
@@ -328,7 +328,7 @@ Each Lead operates in its own git worktree. The Foreman creates it when the Lead
 
 #### 5.6 Reporting
 
-The Lead orchestrator sends messages to the Foreman via `send(foreman_pid, {:lead_message, type, content, metadata})`:
+The Lead orchestrator sends messages to the Foreman via `GenServer.cast(foreman_pid, {:lead_message, type, content, metadata})`:
 - `:status` — progress updates
 - `:decision` — implementation choices with rationale
 - `:artifact` — files created or modified
@@ -370,8 +370,8 @@ All Foreman↔Lead communication happens via Erlang process messages between the
 
 #### 7.1 Message Format
 
-**Lead → Foreman:** `send(foreman_pid, {:lead_message, type, content, metadata})`
-**Foreman → Lead:** `send(lead_pid, {:foreman_steering, content})`
+**Lead → Foreman:** `GenServer.cast(foreman_pid, {:lead_message, type, content, metadata})`
+**Foreman → Lead:** `GenServer.cast(lead_pid, {:foreman_steering, content})`
 
 #### 7.2 Message Types
 

@@ -28,11 +28,11 @@ The coordination protocol defines how Coordinators communicate via OTP messages 
 
 ### 1. Message Format
 
-All Coordinator↔Coordinator communication happens via Erlang process messages.
+All Coordinator↔Coordinator communication happens via GenServer.cast.
 
-**Lead.Coordinator → Foreman.Coordinator:** `send(coordinator_pid, {:lead_message, type, content, metadata})`
-**Foreman.Coordinator → Lead.Coordinator:** `send(lead_coordinator_pid, {:coordinator_steering, content})`
-**Foreman.Coordinator → Lead.Coordinator (contract forwarding):** `send(lead_coordinator_pid, {:coordinator_contract, contract})`
+**Lead.Coordinator → Foreman.Coordinator:** `GenServer.cast(coordinator_pid, {:lead_message, type, content, metadata})`
+**Foreman.Coordinator → Lead.Coordinator:** `GenServer.cast(lead_coordinator_pid, {:coordinator_steering, content})`
+**Foreman.Coordinator → Lead.Coordinator (contract forwarding):** `GenServer.cast(lead_coordinator_pid, {:coordinator_contract, contract})`
 
 ### 2. Message Types
 
